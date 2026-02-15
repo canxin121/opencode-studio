@@ -31,8 +31,8 @@ import FormDialog from '@/components/ui/FormDialog.vue'
 import Input from '@/components/ui/Input.vue'
 import OptionMenu, { type OptionMenuGroup, type OptionMenuItem } from '@/components/ui/OptionMenu.vue'
 import TerminalKeybar from '@/components/TerminalKeybar.vue'
-import { consumeTrustedTerminalHandoff } from '@/lib/terminalHandoff'
-import { getLocalString, removeLocalKey } from '@/lib/persist'
+import { consumeTrustedTerminalHandoffPayload, type TerminalHandoffTarget } from '@/lib/terminalHandoff'
+import { getLocalString, removeLocalKey, setLocalString } from '@/lib/persist'
 import { ApiError } from '@/lib/api'
 import {
   createTerminalSession,
@@ -47,6 +47,7 @@ import {
   type TerminalUiState,
 } from '@/features/terminal/api/terminalApi'
 import { useDesktopSidebarResize } from '@/composables/useDesktopSidebarResize'
+import { useDirectoryStore } from '@/stores/directory'
 import { useUiStore } from '@/stores/ui'
 
 type TerminalStreamEvent =
@@ -78,12 +79,17 @@ const STORAGE_SESSION = 'oc2.terminal.sessionId'
 const STORAGE_SESSION_LIST = 'oc2.terminal.sessionIds'
 const STORAGE_SESSION_META = 'oc2.terminal.sessionMetaById'
 const STORAGE_FOLDER_LIST = 'oc2.terminal.folderList'
+const STORAGE_GIT_HANDOFF_SESSION = 'oc2.terminal.gitHandoffSessionId'
 
 const TERMINAL_STATE_REMOTE_SAVE_DEBOUNCE_MS = 250
 
 const DEFAULT_FOLDER_ID = 'terminal-default'
 const DEFAULT_FOLDER_NAME = 'Default'
 const DEFAULT_TERMINAL_CWD = '/home'
+
+const GIT_HANDOFF_FOLDER_ID = 'terminal-folder-git'
+const GIT_HANDOFF_FOLDER_NAME = 'Git'
+const GIT_HANDOFF_SESSION_NAME = 'Git Terminal'
 
 type TerminalFolder = {
   id: string
@@ -244,13 +250,28 @@ function readStoredFolderList(): TerminalFolder[] {
   }
 }
 
+function readStoredGitHandoffSessionId(): string {
+  return normalizeSessionId(getLocalString(STORAGE_GIT_HANDOFF_SESSION) || '')
+}
+
+function persistGitHandoffSessionId(next: string | null) {
+  const sid = normalizeSessionId(next || '')
+  if (!sid) {
+    removeLocalKey(STORAGE_GIT_HANDOFF_SESSION)
+    return
+  }
+  setLocalString(STORAGE_GIT_HANDOFF_SESSION, sid)
+}
+
 const ui = useUiStore()
+const directoryStore = useDirectoryStore()
 const { startDesktopSidebarResize } = useDesktopSidebarResize()
 
 const route = useRoute()
 const router = useRouter()
 
 const pendingSend = ref<string | null>(null)
+const pendingSendTarget = ref<TerminalHandoffTarget | null>(null)
 
 function firstQueryValue(raw: string | null | Array<string | null> | undefined): string {
   if (typeof raw === 'string') return raw.trim()
@@ -267,14 +288,18 @@ function hydratePendingSendFromQuery() {
   const legacySend = firstQueryValue(route.query.send)
 
   if (token) {
-    pendingSend.value = consumeTrustedTerminalHandoff(token)
+    const handoff = consumeTrustedTerminalHandoffPayload(token)
+    pendingSend.value = handoff?.send || null
+    pendingSendTarget.value = handoff?.target || null
   } else {
     pendingSend.value = null
+    pendingSendTarget.value = null
   }
 
   if (!token && legacySend) {
     // Legacy raw query payloads are intentionally blocked.
     pendingSend.value = null
+    pendingSendTarget.value = null
   }
 
   if (token || legacySend) {
@@ -462,6 +487,73 @@ function sessionFolderId(id: string): string {
   return fallbackFolderId()
 }
 
+function isGitHandoffSession(id: string): boolean {
+  const sid = normalizeSessionId(id)
+  if (!sid) return false
+  if (readStoredGitHandoffSessionId() === sid) return true
+
+  const meta = sessionMetaFor(sid)
+  const name = normalizeSessionMetaName(meta.name)
+  const folderId = normalizeFolderId(meta.folderId)
+  return name === GIT_HANDOFF_SESSION_NAME && folderId === GIT_HANDOFF_FOLDER_ID
+}
+
+function gitHandoffSessionCandidates(): string[] {
+  const out: string[] = []
+  const seen = new Set<string>()
+
+  function push(rawId: string | null | undefined) {
+    const sid = normalizeSessionId(rawId || '')
+    if (!sid || seen.has(sid)) return
+    seen.add(sid)
+    out.push(sid)
+  }
+
+  push(readStoredGitHandoffSessionId())
+  for (const sid of sessionList.value) {
+    if (isGitHandoffSession(sid)) {
+      push(sid)
+    }
+  }
+
+  return out
+}
+
+async function ensureGitHandoffSessionExists(): Promise<string> {
+  const folderId = ensureFolderExists(GIT_HANDOFF_FOLDER_ID, GIT_HANDOFF_FOLDER_NAME)
+
+  for (const sid of gitHandoffSessionCandidates()) {
+    const exists = await getSessionInfo(sid)
+    if (!exists) {
+      removeTrackedSession(sid)
+      continue
+    }
+
+    patchSessionMeta(sid, {
+      name: GIT_HANDOFF_SESSION_NAME,
+      folderId,
+    })
+    persistGitHandoffSessionId(sid)
+    return sid
+  }
+
+  const createCwd = sessionStartCwd()
+  setError(null)
+  status.value = 'creating'
+
+  const json = await createTerminalSession({ cwd: createCwd, cols: 80, rows: 24 })
+  patchSessionMeta(json.sessionId, {
+    name: GIT_HANDOFF_SESSION_NAME,
+    folderId,
+    pinned: undefined,
+    lastUsedAt: Date.now(),
+  })
+  persistGitHandoffSessionId(json.sessionId)
+  clearSessionOutput(json.sessionId)
+  setStreamStatusForSession(json.sessionId, 'disconnected')
+  return json.sessionId
+}
+
 function persistSessionMetaById(opts?: { remote?: boolean }) {
   const next: Record<string, TerminalSessionMeta> = {}
   for (const [key, value] of Object.entries(sessionMetaById.value)) {
@@ -515,12 +607,6 @@ function removeSessionMeta(id: string, opts?: { remote?: boolean }) {
   delete next[sid]
   sessionMetaById.value = next
   persistSessionMetaById(opts)
-}
-
-function markSessionUsed(id: string, at = Date.now(), opts?: { remote?: boolean }) {
-  const sid = normalizeSessionId(id)
-  if (!sid) return
-  patchSessionMeta(sid, { lastUsedAt: Math.max(1, Math.floor(Number(at) || 0)) }, opts)
 }
 
 function seedSessionRecencyFromList(opts?: { remote?: boolean }) {
@@ -590,11 +676,16 @@ function setActiveSession(next: string | null, opts?: { remote?: boolean }) {
     }
     return
   }
+
   sessionId.value = sid
-  sessionList.value = [sid, ...sessionList.value.filter((id) => id !== sid)]
-  markSessionUsed(sid, Date.now(), { remote: false })
+  if (!sessionList.value.includes(sid)) {
+    sessionList.value = [sid, ...sessionList.value]
+    persistSessionList({ remote: false })
+  }
   lastSentResizeSig = null
-  persistSessionList(opts)
+  if (opts?.remote !== false) {
+    scheduleTerminalStateRemotePersist()
+  }
   if (status.value !== 'creating' && status.value !== 'restarting') {
     status.value = streamStatusForSession(sid)
   }
@@ -849,6 +940,9 @@ function removeTrackedSession(id: string, opts?: { persist?: boolean }) {
   clearStreamStatusForSession(sid)
   clearSessionOutput(sid)
   dropStreamSeq(sid)
+  if (readStoredGitHandoffSessionId() === sid) {
+    persistGitHandoffSessionId(null)
+  }
   removeSessionMeta(sid, { remote: shouldPersist })
   if (sessionRenamingId.value === sid) cancelSessionRename()
   if (mobileSessionActionTargetId.value === sid) {
@@ -914,9 +1008,7 @@ function sidebarSessionLabel(item: TerminalSidebarSession): string {
 
 function compareSidebarSessionRecency(a: TerminalSidebarSession, b: TerminalSidebarSession): number {
   if (a.lastUsedAt !== b.lastUsedAt) return b.lastUsedAt - a.lastUsedAt
-  const aIndex = sessionList.value.indexOf(a.id)
-  const bIndex = sessionList.value.indexOf(b.id)
-  return aIndex - bIndex
+  return a.id.localeCompare(b.id)
 }
 
 function sessionMatchesQuery(item: TerminalSidebarSession, q: string): boolean {
@@ -1095,6 +1187,8 @@ function startSessionCreate(folderId: string) {
 }
 
 function sessionStartCwd(): string {
+  const projectDir = String(directoryStore.currentDirectory || '').trim()
+  if (projectDir) return projectDir
   return DEFAULT_TERMINAL_CWD
 }
 
@@ -1574,10 +1668,12 @@ function maybeSendPendingForActiveSession() {
   const sid = normalizeSessionId(sessionId.value || '')
   if (!sid) return
   if (!pendingSend.value) return
+  if (pendingSendTarget.value === 'git' && !isGitHandoffSession(sid)) return
   if (streamStatusForSession(sid) !== 'connected') return
 
   const toSend = pendingSend.value
   pendingSend.value = null
+  pendingSendTarget.value = null
   window.setTimeout(() => {
     void sendInput(toSend.endsWith('\n') ? toSend : `${toSend}\n`)
   }, 50)
@@ -1935,7 +2031,6 @@ async function openSessionFromSidebar(id: string) {
   cancelFolderRename()
 
   if (sessionId.value === sid) {
-    markSessionUsed(sid)
     if (!hasSessionStreamSource(sid) || streamStatusForSession(sid) === 'disconnected') {
       await connect()
     } else {
@@ -1994,6 +2089,11 @@ onMounted(() => {
     openTerminalUiStateEvents()
 
     await refreshTrackedSessions()
+
+    if (pendingSend.value && pendingSendTarget.value === 'git') {
+      const gitSessionId = await ensureGitHandoffSessionExists()
+      setActiveSession(gitSessionId)
+    }
 
     if (sessionId.value) {
       await connect()

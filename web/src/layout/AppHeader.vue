@@ -371,7 +371,7 @@ function openHelpDialog() {
     description="Choose a directory to set as the current project"
     @update:open="(v) => (projectPickerOpen = v)"
   >
-    <div class="flex flex-col gap-3 h-[65vh]">
+    <div class="flex min-h-0 flex-col gap-3">
       <PathPicker
         v-model="projectPickerDraft"
         placeholder="/path/to/project"
@@ -382,7 +382,7 @@ function openHelpDialog() {
         :show-options="true"
         :show-gitignored="true"
         input-class="h-9 font-mono"
-        browser-class="flex-1 min-h-0"
+        browser-class="flex max-h-[52vh] min-h-[14rem] flex-col"
       />
       <div class="flex items-center justify-end gap-2 flex-none">
         <Button variant="ghost" @click="projectPickerOpen = false">Cancel</Button>

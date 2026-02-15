@@ -1,4 +1,4 @@
-import type { CSSProperties, Component, ComputedRef, Ref } from 'vue'
+import type { CSSProperties, ComputedRef, Ref } from 'vue'
 
 import type { OptionMenuGroup, OptionMenuItem } from '@/components/ui/OptionMenu.vue'
 import type { RenderBlock } from '@/components/chat/MessageList.vue'
@@ -40,15 +40,6 @@ type RetryStatusLike = {
 
 type AttentionLike = { kind: 'permission' | 'question'; payload: DynamicRecord } | null
 
-type CommandItemLike = {
-  name: string
-  isBuiltIn?: boolean
-  scope?: string
-  agent?: string
-  description?: string
-  aliases?: string[]
-}
-
 type SessionUsageLike = {
   tokensLabel: string
   percentUsed: number | null
@@ -62,7 +53,6 @@ export type ChatPageViewContext = {
   contentEl: Ref<HTMLElement | null>
   bottomEl: Ref<HTMLElement | null>
   composerBarRef: Ref<HTMLElement | null>
-  commandPaletteRef: Ref<ContainsTargetExpose | null>
   composerRef: Ref<ComposerExpose | null>
   composerControlsRef: Ref<HTMLElement | null>
   composerPickerRef: Ref<ContainsTargetExpose | null>
@@ -141,13 +131,6 @@ export type ChatPageViewContext = {
   retryCountdownLabel: MaybeRef<string>
   retryNextLabel: MaybeRef<string>
   abortRun: () => void | Promise<void>
-
-  commandOpen: MaybeRef<boolean>
-  commandsLoading: MaybeRef<boolean>
-  filteredCommands: MaybeRef<CommandItemLike[]>
-  commandIndex: MaybeRef<number>
-  commandIcon: (cmd: CommandItemLike) => Component
-  insertCommand: (cmd: CommandItemLike) => void
 
   composerActionMenuOpen: MaybeRef<boolean>
   composerActionMenuQuery: MaybeRef<string>

@@ -30,7 +30,7 @@ const pathModel = computed({
     description="Add another directory path"
     @update:open="(v) => emit('update:open', v)"
   >
-    <div class="space-y-3">
+    <div class="flex min-h-0 flex-col gap-3">
       <PathPicker
         v-model="pathModel"
         placeholder="/path/to/directory"
@@ -40,8 +40,9 @@ const pathModel = computed({
         :show-options="true"
         :show-gitignored="true"
         input-class="h-9 font-mono"
+        browser-class="flex h-[min(56vh,34rem)] min-h-[14rem] flex-col"
       />
-      <div class="flex items-center justify-end gap-2">
+      <div class="flex items-center justify-end gap-2 flex-none">
         <Button variant="ghost" @click="emit('update:open', false)">
           <RiCloseLine class="h-4 w-4" />
           Cancel

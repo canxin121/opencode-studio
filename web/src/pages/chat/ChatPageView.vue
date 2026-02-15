@@ -15,7 +15,6 @@ import {
 
 import VerticalSplitPane from '@/components/ui/VerticalSplitPane.vue'
 import MessageList from '@/components/chat/MessageList.vue'
-import CommandPalette from '@/components/chat/CommandPalette.vue'
 import ChatHeader from '@/components/chat/ChatHeader.vue'
 import Composer from '@/components/chat/Composer.vue'
 import RenameSessionDialog from '@/components/chat/RenameSessionDialog.vue'
@@ -39,7 +38,6 @@ const {
   contentEl,
   bottomEl,
   composerBarRef,
-  commandPaletteRef,
   composerRef,
   composerControlsRef,
   composerPickerRef,
@@ -112,14 +110,6 @@ const {
   retryCountdownLabel,
   retryNextLabel,
   abortRun,
-
-  // Command palette.
-  commandOpen,
-  commandsLoading,
-  filteredCommands,
-  commandIndex,
-  commandIcon,
-  insertCommand,
 
   // Composer action menu.
   composerActionMenuOpen,
@@ -198,7 +188,6 @@ void scrollEl
 void contentEl
 void bottomEl
 void composerBarRef
-void commandPaletteRef
 void composerRef
 void composerControlsRef
 void composerPickerRef
@@ -343,16 +332,6 @@ void sessionActionsMenuRef
                 :attention="chat.selectedAttention"
                 :mobile-pointer="ui.isMobilePointer"
                 @abort="abortRun"
-              />
-
-              <CommandPalette
-                ref="commandPaletteRef"
-                :open="commandOpen && !chat.selectedAttention && !retryStatus"
-                :loading="commandsLoading"
-                :commands="filteredCommands"
-                v-model:activeIndex="commandIndex"
-                :command-icon="commandIcon"
-                @select="insertCommand"
               />
 
               <Composer

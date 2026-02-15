@@ -385,7 +385,7 @@ export function useGitPageAuth(opts: {
     }
 
     const send = `cd '${shellEscapeSingleQuotes(dir)}'\n${cmd}`
-    const sendToken = stageTrustedTerminalHandoff(send)
+    const sendToken = stageTrustedTerminalHandoff(send, { target: 'git' })
     if (!sendToken) {
       toasts.push('error', 'Failed to prepare terminal command handoff')
       return

@@ -265,7 +265,9 @@ impl TerminalManager {
         if prefer_tmux {
             tracing::info!("terminal persistence backend: tmux");
         } else {
-            tracing::warn!("tmux not found; terminal persistence is limited to server runtime");
+            tracing::warn!(
+                "tmux not found; terminal sessions will be restored as fresh shells after restart"
+            );
         }
 
         Self {
@@ -409,13 +411,9 @@ impl TerminalManager {
         }
 
         let persisted = self.persisted_session(sid)?;
-        let backend = TerminalBackend::from(persisted.backend);
-        if backend == TerminalBackend::Shell {
-            self.remove_persisted_session(sid);
-            return None;
-        }
+        let cwd = persisted.cwd.clone();
 
-        let Ok(cwd_meta) = std::fs::metadata(&persisted.cwd) else {
+        let Ok(cwd_meta) = std::fs::metadata(&cwd) else {
             self.remove_persisted_session(sid);
             return None;
         };
@@ -424,18 +422,12 @@ impl TerminalManager {
             return None;
         }
 
-        let tmux_name = tmux_session_name(sid);
-        if !tmux_has_session(&tmux_name) {
-            self.remove_persisted_session(sid);
-            return None;
-        }
-
         let session = match TerminalSession::spawn(
             sid.to_string(),
-            persisted.cwd,
+            cwd.clone(),
             persisted.cols,
             persisted.rows,
-            true,
+            self.prefer_tmux,
         ) {
             Ok(session) => session,
             Err(error) => {
@@ -446,6 +438,13 @@ impl TerminalManager {
 
         self.sessions.insert(sid.to_string(), session.clone());
         self.track_session_lifecycle(sid.to_string(), session.clone());
+        self.upsert_persisted_session(
+            sid,
+            &cwd,
+            persisted.cols,
+            persisted.rows,
+            session.backend().to_persisted(),
+        );
         Some(session)
     }
 
@@ -718,15 +717,18 @@ impl TerminalSession {
     }
 
     fn keep_persisted_entry_after_exit(&self) -> bool {
-        if self.backend != TerminalBackend::Tmux {
-            return false;
+        match self.backend {
+            // Shell sessions cannot survive a backend restart, but keep the
+            // registry entry so we can transparently restore a new shell.
+            TerminalBackend::Shell => true,
+            TerminalBackend::Tmux => {
+                let Some(name) = self.tmux_session_name.as_deref() else {
+                    return false;
+                };
+
+                tmux_has_session(name)
+            }
         }
-
-        let Some(name) = self.tmux_session_name.as_deref() else {
-            return false;
-        };
-
-        tmux_has_session(name)
     }
 
     fn spawn_reader_task(session: Arc<Self>, mut reader: Box<dyn Read + Send>) {

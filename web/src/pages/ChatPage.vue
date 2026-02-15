@@ -50,10 +50,6 @@ type OptionMenuExpose = {
   focusSearch?: () => void
 }
 
-type CommandPaletteExpose = {
-  containsTarget?: (target: Node | null) => boolean
-}
-
 type OutgoingMessagePart =
   | { type: 'text'; text: string }
   | { type: 'file'; mime: string; filename: string; url: string }
@@ -107,7 +103,6 @@ const {
 const editorFullscreen = ref(false)
 const editorClosing = ref(false)
 
-const commandPaletteRef = ref<CommandPaletteExpose | null>(null)
 const sessionActionsMenuRef = ref<OptionMenuExpose | null>(null)
 
 const composerActionMenuOpen = ref(false)
@@ -235,24 +230,14 @@ const chatCommands = useChatCommands({
 })
 
 const {
-  commandsLoading,
   commandOpen,
   commandQuery,
   commandIndex,
-  filteredCommands,
   loadCommands,
   insertCommand,
-  commandIcon,
   handleDraftInput,
   handleDraftKeydown: handleDraftKeydownInner,
 } = chatCommands
-
-const filteredCommandsForView = computed(() => {
-  return filteredCommands.value.map((cmd) => ({
-    ...cmd,
-    agent: typeof cmd.agent === 'string' ? cmd.agent : undefined,
-  }))
-})
 
 modelSelection = useChatModelSelection({
   chat,
@@ -1121,7 +1106,6 @@ onMounted(async () => {
     }
 
     // Keep menus open when interacting within them.
-    if (commandPaletteRef.value?.containsTarget?.(target)) return
     if (composerPickerRef.value?.containsTarget?.(target)) return
     if (composerControlsRef.value && composerControlsRef.value.contains(target)) return
 
@@ -1158,7 +1142,6 @@ const viewCtx = {
   contentEl,
   bottomEl,
   composerBarRef,
-  commandPaletteRef,
   composerRef,
   composerControlsRef,
   composerPickerRef,
@@ -1233,14 +1216,6 @@ const viewCtx = {
   navPrev,
   navNext,
   scrollToBottom,
-
-  // Command palette.
-  commandOpen,
-  commandsLoading,
-  filteredCommands: filteredCommandsForView,
-  commandIndex,
-  commandIcon,
-  insertCommand,
 
   // Composer action menu.
   composerActionMenuOpen,

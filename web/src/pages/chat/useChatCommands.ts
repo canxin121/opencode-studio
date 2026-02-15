@@ -244,93 +244,21 @@ export function useChatCommands(opts: {
     },
   )
 
-  function activeCommandQuery(rawValue: string, rawCursorPosition: number | null | undefined): string | null {
-    // Defensive: DOM values should always be strings, but we occasionally see
-    // runtime reports of `undefined.length` during key events. Coerce here so
-    // command palette logic never throws.
-    const value = typeof rawValue === 'string' ? rawValue : String(rawValue ?? '')
-    const cursorPosition =
-      typeof rawCursorPosition === 'number' && Number.isFinite(rawCursorPosition) ? rawCursorPosition : value.length
-
-    const cursor = Math.max(0, Math.min(cursorPosition, value.length))
-    const lineStart = value.lastIndexOf('\n', Math.max(0, cursor - 1)) + 1
-
-    // Support optional leading indentation.
-    let i = lineStart
-    while (i < cursor) {
-      const ch = value[i]
-      if (ch === ' ' || ch === '\t') i += 1
-      else break
-    }
-    if (value[i] !== '/') return null
-
-    const tokenStart = i + 1
-    // Command token stops at whitespace.
-    let tokenEnd = tokenStart
-    while (tokenEnd < value.length) {
-      const ch = value[tokenEnd]
-      if (ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r') break
-      tokenEnd += 1
-    }
-
-    // Only show the palette while the caret is within the command token.
-    if (cursor < tokenStart || cursor > tokenEnd) return null
-
-    return value.slice(tokenStart, cursor)
-  }
-
-  function updateCommandState(rawValue: string, rawCursorPosition: number | null | undefined) {
+  function dismissCommandPaletteOnInput() {
     // Typing in the textarea should dismiss model/agent/variant pickers.
     if (composerPickerOpen.value) {
       composerPickerOpen.value = null
     }
 
-    const q = activeCommandQuery(rawValue, rawCursorPosition)
-    if (q === null) {
-      closeCommandPalette()
-      return
-    }
-
-    commandQuery.value = q
-    commandOpen.value = true
+    closeCommandPalette()
   }
 
   function handleDraftInput() {
-    const target = getComposerTextareaEl(composerRef.value)
-    if (!target) return
-    const value = typeof target.value === 'string' ? target.value : ''
-    const sel = target.selectionStart
-    const cursorPosition = typeof sel === 'number' && Number.isFinite(sel) ? sel : value.length
-    updateCommandState(value, cursorPosition)
+    if (!getComposerTextareaEl(composerRef.value)) return
+    dismissCommandPaletteOnInput()
   }
 
   function handleDraftKeydown(e: KeyboardEvent) {
-    if (commandOpen.value) {
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        closeCommandPalette()
-        return
-      }
-      if (filteredCommands.value.length > 0) {
-        if (e.key === 'ArrowDown') {
-          e.preventDefault()
-          commandIndex.value = (commandIndex.value + 1) % filteredCommands.value.length
-          return
-        }
-        if (e.key === 'ArrowUp') {
-          e.preventDefault()
-          commandIndex.value = (commandIndex.value - 1 + filteredCommands.value.length) % filteredCommands.value.length
-          return
-        }
-        if (e.key === 'Enter' || e.key === 'Tab') {
-          e.preventDefault()
-          const cmd = filteredCommands.value[commandIndex.value]
-          if (cmd) insertCommand(cmd)
-          return
-        }
-      }
-    }
-
     // Enter inserts a newline; Cmd/Ctrl+Enter sends.
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault()

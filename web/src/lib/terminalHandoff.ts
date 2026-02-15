@@ -8,7 +8,20 @@ const TOKEN_RE = /^[a-f0-9]{32}$/
 type TerminalHandoffPayload = {
   v: 1
   send: string
+  target?: TerminalHandoffTarget
   expiresAt: number
+}
+
+export type TerminalHandoffTarget = 'git'
+
+export type ConsumedTerminalHandoff = {
+  send: string
+  target: TerminalHandoffTarget | null
+}
+
+function normalizeTarget(raw: unknown): TerminalHandoffTarget | null {
+  if (raw === 'git') return 'git'
+  return null
 }
 
 function normalizeSendPayload(raw: string): string | null {
@@ -58,6 +71,7 @@ function parsePayload(raw: string): TerminalHandoffPayload | null {
     const parsed = JSON.parse(raw) as TerminalHandoffPayload
     if (parsed?.v !== 1) return null
     if (typeof parsed.send !== 'string') return null
+    if (parsed.target !== undefined && normalizeTarget(parsed.target) === null) return null
     if (typeof parsed.expiresAt !== 'number' || !Number.isFinite(parsed.expiresAt)) return null
     return parsed
   } catch {
@@ -100,9 +114,11 @@ function pruneHandoffs(now: number) {
   }
 }
 
-export function stageTrustedTerminalHandoff(send: string): string | null {
+export function stageTrustedTerminalHandoff(send: string, opts?: { target?: TerminalHandoffTarget }): string | null {
   const payloadSend = normalizeSendPayload(send)
   if (!payloadSend) return null
+
+  const payloadTarget = normalizeTarget(opts?.target)
 
   const now = Date.now()
   pruneHandoffs(now)
@@ -114,6 +130,9 @@ export function stageTrustedTerminalHandoff(send: string): string | null {
     send: payloadSend,
     expiresAt: now + TERMINAL_HANDOFF_TTL_MS,
   }
+  if (payloadTarget) {
+    payload.target = payloadTarget
+  }
 
   try {
     sessionStorage.setItem(`${TERMINAL_HANDOFF_KEY_PREFIX}${token}`, JSON.stringify(payload))
@@ -123,7 +142,7 @@ export function stageTrustedTerminalHandoff(send: string): string | null {
   }
 }
 
-export function consumeTrustedTerminalHandoff(token: string): string | null {
+export function consumeTrustedTerminalHandoffPayload(token: string): ConsumedTerminalHandoff | null {
   const id = String(token || '').trim().toLowerCase()
   if (!TOKEN_RE.test(id)) return null
 
@@ -137,8 +156,18 @@ export function consumeTrustedTerminalHandoff(token: string): string | null {
     const payload = parsePayload(raw)
     if (!payload) return null
     if (payload.expiresAt <= Date.now()) return null
-    return normalizeSendPayload(payload.send)
+    const send = normalizeSendPayload(payload.send)
+    if (!send) return null
+    return {
+      send,
+      target: normalizeTarget(payload.target),
+    }
   } catch {
     return null
   }
+}
+
+export function consumeTrustedTerminalHandoff(token: string): string | null {
+  const payload = consumeTrustedTerminalHandoffPayload(token)
+  return payload?.send || null
 }
