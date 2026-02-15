@@ -1,0 +1,59 @@
+@layer components {
+  /* Semantic typography classes - font-size only */
+  .typography-markdown {
+    font-size: var(--text-markdown);
+  }
+
+  .typography-code {
+    font-size: var(--text-code);
+  }
+
+  .typography-ui-header {
+    font-size: var(--text-ui-header);
+  }
+
+  .typography-ui-label {
+    font-size: var(--text-ui-label);
+  }
+
+  .typography-meta {
+    font-size: var(--text-meta);
+  }
+
+  .typography-micro {
+    font-size: var(--text-micro);
+  }
+
+  /* Consistent content columns (used by chat + editors) */
+  .chat-column {
+    width: min(100%, 72rem);
+    margin-inline: auto;
+    padding-inline: calc(clamp(1rem, 3vw, 1.5rem) * var(--padding-scale, 1));
+  }
+
+  .chat-message-column {
+    width: min(100%, 72rem);
+    margin-inline: auto;
+    padding-inline: calc(clamp(0.75rem, 2.5vw, 1rem) * var(--padding-scale, 1));
+  }
+
+  @media (min-width: 1280px) {
+    .chat-column {
+      width: min(100%, 80rem);
+    }
+
+    .chat-message-column {
+      width: min(100%, 80rem);
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .chat-column {
+      padding-inline: calc(clamp(1.25rem, 2.5vw, 2rem) * var(--padding-scale, 1));
+    }
+
+    .chat-message-column {
+      padding-inline: calc(clamp(1rem, 2.5vw, 1.5rem) * var(--padding-scale, 1));
+    }
+  }
+}

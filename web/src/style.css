@@ -1,0 +1,648 @@
+@import 'tailwindcss';
+@import './styles/typography.css';
+@import './styles/mobile.css';
+@plugin "@tailwindcss/typography";
+
+/* Tailwind v4: ensure we scan Vue + TS + CSS sources for class usage. */
+@source "./**/*.{ts,tsx,vue,css}";
+
+/* Tailwind v4 dark variant uses a custom selector. */
+@custom-variant dark (&:is(.dark *));
+
+@layer base {
+  :root {
+    color-scheme: light;
+
+    /* App shell / safe-area / keyboard insets */
+    --oc-safe-area-top: 0px;
+    --oc-safe-area-right: 0px;
+    --oc-safe-area-bottom: 0px;
+    --oc-safe-area-bottom-visual: 0px;
+    --oc-safe-area-left: 0px;
+    --oc-header-height: 56px;
+    --oc-bottom-nav-height: 56px;
+    --oc-visual-viewport-offset-top: 0px;
+    --oc-keyboard-inset: 0px;
+    --oc-keyboard-avoid-offset: 0px;
+    --oc-keyboard-home-indicator: 0px;
+    /* Core Scale Factors */
+    --padding-scale: 1;
+    --radius-scale: 1;
+
+    /* Base Typography Sizes (Semantic) */
+    --text-markdown: 0.9375rem; /* 15px */
+    --text-code: 0.9063rem; /* 14.5px */
+    --text-ui-header: 0.9375rem;
+    --text-ui-label: 0.875rem; /* 14px */
+    --text-meta: 0.875rem;
+    --text-micro: 0.8125rem; /* 13px */
+
+    /* Font Families */
+    --font-sans:
+      'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    --font-mono:
+      'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
+      monospace;
+    --ui-regular-font-weight: 400;
+
+    /* OKLCH Theme - Light Mode Default (Warm Sand) */
+    --background: 0.97 0.02 85; /* #fbf8f3 */
+    --foreground: 0.25 0.02 40; /* #423f3d */
+
+    --card: 0.99 0.01 90; /* #fcfbf8 */
+    --card-foreground: 0.25 0.02 40; /* #423f3d */
+
+    --popover: 0.99 0.01 90; /* #fcfbf8 */
+    --popover-foreground: 0.25 0.02 40;
+
+    /* Sidebar tokens (used by bg-sidebar, text-sidebar-*, border-sidebar-*) */
+    --sidebar: 0.965 0.018 85; /* slightly deeper than background */
+    --sidebar-foreground: 0.25 0.02 40;
+    --sidebar-border: 0.86 0.02 72;
+    --sidebar-accent: 0.92 0.02 80;
+    --sidebar-accent-foreground: 0.25 0.02 40;
+
+    --primary: 0.65 0.2 55; /* #e87b35 (Orange Accent) */
+    --primary-foreground: 0.99 0.01 90;
+
+    --secondary: 0.92 0.02 80; /* #ebe7e0 */
+    --secondary-foreground: 0.25 0.02 40;
+
+    --muted: 0.9 0.015 75; /* #e6e2db */
+    --muted-foreground: 0.45 0.02 50; /* #78736f */
+
+    --accent: 0.92 0.02 80; /* #ebe7e0 */
+    --accent-foreground: 0.25 0.02 40;
+
+    --destructive: 0.55 0.25 25; /* #d93d3d */
+    --destructive-foreground: 0.99 0.01 90;
+
+    --border: 0.85 0.02 70; /* #d6d1c9 */
+    --input: 0.88 0.02 75; /* #dedad3 */
+    --ring: 0.65 0.2 55; /* #e87b35 */
+
+    --radius: 0.625rem; /* 10px */
+
+    /* Scrollbars */
+    --scrollbar-thumb: 0.32 0.03 50 / 0.4;
+    --scrollbar-thumb-hover: 0.32 0.03 50 / 0.6;
+  }
+
+  /* Desktop shell (Electron/Tauri) drag regions.
+     No-op in normal browsers; enables pointer interactions in draggable windows. */
+  .app-region-no-drag {
+    -webkit-app-region: no-drag;
+  }
+  .app-region-drag {
+    -webkit-app-region: drag;
+  }
+
+  .dark {
+    color-scheme: dark;
+    /* OKLCH Theme - Dark Mode (Deep Warm Charcoal) */
+    --background: 0.16 0.01 30; /* #151313 */
+    --foreground: 0.85 0.02 90; /* #cdccc3 */
+
+    --card: 0.19 0.01 40; /* #1c1b1a */
+    --card-foreground: 0.85 0.02 90;
+
+    --popover: 0.24 0.01 40; /* #282726 */
+    --popover-foreground: 0.85 0.02 90;
+
+    /* Sidebar tokens */
+    --sidebar: 0.19 0.01 32;
+    --sidebar-foreground: 0.85 0.02 90;
+    --sidebar-border: 0.31 0.01 35;
+    --sidebar-accent: 0.29 0.01 40;
+    --sidebar-accent-foreground: 0.85 0.02 90;
+
+    --primary: 0.77 0.17 85; /* #edb449 (Golden Sand) */
+    --primary-foreground: 0.16 0.01 30;
+
+    --secondary: 0.29 0.01 40; /* #343331 */
+    --secondary-foreground: 0.85 0.02 90;
+
+    --muted: 0.33 0.01 40; /* #403e3c */
+    --muted-foreground: 0.75 0.02 80; /* #b6b4ab */
+
+    --accent: 0.29 0.01 40; /* #343331 */
+    --accent-foreground: 0.85 0.02 90;
+
+    --destructive: 0.65 0.15 30; /* #d98678 */
+    --destructive-foreground: 0.9 0.02 80;
+
+    --border: 0.31 0.01 35; /* #393836 */
+    --input: 0.33 0.01 40; /* #403e3c */
+    --ring: 0.77 0.17 85; /* #edb449 */
+  }
+
+  body {
+    @apply antialiased bg-background text-foreground h-full overflow-hidden m-0 p-0 font-sans;
+    font-size: var(--base-font-size, 14px);
+    line-height: 1.5;
+  }
+
+  html,
+  #app {
+    @apply h-full w-full;
+  }
+
+  /* Avoid WebKit textarea styling in the chat composer */
+  textarea[data-chat-input='true'] {
+    -webkit-appearance: none;
+    background: transparent !important;
+    border: none;
+    box-shadow: none;
+  }
+
+  textarea[data-chat-input='true']:focus,
+  textarea[data-chat-input='true']:focus-visible,
+  textarea[data-chat-input='true']:hover {
+    outline: none;
+    border: none;
+    box-shadow: none;
+  }
+
+  /* Keyboard avoidance (mobile) */
+  [data-keyboard-avoid-active='true'] {
+    /*
+      Avoid using transforms for keyboard avoidance.
+      A transformed ancestor becomes the containing block for `position: fixed` children,
+      which breaks the chat fullscreen composer ("Open editor") in desktop webviews.
+    */
+    position: relative;
+    top: calc(-1 * var(--oc-keyboard-avoid-offset, 0px));
+  }
+
+  /* On mobile, let the keyboard cover the bottom nav instead of pushing it upward. */
+  :root[data-oc-keyboard-open='true'] .oc-bottom-nav {
+    display: none;
+  }
+
+  /* Utility Classes */
+  .mono {
+    @apply font-mono;
+  }
+
+  /* Scrollbars */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: oklch(var(--scrollbar-thumb));
+    border-radius: 99px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: oklch(var(--scrollbar-thumb-hover));
+  }
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+}
+
+@theme {
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+
+  --color-border: oklch(var(--border));
+  --color-input: oklch(var(--input));
+  --color-ring: oklch(var(--ring));
+  --color-background: oklch(var(--background));
+  --color-foreground: oklch(var(--foreground));
+
+  --color-primary: oklch(var(--primary));
+  --color-primary-foreground: oklch(var(--primary-foreground));
+
+  --color-secondary: oklch(var(--secondary));
+  --color-secondary-foreground: oklch(var(--secondary-foreground));
+
+  --color-destructive: oklch(var(--destructive));
+  --color-destructive-foreground: oklch(var(--destructive-foreground));
+
+  --color-muted: oklch(var(--muted));
+  --color-muted-foreground: oklch(var(--muted-foreground));
+
+  --color-accent: oklch(var(--accent));
+  --color-accent-foreground: oklch(var(--accent-foreground));
+
+  --color-popover: oklch(var(--popover));
+  --color-popover-foreground: oklch(var(--popover-foreground));
+
+  --color-card: oklch(var(--card));
+  --color-card-foreground: oklch(var(--card-foreground));
+
+  --color-sidebar: oklch(var(--sidebar));
+  --color-sidebar-foreground: oklch(var(--sidebar-foreground));
+  --color-sidebar-border: oklch(var(--sidebar-border));
+  --color-sidebar-accent: oklch(var(--sidebar-accent));
+  --color-sidebar-accent-foreground: oklch(var(--sidebar-accent-foreground));
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+
+  @keyframes accordion-down {
+    from {
+      height: 0;
+    }
+    to {
+      height: var(--radix-accordion-content-height);
+    }
+  }
+  @keyframes accordion-up {
+    from {
+      height: var(--radix-accordion-content-height);
+    }
+    to {
+      height: 0;
+    }
+  }
+}
+
+@layer utilities {
+  /* Hide native scrollbars while preserving scroll behavior (use sparingly). */
+  .oc-scrollbar-hidden {
+    scrollbar-width: none; /* Firefox */
+  }
+
+  .oc-scrollbar-hidden::-webkit-scrollbar {
+    display: none; /* WebKit */
+  }
+
+  /* Markdown typography: use Tailwind Typography plugin, then tune it to our theme tokens. */
+  .prose {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+
+    /* Map typography plugin colors to our OKLCH theme tokens. */
+    --tw-prose-body: oklch(var(--foreground) / 0.9);
+    --tw-prose-headings: oklch(var(--foreground));
+    --tw-prose-lead: oklch(var(--foreground) / 0.9);
+    --tw-prose-links: oklch(var(--primary));
+    --tw-prose-bold: oklch(var(--foreground));
+    --tw-prose-counters: oklch(var(--muted-foreground));
+    --tw-prose-bullets: oklch(var(--muted-foreground));
+    --tw-prose-hr: oklch(var(--border) / 0.9);
+    --tw-prose-quotes: oklch(var(--foreground) / 0.95);
+    --tw-prose-quote-borders: oklch(var(--border));
+    --tw-prose-captions: oklch(var(--muted-foreground));
+    --tw-prose-code: oklch(var(--primary));
+    --tw-prose-pre-code: oklch(var(--foreground));
+    --tw-prose-pre-bg: oklch(var(--muted) / 0.35);
+    --tw-prose-th-borders: oklch(var(--border));
+    --tw-prose-td-borders: oklch(var(--border) / 0.75);
+  }
+
+  /* Links: make them feel clickable, without shouting. */
+  .prose :where(a) {
+    @apply underline underline-offset-2 decoration-primary/30 hover:decoration-primary/60;
+    word-break: break-all;
+    overflow-wrap: anywhere;
+  }
+
+  /* Inline code (but not fenced blocks). */
+  .prose :where(:not(pre) > code) {
+    @apply font-mono text-primary bg-muted/50 px-1 py-0.5 rounded;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  /* Avoid Typography's default backticks around inline code. */
+  .prose :where(code)::before,
+  .prose :where(code)::after {
+    content: none !important;
+  }
+
+  /* Ensure list markers show up (Tailwind preflight resets list-style). */
+  .prose :where(ol) {
+    list-style-type: decimal;
+    padding-left: 1.4rem;
+  }
+  .prose :where(ul) {
+    list-style-type: disc;
+    padding-left: 1.4rem;
+  }
+  .prose :where(li)::marker {
+    color: oklch(var(--muted-foreground));
+  }
+
+  /* Code blocks */
+  .prose :where(pre) {
+    @apply border border-border;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+  .prose :where(pre code) {
+    @apply font-mono bg-transparent p-0 text-foreground;
+  }
+
+  /* Markdown fenced blocks (custom renderer): header + actions + sane sizing. */
+  .oc-md-codeblock {
+    @apply relative w-full min-w-0 my-4 rounded-md border border-border bg-muted/35 overflow-hidden;
+    font-size: 1em; /* keep code blocks the same size as surrounding text */
+  }
+  .oc-md-codeblock__header {
+    @apply flex items-center justify-between gap-3 bg-muted/40 border-b border-border/60 px-3 py-1;
+  }
+  .oc-md-codeblock__lang {
+    @apply min-w-0 truncate text-xs font-mono text-muted-foreground;
+  }
+  .oc-md-codeblock__actions {
+    @apply flex items-center gap-1;
+  }
+  .oc-md-codeblock__iconbtn {
+    @apply inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/40 active:scale-95 transition;
+  }
+  .oc-md-codeblock__icon {
+    @apply h-4 w-4;
+  }
+  .oc-md-codeblock__icon--check {
+    display: none;
+  }
+  .oc-md-codeblock__iconbtn[data-oc-state='copied'] {
+    @apply text-primary;
+  }
+  .oc-md-codeblock__iconbtn[data-oc-state='copied'] .oc-md-codeblock__icon--copy {
+    display: none;
+  }
+  .oc-md-codeblock__iconbtn[data-oc-state='copied'] .oc-md-codeblock__icon--check {
+    display: block;
+  }
+
+  .oc-md-codeblock__icon--up {
+    display: none;
+  }
+  .oc-md-codeblock[data-oc-expanded='1'] .oc-md-codeblock__icon--down {
+    display: none;
+  }
+  .oc-md-codeblock[data-oc-expanded='1'] .oc-md-codeblock__icon--up {
+    display: block;
+  }
+
+  .oc-md-codeblock__body {
+    @apply relative min-w-0;
+  }
+  .oc-md-pre {
+    @apply overflow-x-auto font-mono p-4 leading-relaxed;
+    font-size: 1em;
+  }
+  .oc-md-pre code {
+    @apply bg-transparent p-0;
+  }
+
+  .oc-md-codeblock[data-oc-expanded='0'] .oc-md-pre {
+    max-height: 14rem;
+    overflow: hidden;
+  }
+  .oc-md-codeblock__fade {
+    @apply pointer-events-none hidden absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-muted/85 to-transparent;
+  }
+  .oc-md-codeblock[data-oc-expanded='0'] .oc-md-codeblock__fade {
+    @apply block;
+  }
+  .oc-md-codeblock__morewrap {
+    @apply hidden absolute inset-x-0 bottom-0 justify-center pb-2;
+  }
+  .oc-md-codeblock[data-oc-expanded='0'] .oc-md-codeblock__morewrap {
+    @apply flex;
+  }
+  .oc-md-codeblock__more {
+    @apply pointer-events-auto inline-flex h-8 w-8 items-center justify-center rounded-md border border-border/60 bg-background/70 backdrop-blur text-muted-foreground hover:text-foreground active:scale-95 transition;
+  }
+
+  /* Lightweight highlight.js theme that matches our OKLCH tokens. */
+  .hljs {
+    color: oklch(var(--foreground));
+    background: transparent;
+  }
+  .hljs-comment,
+  .hljs-quote {
+    color: oklch(var(--muted-foreground));
+    font-style: italic;
+  }
+  .hljs-keyword,
+  .hljs-selector-tag,
+  .hljs-literal,
+  .hljs-symbol,
+  .hljs-doctag {
+    color: color-mix(in oklch, oklch(var(--primary)) 78%, oklch(var(--foreground)) 22%);
+    font-weight: 600;
+  }
+  .hljs-string,
+  .hljs-attr,
+  .hljs-regexp,
+  .hljs-template-tag,
+  .hljs-template-variable {
+    color: color-mix(in oklch, oklch(var(--primary)) 55%, oklch(var(--foreground)) 45%);
+  }
+  .hljs-number,
+  .hljs-bullet,
+  .hljs-built_in,
+  .hljs-builtin-name {
+    color: color-mix(in oklch, oklch(var(--destructive)) 35%, oklch(var(--primary)) 65%);
+  }
+  .hljs-title,
+  .hljs-section,
+  .hljs-name,
+  .hljs-function {
+    color: oklch(var(--foreground));
+    font-weight: 600;
+  }
+  .hljs-meta,
+  .hljs-subst {
+    color: oklch(var(--muted-foreground));
+  }
+
+  /* Mermaid (```mermaid) blocks: share header/actions styling with code blocks. */
+  .oc-md-mermaid {
+    @apply relative w-full min-w-0 my-4 rounded-md border border-border bg-muted/35 overflow-hidden;
+  }
+  .oc-md-mermaid__body {
+    @apply relative min-w-0;
+  }
+  .oc-md-mermaid__render {
+    @apply overflow-x-auto p-4;
+  }
+  .oc-md-mermaid__render svg {
+    max-width: 100%;
+    height: auto;
+  }
+  .oc-md-mermaid__fallback {
+    @apply overflow-x-auto font-mono p-4 leading-relaxed;
+    font-size: 1em;
+    display: none;
+  }
+  .oc-md-mermaid[data-oc-mermaid-status='pending'] .oc-md-mermaid__fallback,
+  .oc-md-mermaid[data-oc-mermaid-status='error'] .oc-md-mermaid__fallback {
+    display: block;
+  }
+  .oc-md-mermaid__source {
+    display: none;
+  }
+
+  .oc-md-mermaid[data-oc-expanded='0'] .oc-md-mermaid__render,
+  .oc-md-mermaid[data-oc-expanded='0'] .oc-md-mermaid__fallback {
+    max-height: 16rem;
+    overflow: hidden;
+  }
+  .oc-md-mermaid__fade {
+    @apply pointer-events-none hidden absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-muted/85 to-transparent;
+  }
+  .oc-md-mermaid[data-oc-expanded='0'] .oc-md-mermaid__fade {
+    @apply block;
+  }
+  .oc-md-mermaid__morewrap {
+    @apply hidden absolute inset-x-0 bottom-0 justify-center pb-2;
+  }
+  .oc-md-mermaid[data-oc-expanded='0'] .oc-md-mermaid__morewrap {
+    @apply flex;
+  }
+
+  /* Activity rows: keep widths stable and content from overflowing its column. */
+  .oc-activity-item {
+    width: 100%;
+    min-width: 0;
+  }
+
+  /* Shared surface for activity details (diffs, reasoning text, etc.). */
+  .oc-activity-detail {
+    @apply w-full min-w-0 rounded-md border border-border/60 bg-muted/20;
+  }
+}
+
+@layer components {
+  /* Shared form controls (used by settings panels). */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-md border border-border bg-background/60 px-3 py-2 text-sm font-medium text-foreground shadow-sm transition-all;
+    @apply hover:bg-accent/40 active:scale-95;
+    @apply focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring;
+    @apply disabled:pointer-events-none disabled:opacity-50;
+  }
+
+  .btn.primary {
+    @apply bg-primary text-primary-foreground border-primary/30 hover:bg-primary/90;
+  }
+
+  .btn.danger {
+    @apply bg-destructive text-destructive-foreground border-destructive/30 hover:bg-destructive/90;
+  }
+
+  input.input,
+  select.input,
+  select.select {
+    @apply h-9 w-full rounded-md border border-input bg-background/60 px-3 text-sm text-foreground shadow-sm;
+    @apply focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring;
+    @apply disabled:pointer-events-none disabled:opacity-50;
+  }
+
+  textarea.input {
+    @apply w-full rounded-md border border-input bg-background/60 px-3 py-2 text-sm text-foreground shadow-sm;
+    @apply focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring;
+    @apply disabled:pointer-events-none disabled:opacity-50;
+  }
+
+  /* VS Code-like sidebar primitives (Explorer / Source Control). */
+  .oc-vscode-pane {
+    @apply flex h-full min-h-0 flex-col overflow-hidden border-r border-sidebar-border/70 bg-sidebar text-sidebar-foreground;
+  }
+
+  .oc-vscode-pane-header {
+    @apply flex h-8 items-center justify-between border-b border-sidebar-border/70 px-2.5;
+  }
+
+  .oc-vscode-pane-title {
+    @apply text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground;
+  }
+
+  .oc-vscode-toolbar {
+    @apply flex items-center gap-0.5;
+  }
+
+  .oc-vscode-icon-button {
+    @apply inline-flex h-6 w-6 items-center justify-center rounded-sm text-muted-foreground transition-colors;
+    @apply hover:bg-sidebar-accent/70 hover:text-foreground;
+    @apply focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring;
+    @apply disabled:pointer-events-none disabled:opacity-45;
+  }
+
+  .oc-vscode-section {
+    @apply border-b border-sidebar-border/40;
+  }
+
+  .oc-vscode-section:last-child {
+    border-bottom: none;
+  }
+
+  .oc-vscode-section-head {
+    @apply flex h-7 w-full items-center gap-1 px-2 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground;
+    @apply transition-colors hover:bg-sidebar-accent/45;
+  }
+
+  .oc-vscode-section-label {
+    @apply min-w-0 flex-1 truncate;
+  }
+
+  .oc-vscode-count-badge {
+    @apply inline-flex min-w-4 items-center justify-center rounded-full bg-muted px-1.5 py-0 text-[10px] leading-4 text-foreground;
+  }
+
+  .oc-vscode-row {
+    @apply flex h-[22px] w-full items-center gap-1.5 rounded-sm border border-transparent px-2 text-left text-[12px] text-foreground/90;
+    @apply transition-colors hover:bg-sidebar-accent/50;
+  }
+
+  .oc-vscode-row--active {
+    @apply border-sidebar-border/70 bg-sidebar-accent/75 text-foreground;
+  }
+
+  .oc-vscode-row--drop-target {
+    @apply border-primary/60 bg-primary/12 text-foreground;
+  }
+
+  .oc-vscode-row-status {
+    @apply inline-flex min-w-4 items-center justify-center text-[10px] font-semibold uppercase tracking-[0.05em] text-muted-foreground;
+  }
+
+  .oc-vscode-row-actions {
+    @apply ml-1 flex items-center gap-0.5 opacity-0 transition-opacity;
+    @apply pointer-events-none;
+  }
+
+  .oc-vscode-row:hover .oc-vscode-row-actions,
+  .oc-vscode-row:focus-within .oc-vscode-row-actions,
+  .oc-vscode-section-head:hover .oc-vscode-row-actions,
+  .oc-vscode-section-head:focus-within .oc-vscode-row-actions {
+    @apply pointer-events-auto opacity-100;
+  }
+
+  .oc-vscode-empty {
+    @apply px-2 py-2 text-xs text-muted-foreground;
+  }
+
+  .oc-vscode-subtle-input {
+    @apply h-7 rounded-sm border-sidebar-border/60 bg-sidebar-accent/20 text-[12px] shadow-none;
+    @apply placeholder:text-muted-foreground/90;
+  }
+
+  .oc-vscode-status-modified {
+    @apply text-amber-500;
+  }
+
+  .oc-vscode-status-added {
+    @apply text-emerald-500;
+  }
+
+  .oc-vscode-status-deleted {
+    @apply text-rose-500;
+  }
+
+  .oc-vscode-status-untracked {
+    @apply text-sky-500;
+  }
+}

@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install web deps
+        run: bun install --cwd web --frozen-lockfile
+
+      - name: Web build
+        run: bun run --cwd web build
+
+      - name: Web tests
+        run: bun run --cwd web test
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust tests
+        run: cargo test -q --manifest-path server/Cargo.toml

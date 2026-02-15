@@ -1,0 +1,694 @@
+<script setup lang="ts">
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { RiArrowDownSLine, RiRefreshLine } from '@remixicon/vue'
+
+import { useSettingsStore, type Settings } from '../stores/settings'
+import { useChatStore } from '@/stores/chat'
+import { useToastsStore } from '@/stores/toasts'
+import { useUiStore } from '@/stores/ui'
+
+import Button from '@/components/ui/Button.vue'
+import SidebarTextButton from '@/components/ui/SidebarTextButton.vue'
+import ScrollArea from '@/components/ui/ScrollArea.vue'
+import OpenCodeConfigPanel from '@/components/settings/OpenCodeConfigPanel.vue'
+import { opencodeSections } from '@/components/settings/opencodeSections'
+import { clearBackendSessionCache } from '@/features/settings/api/settingsApi'
+import { useDesktopSidebarResize } from '@/composables/useDesktopSidebarResize'
+import {
+  DEFAULT_CHAT_ACTIVITY_FILTERS,
+  DEFAULT_CHAT_ACTIVITY_EXPAND_KEYS,
+  DEFAULT_CHAT_TOOL_ACTIVITY_FILTERS,
+  normalizeChatActivityFilters,
+  normalizeChatActivityDefaultExpanded,
+  normalizeChatToolActivityFilters,
+  ACTIVITY_DEFAULT_EXPANDED_OPTIONS as activityDefaultExpandedOptions,
+  TOOL_ACTIVITY_OPTIONS as toolActivityOptions,
+  type ChatActivityType,
+  type ChatActivityExpandKey,
+  type ChatToolActivityType,
+} from '@/lib/chatActivity'
+
+type SettingsTab = 'opencode' | 'troubleshooting' | 'appearance'
+
+const settings = useSettingsStore()
+const chat = useChatStore()
+const toasts = useToastsStore()
+const ui = useUiStore()
+const route = useRoute()
+const router = useRouter()
+const { startDesktopSidebarResize } = useDesktopSidebarResize()
+
+const useShellSidebar = computed(() => (ui.isMobile ? ui.isSessionSwitcherOpen : ui.isSidebarOpen))
+const SETTINGS_LAST_ROUTE_KEY = 'oc2.settings.lastRoute'
+
+function persistSettingsRoute(path: string) {
+  try {
+    localStorage.setItem(SETTINGS_LAST_ROUTE_KEY, path)
+  } catch {
+    // ignore
+  }
+}
+
+const settingsSidebarClass = computed(() =>
+  ui.isMobile
+    ? 'relative h-full w-full border-r border-border bg-muted/10 shrink-0'
+    : 'relative h-full border-r border-border bg-muted/10 shrink-0',
+)
+
+const clearingBackendCache = ref(false)
+
+async function clearSessionCache() {
+  if (clearingBackendCache.value) return
+  clearingBackendCache.value = true
+  try {
+    await clearBackendSessionCache()
+    toasts.push('success', 'Backend cache cleared')
+    // Best-effort refresh so session lists pick up new data immediately.
+    await chat.refreshSessions().catch(() => {})
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    toasts.push('error', msg || 'Failed to clear cache')
+  } finally {
+    clearingBackendCache.value = false
+  }
+}
+
+const tabs: Array<{ id: SettingsTab; label: string }> = [
+  { id: 'opencode', label: 'OpenCode' },
+  { id: 'troubleshooting', label: 'Troubleshooting' },
+  { id: 'appearance', label: 'Appearance' },
+]
+
+function normalizeOpencodeSection(raw?: string): string {
+  const val = (raw || '').trim().toLowerCase()
+  const match = opencodeSections.find((s) => s.id === val)
+  return match ? match.id : opencodeSections[0]!.id
+}
+
+const activeTab = computed<SettingsTab>(() => {
+  const raw = String(route.params.tab || '').toLowerCase()
+  const match = tabs.find((t) => t.id === raw)
+  return match?.id || 'opencode'
+})
+
+const activeOpencodeSection = computed(() => {
+  if (activeTab.value !== 'opencode') return null
+  return normalizeOpencodeSection(route.params.section as string | undefined)
+})
+
+const opencodeExpanded = ref(activeTab.value === 'opencode')
+
+function ensureSettingsRoute() {
+  if (activeTab.value !== 'opencode') {
+    if (route.params.section) {
+      void router.replace(`/settings/${activeTab.value}`)
+    }
+    return
+  }
+  const currentSection = (route.params.section as string | undefined) || ''
+  const normalized = normalizeOpencodeSection(currentSection)
+  if (!currentSection || currentSection !== normalized) {
+    void router.replace(`/settings/opencode/${normalized}`)
+  }
+}
+
+function goToTab(id: SettingsTab) {
+  if (id === 'opencode') {
+    if (activeTab.value !== 'opencode') {
+      opencodeExpanded.value = true
+      const section = activeOpencodeSection.value || normalizeOpencodeSection()
+      void router.push(`/settings/opencode/${section}`)
+    } else {
+      opencodeExpanded.value = !opencodeExpanded.value
+    }
+    return
+  }
+  opencodeExpanded.value = false
+  void router.push(`/settings/${id}`)
+}
+
+function goToOpencodeSection(id: string) {
+  opencodeExpanded.value = true
+  const section = normalizeOpencodeSection(id)
+  void router.push(`/settings/opencode/${section}`)
+}
+
+onMounted(() => {
+  if (!settings.data && !settings.loading) {
+    void settings.refresh()
+  }
+})
+
+watch(
+  () => route.fullPath,
+  (path) => {
+    const fullPath = String(path || '')
+    if (!fullPath.startsWith('/settings')) return
+    persistSettingsRoute(fullPath)
+  },
+  { immediate: true },
+)
+
+watch(
+  () => [route.params.tab, route.params.section],
+  () => ensureSettingsRoute(),
+  { immediate: true },
+)
+
+watch(
+  () => activeTab.value,
+  (tab, prev) => {
+    if (tab !== 'opencode') {
+      opencodeExpanded.value = false
+    } else if (prev !== 'opencode' && !opencodeExpanded.value) {
+      opencodeExpanded.value = true
+    }
+  },
+)
+
+function makeSetting<K extends keyof Settings>(key: K, fallback: NonNullable<Settings[K]>) {
+  return computed<NonNullable<Settings[K]>>({
+    get() {
+      const v = settings.data?.[key]
+      // IMPORTANT: Only return the value without mutation side effects.
+      return (v ?? fallback) as NonNullable<Settings[K]>
+    },
+    set(value: NonNullable<Settings[K]>) {
+      // Direct store update without forcing a recursive re-compute of this same getter.
+      void settings.save({ [key]: value } as Pick<Settings, K>)
+    },
+  })
+}
+
+const useSystemTheme = makeSetting('useSystemTheme', true)
+const themeVariant = makeSetting('themeVariant', 'dark')
+const uiFont = makeSetting('uiFont', 'ibm-plex-sans')
+const monoFont = makeSetting('monoFont', 'ibm-plex-mono')
+const fontSize = makeSetting('fontSize', 90)
+const padding = makeSetting('padding', 100)
+const cornerRadius = makeSetting('cornerRadius', 10)
+const inputBarOffset = makeSetting('inputBarOffset', 0)
+
+const showChatTimestamps = makeSetting('showChatTimestamps', true)
+const showReasoningTraces = makeSetting('showReasoningTraces', false)
+const showTextJustificationActivity = makeSetting('showTextJustificationActivity', false)
+
+const chatActivityAutoCollapseOnIdle = makeSetting('chatActivityAutoCollapseOnIdle', true)
+
+const chatActivityDefaultExpanded = computed<ChatActivityExpandKey[]>({
+  get() {
+    const s = settings.data
+    if (s && Object.prototype.hasOwnProperty.call(s, 'chatActivityDefaultExpanded')) {
+      return normalizeChatActivityDefaultExpanded(s.chatActivityDefaultExpanded)
+    }
+    return DEFAULT_CHAT_ACTIVITY_EXPAND_KEYS.slice()
+  },
+  set(value) {
+    void settings.save({ chatActivityDefaultExpanded: value })
+  },
+})
+
+function activityDefaultExpandedEnabled(id: ChatActivityExpandKey): boolean {
+  return chatActivityDefaultExpanded.value.includes(id)
+}
+
+function toggleActivityDefaultExpanded(id: ChatActivityExpandKey) {
+  const next = new Set(chatActivityDefaultExpanded.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  const ordered = DEFAULT_CHAT_ACTIVITY_EXPAND_KEYS.filter((t) => next.has(t))
+  chatActivityDefaultExpanded.value = ordered
+}
+
+function activityTransportEnabled(id: ChatActivityExpandKey): boolean {
+  if (id === 'thinking') return showReasoningTraces.value
+  if (id === 'justification') return showTextJustificationActivity.value
+  return chatActivityFilters.value.includes(id as ChatActivityType)
+}
+
+function setActivityTransportEnabled(id: ChatActivityExpandKey, enabled: boolean) {
+  if (id === 'thinking') {
+    showReasoningTraces.value = enabled
+  } else if (id === 'justification') {
+    showTextJustificationActivity.value = enabled
+  } else {
+    const next = new Set(chatActivityFilters.value)
+    if (enabled) next.add(id as ChatActivityType)
+    else next.delete(id as ChatActivityType)
+    const ordered = DEFAULT_CHAT_ACTIVITY_FILTERS.filter((t) => next.has(t))
+    chatActivityFilters.value = ordered
+  }
+
+  if (!enabled) {
+    const nextExpanded = new Set(chatActivityDefaultExpanded.value)
+    if (nextExpanded.delete(id)) {
+      chatActivityDefaultExpanded.value = DEFAULT_CHAT_ACTIVITY_EXPAND_KEYS.filter((t) => nextExpanded.has(t))
+    }
+  }
+}
+
+function toggleActivityTransport(id: ChatActivityExpandKey) {
+  setActivityTransportEnabled(id, !activityTransportEnabled(id))
+}
+
+const chatActivityDefaultExpandedToolFilters = computed<ChatToolActivityType[]>({
+  get() {
+    const s = settings.data
+    if (s && Object.prototype.hasOwnProperty.call(s, 'chatActivityDefaultExpandedToolFilters')) {
+      return normalizeChatToolActivityFilters(s.chatActivityDefaultExpandedToolFilters)
+    }
+    return []
+  },
+  set(value) {
+    void settings.save({ chatActivityDefaultExpandedToolFilters: value })
+  },
+})
+
+function activityDefaultExpandedToolEnabled(id: ChatToolActivityType): boolean {
+  return chatActivityDefaultExpandedToolFilters.value.includes(id)
+}
+
+function toggleActivityDefaultExpandedTool(id: ChatToolActivityType) {
+  const next = new Set(chatActivityDefaultExpandedToolFilters.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  const ordered = DEFAULT_CHAT_TOOL_ACTIVITY_FILTERS.filter((t) => next.has(t))
+  chatActivityDefaultExpandedToolFilters.value = ordered
+}
+
+function toggleToolDetailTransport(id: ChatToolActivityType) {
+  const next = new Set(chatToolActivityFilters.value)
+  if (next.has(id)) {
+    next.delete(id)
+  } else {
+    next.add(id)
+  }
+  const ordered = DEFAULT_CHAT_TOOL_ACTIVITY_FILTERS.filter((t) => next.has(t))
+  chatToolActivityFilters.value = ordered
+
+  if (!next.has(id)) {
+    const expanded = new Set(chatActivityDefaultExpandedToolFilters.value)
+    if (expanded.delete(id)) {
+      chatActivityDefaultExpandedToolFilters.value = DEFAULT_CHAT_TOOL_ACTIVITY_FILTERS.filter((t) => expanded.has(t))
+    }
+  }
+}
+
+const chatActivityFilters = computed<ChatActivityType[]>({
+  get() {
+    const s = settings.data
+    if (s && Object.prototype.hasOwnProperty.call(s, 'chatActivityFilters')) {
+      return normalizeChatActivityFilters(s.chatActivityFilters)
+    }
+    return DEFAULT_CHAT_ACTIVITY_FILTERS.slice()
+  },
+  set(value) {
+    void settings.save({ chatActivityFilters: value })
+  },
+})
+
+const chatToolActivityFilters = computed<ChatToolActivityType[]>({
+  get() {
+    const s = settings.data
+    if (s && Object.prototype.hasOwnProperty.call(s, 'chatActivityToolFilters')) {
+      return normalizeChatToolActivityFilters(s.chatActivityToolFilters)
+    }
+    return DEFAULT_CHAT_TOOL_ACTIVITY_FILTERS.slice()
+  },
+  set(value) {
+    void settings.save({ chatActivityToolFilters: value })
+  },
+})
+
+function toolActivityEnabled(id: ChatToolActivityType): boolean {
+  return chatToolActivityFilters.value.includes(id)
+}
+
+const dirtyHint = computed(() => (settings.error ? settings.error : null))
+</script>
+
+<template>
+  <div class="settings-page flex h-full flex-col overflow-hidden bg-background text-foreground">
+    <!-- Header -->
+    <div class="flex h-14 items-center justify-between border-b border-border px-4 lg:px-6 bg-muted/20 shrink-0">
+      <div class="flex-1" />
+      <div class="flex items-center gap-2">
+        <Button
+          variant="ghost"
+          size="icon"
+          class="h-8 w-8"
+          title="Refresh"
+          aria-label="Refresh settings"
+          @click="settings.refresh"
+          :disabled="settings.loading"
+        >
+          <RiRefreshLine class="h-4 w-4" :class="settings.loading ? 'animate-spin' : ''" />
+        </Button>
+      </div>
+    </div>
+
+    <!-- Mobile Tabs (Horizontal Scroll) -->
+    <div
+      class="lg:hidden border-b border-border bg-background overflow-x-auto flex items-center px-2 py-1 gap-1 shrink-0 scrollbar-none"
+    >
+      <SidebarTextButton
+        v-for="t in tabs"
+        :key="t.id"
+        @click="goToTab(t.id)"
+        class="flex-shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap active:scale-95"
+        :class="
+          activeTab === t.id
+            ? 'bg-muted/70 text-foreground border border-border'
+            : 'text-muted-foreground hover:text-foreground'
+        "
+      >
+        <span class="inline-flex items-center gap-1">
+          <RiArrowDownSLine
+            v-if="t.id === 'opencode'"
+            class="h-3 w-3 transition-transform"
+            :class="opencodeExpanded && activeTab === 'opencode' ? 'rotate-180' : ''"
+          />
+          {{ t.label }}
+        </span>
+      </SidebarTextButton>
+    </div>
+
+    <div
+      v-if="activeTab === 'opencode' && opencodeExpanded"
+      class="lg:hidden border-b border-border bg-background px-2 py-2 gap-2 shrink-0"
+    >
+      <div class="overflow-x-auto flex items-center gap-1 scrollbar-none">
+        <SidebarTextButton
+          v-for="section in opencodeSections"
+          :key="section.id"
+          @click="goToOpencodeSection(section.id)"
+          class="flex-shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap active:scale-95"
+          :class="
+            activeOpencodeSection === section.id
+              ? 'bg-muted/70 text-foreground border border-border'
+              : 'text-muted-foreground hover:text-foreground border border-border/60'
+          "
+        >
+          {{ section.label }}
+        </SidebarTextButton>
+      </div>
+    </div>
+
+    <div class="flex flex-1 overflow-hidden">
+      <aside
+        v-if="useShellSidebar"
+        :class="settingsSidebarClass"
+        :style="ui.isMobile ? undefined : { width: `${ui.sidebarWidth}px` }"
+      >
+        <div
+          v-if="!ui.isMobile"
+          class="absolute right-0 top-0 z-10 h-full w-1 cursor-col-resize hover:bg-primary/40"
+          @pointerdown="startDesktopSidebarResize"
+        />
+        <ScrollArea class="h-full">
+          <div class="flex flex-col gap-1 p-3">
+            <div v-for="t in tabs" :key="t.id" class="space-y-1">
+              <SidebarTextButton
+                @click="goToTab(t.id)"
+                class="flex w-full items-center rounded-md border border-transparent px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/60 hover:text-foreground active:scale-95"
+                :class="
+                  activeTab === t.id
+                    ? 'bg-primary/12 dark:bg-accent/80 text-foreground border-border/60'
+                    : 'text-muted-foreground'
+                "
+              >
+                <span class="inline-flex items-center gap-2">
+                  <RiArrowDownSLine
+                    v-if="t.id === 'opencode'"
+                    class="h-3.5 w-3.5 transition-transform"
+                    :class="opencodeExpanded && activeTab === 'opencode' ? 'rotate-180' : ''"
+                  />
+                  {{ t.label }}
+                </span>
+              </SidebarTextButton>
+
+              <div
+                v-if="t.id === 'opencode' && activeTab === 'opencode' && opencodeExpanded"
+                class="border-l border-border/60 pl-3 pt-2 space-y-1"
+              >
+                <SidebarTextButton
+                  v-for="section in opencodeSections"
+                  :key="section.id"
+                  @click="goToOpencodeSection(section.id)"
+                  class="w-full rounded-md border border-transparent px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/60 hover:text-foreground active:scale-95"
+                  :class="
+                    activeOpencodeSection === section.id
+                      ? 'bg-primary/12 dark:bg-accent/80 text-foreground border-border/60'
+                      : 'text-muted-foreground'
+                  "
+                >
+                  {{ section.label }}
+                </SidebarTextButton>
+              </div>
+            </div>
+          </div>
+        </ScrollArea>
+      </aside>
+
+      <!-- Content -->
+      <main class="flex-1 overflow-y-auto bg-background" v-show="!ui.isMobile || !ui.isSessionSwitcherOpen">
+        <div :class="['mx-auto w-full p-4 lg:p-8 space-y-8', activeTab === 'opencode' ? 'max-w-6xl' : 'max-w-3xl']">
+          <div
+            v-if="dirtyHint"
+            class="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive"
+          >
+            {{ dirtyHint }}
+          </div>
+
+          <!-- OpenCode Tab -->
+          <div v-if="activeTab === 'opencode'" class="space-y-6">
+            <OpenCodeConfigPanel :active-section="activeOpencodeSection || undefined" />
+          </div>
+
+          <!-- Troubleshooting Tab -->
+          <div v-else-if="activeTab === 'troubleshooting'" class="space-y-6">
+            <div class="rounded-lg border border-border bg-muted/10 p-4">
+              <div class="text-sm font-medium">Troubleshooting</div>
+              <div class="mt-1 text-xs text-muted-foreground">
+                Clear OpenCode Studio's in-memory cache used for reading OpenCode session storage. Use this when session
+                lists look stale.
+              </div>
+              <div class="mt-3 flex items-center gap-2">
+                <Button variant="outline" :disabled="clearingBackendCache" @click="clearSessionCache">
+                  {{ clearingBackendCache ? 'Clearing…' : 'Clear session cache' }}
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Appearance Tab -->
+          <div v-else-if="activeTab === 'appearance'" class="space-y-6">
+            <div class="text-lg font-medium">Theme and typography settings.</div>
+
+            <div class="grid gap-6">
+              <div class="grid gap-2">
+                <label class="text-sm font-medium leading-none">Theme</label>
+                <div class="flex items-center gap-3 flex-wrap">
+                  <label class="inline-flex items-center gap-2 text-sm">
+                    <input type="checkbox" v-model="useSystemTheme" />
+                    Use system theme
+                  </label>
+                  <select
+                    v-model="themeVariant"
+                    class="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+                    :disabled="useSystemTheme"
+                  >
+                    <option value="light">light</option>
+                    <option value="dark">dark</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="grid gap-2">
+                <label class="text-sm font-medium leading-none">Fonts</label>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                  <div class="grid gap-1">
+                    <div class="text-xs text-muted-foreground">UI font</div>
+                    <select v-model="uiFont" class="h-9 rounded-md border border-input bg-transparent px-3 text-sm">
+                      <option value="system">system</option>
+                      <option value="ibm-plex-sans">IBM Plex Sans</option>
+                      <option value="atkinson">Atkinson Hyperlegible</option>
+                      <option value="serif">serif</option>
+                    </select>
+                  </div>
+                  <div class="grid gap-1">
+                    <div class="text-xs text-muted-foreground">Mono font</div>
+                    <select v-model="monoFont" class="h-9 rounded-md border border-input bg-transparent px-3 text-sm">
+                      <option value="system">system</option>
+                      <option value="ibm-plex-mono">IBM Plex Mono</option>
+                      <option value="jetbrains-mono">JetBrains Mono</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div class="grid gap-2">
+                <label class="text-sm font-medium leading-none">Sizing</label>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                  <label class="grid gap-1">
+                    <span class="text-xs text-muted-foreground">Font size (%)</span>
+                    <input
+                      type="number"
+                      min="70"
+                      max="140"
+                      v-model.number="fontSize"
+                      class="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+                    />
+                  </label>
+                  <label class="grid gap-1">
+                    <span class="text-xs text-muted-foreground">Padding (%)</span>
+                    <input
+                      type="number"
+                      min="70"
+                      max="140"
+                      v-model.number="padding"
+                      class="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+                    />
+                  </label>
+                  <label class="grid gap-1">
+                    <span class="text-xs text-muted-foreground">Corner radius (px)</span>
+                    <input
+                      type="number"
+                      min="0"
+                      max="28"
+                      v-model.number="cornerRadius"
+                      class="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+                    />
+                  </label>
+                  <label class="grid gap-1">
+                    <span class="text-xs text-muted-foreground">Input bar offset (px)</span>
+                    <input
+                      type="number"
+                      min="-40"
+                      max="80"
+                      v-model.number="inputBarOffset"
+                      class="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <div class="grid gap-2">
+                <label class="text-sm font-medium leading-none">Chat</label>
+                <div class="grid gap-3">
+                  <label class="inline-flex items-center gap-2 text-sm">
+                    <input type="checkbox" v-model="showChatTimestamps" />
+                    Show timestamps
+                  </label>
+                  <label class="inline-flex items-center gap-2 text-sm">
+                    <input type="checkbox" v-model="chatActivityAutoCollapseOnIdle" />
+                    Auto-collapse activity after assistant finishes
+                  </label>
+                  <div class="mt-1">
+                    <div class="text-xs font-medium text-muted-foreground">Activity details</div>
+                    <div class="mt-2 overflow-x-auto rounded-md border border-border/60">
+                      <table class="min-w-full text-sm">
+                        <thead class="bg-muted/30 text-xs text-muted-foreground">
+                          <tr>
+                            <th class="px-3 py-2 text-left font-medium">Type</th>
+                            <th class="px-3 py-2 text-center font-medium">Transport</th>
+                            <th class="px-3 py-2 text-center font-medium">Expand</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr
+                            v-for="opt in activityDefaultExpandedOptions"
+                            :key="`activity-matrix-${opt.id}`"
+                            class="border-t border-border/50"
+                          >
+                            <td class="px-3 py-2 align-top">
+                              <div>{{ opt.label }}</div>
+                              <div class="text-[11px] text-muted-foreground">{{ opt.description }}</div>
+                            </td>
+                            <td class="px-3 py-2 text-center align-middle">
+                              <input
+                                type="checkbox"
+                                :checked="activityTransportEnabled(opt.id)"
+                                @change="toggleActivityTransport(opt.id)"
+                              />
+                            </td>
+                            <td class="px-3 py-2 text-center align-middle">
+                              <input
+                                type="checkbox"
+                                :checked="activityDefaultExpandedEnabled(opt.id)"
+                                :disabled="!activityTransportEnabled(opt.id)"
+                                @change="toggleActivityDefaultExpanded(opt.id)"
+                              />
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <div class="mt-1">
+                    <div class="text-xs font-medium text-muted-foreground">Tool details</div>
+                    <div class="mt-2 overflow-x-auto rounded-md border border-border/60">
+                      <table class="min-w-full text-sm">
+                        <thead class="bg-muted/30 text-xs text-muted-foreground">
+                          <tr>
+                            <th class="px-3 py-2 text-left font-medium">Tool</th>
+                            <th class="px-3 py-2 text-center font-medium">Transport</th>
+                            <th class="px-3 py-2 text-center font-medium">Expand</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr v-for="opt in toolActivityOptions" :key="`tool-matrix-${opt.id}`" class="border-t border-border/50">
+                            <td class="px-3 py-2 align-top">
+                              <div>{{ opt.label }}</div>
+                              <div class="text-[11px] text-muted-foreground">{{ opt.description }}</div>
+                            </td>
+                            <td class="px-3 py-2 text-center align-middle">
+                              <input
+                                type="checkbox"
+                                :checked="toolActivityEnabled(opt.id)"
+                                @change="toggleToolDetailTransport(opt.id)"
+                              />
+                            </td>
+                            <td class="px-3 py-2 text-center align-middle">
+                              <input
+                                type="checkbox"
+                                :checked="activityDefaultExpandedToolEnabled(opt.id)"
+                                :disabled="!toolActivityEnabled(opt.id)"
+                                @change="toggleActivityDefaultExpandedTool(opt.id)"
+                              />
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                    <div class="mt-2 text-[11px] text-muted-foreground">
+                      Tool expand defaults are configured per tool.
+                    </div>
+                  </div>
+
+                  <div class="text-xs text-muted-foreground">
+                    Transport controls whether activity payload is requested. Expand controls default open state and,
+                    with transport matching always on, whether full details are included in the initial payload.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div v-else class="flex flex-col items-center justify-center h-64 text-muted-foreground">
+            <p>Unknown settings tab.</p>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.settings-page :deep(input[type='checkbox']),
+.settings-page :deep(input[type='radio']) {
+  accent-color: oklch(var(--muted-foreground));
+}
+</style>

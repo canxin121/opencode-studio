@@ -1,0 +1,70 @@
+/* Mobile / PWA foundations */
+
+:root {
+  --is-mobile: 0;
+  --device-type: 'desktop';
+  --font-scale: 1;
+}
+
+/* App shell safe-area helpers */
+.header-safe-area {
+  padding-top: var(--oc-safe-area-top, 0px);
+}
+
+.main-content-safe-area {
+  padding-left: var(--oc-safe-area-left, 0px);
+  padding-right: var(--oc-safe-area-right, 0px);
+}
+
+.bottom-safe-area {
+  padding-bottom: var(--oc-safe-area-bottom-visual, 0px) !important;
+}
+
+.ios-keyboard-safe-area {
+  padding-bottom: calc(var(--oc-keyboard-home-indicator, 0px) + var(--oc-safe-area-bottom-visual, 0px)) !important;
+}
+
+/* Mobile pointer: apply slightly larger markdown and iOS input zoom fix */
+@media (max-width: 1024px) {
+  :root.mobile-pointer {
+    --is-mobile: 1;
+    --device-type: 'mobile';
+    --font-scale: 0.95;
+    --text-markdown: 1rem;
+    --text-code: 0.875rem;
+    --text-ui-header: 0.9375rem;
+    --text-ui-label: 0.875rem;
+    --text-meta: 0.875rem;
+    --text-micro: 0.8125rem;
+  }
+
+  /* Prevent iOS Safari zoom on focus */
+  :root.mobile-pointer input,
+  :root.mobile-pointer textarea,
+  :root.mobile-pointer select {
+    font-size: 16px;
+  }
+
+  /* On mobile, let the keyboard cover the bottom nav instead of pushing it upward. */
+  :root[data-oc-keyboard-open='true'] .oc-bottom-nav {
+    display: none !important;
+  }
+}
+
+/* iOS safe area env() wiring */
+@supports (-webkit-touch-callout: none) {
+  :root {
+    --oc-safe-area-top: env(safe-area-inset-top, 0);
+    --oc-safe-area-right: env(safe-area-inset-right, 0);
+    --oc-safe-area-bottom: env(safe-area-inset-bottom, 0);
+    --oc-safe-area-bottom-visual: clamp(0px, calc(var(--oc-safe-area-bottom) * 0.05), 4px);
+    --oc-safe-area-left: env(safe-area-inset-left, 0);
+  }
+}
+
+/* Standalone PWA: ensure body doesn't scroll under keyboard/toolbars */
+@media (display-mode: standalone) {
+  body {
+    overscroll-behavior-y: none;
+  }
+}

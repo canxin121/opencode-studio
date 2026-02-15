@@ -1,0 +1,13 @@
+<svg width="32" height="32" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- OpenCode brand mark (square-safe) -->
+  <g transform="translate(100 61) scale(1.3)" shape-rendering="crispEdges">
+    <!-- Frame -->
+    <path
+      fill-rule="evenodd"
+      d="M0 0H240V300H0Z M60 60H180V240H60Z"
+      fill="#211E1E"
+    />
+    <!-- Inner fill -->
+    <path d="M60 120H180V240H60Z" fill="#CFCECD" />
+  </g>
+</svg>

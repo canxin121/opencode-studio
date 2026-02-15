@@ -1,0 +1,654 @@
+<script setup lang="ts">
+import { computed, unref } from 'vue'
+import {
+  RiArrowDownLine,
+  RiArrowDownDoubleLine,
+  RiArrowUpLine,
+  RiLoader4Line,
+  RiMore2Line,
+  RiSendPlane2Line,
+  RiStackLine,
+  RiStopCircleLine,
+  RiUserLine,
+  RiBrainAi3Line,
+} from '@remixicon/vue'
+
+import VerticalSplitPane from '@/components/ui/VerticalSplitPane.vue'
+import MessageList from '@/components/chat/MessageList.vue'
+import CommandPalette from '@/components/chat/CommandPalette.vue'
+import ChatHeader from '@/components/chat/ChatHeader.vue'
+import Composer from '@/components/chat/Composer.vue'
+import RenameSessionDialog from '@/components/chat/RenameSessionDialog.vue'
+import AttachProjectDialog from '@/components/chat/AttachProjectDialog.vue'
+import Button from '@/components/ui/Button.vue'
+import IconButton from '@/components/ui/IconButton.vue'
+import OptionMenu from '@/components/ui/OptionMenu.vue'
+import ToolbarChipButton from '@/components/ui/ToolbarChipButton.vue'
+import Tooltip from '@/components/ui/Tooltip.vue'
+import type { ChatPageViewContext } from './chatPageViewContext'
+
+// This view is template-only: it takes a context bag from ChatPage.
+// Keep it "dumb" so we can aggressively split ChatPage logic into composables.
+const props = defineProps<{ ctx: ChatPageViewContext }>()
+const ctx = props.ctx
+
+const {
+  // Template refs (these are refs created in ChatPage).
+  pageRef,
+  scrollEl,
+  contentEl,
+  bottomEl,
+  composerBarRef,
+  commandPaletteRef,
+  composerRef,
+  composerControlsRef,
+  composerPickerRef,
+  modelTriggerRef,
+  variantTriggerRef,
+  agentTriggerRef,
+  sessionActionsMenuRef,
+
+  // Stores / state.
+  chat,
+  ui,
+  attachedFiles,
+  draft,
+
+  // Message list.
+  renderBlocks,
+  pendingInitialScrollSessionId,
+  loadingOlder,
+  showTimestamps,
+  formatTime,
+  copiedMessageId,
+  revertBusyMessageId,
+  revertMarkerBusy,
+  sessionEnded,
+  retryStatus,
+  currentPhase,
+  awaitingAssistant,
+  showAssistantPlaceholder,
+  optimisticUser,
+  showOptimisticUser,
+
+  // Activity.
+  activityInitiallyExpandedForPart,
+  activityCollapseSignal,
+  MAX_VISIBLE_ACTIVITY_COLLAPSED,
+  isActivityExpanded,
+  setActivityExpanded,
+  isReasoningPart,
+  isJustificationPart,
+  isMetaPart,
+
+  // Scroll/nav.
+  handleScroll,
+  isAtBottom,
+  navigableMessageIds,
+  navBottomOffset,
+  navIndex,
+  navTotalLabel,
+  navPrev,
+  navNext,
+  scrollToBottom,
+
+  // Composer layout.
+  composerFullscreenActive,
+  composerTargetHeight,
+  handleComposerResize,
+  resetComposerHeight,
+  toggleEditorFullscreen,
+  formatBytes,
+  handleDrop,
+  handlePaste,
+  handleDraftInput,
+  handleDraftKeydown,
+  handleFileInputChange,
+  removeAttachment,
+  clearAttachments,
+
+  // Header actions.
+  canAbort,
+  retryCountdownLabel,
+  retryNextLabel,
+  abortRun,
+
+  // Command palette.
+  commandOpen,
+  commandsLoading,
+  filteredCommands,
+  commandIndex,
+  commandIcon,
+  insertCommand,
+
+  // Composer action menu.
+  composerActionMenuOpen,
+  composerActionMenuQuery,
+  composerActionMenuGroups,
+  toggleComposerActionMenu,
+  closeComposerActionMenu,
+  runComposerActionMenu,
+
+  // Model/agent/variant picker.
+  composerPickerOpen,
+  composerPickerStyle,
+  composerPickerTitle,
+  composerPickerSearchable,
+  composerPickerSearchPlaceholder,
+  composerPickerQuery,
+  setComposerPickerQuery,
+  composerPickerHelperText,
+  composerPickerEmptyText,
+  composerPickerGroups,
+  setComposerPickerOpen,
+  handleComposerPickerSelect,
+  hasVariantsForSelection,
+
+  // Chip labels.
+  modelHint,
+  modelChipLabelMobile,
+  modelChipLabel,
+  toggleComposerPicker,
+  variantHint,
+  variantChipLabel,
+  agentHint,
+  agentChipLabel,
+
+  // Usage + primary action.
+  sessionUsage,
+  formatCompactNumber,
+  composerPrimaryAction,
+  composerPrimaryDisabled,
+  handleComposerPrimaryAction,
+  aborting,
+  sending,
+
+  // Dialogs.
+  renameDialogOpen,
+  renameDraft,
+  renameBusy,
+  saveRename,
+  attachProjectDialogOpen,
+  attachProjectPath,
+  sessionDirectory,
+  addProjectAttachment,
+
+  // Message actions.
+  isStreamingAssistantMessage,
+  handleForkFromMessage,
+  handleRevertFromMessage,
+  handleCopyMessage,
+  handleRedoFromRevertMarker,
+  handleUnrevertFromRevertMarker,
+} = ctx
+
+// Compute the anchor element for the picker menu based on which picker is open.
+// This ensures the menu appears right next to the button that triggered it.
+const activePickerAnchor = computed(() => {
+  const mode = unref(composerPickerOpen)
+  if (mode === 'model') return unref(modelTriggerRef)
+  if (mode === 'variant') return unref(variantTriggerRef)
+  if (mode === 'agent') return unref(agentTriggerRef)
+  return null
+})
+
+// `ref="..."` in templates doesn't count as usage for TS.
+void pageRef
+void scrollEl
+void contentEl
+void bottomEl
+void composerBarRef
+void commandPaletteRef
+void composerRef
+void composerControlsRef
+void composerPickerRef
+void modelTriggerRef
+void variantTriggerRef
+void agentTriggerRef
+void sessionActionsMenuRef
+</script>
+
+<template>
+  <section ref="pageRef" class="h-full min-h-0 flex flex-col overflow-hidden relative">
+    <VerticalSplitPane
+      :model-value="composerTargetHeight"
+      @update:model-value="handleComposerResize"
+      @dblclick="resetComposerHeight"
+      :min-height="ui.isMobile ? 160 : 180"
+      :disabled="ui.isMobile"
+    >
+      <template #top>
+        <div
+          ref="scrollEl"
+          class="h-full min-h-0 chat-scroll flex-1 overflow-y-auto"
+          data-scrollbar="chat"
+          @scroll="handleScroll"
+        >
+          <div ref="contentEl" class="chat-message-column py-4">
+            <MessageList
+              :is-mobile="ui.isMobile"
+              :selected-session-id="chat.selectedSessionId"
+              :messages-loading="chat.messagesLoading"
+              :messages-error="chat.messagesError"
+              :render-blocks="renderBlocks"
+              :pending-initial-scroll-session-id="pendingInitialScrollSessionId"
+              :loading-older="loadingOlder"
+              :show-timestamps="showTimestamps"
+              :format-time="formatTime"
+              :copied-message-id="copiedMessageId"
+              :revert-busy-message-id="revertBusyMessageId"
+              :is-streaming-assistant-message="isStreamingAssistantMessage"
+              :show-assistant-placeholder="showAssistantPlaceholder"
+              :revert-marker-busy="revertMarkerBusy"
+              :session-ended="sessionEnded"
+              :retry-status="retryStatus"
+              :current-phase="currentPhase"
+              :awaiting-assistant="awaitingAssistant"
+              :activity-initially-expanded-for-part="activityInitiallyExpandedForPart"
+              :activity-collapse-signal="activityCollapseSignal"
+              :max-visible-activity-collapsed="MAX_VISIBLE_ACTIVITY_COLLAPSED"
+              :is-activity-expanded="isActivityExpanded"
+              :set-activity-expanded="setActivityExpanded"
+              :is-reasoning-part="isReasoningPart"
+              :is-justification-part="isJustificationPart"
+              :is-meta-part="isMetaPart"
+              :optimistic-user="optimisticUser"
+              :show-optimistic-user="showOptimisticUser"
+              :open-mobile-sidebar="() => ui.setSessionSwitcherOpen(true)"
+              @fork="handleForkFromMessage"
+              @revert="handleRevertFromMessage"
+              @copy="handleCopyMessage"
+              @redo-from-revert="handleRedoFromRevertMarker"
+              @unrevert-from-revert="handleUnrevertFromRevertMarker"
+            />
+
+            <div ref="bottomEl" class="h-px w-full" aria-hidden="true" />
+          </div>
+        </div>
+
+        <!-- Floating message navigation (user messages only) -->
+        <div
+          v-if="
+            !composerFullscreenActive &&
+            !(ui.isMobile && ui.isSessionSwitcherOpen) &&
+            (navigableMessageIds.length > 1 ||
+              (!isAtBottom && chat.messages.length) ||
+              (navigableMessageIds.length > 0 && !chat.selectedHistory.exhausted))
+          "
+          class="absolute right-3 z-20 flex flex-col items-center gap-2"
+          :style="{ bottom: navBottomOffset }"
+        >
+          <Button
+            v-if="navigableMessageIds.length > 1 || (navigableMessageIds.length > 0 && !chat.selectedHistory.exhausted)"
+            size="icon"
+            variant="outline"
+            class="h-8 w-8 rounded-full bg-background/80 backdrop-blur"
+            title="Previous user message"
+            aria-label="Previous user message"
+            @click="navPrev"
+            :disabled="(navIndex <= 0 && chat.selectedHistory.exhausted) || loadingOlder"
+          >
+            <RiArrowUpLine class="h-4 w-4" />
+          </Button>
+          <Button
+            v-if="navigableMessageIds.length > 1"
+            size="icon"
+            variant="outline"
+            class="h-8 w-8 rounded-full bg-background/80 backdrop-blur"
+            title="Next user message"
+            aria-label="Next user message"
+            @click="navNext"
+            :disabled="navIndex >= navigableMessageIds.length - 1"
+          >
+            <RiArrowDownLine class="h-4 w-4" />
+          </Button>
+
+          <div
+            v-if="navigableMessageIds.length > 0"
+            class="text-[10px] text-muted-foreground/80 bg-background/80 backdrop-blur rounded-full px-2 py-0.5 border border-border/60 select-none"
+          >
+            {{ navIndex + 1 }} / {{ navTotalLabel }}
+          </div>
+
+          <!-- Keep this slot fixed so other controls don't move -->
+          <Button
+            size="icon"
+            variant="outline"
+            class="h-8 w-8 rounded-full bg-background/80 backdrop-blur"
+            title="Bottom"
+            aria-label="Bottom"
+            :class="!isAtBottom && chat.messages.length ? '' : 'invisible pointer-events-none'"
+            @click="scrollToBottom('smooth')"
+          >
+            <RiArrowDownDoubleLine class="h-4 w-4" />
+          </Button>
+        </div>
+      </template>
+
+      <template #bottom>
+        <div
+          ref="composerBarRef"
+          class="h-full flex flex-col min-h-0 bg-background/85 backdrop-blur ios-keyboard-safe-area"
+          data-keyboard-avoid
+        >
+          <div class="chat-column flex flex-col min-h-0 h-full" :class="ui.isMobile ? 'py-2' : 'py-3'">
+            <div class="relative flex flex-1 flex-col min-h-0">
+              <ChatHeader
+                :session-id="chat.selectedSessionId"
+                :session-ended="sessionEnded"
+                :can-abort="canAbort"
+                :retry-status="retryStatus"
+                :retry-countdown-label="retryCountdownLabel"
+                :retry-next-label="retryNextLabel"
+                :attention="chat.selectedAttention"
+                :mobile-pointer="ui.isMobilePointer"
+                @abort="abortRun"
+              />
+
+              <CommandPalette
+                ref="commandPaletteRef"
+                :open="commandOpen && !chat.selectedAttention && !retryStatus"
+                :loading="commandsLoading"
+                :commands="filteredCommands"
+                v-model:activeIndex="commandIndex"
+                :command-icon="commandIcon"
+                @select="insertCommand"
+              />
+
+              <Composer
+                ref="composerRef"
+                v-model:draft="draft"
+                :fullscreen="composerFullscreenActive"
+                :attached-files="attachedFiles"
+                :format-bytes="formatBytes"
+                class="flex-1 min-h-0"
+                @toggleFullscreen="toggleEditorFullscreen"
+                @drop="handleDrop"
+                @paste="handlePaste"
+                @draftInput="handleDraftInput"
+                @draftKeydown="handleDraftKeydown"
+                @filesSelected="handleFileInputChange"
+                @removeAttachment="removeAttachment"
+                @clearAttachments="clearAttachments"
+              >
+                <template #controls>
+                  <div ref="composerControlsRef" class="relative">
+                    <OptionMenu
+                      ref="composerPickerRef"
+                      :open="Boolean(composerPickerOpen)"
+                      :query="composerPickerQuery"
+                      :groups="composerPickerGroups"
+                      :title="composerPickerTitle"
+                      :mobile-title="composerPickerTitle"
+                      :searchable="composerPickerSearchable"
+                      :search-placeholder="composerPickerSearchPlaceholder"
+                      :empty-text="composerPickerEmptyText"
+                      :helper-text="composerPickerHelperText"
+                      :is-mobile-pointer="ui.isMobilePointer"
+                      :desktop-fixed="true"
+                      :desktop-style="composerPickerStyle"
+                      :desktop-anchor-el="activePickerAnchor"
+                      :paginated="composerPickerOpen === 'model' || composerPickerOpen === 'agent'"
+                      :page-size="composerPickerOpen === 'model' ? 80 : 60"
+                      pagination-mode="group"
+                      :collapsible-groups="composerPickerOpen === 'model'"
+                      desktop-placement="top-start"
+                      desktop-class="w-[min(420px,calc(100%-1rem))]"
+                      filter-mode="external"
+                      @update:open="setComposerPickerOpen"
+                      @update:query="setComposerPickerQuery"
+                      @select="handleComposerPickerSelect"
+                    />
+
+                    <div
+                      class="composer-controls-surface w-full overflow-hidden flex items-center justify-between gap-2 rounded-b-xl border-t border-border/60 bg-background/60"
+                      :class="ui.isMobilePointer ? 'px-2 py-1.5' : 'px-2.5 py-2'"
+                    >
+                      <div
+                        class="min-w-0 flex-1 flex items-center gap-1.5 flex-nowrap overflow-x-auto scrollbar-none sm:flex-wrap sm:overflow-visible"
+                        data-oc-keyboard-tap="keep"
+                      >
+                        <IconButton
+                          class="text-muted-foreground hover:text-foreground hover:bg-secondary/40"
+                          :class="composerActionMenuOpen ? 'bg-secondary/60 text-foreground' : ''"
+                          title="Tools"
+                          aria-label="Tools"
+                          @mousedown.prevent
+                          @click.stop="toggleComposerActionMenu"
+                        >
+                          <RiMore2Line class="h-4 w-4" />
+                        </IconButton>
+
+                        <OptionMenu
+                          ref="sessionActionsMenuRef"
+                          :open="composerActionMenuOpen"
+                          v-model:query="composerActionMenuQuery"
+                          :groups="composerActionMenuGroups"
+                          title="Tools"
+                          mobile-title="Tools"
+                          :searchable="true"
+                          search-placeholder="Search actions"
+                          empty-text="No actions found."
+                          :is-mobile-pointer="ui.isMobilePointer"
+                          desktop-placement="top-start"
+                          desktop-class="w-64"
+                          filter-mode="external"
+                          @update:open="(v) => (!v ? closeComposerActionMenu() : undefined)"
+                          @close="closeComposerActionMenu"
+                          @select="runComposerActionMenu"
+                        />
+
+                        <Tooltip v-if="!ui.isMobilePointer && modelHint">
+                          <ToolbarChipButton
+                            :active="composerPickerOpen === 'model'"
+                            title="Model"
+                            aria-label="Model"
+                            ref="modelTriggerRef"
+                            @mousedown.prevent
+                            @click.stop="toggleComposerPicker('model')"
+                          >
+                            <RiStackLine class="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
+                            <span
+                              class="text-[11px] sm:text-xs font-mono font-medium truncate max-w-[150px] sm:max-w-[220px]"
+                              >{{ ui.isMobilePointer ? modelChipLabelMobile : modelChipLabel }}</span
+                            >
+                          </ToolbarChipButton>
+                          <template #content>{{ modelHint }}</template>
+                        </Tooltip>
+                        <ToolbarChipButton
+                          v-else
+                          :active="composerPickerOpen === 'model'"
+                          title="Model"
+                          aria-label="Model"
+                          ref="modelTriggerRef"
+                          @mousedown.prevent
+                          @click.stop="toggleComposerPicker('model')"
+                        >
+                          <RiStackLine class="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
+                          <span
+                            class="text-[11px] sm:text-xs font-mono font-medium truncate max-w-[150px] sm:max-w-[220px]"
+                            >{{ ui.isMobilePointer ? modelChipLabelMobile : modelChipLabel }}</span
+                          >
+                        </ToolbarChipButton>
+
+                        <Tooltip v-if="hasVariantsForSelection && !ui.isMobilePointer && variantHint">
+                          <ToolbarChipButton
+                            :active="composerPickerOpen === 'variant'"
+                            title="Variant"
+                            aria-label="Variant"
+                            ref="variantTriggerRef"
+                            @mousedown.prevent
+                            @click.stop="toggleComposerPicker('variant')"
+                          >
+                            <RiBrainAi3Line class="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
+                            <span
+                              class="text-[11px] sm:text-xs font-mono font-medium truncate max-w-[96px] sm:max-w-[140px]"
+                              >{{ variantChipLabel }}</span
+                            >
+                          </ToolbarChipButton>
+                          <template #content>{{ variantHint }}</template>
+                        </Tooltip>
+                        <ToolbarChipButton
+                          v-else-if="hasVariantsForSelection"
+                          :active="composerPickerOpen === 'variant'"
+                          title="Variant"
+                          aria-label="Variant"
+                          ref="variantTriggerRef"
+                          @mousedown.prevent
+                          @click.stop="toggleComposerPicker('variant')"
+                        >
+                          <RiBrainAi3Line class="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
+                          <span
+                            class="text-[11px] sm:text-xs font-mono font-medium truncate max-w-[96px] sm:max-w-[140px]"
+                            >{{ variantChipLabel }}</span
+                          >
+                        </ToolbarChipButton>
+
+                        <Tooltip v-if="!ui.isMobilePointer && agentHint">
+                          <ToolbarChipButton
+                            :active="composerPickerOpen === 'agent'"
+                            title="Agent"
+                            aria-label="Agent"
+                            ref="agentTriggerRef"
+                            @mousedown.prevent
+                            @click.stop="toggleComposerPicker('agent')"
+                          >
+                            <RiUserLine class="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
+                            <span class="text-[11px] sm:text-xs font-medium truncate max-w-[96px] sm:max-w-[140px]">{{
+                              agentChipLabel
+                            }}</span>
+                          </ToolbarChipButton>
+                          <template #content>{{ agentHint }}</template>
+                        </Tooltip>
+                        <ToolbarChipButton
+                          v-else
+                          :active="composerPickerOpen === 'agent'"
+                          title="Agent"
+                          aria-label="Agent"
+                          ref="agentTriggerRef"
+                          @mousedown.prevent
+                          @click.stop="toggleComposerPicker('agent')"
+                        >
+                          <RiUserLine class="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
+                          <span class="text-[11px] sm:text-xs font-medium truncate max-w-[96px] sm:max-w-[140px]">{{
+                            agentChipLabel
+                          }}</span>
+                        </ToolbarChipButton>
+                      </div>
+
+                      <div class="flex items-center gap-1.5 flex-shrink-0">
+                        <div
+                          v-if="sessionUsage"
+                          class="hidden sm:flex items-center gap-2 mr-2 text-[10px] text-muted-foreground font-mono select-none"
+                        >
+                          <span>{{ sessionUsage.tokensLabel }} tokens</span>
+                          <span v-if="sessionUsage.percentUsed !== null" class="opacity-80"
+                            >{{ sessionUsage.percentUsed }}%</span
+                          >
+                          <span
+                            v-if="sessionUsage.costLabel && sessionUsage.costLabel !== '$0.00'"
+                            class="opacity-80"
+                            >{{ sessionUsage.costLabel }}</span
+                          >
+                        </div>
+                        <div
+                          v-if="sessionUsage && ui.isMobilePointer"
+                          class="sm:hidden flex flex-col items-end mr-1 text-[9px] leading-tight text-muted-foreground font-mono select-none"
+                        >
+                          <span>{{ formatCompactNumber(sessionUsage.tokensValue || 0) }}</span>
+                          <span v-if="sessionUsage.percentUsed !== null" class="opacity-80"
+                            >{{ sessionUsage.percentUsed }}%</span
+                          >
+                        </div>
+
+                        <Tooltip>
+                          <Button
+                            size="icon"
+                            class="h-8 w-8"
+                            data-oc-keyboard-tap="blur"
+                            :variant="composerPrimaryAction === 'stop' ? 'outline' : undefined"
+                            :class="composerPrimaryAction === 'stop' ? 'text-destructive hover:text-destructive' : ''"
+                            :title="composerPrimaryAction === 'stop' ? 'Stop' : 'Send'"
+                            :aria-label="composerPrimaryAction === 'stop' ? 'Stop run' : 'Send message'"
+                            :disabled="composerPrimaryDisabled"
+                            @click="handleComposerPrimaryAction"
+                          >
+                            <RiLoader4Line
+                              v-if="
+                                (composerPrimaryAction === 'stop' && aborting) ||
+                                (composerPrimaryAction === 'send' && sending)
+                              "
+                              class="h-4 w-4 animate-spin"
+                            />
+                            <RiStopCircleLine v-else-if="composerPrimaryAction === 'stop'" class="h-4 w-4" />
+                            <RiSendPlane2Line v-else class="h-4 w-4" />
+                          </Button>
+                          <template #content>{{ composerPrimaryAction === 'stop' ? 'Stop run' : 'Send' }}</template>
+                        </Tooltip>
+                      </div>
+                    </div>
+                  </div>
+                </template>
+              </Composer>
+            </div>
+          </div>
+        </div>
+      </template>
+    </VerticalSplitPane>
+  </section>
+
+  <!-- Mobile tools and picker menus are handled by OptionMenu. -->
+
+  <RenameSessionDialog
+    :open="renameDialogOpen"
+    v-model:draft="renameDraft"
+    :busy="renameBusy"
+    @update:open="(v) => (renameDialogOpen = v)"
+    @save="saveRename"
+  />
+
+  <AttachProjectDialog
+    :open="attachProjectDialogOpen"
+    v-model:path="attachProjectPath"
+    :base-path="sessionDirectory"
+    :attached-count="attachedFiles.length"
+    @update:open="(v) => (attachProjectDialogOpen = v)"
+    @add="addProjectAttachment"
+  />
+</template>
+
+<style scoped>
+.chat-scroll {
+  /* Prevent browser scroll anchoring from fighting programmatic bottom pinning. */
+  overflow-anchor: none;
+  /* Avoid width reflow when the vertical scrollbar appears. */
+  scrollbar-gutter: stable;
+}
+
+/* List motion (subtle reveal). */
+.chatlist-enter-active,
+.chatlist-leave-active {
+  transition:
+    opacity 160ms ease,
+    transform 180ms ease;
+}
+
+.chatlist-enter-from,
+.chatlist-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.activitylist-enter-active,
+.activitylist-leave-active {
+  transition:
+    opacity 140ms ease,
+    transform 160ms ease;
+}
+
+.activitylist-enter-from,
+.activitylist-leave-to {
+  opacity: 0;
+  transform: translateY(6px);
+}
+</style>

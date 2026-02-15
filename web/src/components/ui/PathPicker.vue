@@ -1,0 +1,425 @@
+<script setup lang="ts">
+import { computed, ref, watch } from 'vue'
+import { apiJson } from '@/lib/api'
+import Button from '@/components/ui/Button.vue'
+import Input from '@/components/ui/Input.vue'
+import {
+  RiArrowRightSLine,
+  RiEyeLine,
+  RiEyeOffLine,
+  RiFileTextLine,
+  RiFolder3Line,
+  RiGitBranchLine,
+} from '@remixicon/vue'
+
+type ListEntry = {
+  name: string
+  path: string
+  isDirectory: boolean
+  isFile: boolean
+  isSymbolicLink?: boolean
+}
+
+type ListResponse = {
+  path: string
+  entries: ListEntry[]
+}
+
+const props = withDefaults(
+  defineProps<{
+    modelValue?: string | null
+    placeholder?: string
+    basePath?: string
+    mode?: 'file' | 'directory' | 'any'
+    // `compact`: input + Browse toggle; `browser`: show only the browser panel.
+    view?: 'compact' | 'browser'
+    browserTitle?: string
+    browserDescription?: string
+    preferRelative?: boolean
+    resolveToAbsolute?: boolean
+    showOptions?: boolean
+    showHidden?: boolean
+    showGitignored?: boolean
+    disabled?: boolean
+    inputClass?: string
+    buttonClass?: string
+    buttonLabel?: string
+    browserClass?: string
+  }>(),
+  {
+    mode: 'any',
+    view: 'compact',
+    preferRelative: false,
+    resolveToAbsolute: false,
+    showOptions: false,
+    showHidden: false,
+    buttonLabel: 'Browse',
+  },
+)
+
+const emit = defineEmits<{
+  (e: 'update:modelValue', value: string): void
+  (e: 'change', value: string): void
+}>()
+
+const value = computed<string>({
+  get: () => props.modelValue ?? '',
+  set: (v: string) => {
+    emit('update:modelValue', v)
+    emit('change', v)
+  },
+})
+
+const browserOpen = ref(false)
+const browserPath = ref('')
+const browserQuery = ref('')
+const browserFoldersOnly = ref(false)
+const browserEntries = ref<ListEntry[]>([])
+const browserLoading = ref(false)
+const browserError = ref<string | null>(null)
+
+const showHidden = ref(Boolean(props.showHidden))
+const showGitignored = ref(Boolean(props.showGitignored))
+const effectiveRespectGitignore = computed(() => !showGitignored.value)
+
+function trimTrailingSlash(path: string): string {
+  if (!path) return ''
+  if (path === '/') return '/'
+  return path.replace(/\/+$/, '')
+}
+
+function isAbsolutePath(path: string): boolean {
+  if (!path) return false
+  if (path.startsWith('/') || path.startsWith('~')) return true
+  return /^[A-Za-z]:[\\/]/.test(path)
+}
+
+function joinPath(base: string, suffix: string): string {
+  if (!base) return suffix
+  if (!suffix) return base
+  const left = trimTrailingSlash(base)
+  const right = suffix.replace(/^\/+/, '')
+  return `${left}/${right}`
+}
+
+function splitInput(raw: string) {
+  const clean = raw.trim()
+  const lastSlash = clean.lastIndexOf('/')
+  if (lastSlash >= 0) {
+    return {
+      raw: clean,
+      dirPart: clean.slice(0, lastSlash + 1),
+      prefix: clean.slice(lastSlash + 1),
+    }
+  }
+  return { raw: clean, dirPart: '', prefix: clean }
+}
+
+const context = computed(() => {
+  const base = trimTrailingSlash(props.basePath || '')
+  const { raw, dirPart, prefix } = splitInput(value.value)
+  const absolute = isAbsolutePath(raw)
+  let effectiveDir = ''
+  if (absolute) {
+    effectiveDir = dirPart || raw
+  } else if (base) {
+    effectiveDir = joinPath(base, dirPart)
+  } else {
+    effectiveDir = dirPart
+  }
+  return {
+    raw,
+    dirPart,
+    prefix,
+    absolute,
+    effectiveDir,
+    base,
+  }
+})
+
+const browserBreadcrumbs = computed(() => {
+  const path = browserPath.value
+  if (!path) return [] as Array<{ label: string; path: string }>
+  const parts = path.split('/').filter(Boolean)
+  const crumbs: Array<{ label: string; path: string }> = [{ label: '/', path: '/' }]
+  let current = ''
+  for (const part of parts) {
+    current = `${current}/${part}`
+    crumbs.push({ label: part, path: current })
+  }
+  return crumbs
+})
+
+function formatOutputPath(absPath: string): string {
+  const base = context.value.base
+  if (props.resolveToAbsolute || !base) return absPath
+  if (props.preferRelative && absPath.startsWith(`${base}/`)) {
+    return absPath.slice(base.length + 1)
+  }
+  return absPath
+}
+
+async function fetchList(path: string): Promise<ListResponse> {
+  const query = path ? `?path=${encodeURIComponent(path)}` : ''
+  const gitignore = effectiveRespectGitignore.value ? `${query ? '&' : '?'}respectGitignore=true` : ''
+  return apiJson<ListResponse>(`/api/fs/list${query}${gitignore}`)
+}
+
+function updateValue(next: string) {
+  value.value = next
+}
+
+function resolveBrowserDraftPath(raw: string): string {
+  const t = trimTrailingSlash((raw || '').trim())
+  if (!t) return ''
+  if (isAbsolutePath(t)) return t
+  const base = trimTrailingSlash(props.basePath || '')
+  if (base) return joinPath(base, t)
+  return t
+}
+
+async function loadBrowser(path: string) {
+  browserLoading.value = true
+  browserError.value = null
+  try {
+    const resp = await fetchList(path)
+    browserPath.value = resp.path
+    // For directory pickers, the "current folder" is the selection.
+    if (props.mode === 'directory') {
+      updateValue(formatOutputPath(resp.path))
+    }
+    const list = (resp.entries || [])
+      .filter((entry) => (showHidden.value ? true : !entry.name.startsWith('.')))
+      .slice()
+      .sort((a, b) => {
+        // Put non-hidden first for better UX.
+        const ah = a.name.startsWith('.')
+        const bh = b.name.startsWith('.')
+        if (ah !== bh) return ah ? 1 : -1
+        if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1
+        return a.name.localeCompare(b.name)
+      })
+    browserEntries.value = list
+  } catch (err) {
+    browserError.value = err instanceof Error ? err.message : String(err)
+    browserEntries.value = []
+  } finally {
+    browserLoading.value = false
+  }
+}
+
+async function openBrowser() {
+  if (props.disabled) return
+  browserOpen.value = true
+  browserQuery.value = ''
+  browserFoldersOnly.value = false
+  const ctx = context.value
+  let start = ''
+  if (ctx.absolute && ctx.raw) {
+    // Directory pickers are usually pointed at a directory; for file pickers we
+    // want to start from the parent directory.
+    start = props.mode === 'directory' ? ctx.raw : ctx.effectiveDir || ctx.raw
+  } else {
+    start = ctx.base || ''
+  }
+  await loadBrowser(start)
+}
+
+function closeBrowser() {
+  browserOpen.value = false
+}
+
+function applyBrowserPath(path: string) {
+  updateValue(formatOutputPath(path))
+  // In compact mode, selecting is usually a one-off.
+  if (props.view === 'compact') {
+    closeBrowser()
+  }
+}
+
+function goToBrowserDraft() {
+  const next = resolveBrowserDraftPath(value.value)
+  if (!next) return
+  void loadBrowser(next)
+}
+
+function selectBrowserEntry(entry: ListEntry) {
+  if (entry.isDirectory) {
+    void loadBrowser(entry.path)
+    return
+  }
+  if (props.mode === 'directory') return
+  applyBrowserPath(entry.path)
+}
+
+const effectiveFoldersOnly = computed(() => {
+  if (props.mode === 'directory') return true
+  if (props.mode === 'file') return false
+  return browserFoldersOnly.value
+})
+
+const filteredBrowserEntries = computed(() => {
+  const q = (browserQuery.value || '').trim().toLowerCase()
+  return (browserEntries.value || [])
+    .filter((e) => (effectiveFoldersOnly.value ? e.isDirectory : true))
+    .filter((e) => {
+      if (!q) return true
+      return e.name.toLowerCase().includes(q)
+    })
+})
+
+watch(
+  () => [showHidden.value, showGitignored.value],
+  () => {
+    if (browserOpen.value) {
+      void loadBrowser(browserPath.value || '')
+    }
+  },
+)
+
+const browserVisible = computed(() => props.view === 'browser' || browserOpen.value)
+
+watch(
+  () => [props.view, props.basePath],
+  () => {
+    if (props.view === 'browser' && !browserOpen.value) {
+      void openBrowser()
+    }
+  },
+  { immediate: true },
+)
+</script>
+
+<template>
+  <div class="relative">
+    <div v-if="props.view === 'compact'" class="flex items-center gap-2">
+      <Input v-model="value" :placeholder="placeholder" :disabled="disabled" class="min-w-0" :class="inputClass" />
+      <Button
+        variant="outline"
+        size="sm"
+        type="button"
+        @click="browserOpen ? closeBrowser() : openBrowser()"
+        :disabled="disabled"
+        :class="buttonClass"
+      >
+        {{ browserOpen ? 'Hide' : buttonLabel }}
+      </Button>
+    </div>
+
+    <div v-if="browserVisible" class="mt-3">
+      <div v-if="browserTitle || browserDescription" class="mb-2">
+        <div v-if="browserTitle" class="typography-ui-label font-semibold">{{ browserTitle }}</div>
+        <div v-if="browserDescription" class="typography-micro text-muted-foreground">{{ browserDescription }}</div>
+      </div>
+
+      <div class="flex flex-col gap-3" :class="browserClass || 'min-h-[50vh] max-h-[50vh]'">
+        <div class="flex items-center gap-2 flex-wrap">
+          <Input
+            v-model="value"
+            :placeholder="placeholder || '/path/to/folder'"
+            class="min-w-0 flex-1 font-mono"
+            @keydown.enter.prevent="goToBrowserDraft"
+          />
+
+          <Button
+            variant="outline"
+            size="sm"
+            type="button"
+            @click="goToBrowserDraft"
+            :disabled="!value.trim()"
+            :class="buttonClass"
+          >
+            Go
+          </Button>
+        </div>
+
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <Input v-model="browserQuery" placeholder="Filter..." class="min-w-0 flex-1" />
+
+          <div class="flex items-center gap-1">
+            <template v-if="showOptions">
+              <Button
+                variant="ghost"
+                size="icon"
+                type="button"
+                class="h-8 w-8"
+                :class="showHidden ? 'bg-secondary/60' : ''"
+                :title="showHidden ? 'Hidden: shown' : 'Hidden: hidden'"
+                :aria-pressed="showHidden"
+                aria-label="Toggle hidden"
+                @click="showHidden = !showHidden"
+              >
+                <RiEyeLine v-if="showHidden" class="h-4 w-4" />
+                <RiEyeOffLine v-else class="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                type="button"
+                class="h-8 w-8"
+                :class="showGitignored ? 'bg-secondary/60' : ''"
+                :title="showGitignored ? 'Gitignored: shown' : 'Gitignored: hidden'"
+                :aria-pressed="showGitignored"
+                aria-label="Toggle gitignored"
+                @click="showGitignored = !showGitignored"
+              >
+                <RiGitBranchLine class="h-4 w-4" :class="showGitignored ? '' : 'opacity-50'" />
+              </Button>
+            </template>
+
+            <Button
+              v-if="mode === 'any'"
+              variant="outline"
+              size="sm"
+              type="button"
+              :aria-pressed="browserFoldersOnly"
+              @click="browserFoldersOnly = !browserFoldersOnly"
+              :class="buttonClass"
+            >
+              {{ browserFoldersOnly ? 'Folders only' : 'All' }}
+            </Button>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-1 text-xs">
+          <button
+            v-for="crumb in browserBreadcrumbs"
+            :key="crumb.path"
+            type="button"
+            class="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-muted-foreground hover:bg-accent"
+            @click="loadBrowser(crumb.path)"
+          >
+            <span>{{ crumb.label }}</span>
+            <RiArrowRightSLine class="h-3 w-3" />
+          </button>
+        </div>
+
+        <div class="flex-1 min-h-0 rounded-md border border-border overflow-hidden">
+          <div v-if="browserLoading" class="px-3 py-3 text-xs text-muted-foreground">Loading…</div>
+          <div v-else-if="browserError" class="px-3 py-3 text-xs text-destructive">{{ browserError }}</div>
+          <div v-else class="h-full overflow-auto">
+            <button
+              v-for="entry in filteredBrowserEntries"
+              :key="entry.path"
+              type="button"
+              class="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-accent"
+              @click="selectBrowserEntry(entry)"
+            >
+              <div class="flex min-w-0 items-center gap-2">
+                <span class="text-muted-foreground">
+                  <RiFolder3Line v-if="entry.isDirectory" class="h-4 w-4" />
+                  <RiFileTextLine v-else class="h-4 w-4" />
+                </span>
+                <span class="min-w-0 truncate" :title="entry.name">{{ entry.name }}</span>
+              </div>
+              <span v-if="entry.isDirectory" class="text-xs text-muted-foreground">Open</span>
+            </button>
+            <div v-if="filteredBrowserEntries.length === 0" class="px-3 py-3 text-xs text-muted-foreground">
+              No matches
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
