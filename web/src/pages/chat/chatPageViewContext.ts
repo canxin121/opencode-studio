@@ -47,6 +47,17 @@ type SessionUsageLike = {
   tokensValue?: number | null
 }
 
+type SessionErrorLike = {
+  at: number
+  error: {
+    message: string
+    rendered?: string
+    code?: string
+    name?: string
+    classification?: string
+  }
+} | null
+
 export type ChatPageViewContext = {
   pageRef: Ref<HTMLElement | null>
   scrollEl: Ref<HTMLElement | null>
@@ -65,9 +76,11 @@ export type ChatPageViewContext = {
     selectedSessionId: string | null
     selectedAttention: AttentionLike
     selectedHistory: { exhausted: boolean }
+    selectedSessionError: SessionErrorLike
     messages: MessageEntry[]
     messagesLoading: boolean
     messagesError: string | null
+    clearSessionError: (sessionId: string) => void
   }
   ui: {
     isMobile: boolean
@@ -180,6 +193,7 @@ export type ChatPageViewContext = {
   addProjectAttachment: () => void | Promise<void>
 
   isStreamingAssistantMessage: (message: MessageRecordLike | null | undefined) => boolean
+  handleCopySessionError: () => void | Promise<void>
   handleForkFromMessage: (messageId: string) => void
   handleRevertFromMessage: (messageId: string) => void
   handleCopyMessage: (message: MessageRecordLike) => void

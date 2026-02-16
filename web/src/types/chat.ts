@@ -18,9 +18,42 @@ export type MessageInfo = {
   role: 'user' | 'assistant' | 'system' | string
   time?: { created?: number; completed?: number }
   finish?: string
+  error?: MessageError
   agent?: string
   modelID?: string
   providerID?: string
+  [k: string]: JsonLike
+}
+
+export type MessageError = {
+  name?: string
+  type?: string
+  message?: string
+  code?: string
+  classification?: string
+  statusCode?: number | string
+  isRetryable?: boolean
+  retries?: number
+  providerID?: string
+  modelID?: string
+  requestID?: string
+  responseMessage?: string
+  responseBody?: string
+  metadata?: Record<string, JsonLike>
+  data?: {
+    message?: string
+    code?: string
+    statusCode?: number | string
+    isRetryable?: boolean
+    retries?: number
+    providerID?: string
+    modelID?: string
+    requestID?: string
+    responseMessage?: string
+    responseBody?: string
+    metadata?: Record<string, JsonLike>
+    [k: string]: JsonLike
+  }
   [k: string]: JsonLike
 }
 
@@ -55,8 +88,14 @@ export type SessionStatusEvent = {
   status: SessionStatus
 }
 
+export type SessionErrorClassification = 'context_overflow' | 'provider_auth' | 'network' | 'provider_api' | 'unknown'
+
 export type SessionError = {
   message: string
+  rendered?: string
+  code?: string
+  name?: string
+  classification?: SessionErrorClassification
   raw: JsonLike
 }
 

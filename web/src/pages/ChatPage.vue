@@ -805,6 +805,58 @@ async function copyToClipboard(text: string) {
   if (!ok) throw new Error('Copy failed')
 }
 
+function stringifyForClipboard(value: JsonValue): string {
+  if (typeof value === 'string') return value
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch {
+    return String(value ?? '')
+  }
+}
+
+async function handleCopySessionError() {
+  const sid = String(chat.selectedSessionId || '').trim()
+  const selectedError = chat.selectedSessionError
+  if (!selectedError) {
+    toasts.push('error', 'No session error to copy')
+    return
+  }
+
+  const detail = selectedError.error
+  const lines: string[] = []
+  if (sid) lines.push(`sessionID: ${sid}`)
+
+  const at = Number(selectedError.at || 0)
+  if (Number.isFinite(at) && at > 0) {
+    lines.push(`time: ${new Date(at).toISOString()}`)
+  }
+
+  const classification = String(detail.classification || '').trim()
+  if (classification) lines.push(`classification: ${classification}`)
+
+  const code = String(detail.code || '').trim()
+  if (code) lines.push(`code: ${code}`)
+
+  const name = String(detail.name || '').trim()
+  if (name) lines.push(`name: ${name}`)
+
+  const message = String(detail.message || '').trim()
+  if (message) lines.push(`message: ${message}`)
+
+  const rendered = String(detail.rendered || '').trim()
+  if (rendered && rendered !== message) lines.push(`rendered: ${rendered}`)
+
+  lines.push('raw:')
+  lines.push(stringifyForClipboard(detail.raw as JsonValue))
+
+  try {
+    await copyToClipboard(lines.join('\n'))
+    toasts.push('success', 'Copied error details')
+  } catch {
+    toasts.push('error', 'Failed to copy error details')
+  }
+}
+
 const messageActions = useChatMessageActions({
   chat,
   toasts,
@@ -823,10 +875,13 @@ const messageActions = useChatMessageActions({
 const { copiedMessageId, revertBusyMessageId, handleCopyMessage, handleForkFromMessage, handleRevertFromMessage } =
   messageActions
 
-function isStreamingAssistantMessage(message: { info?: { role?: string; finish?: string } } | null | undefined): boolean {
+function isStreamingAssistantMessage(
+  message: { info?: { role?: string; finish?: string; error?: unknown } } | null | undefined,
+): boolean {
   if (!message?.info) return false
   const role = String(message.info.role || '')
   if (role !== 'assistant') return false
+  if (message.info.error) return false
   const finish = typeof message.info.finish === 'string' ? message.info.finish.trim() : ''
   return !finish
 }
@@ -1193,6 +1248,7 @@ const viewCtx = {
   handleForkFromMessage,
   handleRevertFromMessage,
   handleCopyMessage,
+  handleCopySessionError,
   handleRedoFromRevertMarker,
   handleUnrevertFromRevertMarker,
 

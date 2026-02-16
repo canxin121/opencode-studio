@@ -4,6 +4,7 @@ import type { RouteLocationNormalizedLoaded, Router } from 'vue-router'
 import { apiJson } from '@/lib/api'
 import { patchSessionIdInQuery } from '@/app/navigation/sessionQuery'
 import type { JsonValue } from '@/types/json'
+import { buildAssistantErrorCopyText } from './assistantError'
 
 type ToastKind = 'info' | 'success' | 'error'
 type ToastsStore = { push: (kind: ToastKind, message: string) => void }
@@ -41,7 +42,11 @@ type PendingComposer = {
 }
 
 type MessageLike = {
-  info?: { id?: string }
+  info?: {
+    id?: string
+    role?: string
+    error?: JsonValue
+  }
   parts?: MessagePartLike[]
 }
 
@@ -111,10 +116,13 @@ export function useChatMessageActions(opts: {
 
   async function handleCopyMessage(message: MessageLike) {
     const id = typeof message?.info?.id === 'string' ? message.info.id : ''
-    const text = getTextParts(Array.isArray(message?.parts) ? message.parts : [])
+    let text = getTextParts(Array.isArray(message?.parts) ? message.parts : [])
       .map((p) => (typeof p?.text === 'string' ? p.text : ''))
       .filter((t) => t.trim())
       .join('\n\n')
+    if (!text) {
+      text = buildAssistantErrorCopyText(message?.info ?? null)
+    }
     if (!text) return
     try {
       await copyToClipboard(text)

@@ -25,6 +25,7 @@ import OptionMenu from '@/components/ui/OptionMenu.vue'
 import ToolbarChipButton from '@/components/ui/ToolbarChipButton.vue'
 import Tooltip from '@/components/ui/Tooltip.vue'
 import type { ChatPageViewContext } from './chatPageViewContext'
+import { hasDisplayableAssistantError } from './assistantError'
 
 // This view is template-only: it takes a context bag from ChatPage.
 // Keep it "dumb" so we can aggressively split ChatPage logic into composables.
@@ -168,6 +169,7 @@ const {
   handleForkFromMessage,
   handleRevertFromMessage,
   handleCopyMessage,
+  handleCopySessionError,
   handleRedoFromRevertMarker,
   handleUnrevertFromRevertMarker,
 } = ctx
@@ -180,6 +182,17 @@ const activePickerAnchor = computed(() => {
   if (mode === 'variant') return unref(variantTriggerRef)
   if (mode === 'agent') return unref(agentTriggerRef)
   return null
+})
+
+const headerSessionError = computed(() => {
+  if (!chat.selectedSessionError) return null
+  const messages = Array.isArray(chat.messages) ? chat.messages : []
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    if (hasDisplayableAssistantError(messages[i]?.info)) {
+      return null
+    }
+  }
+  return chat.selectedSessionError
 })
 
 // `ref="..."` in templates doesn't count as usage for TS.
@@ -330,8 +343,11 @@ void sessionActionsMenuRef
                 :retry-countdown-label="retryCountdownLabel"
                 :retry-next-label="retryNextLabel"
                 :attention="chat.selectedAttention"
+                :session-error="headerSessionError"
                 :mobile-pointer="ui.isMobilePointer"
                 @abort="abortRun"
+                @copyError="handleCopySessionError"
+                @clearError="chat.selectedSessionId ? chat.clearSessionError(chat.selectedSessionId) : undefined"
               />
 
               <Composer

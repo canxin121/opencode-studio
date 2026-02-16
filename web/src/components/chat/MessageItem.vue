@@ -11,6 +11,11 @@ import {
 import Markdown from '@/components/Markdown.vue'
 import Button from '@/components/ui/Button.vue'
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
+import {
+  buildAssistantErrorDetailsText,
+  buildAssistantErrorMetaEntries,
+  getAssistantErrorInfo,
+} from '@/pages/chat/assistantError'
 import type { JsonValue } from '@/types/json'
 
 type MessagePartLike = {
@@ -30,6 +35,8 @@ type MessageLike = {
     id?: string
     role?: string
     time?: { created?: number }
+    finish?: string
+    error?: JsonValue
     agent?: string
     modelID?: string
   }
@@ -87,6 +94,34 @@ function filePartLabel(part: MessagePartLike): string {
 
 const role = () => String(props.message?.info?.role || '')
 const messageId = () => String(props.message?.info?.id || '')
+
+function assistantErrorInfo() {
+  return getAssistantErrorInfo({
+    role: props.message?.info?.role,
+    error: props.message?.info?.error,
+  })
+}
+
+const assistantErrorMessage = () => {
+  const info = assistantErrorInfo()
+  if (!info || info.interrupted || !info.message) return ''
+  return info.message
+}
+
+const assistantErrorMetaEntries = () => {
+  const info = assistantErrorInfo()
+  if (!info || info.interrupted) return []
+  return buildAssistantErrorMetaEntries(info)
+}
+
+const assistantErrorDetailsText = () => {
+  const info = assistantErrorInfo()
+  if (!info || info.interrupted) return ''
+  return buildAssistantErrorDetailsText(info)
+}
+
+const assistantInterrupted = () => Boolean(assistantErrorInfo()?.interrupted)
+const assistantHasError = () => role() === 'assistant' && Boolean(assistantErrorMessage())
 </script>
 
 <template>
@@ -100,10 +135,15 @@ const messageId = () => String(props.message?.info?.id || '')
       >
         <div class="flex items-center gap-2 px-1 mb-1 text-[11px] text-muted-foreground/70">
           <div class="flex items-center gap-2 min-w-0">
-            <span class="font-semibold uppercase tracking-wider">{{ message.info.role }}</span>
+            <span
+              class="font-semibold uppercase tracking-wider"
+              :class="assistantHasError() ? 'text-rose-700 dark:text-rose-300' : ''"
+              >{{ message.info.role }}</span
+            >
             <span v-if="showTimestamps">{{ formatTime(message.info.time?.created) }}</span>
             <span v-if="message.info.agent" class="font-mono truncate">{{ message.info.agent }}</span>
             <span v-if="message.info.modelID" class="font-mono truncate">{{ message.info.modelID }}</span>
+            <span v-if="assistantInterrupted()" class="text-muted-foreground">interrupted</span>
           </div>
 
           <div class="flex-1" />
@@ -164,7 +204,9 @@ const messageId = () => String(props.message?.info?.id || '')
           class="rounded-lg border border-border/60 px-4 py-3 text-sm leading-relaxed relative"
           :class="{
             'bg-secondary/50': role() === 'user',
-            'bg-card/50': role() === 'assistant',
+            'bg-card/50': role() === 'assistant' && !assistantHasError(),
+            'border-rose-300/70 bg-rose-50/70 text-rose-950 dark:border-rose-500/45 dark:bg-rose-950/25 dark:text-rose-100':
+              assistantHasError(),
             'bg-destructive/10 border border-destructive/20 text-destructive': role() === 'system',
           }"
         >
@@ -172,7 +214,8 @@ const messageId = () => String(props.message?.info?.id || '')
             class="pointer-events-none absolute inset-y-0 left-0 w-1 rounded-l-lg"
             :class="{
               'bg-secondary/90': role() === 'user',
-              'bg-primary/55': role() === 'assistant',
+              'bg-primary/55': role() === 'assistant' && !assistantHasError(),
+              'bg-rose-400/80 dark:bg-rose-400/70': assistantHasError(),
               'bg-destructive/70': role() === 'system',
             }"
           />
@@ -181,6 +224,35 @@ const messageId = () => String(props.message?.info?.id || '')
               <Markdown :content="p.text || ''" mode="markdown" :stream="isStreaming" />
             </div>
           </div>
+
+          <div v-if="assistantErrorMessage()" class="mt-2 break-words">
+            <Markdown :content="assistantErrorMessage()" mode="markdown" :stream="false" />
+          </div>
+
+          <div v-if="assistantErrorMetaEntries().length" class="mt-2 flex flex-wrap gap-1.5">
+            <span
+              v-for="meta in assistantErrorMetaEntries()"
+              :key="meta.label"
+              class="inline-flex items-center rounded-md border border-rose-300/70 bg-rose-100/65 px-1.5 py-0.5 text-[10px] font-mono text-rose-900 dark:border-rose-500/45 dark:bg-rose-900/35 dark:text-rose-100"
+            >
+              {{ meta.label }}={{ meta.value }}
+            </span>
+          </div>
+
+          <details
+            v-if="assistantErrorDetailsText()"
+            class="mt-2 rounded-md border border-rose-300/60 bg-rose-100/40 dark:border-rose-500/40 dark:bg-rose-900/20"
+          >
+            <summary
+              class="cursor-pointer select-none px-2 py-1 text-[11px] font-medium text-rose-900 dark:text-rose-100"
+            >
+              error details
+            </summary>
+            <pre
+              class="max-h-64 overflow-auto border-t border-rose-300/50 px-2 py-1 text-[11px] leading-relaxed whitespace-pre-wrap break-words text-rose-950 dark:border-rose-500/35 dark:text-rose-100"
+              >{{ assistantErrorDetailsText() }}</pre
+            >
+          </details>
 
           <div v-if="getFileParts(message.parts).length" class="mt-3 space-y-2">
             <div class="flex flex-wrap gap-2">
@@ -199,10 +271,7 @@ const messageId = () => String(props.message?.info?.id || '')
               </template>
             </div>
 
-            <div
-              v-if="imageFileParts(message.parts).length"
-              class="grid grid-cols-2 sm:grid-cols-3 gap-2"
-            >
+            <div v-if="imageFileParts(message.parts).length" class="grid grid-cols-2 sm:grid-cols-3 gap-2">
               <a
                 v-for="img in imageFileParts(message.parts)"
                 :key="img.id || img.url"

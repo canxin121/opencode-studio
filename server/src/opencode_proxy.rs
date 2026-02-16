@@ -1361,6 +1361,278 @@ fn read_trimmed_from_map(
     None
 }
 
+fn read_trimmed_from_value(value: &serde_json::Value, keys: &[&str]) -> Option<String> {
+    value
+        .as_object()
+        .and_then(|map| read_trimmed_from_map(map, keys))
+}
+
+fn read_error_message_from_json_text(text: &str) -> Option<String> {
+    let parsed: serde_json::Value = serde_json::from_str(text.trim()).ok()?;
+    parsed.as_object().and_then(|obj| {
+        read_trimmed_from_map(obj, &["message"])
+            .or_else(|| {
+                obj.get("error")
+                    .and_then(|nested| read_trimmed_from_value(nested, &["message"]))
+            })
+            .or_else(|| obj.get("error").and_then(trim_string_value))
+    })
+}
+
+fn finite_number_from_map_keys(
+    map: &serde_json::Map<String, serde_json::Value>,
+    keys: &[&str],
+) -> Option<serde_json::Value> {
+    for key in keys {
+        if let Some(value) = finite_number_from_map(map, key) {
+            return Some(value);
+        }
+    }
+    None
+}
+
+fn read_bool_from_map(
+    map: &serde_json::Map<String, serde_json::Value>,
+    keys: &[&str],
+) -> Option<bool> {
+    for key in keys {
+        if let Some(value) = map.get(*key) {
+            if let Some(flag) = value.as_bool() {
+                return Some(flag);
+            }
+            if let Some(text) = trim_string_value(value) {
+                let lowered = text.to_ascii_lowercase();
+                if lowered == "true" || lowered == "1" || lowered == "yes" {
+                    return Some(true);
+                }
+                if lowered == "false" || lowered == "0" || lowered == "no" {
+                    return Some(false);
+                }
+            }
+        }
+    }
+    None
+}
+
+fn scalar_value(value: &serde_json::Value) -> Option<serde_json::Value> {
+    if let Some(text) = trim_string_value(value) {
+        return Some(serde_json::Value::String(text));
+    }
+    if let Some(num) = finite_number_value(value) {
+        return Some(num);
+    }
+    value.as_bool().map(serde_json::Value::Bool)
+}
+
+fn sanitize_metadata_map(
+    map: &serde_json::Map<String, serde_json::Value>,
+) -> Option<serde_json::Map<String, serde_json::Value>> {
+    let mut out = serde_json::Map::new();
+    for (key, value) in map {
+        if let Some(cleaned) = scalar_value(value) {
+            out.insert(key.clone(), cleaned);
+        }
+    }
+    if out.is_empty() {
+        return None;
+    }
+    Some(out)
+}
+
+fn prune_message_error_value(value: &mut serde_json::Value) -> bool {
+    let Some(error_obj) = value.as_object() else {
+        return false;
+    };
+
+    let error_data = error_obj.get("data").and_then(|v| v.as_object());
+    let nested_error = error_obj.get("error").and_then(|v| v.as_object());
+    let metadata = error_data.and_then(|obj| obj.get("metadata").and_then(|v| v.as_object()));
+
+    let error_name = read_trimmed_from_map(error_obj, &["name", "type"])
+        .or_else(|| nested_error.and_then(|obj| read_trimmed_from_map(obj, &["name", "type"])));
+
+    let error_type = read_trimmed_from_map(error_obj, &["type"])
+        .or_else(|| nested_error.and_then(|obj| read_trimmed_from_map(obj, &["type"])));
+
+    let error_code = read_trimmed_from_map(error_obj, &["code"])
+        .or_else(|| error_data.and_then(|obj| read_trimmed_from_map(obj, &["code"])))
+        .or_else(|| nested_error.and_then(|obj| read_trimmed_from_map(obj, &["code"])))
+        .or_else(|| metadata.and_then(|obj| read_trimmed_from_map(obj, &["code"])));
+
+    let status_code = error_data
+        .and_then(|obj| finite_number_from_map_keys(obj, &["statusCode", "status"]))
+        .or_else(|| finite_number_from_map_keys(error_obj, &["statusCode", "status"]))
+        .or_else(|| {
+            nested_error.and_then(|obj| finite_number_from_map_keys(obj, &["statusCode", "status"]))
+        });
+
+    let is_retryable = error_data
+        .and_then(|obj| read_bool_from_map(obj, &["isRetryable", "retryable"]))
+        .or_else(|| read_bool_from_map(error_obj, &["isRetryable", "retryable"]))
+        .or_else(|| {
+            nested_error.and_then(|obj| read_bool_from_map(obj, &["isRetryable", "retryable"]))
+        });
+
+    let retries = error_data
+        .and_then(|obj| finite_number_from_map_keys(obj, &["retries", "retryCount"]))
+        .or_else(|| finite_number_from_map_keys(error_obj, &["retries", "retryCount"]))
+        .or_else(|| {
+            nested_error
+                .and_then(|obj| finite_number_from_map_keys(obj, &["retries", "retryCount"]))
+        });
+
+    let provider_id = error_data
+        .and_then(|obj| read_trimmed_from_map(obj, &["providerID", "providerId", "provider"]))
+        .or_else(|| read_trimmed_from_map(error_obj, &["providerID", "providerId", "provider"]))
+        .or_else(|| {
+            nested_error.and_then(|obj| {
+                read_trimmed_from_map(obj, &["providerID", "providerId", "provider"])
+            })
+        });
+
+    let model_id = error_data
+        .and_then(|obj| read_trimmed_from_map(obj, &["modelID", "modelId", "model"]))
+        .or_else(|| read_trimmed_from_map(error_obj, &["modelID", "modelId", "model"]))
+        .or_else(|| {
+            nested_error
+                .and_then(|obj| read_trimmed_from_map(obj, &["modelID", "modelId", "model"]))
+        });
+
+    let request_id = error_data
+        .and_then(|obj| read_trimmed_from_map(obj, &["requestID", "requestId", "request_id"]))
+        .or_else(|| read_trimmed_from_map(error_obj, &["requestID", "requestId", "request_id"]))
+        .or_else(|| {
+            nested_error.and_then(|obj| {
+                read_trimmed_from_map(obj, &["requestID", "requestId", "request_id"])
+            })
+        })
+        .or_else(|| {
+            metadata.and_then(|obj| {
+                read_trimmed_from_map(obj, &["requestID", "requestId", "request_id"])
+            })
+        });
+
+    let classification = read_trimmed_from_map(error_obj, &["classification"])
+        .or_else(|| error_data.and_then(|obj| read_trimmed_from_map(obj, &["classification"])))
+        .or_else(|| nested_error.and_then(|obj| read_trimmed_from_map(obj, &["classification"])));
+
+    let response_body_message = error_data
+        .and_then(|obj| obj.get("responseBody"))
+        .and_then(trim_string_value)
+        .and_then(|text| read_error_message_from_json_text(&text));
+
+    let response_body = error_data
+        .and_then(|obj| read_trimmed_from_map(obj, &["responseBody"]))
+        .or_else(|| read_trimmed_from_map(error_obj, &["responseBody"]))
+        .or_else(|| nested_error.and_then(|obj| read_trimmed_from_map(obj, &["responseBody"])));
+
+    let response_message = error_data
+        .and_then(|obj| read_trimmed_from_map(obj, &["responseMessage"]))
+        .or_else(|| read_trimmed_from_map(error_obj, &["responseMessage"]))
+        .or_else(|| nested_error.and_then(|obj| read_trimmed_from_map(obj, &["responseMessage"])));
+
+    let metadata_map = error_data
+        .and_then(|obj| obj.get("metadata").and_then(|v| v.as_object()))
+        .or_else(|| error_obj.get("metadata").and_then(|v| v.as_object()))
+        .or_else(|| nested_error.and_then(|obj| obj.get("metadata").and_then(|v| v.as_object())))
+        .and_then(sanitize_metadata_map);
+
+    let error_message = read_trimmed_from_map(error_obj, &["message"])
+        .or_else(|| error_data.and_then(|obj| read_trimmed_from_map(obj, &["message"])))
+        .or_else(|| nested_error.and_then(|obj| read_trimmed_from_map(obj, &["message"])))
+        .or_else(|| response_message.clone())
+        .or_else(|| response_body_message);
+
+    let mut out = serde_json::Map::new();
+    if let Some(name) = error_name {
+        out.insert("name".to_string(), serde_json::Value::String(name));
+    }
+    if let Some(ty) = error_type {
+        out.insert("type".to_string(), serde_json::Value::String(ty));
+    }
+    if let Some(code) = error_code {
+        out.insert("code".to_string(), serde_json::Value::String(code));
+    }
+    if let Some(v) = classification {
+        out.insert("classification".to_string(), serde_json::Value::String(v));
+    }
+    if let Some(v) = status_code.clone() {
+        out.insert("statusCode".to_string(), v);
+    }
+    if let Some(v) = is_retryable {
+        out.insert("isRetryable".to_string(), serde_json::Value::Bool(v));
+    }
+    if let Some(v) = retries.clone() {
+        out.insert("retries".to_string(), v);
+    }
+    if let Some(v) = provider_id.clone() {
+        out.insert("providerID".to_string(), serde_json::Value::String(v));
+    }
+    if let Some(v) = model_id.clone() {
+        out.insert("modelID".to_string(), serde_json::Value::String(v));
+    }
+    if let Some(v) = request_id.clone() {
+        out.insert("requestID".to_string(), serde_json::Value::String(v));
+    }
+    if let Some(v) = response_message.clone() {
+        out.insert("responseMessage".to_string(), serde_json::Value::String(v));
+    }
+    if let Some(v) = response_body.clone() {
+        out.insert("responseBody".to_string(), serde_json::Value::String(v));
+    }
+    if let Some(v) = metadata_map.clone() {
+        out.insert("metadata".to_string(), serde_json::Value::Object(v));
+    }
+
+    let mut data = serde_json::Map::new();
+    if let Some(message) = error_message {
+        out.insert(
+            "message".to_string(),
+            serde_json::Value::String(message.clone()),
+        );
+        data.insert("message".to_string(), serde_json::Value::String(message));
+    }
+    if let Some(code) = out.get("code").cloned() {
+        data.insert("code".to_string(), code);
+    }
+    if let Some(v) = out.get("statusCode").cloned() {
+        data.insert("statusCode".to_string(), v);
+    }
+    if let Some(v) = out.get("isRetryable").cloned() {
+        data.insert("isRetryable".to_string(), v);
+    }
+    if let Some(v) = out.get("retries").cloned() {
+        data.insert("retries".to_string(), v);
+    }
+    if let Some(v) = out.get("providerID").cloned() {
+        data.insert("providerID".to_string(), v);
+    }
+    if let Some(v) = out.get("modelID").cloned() {
+        data.insert("modelID".to_string(), v);
+    }
+    if let Some(v) = out.get("requestID").cloned() {
+        data.insert("requestID".to_string(), v);
+    }
+    if let Some(v) = out.get("responseMessage").cloned() {
+        data.insert("responseMessage".to_string(), v);
+    }
+    if let Some(v) = out.get("responseBody").cloned() {
+        data.insert("responseBody".to_string(), v);
+    }
+    if let Some(v) = out.get("metadata").cloned() {
+        data.insert("metadata".to_string(), v);
+    }
+    if !data.is_empty() {
+        out.insert("data".to_string(), serde_json::Value::Object(data));
+    }
+
+    if out.is_empty() {
+        return false;
+    }
+    *value = serde_json::Value::Object(out);
+    true
+}
+
 fn prune_message_time_for_sse(value: &mut serde_json::Value) {
     let Some(obj) = value.as_object_mut() else {
         *value = serde_json::Value::Object(serde_json::Map::new());
@@ -1932,6 +2204,7 @@ fn prune_message_info_for_sse(info: &mut serde_json::Map<String, serde_json::Val
             "variant",
             "cost",
             "tokens",
+            "error",
         ],
     );
 
@@ -1986,6 +2259,12 @@ fn prune_message_info_for_sse(info: &mut serde_json::Map<String, serde_json::Val
     }
     if info.get("variant").is_some_and(|v| !v.is_string()) {
         info.remove("variant");
+    }
+
+    if let Some(error) = info.get_mut("error")
+        && !prune_message_error_value(error)
+    {
+        info.remove("error");
     }
 
     info.get("id")
@@ -2236,23 +2515,37 @@ fn sanitize_session_error_event_properties(
     props: &mut serde_json::Map<String, serde_json::Value>,
 ) -> bool {
     let session_id = read_trimmed_from_map(props, &["sessionID", "sessionId", "session_id"]);
-    let error_message = props
-        .get("error")
-        .and_then(|v| v.as_object())
-        .and_then(|obj| read_trimmed_from_map(obj, &["message"]))
-        .or_else(|| read_trimmed_from_map(props, &["message"]));
+
+    let error_value = props.get("error").cloned();
+    let mut error_out = serde_json::Map::new();
+    if let Some(mut value) = error_value.clone()
+        && prune_message_error_value(&mut value)
+        && let Some(obj) = value.as_object()
+    {
+        error_out = obj.clone();
+    }
+
+    if error_out.get("message").is_none()
+        && let Some(message) = error_value
+            .as_ref()
+            .and_then(trim_string_value)
+            .or_else(|| read_trimmed_from_map(props, &["message"]))
+    {
+        error_out.insert("message".to_string(), serde_json::Value::String(message));
+    }
+
+    let classification = read_trimmed_from_map(props, &["classification"])
+        .or_else(|| error_out.get("classification").and_then(trim_string_value));
 
     props.clear();
     if let Some(v) = session_id {
         props.insert("sessionID".to_string(), serde_json::Value::String(v));
     }
-    if let Some(message) = error_message {
-        props.insert(
-            "error".to_string(),
-            serde_json::json!({
-                "message": message,
-            }),
-        );
+    if let Some(v) = classification {
+        props.insert("classification".to_string(), serde_json::Value::String(v));
+    }
+    if !error_out.is_empty() {
+        props.insert("error".to_string(), serde_json::Value::Object(error_out));
     }
     !props.is_empty()
 }
@@ -2684,6 +2977,7 @@ fn prune_message_info(info: &mut serde_json::Map<String, serde_json::Value>) {
             "variant",
             "cost",
             "tokens",
+            "error",
         ],
     );
 
@@ -2732,6 +3026,12 @@ fn prune_message_info(info: &mut serde_json::Map<String, serde_json::Value>) {
 
     if info.get("variant").is_some_and(|v| !v.is_string()) {
         info.remove("variant");
+    }
+
+    if let Some(error) = info.get_mut("error")
+        && !prune_message_error_value(error)
+    {
+        info.remove("error");
     }
 }
 
@@ -4131,6 +4431,260 @@ mod tests {
         };
 
         assert!(!sanitize_sse_event_data(&mut event, &filter, &detail));
+    }
+
+    #[test]
+    fn sanitize_sse_session_error_extracts_nested_message_and_classification() {
+        let mut event = json!({
+            "type": "session.error",
+            "properties": {
+                "sessionID": "ses_1",
+                "classification": "context_overflow",
+                "error": {
+                    "name": "ContextOverflowError",
+                    "data": {
+                        "message": "Input exceeds context window of this model",
+                        "responseBody": "{\"error\":{\"message\":\"Your input exceeds the context window of this model.\"}}"
+                    }
+                }
+            }
+        });
+
+        let filter = ActivityFilter {
+            allowed: ["tool", "patch", "snapshot", "agent", "retry", "compaction"]
+                .into_iter()
+                .map(String::from)
+                .collect(),
+            tool_allowed: HashSet::new(),
+            tool_explicit: true,
+            show_reasoning: false,
+            show_justification: false,
+        };
+
+        let detail = ActivityDetailPolicy {
+            enabled: false,
+            expanded: HashSet::new(),
+            expanded_tools: HashSet::new(),
+        };
+
+        assert!(sanitize_sse_event_data(&mut event, &filter, &detail));
+        let props = event["properties"].as_object().expect("properties");
+        assert_eq!(props.get("sessionID"), Some(&json!("ses_1")));
+        assert_eq!(
+            props.get("classification"),
+            Some(&json!("context_overflow"))
+        );
+
+        let error = props
+            .get("error")
+            .and_then(|v| v.as_object())
+            .expect("error object");
+        assert_eq!(error.get("name"), Some(&json!("ContextOverflowError")));
+        assert_eq!(
+            error.get("message"),
+            Some(&json!("Input exceeds context window of this model"))
+        );
+    }
+
+    #[test]
+    fn sanitize_sse_session_error_keeps_global_error_without_session_id() {
+        let mut event = json!({
+            "type": "session.error",
+            "properties": {
+                "classification": "provider_api",
+                "error": {
+                    "code": "invalid_prompt",
+                    "message": "Invalid prompt from upstream"
+                }
+            }
+        });
+
+        let filter = ActivityFilter {
+            allowed: ["tool", "patch", "snapshot", "agent", "retry", "compaction"]
+                .into_iter()
+                .map(String::from)
+                .collect(),
+            tool_allowed: HashSet::new(),
+            tool_explicit: true,
+            show_reasoning: false,
+            show_justification: false,
+        };
+
+        let detail = ActivityDetailPolicy {
+            enabled: false,
+            expanded: HashSet::new(),
+            expanded_tools: HashSet::new(),
+        };
+
+        assert!(sanitize_sse_event_data(&mut event, &filter, &detail));
+        let props = event["properties"].as_object().expect("properties");
+        assert!(props.get("sessionID").is_none());
+        assert_eq!(props.get("classification"), Some(&json!("provider_api")));
+        assert_eq!(
+            props.get("error").and_then(|v| v.get("code")),
+            Some(&json!("invalid_prompt"))
+        );
+        assert_eq!(
+            props.get("error").and_then(|v| v.get("message")),
+            Some(&json!("Invalid prompt from upstream"))
+        );
+    }
+
+    #[test]
+    fn sanitize_sse_message_updated_keeps_assistant_error_summary() {
+        let mut event = json!({
+            "type": "message.updated",
+            "properties": {
+                "info": {
+                    "id": "msg_1",
+                    "sessionID": "ses_1",
+                    "role": "assistant",
+                    "time": {"created": 1, "completed": 2},
+                    "error": {
+                        "name": "ContextOverflowError",
+                        "data": {
+                            "message": "Input exceeds context window of this model",
+                            "statusCode": 400,
+                            "isRetryable": false,
+                            "requestID": "req_ctx_1",
+                            "metadata": {
+                                "request_id": "req_ctx_1",
+                                "attempt": 2,
+                                "drop": {"nope": true}
+                            },
+                            "responseBody": "{\"error\":{\"message\":\"Your input exceeds the context window of this model.\"}}",
+                            "noise": "drop"
+                        },
+                        "noise": "drop"
+                    },
+                    "noise": true
+                }
+            }
+        });
+
+        let filter = ActivityFilter {
+            allowed: HashSet::new(),
+            tool_allowed: HashSet::new(),
+            tool_explicit: true,
+            show_reasoning: false,
+            show_justification: false,
+        };
+
+        let detail = ActivityDetailPolicy {
+            enabled: false,
+            expanded: HashSet::new(),
+            expanded_tools: HashSet::new(),
+        };
+
+        assert!(sanitize_sse_event_data(&mut event, &filter, &detail));
+        let info = event["properties"]["info"]
+            .as_object()
+            .expect("message info");
+        let error = info
+            .get("error")
+            .and_then(|v| v.as_object())
+            .expect("error object");
+        assert_eq!(error.get("name"), Some(&json!("ContextOverflowError")));
+        assert_eq!(
+            error.get("message"),
+            Some(&json!("Input exceeds context window of this model"))
+        );
+        assert_eq!(error.get("statusCode"), Some(&json!(400)));
+        assert_eq!(error.get("isRetryable"), Some(&json!(false)));
+        assert_eq!(error.get("requestID"), Some(&json!("req_ctx_1")));
+        assert_eq!(
+            error.get("data").and_then(|v| v.get("message")),
+            Some(&json!("Input exceeds context window of this model"))
+        );
+        assert_eq!(
+            error.get("data").and_then(|v| v.get("statusCode")),
+            Some(&json!(400))
+        );
+        assert_eq!(
+            error.get("metadata").and_then(|v| v.get("request_id")),
+            Some(&json!("req_ctx_1"))
+        );
+        assert!(error.get("metadata").and_then(|v| v.get("drop")).is_none());
+        assert!(error.get("noise").is_none());
+    }
+
+    #[test]
+    fn filter_message_payload_keeps_assistant_error_summary() {
+        let mut payload = json!([
+            {
+                "info": {
+                    "id": "msg_1",
+                    "role": "assistant",
+                    "time": {"created": 1, "updated": 2},
+                    "error": {
+                        "name": "APIError",
+                        "data": {
+                            "message": "Upstream provider timeout",
+                            "code": "upstream_timeout",
+                            "statusCode": 504,
+                            "isRetryable": true,
+                            "providerID": "anthropic",
+                            "modelID": "claude-sonnet-4-20250514",
+                            "requestID": "req_timeout_1",
+                            "metadata": {
+                                "request_id": "req_timeout_1",
+                                "region": "us-east-1"
+                            },
+                            "noise": "drop"
+                        },
+                        "noise": true
+                    }
+                },
+                "parts": []
+            }
+        ]);
+
+        let filter = ActivityFilter {
+            allowed: HashSet::new(),
+            tool_allowed: HashSet::new(),
+            tool_explicit: true,
+            show_reasoning: false,
+            show_justification: false,
+        };
+
+        let detail = ActivityDetailPolicy {
+            enabled: false,
+            expanded: HashSet::new(),
+            expanded_tools: HashSet::new(),
+        };
+
+        filter_message_payload(&mut payload, &filter, &detail);
+        let info = payload[0]["info"].as_object().expect("message info");
+        let error = info
+            .get("error")
+            .and_then(|v| v.as_object())
+            .expect("error object");
+        assert_eq!(error.get("name"), Some(&json!("APIError")));
+        assert_eq!(error.get("code"), Some(&json!("upstream_timeout")));
+        assert_eq!(
+            error.get("message"),
+            Some(&json!("Upstream provider timeout"))
+        );
+        assert_eq!(error.get("statusCode"), Some(&json!(504)));
+        assert_eq!(error.get("isRetryable"), Some(&json!(true)));
+        assert_eq!(error.get("providerID"), Some(&json!("anthropic")));
+        assert_eq!(
+            error.get("modelID"),
+            Some(&json!("claude-sonnet-4-20250514"))
+        );
+        assert_eq!(error.get("requestID"), Some(&json!("req_timeout_1")));
+        assert_eq!(
+            error.get("data").and_then(|v| v.get("message")),
+            Some(&json!("Upstream provider timeout"))
+        );
+        assert_eq!(
+            error.get("data").and_then(|v| v.get("metadata")),
+            Some(&json!({
+                "request_id": "req_timeout_1",
+                "region": "us-east-1"
+            }))
+        );
+        assert!(error.get("noise").is_none());
     }
 
     #[test]

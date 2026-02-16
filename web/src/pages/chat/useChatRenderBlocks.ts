@@ -9,6 +9,7 @@ import {
   type ChatActivityType,
   type ChatToolActivityType,
 } from '@/lib/chatActivity'
+import { hasDisplayableAssistantError } from './assistantError'
 
 type RenderValue = unknown
 type UnknownRecord = Record<string, RenderValue>
@@ -31,6 +32,7 @@ export type ChatMessage = {
     role?: string
     time?: { created?: number }
     finish?: string
+    error?: RenderValue
     agent?: string
     modelID?: string
   }
@@ -169,7 +171,9 @@ export function useChatRenderBlocks(opts: {
   const toolFilterSet = computed(() => {
     const set = new Set<string>()
     for (const raw of chatToolActivityFilters.value || []) {
-      const key = String(raw || '').trim().toLowerCase()
+      const key = String(raw || '')
+        .trim()
+        .toLowerCase()
       if (!key) continue
       set.add(key)
     }
@@ -368,8 +372,9 @@ export function useChatRenderBlocks(opts: {
       const textParts = getTextParts(parts)
       const activityParts = getRenderableActivityParts(parts)
       const hasFiles = hasRenderableFileParts(parts)
+      const hasError = hasDisplayableAssistantError(m?.info)
 
-      if (textParts.length > 0 || hasFiles) {
+      if (textParts.length > 0 || hasFiles || hasError) {
         // We reached the next text message: flush the activity between the last text and this one.
         flushActivity(id || null)
         blocks.push({ kind: 'message', key: `msg:${id || blocks.length}`, message: m, textParts })

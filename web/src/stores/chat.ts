@@ -6,6 +6,9 @@ import type { SseEvent } from '../lib/sse'
 import type {
   AttentionEvent,
   MessageEntry,
+  SessionError,
+  SessionErrorClassification,
+  SessionErrorEvent,
   Session,
   SessionRunConfig,
   SessionStatus,
@@ -96,6 +99,7 @@ export const useChatStore = defineStore('chat', () => {
 
   const attentionBySession = ref<Record<string, AttentionEvent>>({})
   const sessionStatusBySession = ref<Record<string, SessionStatusEvent>>({})
+  const sessionErrorBySession = ref<Record<string, SessionErrorEvent>>({})
   const sessionRunConfigBySession = ref<Record<string, SessionRunConfig>>({})
 
   // Simple debounce so we can respond to high-frequency SSE updates.
@@ -104,6 +108,7 @@ export const useChatStore = defineStore('chat', () => {
   const refreshMessagesRetryTimerBySession = new Map<string, number>()
   let selectSeq = 0
   let lastGlobalErrorToastAt = 0
+  const lastSessionErrorToastByKey = new Map<string, { at: number; message: string }>()
   let createSessionInFlight: Promise<Session | null> | null = null
 
   function clearMessageRefreshRetry(sessionId: string) {
@@ -148,6 +153,135 @@ export const useChatStore = defineStore('chat', () => {
 
   function readEventProperties(evt: SseEvent): UnknownRecord {
     return asRecord(evt.properties) || {}
+  }
+
+  type SessionErrorClassificationOrEmpty = SessionErrorClassification | ''
+
+  function normalizeErrorClassification(value: JsonValue): SessionErrorClassificationOrEmpty {
+    const normalized = typeof value === 'string' ? value.trim().toLowerCase() : ''
+    if (
+      normalized === 'context_overflow' ||
+      normalized === 'provider_auth' ||
+      normalized === 'network' ||
+      normalized === 'provider_api' ||
+      normalized === 'unknown'
+    ) {
+      return normalized
+    }
+    return ''
+  }
+
+  function classificationFallbackMessage(classification: SessionErrorClassificationOrEmpty): string {
+    switch (classification) {
+      case 'context_overflow':
+        return 'Input exceeds the model context window. Reduce context and retry.'
+      case 'provider_auth':
+        return 'Provider authentication failed. Reconnect provider credentials and retry.'
+      case 'network':
+        return 'Network error while contacting the model provider. Check connectivity and retry.'
+      case 'provider_api':
+        return 'The model provider returned an API error. Retry or switch model/provider.'
+      default:
+        return ''
+    }
+  }
+
+  function parseJsonSafe(text: string): JsonValue | null {
+    try {
+      const parsed = JSON.parse(text)
+      return parsed as JsonValue
+    } catch {
+      return null
+    }
+  }
+
+  function readString(value: JsonValue): string {
+    return typeof value === 'string' ? value.trim() : ''
+  }
+
+  function firstNonEmpty(values: Array<string | null | undefined>): string {
+    for (const value of values) {
+      const text = typeof value === 'string' ? value.trim() : ''
+      if (text) return text
+    }
+    return ''
+  }
+
+  function readErrorMessageFromJsonLike(value: JsonValue): string {
+    const obj = asRecord(value)
+    if (!obj) return ''
+    const nested = asRecord(obj.error)
+    return firstNonEmpty([readString(obj.message), readString(nested?.message), readString(obj.error)])
+  }
+
+  function nonEmptyJsonPreview(value: JsonValue): string {
+    const record = asRecord(value)
+    if (record && Object.keys(record).length === 0) return ''
+    return clampText(safeJson(value), 260)
+  }
+
+  function normalizeSessionError(evt: SseEvent): {
+    message: string
+    rendered: string
+    code: string
+    name: string
+    classification: SessionErrorClassificationOrEmpty
+    details: SessionError
+  } {
+    const props = readEventProperties(evt)
+    const rawErr = props.error
+    const err = asRecord(rawErr)
+    const data = asRecord(err?.data)
+    const nestedError = asRecord(err?.error)
+    const metadata = asRecord(data?.metadata)
+
+    const responseBody = readString(data?.responseBody)
+    const responseBodyMessage = responseBody ? readErrorMessageFromJsonLike(parseJsonSafe(responseBody)) : ''
+
+    const message = firstNonEmpty([
+      readString(err?.message),
+      readString(data?.message),
+      readString(nestedError?.message),
+      responseBodyMessage,
+      readString(props.message),
+      typeof rawErr === 'string' ? rawErr : '',
+    ])
+
+    const code = firstNonEmpty([
+      readString(err?.code),
+      readString(data?.code),
+      readString(nestedError?.code),
+      readString(metadata?.code),
+    ])
+
+    const name = firstNonEmpty([readString(err?.name), readString(err?.type), readString(nestedError?.type)])
+
+    const classification = normalizeErrorClassification(props.classification)
+    const fallback = classificationFallbackMessage(classification)
+    const rawPreview = nonEmptyJsonPreview(err) || nonEmptyJsonPreview(rawErr)
+    const rendered = message || rawPreview || fallback || (code ? `[${code}] Session error` : 'Session error')
+
+    const details: SessionError = {
+      message: message || fallback || (code ? `[${code}] Session error` : 'Session error'),
+      rendered,
+      ...(code ? { code } : {}),
+      ...(name ? { name } : {}),
+      ...(classification ? { classification } : {}),
+      raw: rawErr ?? props,
+    }
+
+    return { message, rendered, code, name, classification, details }
+  }
+
+  function pushErrorToastWithDedupe(key: string, message: string, timeoutMs = 4500) {
+    const dedupeKey = (key || '').trim() || '__global__'
+    const msg = (message || '').trim()
+    if (!msg) return
+    const now = Date.now()
+    const prev = lastSessionErrorToastByKey.get(dedupeKey)
+    if (prev && prev.message === msg && now - prev.at < 1200) return
+    lastSessionErrorToastByKey.set(dedupeKey, { at: now, message: msg })
+    toasts.push('error', msg, timeoutMs)
   }
 
   function scheduleSessionsRefresh(delayMs = 250) {
@@ -234,6 +368,12 @@ export const useChatStore = defineStore('chat', () => {
     return sessionStatusBySession.value[sid] ?? null
   })
 
+  const selectedSessionError = computed(() => {
+    const sid = selectedSessionId.value
+    if (!sid) return null
+    return sessionErrorBySession.value[sid] ?? null
+  })
+
   const selectedSessionRunConfig = computed(() => {
     const sid = selectedSessionId.value
     if (!sid) return null
@@ -290,6 +430,15 @@ export const useChatStore = defineStore('chat', () => {
     }
     sessionRunConfigBySession.value = { ...sessionRunConfigBySession.value, [sid]: next }
     runConfigPersister.persistSoon()
+  }
+
+  function clearSessionError(sessionId: string) {
+    const sid = (sessionId || '').trim()
+    if (!sid) return
+    if (!Object.prototype.hasOwnProperty.call(sessionErrorBySession.value, sid)) return
+    const next = { ...sessionErrorBySession.value }
+    delete next[sid]
+    sessionErrorBySession.value = next
   }
 
   function setSessionMessages(sessionId: string, list: MessageEntry[]) {
@@ -1018,10 +1167,12 @@ export const useChatStore = defineStore('chat', () => {
       variant?: string
     },
   ) {
+    clearSessionError(sessionId)
     await sendMessageToSession(sessionId, opts, getDirectoryForSession)
   }
 
   async function sendText(sessionId: string, text: string) {
+    clearSessionError(sessionId)
     await sendTextToSession(sessionId, text, getDirectoryForSession)
   }
 
@@ -1081,6 +1232,10 @@ export const useChatStore = defineStore('chat', () => {
       const nextStatus = { ...sessionStatusBySession.value }
       delete nextStatus[sid]
       sessionStatusBySession.value = nextStatus
+
+      const nextErrors = { ...sessionErrorBySession.value }
+      delete nextErrors[sid]
+      sessionErrorBySession.value = nextErrors
 
       const nextMessages = { ...messagesBySession.value }
       delete nextMessages[sid]
@@ -1155,6 +1310,10 @@ export const useChatStore = defineStore('chat', () => {
           [sid]: { at: Date.now(), payload: evt, status: parsed },
         }
 
+        if (parsed.type === 'busy' || parsed.type === 'retry') {
+          clearSessionError(sid)
+        }
+
         if (parsed.type === 'idle') {
           clearAttention(sid)
         }
@@ -1180,40 +1339,50 @@ export const useChatStore = defineStore('chat', () => {
     }
 
     if (sid && t === 'session.error') {
-      const rawErr = readEventProperties(evt).error
-      const rawErrRecord = asRecord(rawErr)
-      const msg = typeof rawErrRecord?.message === 'string' ? rawErrRecord.message.trim() : ''
-      const rendered = msg || clampText(safeJson(rawErrRecord || rawErr), 260) || 'Session error'
+      const normalized = normalizeSessionError(evt)
+      const rendered = normalized.rendered
+      const at = Date.now()
+      const selected = selectedSessionId.value === sid
+      const title = firstNonEmpty([sessionsById.value[sid]?.title, sessions.value.find((s) => s.id === sid)?.title])
+      const toastMessage = selected ? rendered : `${title || sid}: ${rendered}`
 
       // Errors terminate the active run; reset status so UI doesn't get stuck.
       sessionStatusBySession.value = {
         ...sessionStatusBySession.value,
-        [sid]: { at: Date.now(), payload: evt, status: { type: 'idle' } },
+        [sid]: { at, payload: evt, status: { type: 'idle' } },
+      }
+
+      sessionErrorBySession.value = {
+        ...sessionErrorBySession.value,
+        [sid]: {
+          at,
+          payload: evt,
+          error: normalized.details,
+        },
       }
 
       clearAttention(sid)
 
-      if (selectedSessionId.value === sid) {
-        toasts.push('error', rendered, 4500)
+      pushErrorToastWithDedupe(`session:${sid}`, toastMessage)
 
+      if (selected) {
         if (refreshMessagesTimer) window.clearTimeout(refreshMessagesTimer)
         refreshMessagesTimer = window.setTimeout(() => {
           void refreshMessages(sid, { silent: true })
         }, 200)
       }
+
+      scheduleSessionsRefresh(500)
     }
 
     // Global session.error (no sessionID) happens in OpenCode as well; surface it.
     if (!sid && t === 'session.error') {
-      const rawErr = readEventProperties(evt).error
-      const rawErrRecord = asRecord(rawErr)
-      const msg = typeof rawErrRecord?.message === 'string' ? rawErrRecord.message.trim() : ''
-      const rendered = msg || clampText(safeJson(rawErrRecord || rawErr), 260) || 'Session error'
+      const rendered = normalizeSessionError(evt).rendered
 
       const now = Date.now()
       if (now - lastGlobalErrorToastAt > 1500) {
         lastGlobalErrorToastAt = now
-        toasts.push('error', rendered, 4500)
+        pushErrorToastWithDedupe('__global__', rendered, 4500)
       }
 
       scheduleSessionsRefresh(500)
@@ -1418,8 +1587,10 @@ export const useChatStore = defineStore('chat', () => {
     messagesError,
     selectedAttention,
     selectedSessionStatus,
+    selectedSessionError,
     selectedSessionRunConfig,
     sessionStatusBySession,
+    sessionErrorBySession,
     sessionRunConfigBySession,
     attentionBySession,
     refreshSessions,
@@ -1445,6 +1616,7 @@ export const useChatStore = defineStore('chat', () => {
     consumePendingComposer,
     getComposerDraft,
     setComposerDraft,
+    clearSessionError,
     revertToMessage,
     unrevertSession,
     applyEvent,
