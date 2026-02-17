@@ -11,10 +11,12 @@ import { readSessionIdFromFullPath, readSessionIdFromQuery } from '@/app/navigat
 import { useChatStore } from '@/stores/chat'
 import { useDirectoryStore } from '@/stores/directory'
 import { useOpencodeConfigStore } from '@/stores/opencodeConfig'
+import { usePluginHostStore } from '@/stores/pluginHost'
 import { useSessionActivityStore } from '@/stores/sessionActivity'
 import { useSettingsStore } from '@/stores/settings'
 import { useUiStore } from '@/stores/ui'
 import { useToastsStore } from '@/stores/toasts'
+import { resolveChatMounts, type ChatMount } from '@/plugins/host/mounts'
 
 import { useMessageStreaming } from '@/composables/chat/useMessageStreaming'
 import { useChatAttachments } from './chat/useChatAttachments'
@@ -60,6 +62,7 @@ const router = useRouter()
 const chat = useChatStore()
 const directoryStore = useDirectoryStore()
 const opencodeConfig = useOpencodeConfigStore()
+const pluginHost = usePluginHostStore()
 const activity = useSessionActivityStore()
 const settings = useSettingsStore()
 const ui = useUiStore()
@@ -653,6 +656,17 @@ async function handleUnrevertFromRevertMarker() {
 const settingsData = computed<JsonObject>(() => asRecord(settings.data))
 
 const activityAutoCollapseOnIdle = computed(() => settingsData.value.chatActivityAutoCollapseOnIdle !== false)
+
+const chatMountsBySurface = computed(() => resolveChatMounts(pluginHost.manifestsById))
+
+function isPlanpilotMount(mount: ChatMount): boolean {
+  const pluginId = String(mount.pluginId || '').trim().toLowerCase()
+  return pluginId === 'opencode-planpilot' || pluginId.includes('planpilot')
+}
+
+const chatSidebarPluginMounts = computed(() =>
+  chatMountsBySurface.value['chat.sidebar'].filter((mount) => !isPlanpilotMount(mount)),
+)
 
 const activityDefaultExpandedKeys = computed<ChatActivityExpandKey[]>(() => {
   const s = settingsData.value
@@ -1312,6 +1326,9 @@ const viewCtx = {
   attachProjectPath,
   sessionDirectory,
   addProjectAttachment,
+
+  // Plugin chat mounts.
+  chatSidebarPluginMounts,
 } satisfies ChatPageViewContext
 
 onBeforeUnmount(() => {

@@ -1591,6 +1591,7 @@ mod tests {
                 true,
                 None,
             )),
+            plugin_runtime: Arc::new(crate::plugin_runtime::PluginRuntime::new()),
             terminal: Arc::new(crate::terminal::TerminalManager::new()),
             session_activity: crate::session_activity::SessionActivityManager::new(),
             directory_session_index:

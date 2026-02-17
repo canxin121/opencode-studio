@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 
 import { ApiError, apiJson } from '@/lib/api'
+import { postAppBroadcast } from '@/lib/appBroadcast'
 import { useDirectoryStore } from '@/stores/directory'
 import type { JsonValue as JsonLike } from '@/types/json'
 
@@ -82,6 +83,7 @@ export const useOpencodeConfigStore = defineStore('opencodeConfig', () => {
       activePath.value = resp.path || null
       scope.value = resp.scope || scope.value
       exists.value = typeof resp.exists === 'boolean' ? resp.exists : null
+      postAppBroadcast('opencodeConfig.updated', { updatedAt: Date.now(), scope: scope.value })
     } catch (err) {
       if (err instanceof ApiError) {
         error.value = err.message || err.bodyText || null

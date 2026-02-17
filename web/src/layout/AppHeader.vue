@@ -231,6 +231,9 @@ const SETTINGS_LAST_ROUTE_KEY = 'oc2.settings.lastRoute'
 function getRememberedSettingsRoute(): string {
   try {
     const raw = String(localStorage.getItem(SETTINGS_LAST_ROUTE_KEY) || '').trim()
+    if (raw.startsWith('/settings/plan')) {
+      return `/settings/plugins${raw.slice('/settings/plan'.length)}`
+    }
     if (raw.startsWith('/settings')) return raw
   } catch {
     // ignore

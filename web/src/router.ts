@@ -45,6 +45,17 @@ const routes: RouteRecordRaw[] = [
   },
   { path: '/settings', redirect: '/settings/opencode/general' },
   {
+    path: '/settings/plan/:section?',
+    redirect: (to) => {
+      const section = typeof to.params.section === 'string' ? to.params.section : ''
+      return {
+        path: section ? `/settings/plugins/${section}` : '/settings/plugins',
+        query: to.query,
+        hash: to.hash,
+      }
+    },
+  },
+  {
     path: '/settings/:tab/:section?',
     component: () => import('./pages/SettingsPage.vue'),
     meta: { shellSidebar: 'none', mobilePanel: 'settings' },

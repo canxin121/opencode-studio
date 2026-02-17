@@ -5,6 +5,7 @@ import { RiArrowDownSLine, RiRefreshLine } from '@remixicon/vue'
 
 import { useSettingsStore, type Settings } from '../stores/settings'
 import { useChatStore } from '@/stores/chat'
+import { usePluginHostStore } from '@/stores/pluginHost'
 import { useToastsStore } from '@/stores/toasts'
 import { useUiStore } from '@/stores/ui'
 
@@ -12,6 +13,7 @@ import Button from '@/components/ui/Button.vue'
 import SidebarTextButton from '@/components/ui/SidebarTextButton.vue'
 import ScrollArea from '@/components/ui/ScrollArea.vue'
 import OpenCodeConfigPanel from '@/components/settings/OpenCodeConfigPanel.vue'
+import PluginSettingsPanel from '@/components/settings/PluginSettingsPanel.vue'
 import { opencodeSections } from '@/components/settings/opencodeSections'
 import { clearBackendSessionCache } from '@/features/settings/api/settingsApi'
 import { useDesktopSidebarResize } from '@/composables/useDesktopSidebarResize'
@@ -29,10 +31,11 @@ import {
   type ChatToolActivityType,
 } from '@/lib/chatActivity'
 
-type SettingsTab = 'opencode' | 'troubleshooting' | 'appearance'
+type SettingsTab = 'opencode' | 'plugins' | 'troubleshooting' | 'appearance'
 
 const settings = useSettingsStore()
 const chat = useChatStore()
+const pluginHost = usePluginHostStore()
 const toasts = useToastsStore()
 const ui = useUiStore()
 const route = useRoute()
@@ -76,6 +79,7 @@ async function clearSessionCache() {
 
 const tabs: Array<{ id: SettingsTab; label: string }> = [
   { id: 'opencode', label: 'OpenCode' },
+  { id: 'plugins', label: 'Plugins' },
   { id: 'troubleshooting', label: 'Troubleshooting' },
   { id: 'appearance', label: 'Appearance' },
 ]
@@ -84,6 +88,34 @@ function normalizeOpencodeSection(raw?: string): string {
   const val = (raw || '').trim().toLowerCase()
   const match = opencodeSections.find((s) => s.id === val)
   return match ? match.id : opencodeSections[0]!.id
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function hasSettingsSchema(pluginId: string): boolean {
+  const manifest = pluginHost.getManifest(pluginId)
+  const root = manifest?.manifest
+  if (!isPlainObject(root)) return false
+  const schema = (root as Record<string, unknown>).settingsSchema
+  return isPlainObject(schema)
+}
+
+const pluginsTabPlugins = computed(() =>
+  pluginHost.readyPlugins
+    .filter((item) => hasSettingsSchema(item.id))
+    .map((item) => ({
+      id: item.id,
+      label: item.displayName || item.id,
+    })),
+)
+
+function normalizePluginsSection(raw?: string): string {
+  const available = pluginsTabPlugins.value.map((item) => item.id)
+  if (available.length === 0) return ''
+  const val = String(raw || '').trim()
+  return available.includes(val) ? val : available[0]!
 }
 
 const activeTab = computed<SettingsTab>(() => {
@@ -97,9 +129,30 @@ const activeOpencodeSection = computed(() => {
   return normalizeOpencodeSection(route.params.section as string | undefined)
 })
 
+const activePluginsSection = computed(() => {
+  if (activeTab.value !== 'plugins') return null
+  return normalizePluginsSection(route.params.section as string | undefined)
+})
+
 const opencodeExpanded = ref(activeTab.value === 'opencode')
+const pluginsExpanded = ref(activeTab.value === 'plugins')
 
 function ensureSettingsRoute() {
+  if (activeTab.value === 'plugins') {
+    const currentSection = String(route.params.section || '')
+    const normalized = normalizePluginsSection(currentSection)
+    if (!normalized) {
+      if (currentSection) {
+        void router.replace('/settings/plugins')
+      }
+      return
+    }
+    if (!currentSection || currentSection !== normalized) {
+      void router.replace(`/settings/plugins/${normalized}`)
+    }
+    return
+  }
+
   if (activeTab.value !== 'opencode') {
     if (route.params.section) {
       void router.replace(`/settings/${activeTab.value}`)
@@ -124,7 +177,24 @@ function goToTab(id: SettingsTab) {
     }
     return
   }
+
+  if (id === 'plugins') {
+    if (activeTab.value !== 'plugins') {
+      pluginsExpanded.value = true
+      const section = activePluginsSection.value || normalizePluginsSection()
+      if (section) {
+        void router.push(`/settings/plugins/${section}`)
+      } else {
+        void router.push('/settings/plugins')
+      }
+    } else {
+      pluginsExpanded.value = !pluginsExpanded.value
+    }
+    return
+  }
+
   opencodeExpanded.value = false
+  pluginsExpanded.value = false
   void router.push(`/settings/${id}`)
 }
 
@@ -134,9 +204,19 @@ function goToOpencodeSection(id: string) {
   void router.push(`/settings/opencode/${section}`)
 }
 
+function goToPluginsSection(id: string) {
+  const section = normalizePluginsSection(id)
+  if (!section) return
+  pluginsExpanded.value = true
+  void router.push(`/settings/plugins/${section}`)
+}
+
 onMounted(() => {
   if (!settings.data && !settings.loading) {
     void settings.refresh()
+  }
+  if (!pluginHost.bootstrapped && !pluginHost.loading) {
+    void pluginHost.bootstrap()
   }
 })
 
@@ -157,12 +237,27 @@ watch(
 )
 
 watch(
+  () => pluginsTabPlugins.value.map((item) => item.id).join('|'),
+  () => {
+    if (activeTab.value === 'plugins') {
+      ensureSettingsRoute()
+    }
+  },
+)
+
+watch(
   () => activeTab.value,
   (tab, prev) => {
     if (tab !== 'opencode') {
       opencodeExpanded.value = false
     } else if (prev !== 'opencode' && !opencodeExpanded.value) {
       opencodeExpanded.value = true
+    }
+
+    if (tab !== 'plugins') {
+      pluginsExpanded.value = false
+    } else if (prev !== 'plugins' && !pluginsExpanded.value) {
+      pluginsExpanded.value = true
     }
   },
 )
@@ -330,71 +425,6 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
 
 <template>
   <div class="settings-page flex h-full flex-col overflow-hidden bg-background text-foreground">
-    <!-- Header -->
-    <div class="flex h-14 items-center justify-between border-b border-border px-4 lg:px-6 bg-muted/20 shrink-0">
-      <div class="flex-1" />
-      <div class="flex items-center gap-2">
-        <Button
-          variant="ghost"
-          size="icon"
-          class="h-8 w-8"
-          title="Refresh"
-          aria-label="Refresh settings"
-          @click="settings.refresh"
-          :disabled="settings.loading"
-        >
-          <RiRefreshLine class="h-4 w-4" :class="settings.loading ? 'animate-spin' : ''" />
-        </Button>
-      </div>
-    </div>
-
-    <!-- Mobile Tabs (Horizontal Scroll) -->
-    <div
-      class="lg:hidden border-b border-border bg-background overflow-x-auto flex items-center px-2 py-1 gap-1 shrink-0 scrollbar-none"
-    >
-      <SidebarTextButton
-        v-for="t in tabs"
-        :key="t.id"
-        @click="goToTab(t.id)"
-        class="flex-shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap active:scale-95"
-        :class="
-          activeTab === t.id
-            ? 'bg-muted/70 text-foreground border border-border'
-            : 'text-muted-foreground hover:text-foreground'
-        "
-      >
-        <span class="inline-flex items-center gap-1">
-          <RiArrowDownSLine
-            v-if="t.id === 'opencode'"
-            class="h-3 w-3 transition-transform"
-            :class="opencodeExpanded && activeTab === 'opencode' ? 'rotate-180' : ''"
-          />
-          {{ t.label }}
-        </span>
-      </SidebarTextButton>
-    </div>
-
-    <div
-      v-if="activeTab === 'opencode' && opencodeExpanded"
-      class="lg:hidden border-b border-border bg-background px-2 py-2 gap-2 shrink-0"
-    >
-      <div class="overflow-x-auto flex items-center gap-1 scrollbar-none">
-        <SidebarTextButton
-          v-for="section in opencodeSections"
-          :key="section.id"
-          @click="goToOpencodeSection(section.id)"
-          class="flex-shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap active:scale-95"
-          :class="
-            activeOpencodeSection === section.id
-              ? 'bg-muted/70 text-foreground border border-border'
-              : 'text-muted-foreground hover:text-foreground border border-border/60'
-          "
-        >
-          {{ section.label }}
-        </SidebarTextButton>
-      </div>
-    </div>
-
     <div class="flex flex-1 overflow-hidden">
       <aside
         v-if="useShellSidebar"
@@ -408,6 +438,20 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
         />
         <ScrollArea class="h-full">
           <div class="flex flex-col gap-1 p-3">
+            <div class="mb-2 flex items-center justify-between px-1">
+              <div class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Settings</div>
+              <Button
+                variant="ghost"
+                size="icon"
+                class="h-7 w-7"
+                title="Refresh"
+                aria-label="Refresh settings"
+                @click="settings.refresh"
+                :disabled="settings.loading"
+              >
+                <RiRefreshLine class="h-4 w-4" :class="settings.loading ? 'animate-spin' : ''" />
+              </Button>
+            </div>
             <div v-for="t in tabs" :key="t.id" class="space-y-1">
               <SidebarTextButton
                 @click="goToTab(t.id)"
@@ -420,9 +464,14 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
               >
                 <span class="inline-flex items-center gap-2">
                   <RiArrowDownSLine
-                    v-if="t.id === 'opencode'"
+                    v-if="t.id === 'opencode' || t.id === 'plugins'"
                     class="h-3.5 w-3.5 transition-transform"
-                    :class="opencodeExpanded && activeTab === 'opencode' ? 'rotate-180' : ''"
+                    :class="
+                      (t.id === 'opencode' && opencodeExpanded && activeTab === 'opencode') ||
+                      (t.id === 'plugins' && pluginsExpanded && activeTab === 'plugins')
+                        ? 'rotate-180'
+                        : ''
+                    "
                   />
                   {{ t.label }}
                 </span>
@@ -446,6 +495,25 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
                   {{ section.label }}
                 </SidebarTextButton>
               </div>
+
+              <div
+                v-if="t.id === 'plugins' && activeTab === 'plugins' && pluginsExpanded"
+                class="border-l border-border/60 pl-3 pt-2 space-y-1"
+              >
+                <SidebarTextButton
+                  v-for="plugin in pluginsTabPlugins"
+                  :key="`desktop-plugins-${plugin.id}`"
+                  @click="goToPluginsSection(plugin.id)"
+                  class="w-full rounded-md border border-transparent px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/60 hover:text-foreground active:scale-95"
+                  :class="
+                    activePluginsSection === plugin.id
+                      ? 'bg-primary/12 dark:bg-accent/80 text-foreground border-border/60'
+                      : 'text-muted-foreground'
+                  "
+                >
+                  {{ plugin.label }}
+                </SidebarTextButton>
+              </div>
             </div>
           </div>
         </ScrollArea>
@@ -464,6 +532,18 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
           <!-- OpenCode Tab -->
           <div v-if="activeTab === 'opencode'" class="space-y-6">
             <OpenCodeConfigPanel :active-section="activeOpencodeSection || undefined" />
+          </div>
+
+          <!-- Plugins Tab -->
+          <div v-else-if="activeTab === 'plugins'" class="space-y-6">
+            <div
+              v-if="pluginsTabPlugins.length === 0"
+              class="rounded-lg border border-border bg-muted/10 p-4 text-sm text-muted-foreground"
+            >
+              No plugins expose settings.
+            </div>
+
+            <PluginSettingsPanel v-else :plugin-id="activePluginsSection" :hide-plugin-selector="true" />
           </div>
 
           <!-- Troubleshooting Tab -->

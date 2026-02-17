@@ -7,16 +7,6 @@ import type { JsonValue } from '@/types/json'
 
 type RetryStatus = { type: 'retry'; attempt: number; message: string; next: number }
 type Attention = { kind: 'permission' | 'question'; payload: JsonValue }
-type SessionError = {
-  at: number
-  error: {
-    message: string
-    rendered?: string
-    code?: string
-    name?: string
-    classification?: string
-  }
-}
 
 const props = withDefaults(
   defineProps<{
@@ -27,7 +17,6 @@ const props = withDefaults(
     retryCountdownLabel: string
     retryNextLabel: string
     attention: Attention | null
-    sessionError?: SessionError | null
     mobilePointer?: boolean
   }>(),
   {
@@ -37,45 +26,11 @@ const props = withDefaults(
 
 defineEmits<{
   (e: 'abort'): void
-  (e: 'clearError'): void
-  (e: 'copyError'): void
 }>()
 
 const hasRetry = computed(() => Boolean(props.retryStatus && props.sessionId))
 const hasAttention = computed(() => Boolean(props.attention && props.sessionId && !props.sessionEnded))
-const hasError = computed(() => Boolean(props.sessionError && props.sessionId))
 const showOverlay = computed(() => hasRetry.value || hasAttention.value)
-
-const errorClassificationLabel = computed(() => {
-  const classification = String(props.sessionError?.error?.classification || '').trim()
-  if (classification === 'context_overflow') return 'Context overflow'
-  if (classification === 'provider_auth') return 'Auth error'
-  if (classification === 'network') return 'Network error'
-  if (classification === 'provider_api') return 'Provider error'
-  if (classification === 'unknown') return 'Session error'
-  return 'Session error'
-})
-
-const errorBody = computed(() => {
-  const detail = props.sessionError?.error
-  const rendered = typeof detail?.rendered === 'string' ? detail.rendered.trim() : ''
-  if (rendered) return rendered
-  const message = typeof detail?.message === 'string' ? detail.message.trim() : ''
-  if (message) return message
-  const code = typeof detail?.code === 'string' ? detail.code.trim() : ''
-  if (code) return `[${code}] Session error`
-  return 'Session error'
-})
-
-const errorAtLabel = computed(() => {
-  const at = Number(props.sessionError?.at || 0)
-  if (!Number.isFinite(at) || at <= 0) return ''
-  try {
-    return new Date(at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-  } catch {
-    return ''
-  }
-})
 
 const mobileTitle = computed(() => {
   if (props.attention?.kind === 'permission') return 'Permission required'
@@ -86,22 +41,6 @@ const mobileTitle = computed(() => {
 </script>
 
 <template>
-  <div v-if="hasError" class="mb-2 rounded-lg border border-rose-300/70 bg-rose-50/70 px-3 py-2 text-rose-900 dark:border-rose-500/40 dark:bg-rose-950/25 dark:text-rose-100">
-    <div class="flex items-start justify-between gap-3">
-      <div class="min-w-0">
-        <div class="flex items-center gap-2 text-xs font-semibold">
-          <span>{{ errorClassificationLabel }}</span>
-          <span v-if="errorAtLabel" class="text-[10px] font-mono text-rose-900/70 dark:text-rose-200/80">{{ errorAtLabel }}</span>
-        </div>
-        <div class="mt-1 text-[11px] leading-5 break-words">{{ errorBody }}</div>
-      </div>
-      <div class="shrink-0 flex items-center gap-2">
-        <Button size="sm" variant="outline" class="h-7" @click="$emit('copyError')">Copy details</Button>
-        <Button size="sm" variant="outline" class="h-7" @click="$emit('clearError')">Dismiss</Button>
-      </div>
-    </div>
-  </div>
-
   <template v-if="showOverlay">
     <div v-if="mobilePointer" class="fixed inset-0 z-[70]">
       <div class="absolute inset-0 bg-black/55 backdrop-blur-sm" />

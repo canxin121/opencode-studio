@@ -50,6 +50,16 @@ type RetryStatusLike = {
   [k: string]: JsonValue
 } | null
 
+type SessionErrorLike = {
+  at: number
+  error: {
+    message: string
+    rendered?: string
+    code?: string
+    classification?: string
+  }
+} | null
+
 export type RenderBlock =
   | { kind: 'message'; key: string; message: MessageLike; textParts: MessagePartLike[] }
   | {
@@ -67,6 +77,7 @@ const props = defineProps<{
   selectedSessionId: string | null
   messagesLoading: boolean
   messagesError: string | null
+  sessionError?: SessionErrorLike
   renderBlocks: RenderBlock[]
   pendingInitialScrollSessionId: string | null
   loadingOlder: boolean
@@ -107,7 +118,39 @@ const emit = defineEmits<{
   (e: 'copy', message: MessageLike): void
   (e: 'redoFromRevert'): void
   (e: 'unrevertFromRevert'): void
+  (e: 'copySessionError'): void
+  (e: 'clearSessionError'): void
 }>()
+
+function sessionErrorClassificationLabel(): string {
+  const classification = String(props.sessionError?.error?.classification || '').trim()
+  if (classification === 'context_overflow') return 'Context overflow'
+  if (classification === 'provider_auth') return 'Auth error'
+  if (classification === 'network') return 'Network error'
+  if (classification === 'provider_api') return 'Provider error'
+  return 'Session error'
+}
+
+function sessionErrorBody(): string {
+  const detail = props.sessionError?.error
+  const rendered = typeof detail?.rendered === 'string' ? detail.rendered.trim() : ''
+  if (rendered) return rendered
+  const message = typeof detail?.message === 'string' ? detail.message.trim() : ''
+  if (message) return message
+  const code = typeof detail?.code === 'string' ? detail.code.trim() : ''
+  if (code) return `[${code}] Session error`
+  return 'Session error'
+}
+
+function sessionErrorAtLabel(): string {
+  const at = Number(props.sessionError?.at || 0)
+  if (!Number.isFinite(at) || at <= 0) return ''
+  try {
+    return new Date(at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  } catch {
+    return ''
+  }
+}
 </script>
 
 <template>
@@ -135,14 +178,23 @@ const emit = defineEmits<{
     </div>
   </div>
 
-  <div
-    v-else-if="messagesError"
-    class="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive"
-  >
-    {{ messagesError }}
-  </div>
-
   <template v-else>
+    <div v-if="messagesError" class="group mb-3">
+      <div class="flex">
+        <div class="w-full min-w-0">
+          <div class="flex items-center gap-2 px-1 mb-1 text-[11px] text-muted-foreground/70">
+            <span class="font-semibold uppercase tracking-wider text-destructive">system</span>
+          </div>
+          <div
+            class="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm leading-relaxed text-destructive relative"
+          >
+            <div class="pointer-events-none absolute inset-y-0 left-0 w-1 rounded-l-lg bg-destructive/70" />
+            <div class="break-words">{{ messagesError }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div v-if="loadingOlder" class="mb-2 px-1 text-[11px] text-muted-foreground/70 flex items-center gap-2">
       <RiLoader4Line class="h-3.5 w-3.5 animate-spin" />
       Loading older messages...
@@ -375,5 +427,40 @@ const emit = defineEmits<{
         </div>
       </div>
     </TransitionGroup>
+
+    <div v-if="sessionError" class="group mt-4">
+      <div class="flex">
+        <div class="w-full min-w-0">
+          <div class="flex items-center gap-2 px-1 mb-1 text-[11px] text-muted-foreground/70">
+            <span class="font-semibold uppercase tracking-wider text-rose-700 dark:text-rose-300">system</span>
+          </div>
+
+          <div
+            class="rounded-lg border border-rose-300/70 bg-rose-50/70 px-4 py-3 text-sm leading-relaxed text-rose-950 dark:border-rose-500/45 dark:bg-rose-950/25 dark:text-rose-100 relative"
+          >
+            <div
+              class="pointer-events-none absolute inset-y-0 left-0 w-1 rounded-l-lg bg-rose-400/80 dark:bg-rose-400/70"
+            />
+
+            <div class="flex flex-wrap items-center gap-2 text-xs font-semibold">
+              <span>{{ sessionErrorClassificationLabel() }}</span>
+              <span
+                v-if="sessionErrorAtLabel()"
+                class="text-[10px] font-mono text-rose-900/70 dark:text-rose-200/80"
+              >
+                {{ sessionErrorAtLabel() }}
+              </span>
+            </div>
+
+            <div class="mt-1 break-words">{{ sessionErrorBody() }}</div>
+
+            <div class="mt-2 flex flex-wrap items-center gap-2">
+              <Button size="sm" variant="outline" class="h-7" @click="$emit('copySessionError')">Copy details</Button>
+              <Button size="sm" variant="outline" class="h-7" @click="$emit('clearSessionError')">Dismiss</Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </template>
 </template>

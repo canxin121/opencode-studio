@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, unref } from 'vue'
+import { computed, ref, unref } from 'vue'
 import {
   RiArrowDownLine,
   RiArrowDownDoubleLine,
@@ -15,6 +15,8 @@ import {
 
 import VerticalSplitPane from '@/components/ui/VerticalSplitPane.vue'
 import MessageList from '@/components/chat/MessageList.vue'
+import PluginChatMounts from '@/components/chat/PluginChatMounts.vue'
+import PlanpilotTodoBar from '@/components/chat/PlanpilotTodoBar.vue'
 import ChatHeader from '@/components/chat/ChatHeader.vue'
 import Composer from '@/components/chat/Composer.vue'
 import RenameSessionDialog from '@/components/chat/RenameSessionDialog.vue'
@@ -52,6 +54,7 @@ const {
   ui,
   attachedFiles,
   draft,
+  chatSidebarPluginMounts,
 
   // Message list.
   renderBlocks,
@@ -174,6 +177,16 @@ const {
   handleUnrevertFromRevertMarker,
 } = ctx
 
+const planpilotReservePx = ref(0)
+
+function handlePlanpilotReserve(px: number) {
+  if (!Number.isFinite(px) || px <= 0) {
+    planpilotReservePx.value = 0
+    return
+  }
+  planpilotReservePx.value = Math.max(0, Math.floor(px))
+}
+
 // Compute the anchor element for the picker menu based on which picker is open.
 // This ensures the menu appears right next to the button that triggered it.
 const activePickerAnchor = computed(() => {
@@ -184,7 +197,7 @@ const activePickerAnchor = computed(() => {
   return null
 })
 
-const headerSessionError = computed(() => {
+const timelineSessionError = computed(() => {
   if (!chat.selectedSessionError) return null
   const messages = Array.isArray(chat.messages) ? chat.messages : []
   for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -232,6 +245,7 @@ void sessionActionsMenuRef
               :selected-session-id="chat.selectedSessionId"
               :messages-loading="chat.messagesLoading"
               :messages-error="chat.messagesError"
+              :session-error="timelineSessionError"
               :render-blocks="renderBlocks"
               :pending-initial-scroll-session-id="pendingInitialScrollSessionId"
               :loading-older="loadingOlder"
@@ -262,7 +276,11 @@ void sessionActionsMenuRef
               @copy="handleCopyMessage"
               @redo-from-revert="handleRedoFromRevertMarker"
               @unrevert-from-revert="handleUnrevertFromRevertMarker"
+              @copySessionError="handleCopySessionError"
+              @clearSessionError="chat.selectedSessionId ? chat.clearSessionError(chat.selectedSessionId) : undefined"
             />
+
+            <div v-if="planpilotReservePx > 0" :style="{ height: `${planpilotReservePx}px` }" aria-hidden="true" />
 
             <div ref="bottomEl" class="h-px w-full" aria-hidden="true" />
           </div>
@@ -325,6 +343,15 @@ void sessionActionsMenuRef
             <RiArrowDownDoubleLine class="h-4 w-4" />
           </Button>
         </div>
+
+        <div
+          v-if="chat.selectedSessionId && !ui.isSessionSwitcherOpen"
+          class="pointer-events-none absolute inset-x-0 bottom-2 z-30"
+        >
+          <div class="chat-column">
+            <PlanpilotTodoBar :session-id="chat.selectedSessionId" @reserve-change="handlePlanpilotReserve" />
+          </div>
+        </div>
       </template>
 
       <template #bottom>
@@ -343,12 +370,10 @@ void sessionActionsMenuRef
                 :retry-countdown-label="retryCountdownLabel"
                 :retry-next-label="retryNextLabel"
                 :attention="chat.selectedAttention"
-                :session-error="headerSessionError"
                 :mobile-pointer="ui.isMobilePointer"
                 @abort="abortRun"
-                @copyError="handleCopySessionError"
-                @clearError="chat.selectedSessionId ? chat.clearSessionError(chat.selectedSessionId) : undefined"
               />
+              <PluginChatMounts :mounts="chatSidebarPluginMounts" />
 
               <Composer
                 ref="composerRef"

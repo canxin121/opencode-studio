@@ -21,6 +21,7 @@ use tower_http::{
 pub(crate) struct AppState {
     pub(crate) ui_auth: crate::ui_auth::UiAuth,
     pub(crate) opencode: Arc<crate::opencode::OpenCodeManager>,
+    pub(crate) plugin_runtime: Arc<crate::plugin_runtime::PluginRuntime>,
     pub(crate) terminal: Arc<crate::terminal::TerminalManager>,
     pub(crate) session_activity: crate::session_activity::SessionActivityManager,
     pub(crate) directory_session_index:
@@ -244,6 +245,8 @@ pub(crate) async fn run(args: crate::Args) {
     let terminal = Arc::new(crate::terminal::TerminalManager::new());
     terminal.clone().spawn_cleanup_task();
 
+    let plugin_runtime = Arc::new(crate::plugin_runtime::PluginRuntime::new());
+
     let activity = crate::session_activity::SessionActivityManager::new();
     let directory_session_index =
         crate::directory_session_index::DirectorySessionIndexManager::new();
@@ -251,12 +254,25 @@ pub(crate) async fn run(args: crate::Args) {
     let state = Arc::new(AppState {
         ui_auth,
         opencode,
+        plugin_runtime,
         terminal,
         session_activity: activity,
         directory_session_index,
         settings_path,
         settings: Arc::new(RwLock::new(settings_value)),
     });
+
+    if let Err(err) = state
+        .plugin_runtime
+        .refresh_from_opencode_config_layers(None)
+        .await
+    {
+        tracing::warn!(
+            target: "opencode_studio.plugin_runtime",
+            error = %err,
+            "failed to refresh plugin runtime on startup"
+        );
+    }
 
     {
         let state = state.clone();
@@ -296,6 +312,23 @@ pub(crate) async fn run(args: crate::Args) {
         .route(
             "/config/opencode",
             get(crate::config::config_opencode_get).put(crate::config::config_opencode_put),
+        )
+        .route("/plugins", get(crate::plugin_runtime::plugins_list_get))
+        .route(
+            "/plugins/{plugin_id}/manifest",
+            get(crate::plugin_runtime::plugin_manifest_get),
+        )
+        .route(
+            "/plugins/{plugin_id}/action",
+            post(crate::plugin_runtime::plugin_action_post),
+        )
+        .route(
+            "/plugins/{plugin_id}/events",
+            get(crate::plugin_runtime::plugin_events_get),
+        )
+        .route(
+            "/plugins/{plugin_id}/assets/{*asset_path}",
+            get(crate::plugin_runtime::plugin_asset_get),
         )
         .route("/config/reload", post(crate::config::config_reload_post))
         .route(

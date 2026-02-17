@@ -124,7 +124,7 @@ pub async fn config_opencode_get(
 }
 
 pub async fn config_opencode_put(
-    State(_state): State<Arc<crate::AppState>>,
+    State(state): State<Arc<crate::AppState>>,
     Query(query): Query<OpencodeConfigQuery>,
     Json(body): Json<Value>,
 ) -> Response {
@@ -208,6 +208,19 @@ pub async fn config_opencode_put(
             Json(serde_json::json!({"error": err})),
         )
             .into_response();
+    }
+
+    if let Err(err) = state
+        .plugin_runtime
+        .refresh_from_opencode_config_layers(directory.as_deref())
+        .await
+    {
+        tracing::warn!(
+            target: "opencode_studio.plugin_runtime",
+            scope,
+            error = %err,
+            "failed to refresh plugin runtime after opencode config update"
+        );
     }
 
     let response = OpencodeConfigResponse {

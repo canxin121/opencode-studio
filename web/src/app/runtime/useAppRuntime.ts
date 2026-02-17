@@ -9,6 +9,7 @@ import { useUiStore } from '@/stores/ui'
 import { useUpdatesStore } from '@/stores/updates'
 import { useDirectoryStore } from '@/stores/directory'
 import { useDirectorySessionStore } from '@/stores/directorySessionStore'
+import { usePluginHostStore } from '@/stores/pluginHost'
 
 import { connectSse } from '@/lib/sse'
 import type { SseClientStats } from '@/lib/sse'
@@ -31,6 +32,7 @@ export function useAppRuntime() {
   const updates = useUpdatesStore()
   const directoryStore = useDirectoryStore()
   const directorySessions = useDirectorySessionStore()
+  const pluginHost = usePluginHostStore()
 
   let sse: ReturnType<typeof connectSse> | null = null
   let visibilityHandler: (() => void) | null = null
@@ -376,6 +378,8 @@ export function useAppRuntime() {
       directorySessions.bootstrapWithStaleWhileRevalidate().catch(() => {}),
     ])
 
+    await pluginHost.bootstrap().catch(() => {})
+
 
     // Check for updates a few seconds after mount.
     updateTimer = window.setTimeout(() => {
@@ -396,6 +400,10 @@ export function useAppRuntime() {
       if (!msg?.type) return
       if (msg.type === 'settings.updated') {
         void settings.refresh().catch(() => {})
+        return
+      }
+      if (msg.type === 'opencodeConfig.updated') {
+        void pluginHost.bootstrap().catch(() => {})
         return
       }
       if (msg.type === 'chatSidebarUiPrefs.updated') {
