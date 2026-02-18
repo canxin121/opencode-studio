@@ -52,6 +52,13 @@ const draft = ref<JsonObject>({})
 const jsonTextByPath = ref<Record<string, string>>({})
 const jsonErrorByPath = ref<Record<string, string>>({})
 
+const arrayRowsByPath = ref<Record<string, string[]>>({})
+const arrayErrorByPath = ref<Record<string, string>>({})
+
+type MapRow = { key: string; value: string }
+const mapRowsByPath = ref<Record<string, MapRow[]>>({})
+const mapErrorByPath = ref<Record<string, string>>({})
+
 function asObject(value: JsonLike): JsonObject {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
   return value as JsonObject
@@ -117,6 +124,23 @@ function isArrayWithPrimitiveItems(prop: SchemaProperty): boolean {
   return isPrimitiveProperty(items)
 }
 
+function additionalPrimitiveProp(prop: SchemaProperty): SchemaProperty | null {
+  if (prop.type !== 'object') return null
+  const ap = prop.additionalProperties
+  if (!ap || ap === true || ap === false) return null
+  const apProp = asSchemaProperty(ap as JsonLike)
+  return isPrimitiveProperty(apProp) ? apProp : null
+}
+
+function mapValueType(prop: SchemaProperty): string {
+  return String(additionalPrimitiveProp(prop)?.type || '')
+}
+
+function mapValueEnum(prop: SchemaProperty): JsonLike[] {
+  const ap = additionalPrimitiveProp(prop)
+  return ap && Array.isArray(ap.enum) ? ap.enum : []
+}
+
 function flattenSchema(
   properties: Record<string, SchemaProperty>,
   basePath: string[] = [],
@@ -162,6 +186,10 @@ async function loadPluginConfig() {
     draft.value = {}
     jsonTextByPath.value = {}
     jsonErrorByPath.value = {}
+    arrayRowsByPath.value = {}
+    arrayErrorByPath.value = {}
+    mapRowsByPath.value = {}
+    mapErrorByPath.value = {}
     return
   }
 
@@ -177,12 +205,20 @@ async function loadPluginConfig() {
     draft.value = cloneObject(next)
     jsonTextByPath.value = {}
     jsonErrorByPath.value = {}
+    arrayRowsByPath.value = {}
+    arrayErrorByPath.value = {}
+    mapRowsByPath.value = {}
+    mapErrorByPath.value = {}
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
     config.value = {}
     draft.value = {}
     jsonTextByPath.value = {}
     jsonErrorByPath.value = {}
+    arrayRowsByPath.value = {}
+    arrayErrorByPath.value = {}
+    mapRowsByPath.value = {}
+    mapErrorByPath.value = {}
   } finally {
     loading.value = false
   }
@@ -190,6 +226,12 @@ async function loadPluginConfig() {
 
 async function savePluginConfig() {
   if (!selectedPluginId.value || saving.value) return
+
+  if (Object.keys(arrayErrorByPath.value).length > 0 || Object.keys(mapErrorByPath.value).length > 0) {
+    error.value = 'Fix invalid list fields before saving.'
+    toasts.push('error', error.value)
+    return
+  }
 
   if (!commitAllJsonDrafts()) {
     error.value = 'Fix invalid JSON fields before saving.'
@@ -239,6 +281,10 @@ watch(
 watch(
   () => selectedPluginId.value,
   () => {
+    arrayRowsByPath.value = {}
+    arrayErrorByPath.value = {}
+    mapRowsByPath.value = {}
+    mapErrorByPath.value = {}
     void loadPluginConfig()
   },
   { immediate: true },
@@ -451,73 +497,299 @@ function onEnumInput(path: string[], event: Event) {
   }
 }
 
-function arrayValue(path: string[], prop: SchemaProperty): string {
-  const value = draftValueAtPath(path)
-  const fallback = Array.isArray(prop.default) ? prop.default : []
-  const list = Array.isArray(value) ? value : fallback
-  return list.map((item) => String(item)).join('\n')
+function arrayItemProp(prop: SchemaProperty): SchemaProperty {
+  return asSchemaProperty(prop.items as JsonLike)
 }
 
-function parseArrayInput(raw: string): string[] {
-  return raw
-    .split(/\r?\n|,/)
-    .map((part) => part.trim())
-    .filter((part) => part.length > 0)
+function arrayItemType(prop: SchemaProperty): string {
+  return String(arrayItemProp(prop).type || '')
 }
 
-function onArrayInput(path: string[], prop: SchemaProperty, event: Event) {
-  const raw = (event.target as HTMLTextAreaElement).value
-  const trimmed = raw.trim()
-  if (!trimmed) {
-    setDraftPath(path, undefined)
-    return
+function arrayItemEnum(prop: SchemaProperty): JsonLike[] {
+  const item = arrayItemProp(prop)
+  return Array.isArray(item.enum) ? item.enum : []
+}
+
+function ensureMapRows(path: string[], prop: SchemaProperty): MapRow[] {
+  const key = pathKey(path)
+  if (Object.prototype.hasOwnProperty.call(mapRowsByPath.value, key)) {
+    return mapRowsByPath.value[key] || []
   }
 
-  // Accept JSON arrays too.
-  try {
-    const parsed = JSON.parse(trimmed)
-    if (Array.isArray(parsed)) {
-      const items = asSchemaProperty(prop.items as JsonLike)
-      if (items.type === 'integer' || items.type === 'number') {
-        const nums = parsed
-          .map((item) => {
-            if (typeof item === 'number') return item
-            if (typeof item === 'string' && item.trim()) return Number(item.trim())
-            return Number.NaN
-          })
-          .filter((num) => Number.isFinite(num))
-          .map((num) => (items.type === 'integer' ? Math.trunc(num) : num))
-        setDraftPath(path, nums as unknown as JsonLike)
-        return
-      }
+  const current = draftValueAtPath(path)
+  const fallback = typeof prop.default === 'object' && prop.default && !Array.isArray(prop.default) ? prop.default : {}
+  const obj =
+    typeof current === 'object' && current && !Array.isArray(current)
+      ? (current as Record<string, JsonLike>)
+      : (fallback as Record<string, JsonLike>)
 
-      if (items.type === 'string') {
-        const strs = parsed
-          .map((item) => String(item).trim())
-          .filter((item) => item.length > 0)
-        setDraftPath(path, strs as unknown as JsonLike)
-        return
-      }
+  const ap = additionalPrimitiveProp(prop)
+  const rows: MapRow[] = Object.entries(obj).map(([k, v]) => {
+    if (ap && Array.isArray(ap.enum) && ap.enum.length > 0) return { key: k, value: enumToken(v) }
+    if (ap && ap.type === 'boolean') return { key: k, value: v === true ? 'true' : v === false ? 'false' : '' }
+    return { key: k, value: String(v ?? '') }
+  })
 
-      setDraftPath(path, parsed as unknown as JsonLike)
-      return
+  mapRowsByPath.value = { ...mapRowsByPath.value, [key]: rows }
+  return rows
+}
+
+function mapError(path: string[]): string {
+  const key = pathKey(path)
+  return String(mapErrorByPath.value[key] || '').trim()
+}
+
+function parsePrimitiveMapRows(
+  prop: SchemaProperty,
+  rows: MapRow[],
+): { ok: true; parsed: Record<string, JsonLike> } | { ok: false; error: string } {
+  const ap = additionalPrimitiveProp(prop)
+  if (!ap) return { ok: true, parsed: {} }
+
+  const out: Record<string, JsonLike> = {}
+  const seen = new Set<string>()
+
+  for (let idx = 0; idx < rows.length; idx += 1) {
+    const k = String(rows[idx]?.key || '').trim()
+    const raw = String(rows[idx]?.value || '')
+    const trimmed = raw.trim()
+    if (!k) continue
+    if (!trimmed) continue
+    if (seen.has(k)) return { ok: false, error: `Row ${idx + 1}: duplicate key '${k}'.` }
+    seen.add(k)
+
+    if (Array.isArray(ap.enum) && ap.enum.length > 0) {
+      try {
+        out[k] = JSON.parse(trimmed) as JsonLike
+        continue
+      } catch {
+        return { ok: false, error: `Row ${idx + 1}: invalid enum value.` }
+      }
     }
-  } catch {
-    // fall through
+
+    if (ap.type === 'string') {
+      out[k] = trimmed
+      continue
+    }
+
+    if (ap.type === 'number') {
+      const num = Number(trimmed)
+      if (!Number.isFinite(num)) return { ok: false, error: `Row ${idx + 1}: invalid number.` }
+      out[k] = num
+      continue
+    }
+
+    if (ap.type === 'integer') {
+      const num = Number(trimmed)
+      if (!Number.isFinite(num) || !Number.isInteger(num)) {
+        return { ok: false, error: `Row ${idx + 1}: invalid integer.` }
+      }
+      out[k] = num
+      continue
+    }
+
+    if (ap.type === 'boolean') {
+      if (trimmed === 'true') {
+        out[k] = true
+        continue
+      }
+      if (trimmed === 'false') {
+        out[k] = false
+        continue
+      }
+      return { ok: false, error: `Row ${idx + 1}: use true or false.` }
+    }
   }
 
-  const items = asSchemaProperty(prop.items as JsonLike)
-  const parts = parseArrayInput(trimmed)
-  if (items.type === 'integer' || items.type === 'number') {
-    const nums = parts
-      .map((part) => Number(part))
-      .filter((num) => Number.isFinite(num))
-      .map((num) => (items.type === 'integer' ? Math.trunc(num) : num))
-    setDraftPath(path, nums as unknown as JsonLike)
+  return { ok: true, parsed: out }
+}
+
+function setMapRows(path: string[], prop: SchemaProperty, nextRows: MapRow[]) {
+  const key = pathKey(path)
+  mapRowsByPath.value = { ...mapRowsByPath.value, [key]: nextRows }
+
+  const result = parsePrimitiveMapRows(prop, nextRows)
+  if (!result.ok) {
+    mapErrorByPath.value = { ...mapErrorByPath.value, [key]: result.error }
     return
   }
 
-  setDraftPath(path, parts as unknown as JsonLike)
+  if (mapErrorByPath.value[key]) {
+    const nextErr = { ...mapErrorByPath.value }
+    delete nextErr[key]
+    mapErrorByPath.value = nextErr
+  }
+
+  const keys = Object.keys(result.parsed)
+  setDraftPath(path, keys.length > 0 ? (result.parsed as unknown as JsonLike) : undefined)
+}
+
+function onMapKeyInput(path: string[], prop: SchemaProperty, rowIdx: number, event: Event) {
+  const raw = (event.target as HTMLInputElement).value
+  const rows = [...ensureMapRows(path, prop)]
+  rows[rowIdx] = { ...(rows[rowIdx] || { key: '', value: '' }), key: raw }
+  setMapRows(path, prop, rows)
+}
+
+function onMapValueInput(path: string[], prop: SchemaProperty, rowIdx: number, event: Event) {
+  const raw = (event.target as HTMLInputElement).value
+  const rows = [...ensureMapRows(path, prop)]
+  rows[rowIdx] = { ...(rows[rowIdx] || { key: '', value: '' }), value: raw }
+  setMapRows(path, prop, rows)
+}
+
+function onMapValueSelect(path: string[], prop: SchemaProperty, rowIdx: number, event: Event) {
+  const raw = (event.target as HTMLSelectElement).value
+  const rows = [...ensureMapRows(path, prop)]
+  rows[rowIdx] = { ...(rows[rowIdx] || { key: '', value: '' }), value: raw }
+  setMapRows(path, prop, rows)
+}
+
+function addMapRow(path: string[], prop: SchemaProperty) {
+  const rows = [...ensureMapRows(path, prop), { key: '', value: '' }]
+  setMapRows(path, prop, rows)
+}
+
+function removeMapRow(path: string[], prop: SchemaProperty, rowIdx: number) {
+  const rows = [...ensureMapRows(path, prop)]
+  rows.splice(rowIdx, 1)
+  setMapRows(path, prop, rows)
+}
+
+function clearMapRows(path: string[], prop: SchemaProperty) {
+  setMapRows(path, prop, [])
+}
+
+function ensureArrayRows(path: string[], prop: SchemaProperty): string[] {
+  const key = pathKey(path)
+  if (Object.prototype.hasOwnProperty.call(arrayRowsByPath.value, key)) {
+    return arrayRowsByPath.value[key] || []
+  }
+
+  const current = draftValueAtPath(path)
+  const fallback = Array.isArray(prop.default) ? prop.default : []
+  const list = Array.isArray(current) ? current : fallback
+  const item = arrayItemProp(prop)
+
+  const rows = list.map((value) => {
+    if (Array.isArray(item.enum) && item.enum.length > 0) return enumToken(value)
+    if (item.type === 'boolean') return value === true ? 'true' : value === false ? 'false' : ''
+    return String(value ?? '')
+  })
+
+  arrayRowsByPath.value = { ...arrayRowsByPath.value, [key]: rows }
+  return rows
+}
+
+function arrayError(path: string[]): string {
+  const key = pathKey(path)
+  return String(arrayErrorByPath.value[key] || '').trim()
+}
+
+function parsePrimitiveArrayRows(
+  prop: SchemaProperty,
+  rows: string[],
+): { ok: true; parsed: JsonLike[] } | { ok: false; error: string } {
+  const item = arrayItemProp(prop)
+  const out: JsonLike[] = []
+
+  for (let idx = 0; idx < rows.length; idx += 1) {
+    const raw = String(rows[idx] || '')
+    const trimmed = raw.trim()
+    if (!trimmed) continue
+
+    if (Array.isArray(item.enum) && item.enum.length > 0) {
+      try {
+        out.push(JSON.parse(trimmed) as JsonLike)
+        continue
+      } catch {
+        return { ok: false, error: `Row ${idx + 1}: invalid enum value.` }
+      }
+    }
+
+    if (item.type === 'string') {
+      out.push(trimmed)
+      continue
+    }
+
+    if (item.type === 'number') {
+      const num = Number(trimmed)
+      if (!Number.isFinite(num)) return { ok: false, error: `Row ${idx + 1}: invalid number.` }
+      out.push(num)
+      continue
+    }
+
+    if (item.type === 'integer') {
+      const num = Number(trimmed)
+      if (!Number.isFinite(num) || !Number.isInteger(num)) {
+        return { ok: false, error: `Row ${idx + 1}: invalid integer.` }
+      }
+      out.push(num)
+      continue
+    }
+
+    if (item.type === 'boolean') {
+      if (trimmed === 'true') {
+        out.push(true)
+        continue
+      }
+      if (trimmed === 'false') {
+        out.push(false)
+        continue
+      }
+      return { ok: false, error: `Row ${idx + 1}: use true or false.` }
+    }
+  }
+
+  return { ok: true, parsed: out }
+}
+
+function setArrayRows(path: string[], prop: SchemaProperty, nextRows: string[]) {
+  const key = pathKey(path)
+  arrayRowsByPath.value = { ...arrayRowsByPath.value, [key]: nextRows }
+
+  const result = parsePrimitiveArrayRows(prop, nextRows)
+  if (!result.ok) {
+    arrayErrorByPath.value = { ...arrayErrorByPath.value, [key]: result.error }
+    return
+  }
+
+  if (arrayErrorByPath.value[key]) {
+    const nextErr = { ...arrayErrorByPath.value }
+    delete nextErr[key]
+    arrayErrorByPath.value = nextErr
+  }
+
+  setDraftPath(path, result.parsed.length > 0 ? (result.parsed as unknown as JsonLike) : undefined)
+}
+
+function onArrayRowInput(path: string[], prop: SchemaProperty, rowIdx: number, event: Event) {
+  const raw = (event.target as HTMLInputElement).value
+  const rows = [...ensureArrayRows(path, prop)]
+  rows[rowIdx] = raw
+  setArrayRows(path, prop, rows)
+}
+
+function onArrayRowSelect(path: string[], prop: SchemaProperty, rowIdx: number, event: Event) {
+  const raw = (event.target as HTMLSelectElement).value
+  const rows = [...ensureArrayRows(path, prop)]
+  rows[rowIdx] = raw
+  setArrayRows(path, prop, rows)
+}
+
+function addArrayRow(path: string[], prop: SchemaProperty) {
+  const rows = [...ensureArrayRows(path, prop), '']
+  setArrayRows(path, prop, rows)
+}
+
+function removeArrayRow(path: string[], prop: SchemaProperty, rowIdx: number) {
+  const rows = [...ensureArrayRows(path, prop)]
+  rows.splice(rowIdx, 1)
+  setArrayRows(path, prop, rows)
+}
+
+function clearArrayRows(path: string[], prop: SchemaProperty) {
+  setArrayRows(path, prop, [])
 }
 </script>
 
@@ -554,31 +826,29 @@ function onArrayInput(path: string[], prop: SchemaProperty, event: Event) {
         </Button>
       </div>
 
-      <div v-if="error" class="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-        {{ error }}
-      </div>
-
-      <div v-if="loading" class="text-xs text-muted-foreground">Loading plugin config…</div>
-
-      <div v-else class="grid gap-3">
-        <div v-if="schemaEntries.length === 0" class="text-xs text-muted-foreground">
-          This plugin did not declare any settings fields.
+        <div v-if="error" class="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {{ error }}
         </div>
 
-        <div
-          v-for="entry in schemaEntries"
-          :key="entry.path.join('.')"
-          class="grid gap-1"
-          :style="{ paddingLeft: `${Math.max(0, (entry.depth - 1) * 12)}px` }"
-        >
-          <template v-if="entry.kind === 'group'">
-            <div class="pt-2 text-xs font-semibold text-muted-foreground">
-              {{ getLabel(entry.key, entry.prop) }}
-            </div>
-            <div v-if="getDescription(entry.prop)" class="text-xs text-muted-foreground">
-              {{ getDescription(entry.prop) }}
-            </div>
-          </template>
+        <div v-if="loading" class="text-xs text-muted-foreground">Loading plugin config…</div>
+
+        <div v-else class="grid gap-3">
+          <div v-if="schemaEntries.length === 0" class="text-xs text-muted-foreground">
+            This plugin did not declare any settings fields.
+          </div>
+
+          <div
+            v-for="entry in schemaEntries"
+            :key="entry.path.join('.')"
+            class="grid gap-1"
+            :style="{ paddingLeft: `${Math.max(0, (entry.depth - 1) * 12)}px` }"
+          >
+            <template v-if="entry.kind === 'group'">
+              <div class="pt-2 text-xs font-semibold text-muted-foreground">{{ getLabel(entry.key, entry.prop) }}</div>
+              <div v-if="getDescription(entry.prop)" class="text-xs text-muted-foreground">
+                {{ getDescription(entry.prop) }}
+              </div>
+            </template>
 
           <template v-else>
             <label class="text-sm font-medium leading-none">{{ getLabel(entry.key, entry.prop) }}</label>
@@ -627,12 +897,143 @@ function onArrayInput(path: string[], prop: SchemaProperty, event: Event) {
               <span class="text-muted-foreground">On</span>
             </label>
 
-            <textarea
-              v-else-if="entry.prop.type === 'array' && isArrayWithPrimitiveItems(entry.prop)"
-              :value="arrayValue(entry.path, entry.prop)"
-              class="min-h-[92px] rounded-md border border-input bg-transparent px-3 py-2 text-sm"
-              @input="onArrayInput(entry.path, entry.prop, $event)"
-            />
+            <div v-else-if="entry.prop.type === 'array' && isArrayWithPrimitiveItems(entry.prop)" class="grid gap-2">
+              <div class="rounded-md border border-input bg-transparent p-2 grid gap-2">
+                <div
+                  v-for="(row, rowIdx) in ensureArrayRows(entry.path, entry.prop)"
+                  :key="`arr:${entry.path.join('.')}:${rowIdx}`"
+                  class="flex items-center gap-2"
+                >
+                  <select
+                    v-if="arrayItemEnum(entry.prop).length > 0"
+                    :value="row"
+                    class="h-9 flex-1 rounded-md border border-input bg-transparent px-3 text-sm"
+                    @change="onArrayRowSelect(entry.path, entry.prop, rowIdx, $event)"
+                  >
+                    <option value="">(empty)</option>
+                    <option
+                      v-for="(item, itemIdx) in arrayItemEnum(entry.prop)"
+                      :key="`arr-enum:${entry.path.join('.')}:${rowIdx}:${itemIdx}`"
+                      :value="enumToken(item)"
+                    >
+                      {{ String(item) }}
+                    </option>
+                  </select>
+
+                  <select
+                    v-else-if="arrayItemProp(entry.prop).type === 'boolean'"
+                    :value="row"
+                    class="h-9 flex-1 rounded-md border border-input bg-transparent px-3 text-sm"
+                    @change="onArrayRowSelect(entry.path, entry.prop, rowIdx, $event)"
+                  >
+                    <option value="">(empty)</option>
+                    <option value="true">true</option>
+                    <option value="false">false</option>
+                  </select>
+
+                  <input
+                    v-else
+                    type="text"
+                    :inputmode="arrayItemType(entry.prop) === 'integer' ? 'numeric' : arrayItemType(entry.prop) === 'number' ? 'decimal' : 'text'"
+                    :placeholder="arrayItemType(entry.prop) === 'integer' ? 'Integer' : arrayItemType(entry.prop) === 'number' ? 'Number' : 'Value'"
+                    :value="row"
+                    class="h-9 flex-1 rounded-md border border-input bg-transparent px-3 text-sm"
+                    @input="onArrayRowInput(entry.path, entry.prop, rowIdx, $event)"
+                  />
+
+                  <Button variant="outline" size="sm" @click="removeArrayRow(entry.path, entry.prop, rowIdx)">
+                    Remove
+                  </Button>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-2">
+                  <Button variant="outline" size="sm" @click="addArrayRow(entry.path, entry.prop)">Add</Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    :disabled="ensureArrayRows(entry.path, entry.prop).length === 0"
+                    @click="clearArrayRows(entry.path, entry.prop)"
+                  >
+                    Clear
+                  </Button>
+                </div>
+              </div>
+
+              <div v-if="arrayError(entry.path)" class="text-xs text-destructive">{{ arrayError(entry.path) }}</div>
+            </div>
+
+            <div v-else-if="entry.prop.type === 'object' && additionalPrimitiveProp(entry.prop)" class="grid gap-2">
+              <div class="rounded-md border border-input bg-transparent p-2 grid gap-2">
+                <div
+                  v-for="(row, rowIdx) in ensureMapRows(entry.path, entry.prop)"
+                  :key="`map:${entry.path.join('.')}:${rowIdx}`"
+                  class="flex items-center gap-2"
+                >
+                  <input
+                    type="text"
+                    placeholder="Key"
+                    :value="row.key"
+                    class="h-9 w-[40%] min-w-[160px] rounded-md border border-input bg-transparent px-3 text-sm"
+                    @input="onMapKeyInput(entry.path, entry.prop, rowIdx, $event)"
+                  />
+
+                  <select
+                    v-if="mapValueEnum(entry.prop).length > 0"
+                    :value="row.value"
+                    class="h-9 flex-1 rounded-md border border-input bg-transparent px-3 text-sm"
+                    @change="onMapValueSelect(entry.path, entry.prop, rowIdx, $event)"
+                  >
+                    <option value="">(empty)</option>
+                    <option
+                      v-for="(item, itemIdx) in mapValueEnum(entry.prop)"
+                      :key="`map-enum:${entry.path.join('.')}:${rowIdx}:${itemIdx}`"
+                      :value="enumToken(item)"
+                    >
+                      {{ String(item) }}
+                    </option>
+                  </select>
+
+                  <select
+                    v-else-if="mapValueType(entry.prop) === 'boolean'"
+                    :value="row.value"
+                    class="h-9 flex-1 rounded-md border border-input bg-transparent px-3 text-sm"
+                    @change="onMapValueSelect(entry.path, entry.prop, rowIdx, $event)"
+                  >
+                    <option value="">(empty)</option>
+                    <option value="true">true</option>
+                    <option value="false">false</option>
+                  </select>
+
+                  <input
+                    v-else
+                    type="text"
+                    :inputmode="mapValueType(entry.prop) === 'integer' ? 'numeric' : mapValueType(entry.prop) === 'number' ? 'decimal' : 'text'"
+                    :placeholder="mapValueType(entry.prop) === 'integer' ? 'Integer' : mapValueType(entry.prop) === 'number' ? 'Number' : 'Value'"
+                    :value="row.value"
+                    class="h-9 flex-1 rounded-md border border-input bg-transparent px-3 text-sm"
+                    @input="onMapValueInput(entry.path, entry.prop, rowIdx, $event)"
+                  />
+
+                  <Button variant="outline" size="sm" @click="removeMapRow(entry.path, entry.prop, rowIdx)">
+                    Remove
+                  </Button>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-2">
+                  <Button variant="outline" size="sm" @click="addMapRow(entry.path, entry.prop)">Add</Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    :disabled="ensureMapRows(entry.path, entry.prop).length === 0"
+                    @click="clearMapRows(entry.path, entry.prop)"
+                  >
+                    Clear
+                  </Button>
+                </div>
+              </div>
+
+              <div v-if="mapError(entry.path)" class="text-xs text-destructive">{{ mapError(entry.path) }}</div>
+            </div>
 
             <textarea
               v-else

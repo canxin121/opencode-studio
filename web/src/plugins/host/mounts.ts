@@ -1,18 +1,36 @@
 import type { JsonValue as JsonLike } from '@/types/json'
 import type { PluginManifestResponse } from '@/plugins/host/types'
 
-export type ChatMountSurface = 'chat.sidebar' | 'chat.activity.inline' | 'chat.message.footer'
+export type ChatMountSurface =
+  | 'chat.sidebar'
+  | 'chat.activity.inline'
+  | 'chat.message.footer'
+  | 'chat.overlay.bottom'
+
+export type PluginMountMode = 'iframe' | 'module'
 
 export type ChatMount = {
   pluginId: string
   surface: ChatMountSurface
   entry: string
   title: string
+  mode: PluginMountMode
+  // Optional UI hints for the host renderer.
+  height?: number
+  // Runtime context for this mount. For iframe mounts this becomes query params.
+  context?: Record<string, string>
+  // Used for cache-busting module imports and debugging.
+  pluginVersion?: string
 }
 
 export type ChatMountMap = Record<ChatMountSurface, ChatMount[]>
 
-const CHAT_SURFACES: ChatMountSurface[] = ['chat.sidebar', 'chat.activity.inline', 'chat.message.footer']
+const CHAT_SURFACES: ChatMountSurface[] = [
+  'chat.sidebar',
+  'chat.activity.inline',
+  'chat.message.footer',
+  'chat.overlay.bottom',
+]
 
 function asObject(value: JsonLike): Record<string, JsonLike> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
@@ -29,9 +47,47 @@ function normalizeEntry(value: JsonLike): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
+function normalizeMode(value: JsonLike, fallback: PluginMountMode): PluginMountMode {
+  const raw = typeof value === 'string' ? value.trim().toLowerCase() : ''
+  if (raw === 'module' || raw === 'embedded') return 'module'
+  if (raw === 'iframe' || raw === 'frame') return 'iframe'
+  return fallback
+}
+
+function normalizeHeight(value: JsonLike): number | undefined {
+  const raw = typeof value === 'number' ? value : Number.NaN
+  if (!Number.isFinite(raw) || raw <= 0) return undefined
+  return Math.max(80, Math.floor(raw))
+}
+
+function defaultModeFromManifest(manifest: PluginManifestResponse): PluginMountMode {
+  const ui = asObject(asObject(manifest.manifest).ui)
+  const uiMode = normalizeMode(ui.mode as JsonLike, 'iframe')
+  return uiMode
+}
+
+function basenameLike(path: string): string {
+  const normalized = String(path || '').trim().replace(/\\/g, '/')
+  const parts = normalized.split('/').filter(Boolean)
+  return parts.length ? parts[parts.length - 1]! : ''
+}
+
 function defaultEntryFromManifest(manifest: PluginManifestResponse): string {
   const ui = asObject(asObject(manifest.manifest).ui)
-  return normalizeEntry(ui.entry)
+  const entry = normalizeEntry(ui.entry)
+  if (!entry) return ''
+
+  // Server-side asset routing uses ui.assetsDir when present. When assetsDir is
+  // missing, the server infers the asset root as the parent directory of ui.entry.
+  // In that case, the client must request the entry relative to that inferred
+  // root (i.e., basename only), not the full path.
+  const assetsDir = normalizeEntry(ui.assetsDir)
+  const assetsPath = normalizeEntry(ui.assetsPath)
+  if (!assetsDir && !assetsPath && (entry.includes('/') || entry.includes('\\'))) {
+    return basenameLike(entry)
+  }
+
+  return entry
 }
 
 function pushMount(
@@ -41,6 +97,9 @@ function pushMount(
   surface: string,
   entry: string,
   title?: string,
+  mode: PluginMountMode = 'iframe',
+  height?: number,
+  pluginVersion?: string,
 ) {
   const normalizedSurface = normalizeSurface(surface)
   const normalizedEntry = normalizeEntry(entry)
@@ -50,6 +109,9 @@ function pushMount(
     surface: normalizedSurface,
     entry: normalizedEntry,
     title: String(title || pluginTitle || pluginId).trim() || pluginId,
+    mode,
+    height,
+    pluginVersion,
   })
 }
 
@@ -57,20 +119,25 @@ function mountsFromManifest(manifest: PluginManifestResponse): ChatMount[] {
   const root = asObject(manifest.manifest)
   const mountsValue = root.mounts
   const defaultEntry = defaultEntryFromManifest(manifest)
+  const defaultMode = defaultModeFromManifest(manifest)
   const pluginTitle = String(root.displayName || root.id || manifest.id || '').trim() || manifest.id
+  const pluginVersion = typeof root.version === 'string' ? root.version.trim() : ''
   const out: ChatMount[] = []
 
   if (Array.isArray(mountsValue)) {
     for (const item of mountsValue) {
       if (typeof item === 'string') {
-        pushMount(out, manifest.id, pluginTitle, item, defaultEntry)
+        pushMount(out, manifest.id, pluginTitle, item, defaultEntry, undefined, defaultMode, undefined, pluginVersion)
         continue
       }
       const obj = asObject(item)
       const surface = String(obj.surface || '').trim()
       const entry = normalizeEntry(obj.entry) || defaultEntry
       const title = typeof obj.title === 'string' ? obj.title : undefined
-      pushMount(out, manifest.id, pluginTitle, surface, entry, title)
+
+      const mode = normalizeMode(obj.mode as JsonLike, defaultMode)
+      const height = normalizeHeight((obj.height ?? obj.frameHeight ?? obj.heightPx) as JsonLike)
+      pushMount(out, manifest.id, pluginTitle, surface, entry, title, mode, height, pluginVersion)
     }
     return out
   }
@@ -81,18 +148,21 @@ function mountsFromManifest(manifest: PluginManifestResponse): ChatMount[] {
     for (const surface of mountKeys) {
       const raw = mountsObj[surface]
       if (raw === true) {
-        pushMount(out, manifest.id, pluginTitle, surface, defaultEntry)
+        pushMount(out, manifest.id, pluginTitle, surface, defaultEntry, undefined, defaultMode, undefined, pluginVersion)
         continue
       }
       if (typeof raw === 'string') {
-        pushMount(out, manifest.id, pluginTitle, surface, raw)
+        pushMount(out, manifest.id, pluginTitle, surface, raw, undefined, defaultMode, undefined, pluginVersion)
         continue
       }
       const obj = asObject(raw)
       if (!Object.keys(obj).length) continue
       const entry = normalizeEntry(obj.entry) || defaultEntry
       const title = typeof obj.title === 'string' ? obj.title : undefined
-      pushMount(out, manifest.id, pluginTitle, surface, entry, title)
+
+      const mode = normalizeMode(obj.mode as JsonLike, defaultMode)
+      const height = normalizeHeight((obj.height ?? obj.frameHeight ?? obj.heightPx) as JsonLike)
+      pushMount(out, manifest.id, pluginTitle, surface, entry, title, mode, height, pluginVersion)
     }
     return out
   }
@@ -102,7 +172,7 @@ function mountsFromManifest(manifest: PluginManifestResponse): ChatMount[] {
   const capabilities = Array.isArray(root.capabilities) ? root.capabilities : []
   const hasSidebarCapability = capabilities.some((item) => String(item || '').trim() === 'chat.sidebar')
   if (hasSidebarCapability && defaultEntry) {
-    pushMount(out, manifest.id, pluginTitle, 'chat.sidebar', defaultEntry)
+    pushMount(out, manifest.id, pluginTitle, 'chat.sidebar', defaultEntry, undefined, defaultMode, undefined, pluginVersion)
   }
 
   return out
@@ -113,6 +183,7 @@ export function resolveChatMounts(manifestsById: Record<string, PluginManifestRe
     'chat.sidebar': [],
     'chat.activity.inline': [],
     'chat.message.footer': [],
+    'chat.overlay.bottom': [],
   }
 
   for (const manifest of Object.values(manifestsById || {})) {

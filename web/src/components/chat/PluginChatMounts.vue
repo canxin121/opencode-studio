@@ -9,6 +9,10 @@ defineProps<{
 
 <template>
   <div v-if="mounts.length" class="space-y-3 mb-4">
-    <PluginMountFrame v-for="mount in mounts" :key="`${mount.pluginId}:${mount.surface}:${mount.entry}`" :mount="mount" />
+    <PluginMountFrame
+      v-for="mount in mounts"
+      :key="`${mount.pluginId}:${mount.surface}:${mount.entry}:${mount.mode}`"
+      :mount="mount"
+    />
   </div>
 </template>

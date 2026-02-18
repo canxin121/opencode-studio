@@ -16,7 +16,7 @@ import {
 import VerticalSplitPane from '@/components/ui/VerticalSplitPane.vue'
 import MessageList from '@/components/chat/MessageList.vue'
 import PluginChatMounts from '@/components/chat/PluginChatMounts.vue'
-import PlanpilotTodoBar from '@/components/chat/PlanpilotTodoBar.vue'
+import PluginChatOverlayMounts from '@/components/chat/PluginChatOverlayMounts.vue'
 import ChatHeader from '@/components/chat/ChatHeader.vue'
 import Composer from '@/components/chat/Composer.vue'
 import RenameSessionDialog from '@/components/chat/RenameSessionDialog.vue'
@@ -55,6 +55,7 @@ const {
   attachedFiles,
   draft,
   chatSidebarPluginMounts,
+  chatOverlayBottomPluginMounts,
 
   // Message list.
   renderBlocks,
@@ -177,14 +178,14 @@ const {
   handleUnrevertFromRevertMarker,
 } = ctx
 
-const planpilotReservePx = ref(0)
+const overlayReservePx = ref(0)
 
-function handlePlanpilotReserve(px: number) {
+function handleOverlayReserve(px: number) {
   if (!Number.isFinite(px) || px <= 0) {
-    planpilotReservePx.value = 0
+    overlayReservePx.value = 0
     return
   }
-  planpilotReservePx.value = Math.max(0, Math.floor(px))
+  overlayReservePx.value = Math.max(0, Math.floor(px))
 }
 
 // Compute the anchor element for the picker menu based on which picker is open.
@@ -280,7 +281,7 @@ void sessionActionsMenuRef
               @clearSessionError="chat.selectedSessionId ? chat.clearSessionError(chat.selectedSessionId) : undefined"
             />
 
-            <div v-if="planpilotReservePx > 0" :style="{ height: `${planpilotReservePx}px` }" aria-hidden="true" />
+            <div v-if="overlayReservePx > 0" :style="{ height: `${overlayReservePx}px` }" aria-hidden="true" />
 
             <div ref="bottomEl" class="h-px w-full" aria-hidden="true" />
           </div>
@@ -349,7 +350,7 @@ void sessionActionsMenuRef
           class="pointer-events-none absolute inset-x-0 bottom-2 z-30"
         >
           <div class="chat-column">
-            <PlanpilotTodoBar :session-id="chat.selectedSessionId" @reserve-change="handlePlanpilotReserve" />
+            <PluginChatOverlayMounts :mounts="chatOverlayBottomPluginMounts" @reserve-change="handleOverlayReserve" />
           </div>
         </div>
       </template>

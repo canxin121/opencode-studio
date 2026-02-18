@@ -93,6 +93,7 @@ export type ChatPageViewContext = {
   draft: MaybeRef<string>
 
   chatSidebarPluginMounts: MaybeRef<ChatMount[]>
+  chatOverlayBottomPluginMounts: MaybeRef<ChatMount[]>
 
   renderBlocks: MaybeRef<RenderBlock[]>
   pendingInitialScrollSessionId: MaybeRef<string | null>

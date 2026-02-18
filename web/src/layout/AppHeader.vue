@@ -149,7 +149,11 @@ const tabs = computed<Tab[]>(() => {
 watch(
   () => route.path,
   (path) => {
-    const next = mainTabFromPath(path)
+    const normalized = String(path || '').toLowerCase()
+    const matchesMainTab = MAIN_TABS.some((tab) => normalized.startsWith(tab.path))
+    if (!matchesMainTab) return
+
+    const next = mainTabFromPath(normalized)
     if (ui.activeMainTab !== next) {
       ui.setActiveMainTab(next)
     }
@@ -158,14 +162,24 @@ watch(
 )
 
 const mobileTitle = computed(() => {
-  const map: Record<string, string> = {
+  const panelMap: Record<string, string> = {
+    settings: 'Settings',
+    sessions: 'Chat',
+    files: 'Files',
+    terminal: 'Terminal',
+    git: 'Git',
+  }
+  const panel = String(route.meta?.mobilePanel || '').trim().toLowerCase()
+  if (panelMap[panel]) return panelMap[panel]
+
+  const tabMap: Record<string, string> = {
     chat: 'Chat',
     diff: 'Diff',
     files: 'Files',
     terminal: 'Terminal',
     git: 'Git',
   }
-  return map[String(ui.activeMainTab || '')] || 'OpenCode Studio'
+  return tabMap[String(ui.activeMainTab || '')] || 'OpenCode Studio'
 })
 
 const mobilePanelToggleLabel = computed(() => {

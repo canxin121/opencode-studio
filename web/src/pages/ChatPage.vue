@@ -659,13 +659,24 @@ const activityAutoCollapseOnIdle = computed(() => settingsData.value.chatActivit
 
 const chatMountsBySurface = computed(() => resolveChatMounts(pluginHost.manifestsById))
 
-function isPlanpilotMount(mount: ChatMount): boolean {
-  const pluginId = String(mount.pluginId || '').trim().toLowerCase()
-  return pluginId === 'opencode-planpilot' || pluginId.includes('planpilot')
+function withChatMountContext(mounts: ChatMount[]): ChatMount[] {
+  const ctx: Record<string, string> = {}
+  const sid = String(chat.selectedSessionId || '').trim()
+  const cwd = String(sessionDirectory.value || '').trim()
+  if (sid) ctx.sessionId = sid
+  if (cwd) ctx.cwd = cwd
+
+  // Always return fresh mount objects so UI loaders can react to context changes.
+  return mounts.map((mount) => ({
+    ...mount,
+    context: ctx,
+  }))
 }
 
-const chatSidebarPluginMounts = computed(() =>
-  chatMountsBySurface.value['chat.sidebar'].filter((mount) => !isPlanpilotMount(mount)),
+const chatSidebarPluginMounts = computed(() => withChatMountContext(chatMountsBySurface.value['chat.sidebar']))
+
+const chatOverlayBottomPluginMounts = computed(() =>
+  withChatMountContext(chatMountsBySurface.value['chat.overlay.bottom']),
 )
 
 const activityDefaultExpandedKeys = computed<ChatActivityExpandKey[]>(() => {
@@ -1329,6 +1340,7 @@ const viewCtx = {
 
   // Plugin chat mounts.
   chatSidebarPluginMounts,
+  chatOverlayBottomPluginMounts,
 } satisfies ChatPageViewContext
 
 onBeforeUnmount(() => {

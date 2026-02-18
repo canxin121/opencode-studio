@@ -1,18 +1,16 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 
-import { pluginAssetEntryUrl, type ChatMount } from '@/plugins/host/mounts'
+import PluginMountHost from '@/components/plugins/PluginMountHost.vue'
+import type { ChatMount } from '@/plugins/host/mounts'
 
 const props = defineProps<{
   mount: ChatMount
   height?: number
 }>()
 
-const loaded = ref(false)
-
-const frameUrl = computed(() => pluginAssetEntryUrl(props.mount.pluginId, props.mount.entry))
 const frameHeight = computed(() => {
-  const raw = Number(props.height || 0)
+  const raw = Number(props.height || props.mount.height || 0)
   if (!Number.isFinite(raw) || raw <= 0) return 260
   return Math.max(120, Math.floor(raw))
 })
@@ -24,20 +22,6 @@ const frameHeight = computed(() => {
       <span class="font-medium text-foreground">{{ mount.title }}</span>
       <span class="ml-2 font-mono opacity-70">{{ mount.pluginId }}</span>
     </header>
-    <div class="relative w-full" :style="{ height: `${frameHeight}px` }">
-      <iframe
-        class="w-full h-full bg-background"
-        :src="frameUrl"
-        :title="mount.title"
-        loading="lazy"
-        @load="loaded = true"
-      />
-      <div
-        v-if="!loaded"
-        class="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground bg-background/85"
-      >
-        Loading plugin UI...
-      </div>
-    </div>
+    <PluginMountHost :mount="mount" :fixed-height="frameHeight" />
   </section>
 </template>
