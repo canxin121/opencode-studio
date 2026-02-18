@@ -22,6 +22,8 @@ const props = withDefaults(
     options: PickerOption[]
     title?: string
     emptyLabel?: string
+    includeEmpty?: boolean
+    emptyDisabled?: boolean
     searchPlaceholder?: string
     placeholder?: string
     allowCustom?: boolean
@@ -31,9 +33,13 @@ const props = withDefaults(
     triggerClass?: string
     icon?: Component
     maxInitialOptions?: number
+    desktopFixed?: boolean
+    isMobilePointer?: boolean
   }>(),
   {
     emptyLabel: 'Auto (OpenCode default)',
+    includeEmpty: true,
+    emptyDisabled: false,
     searchPlaceholder: 'Search...',
     placeholder: 'Select...',
     allowCustom: false,
@@ -42,6 +48,8 @@ const props = withDefaults(
     size: 'default',
     triggerClass: '',
     maxInitialOptions: 60,
+    desktopFixed: true,
+    isMobilePointer: false,
   },
 )
 
@@ -56,6 +64,17 @@ const query = ref('')
 
 const selected = computed(() => String(props.modelValue || '').trim())
 const q = computed(() => query.value.trim().toLowerCase())
+
+const selectedDisplayLabel = computed(() => {
+  if (!selected.value) {
+    if (!props.includeEmpty) return props.placeholder || ''
+    return props.emptyLabel || props.placeholder || ''
+  }
+
+  const opt = (Array.isArray(props.options) ? props.options : []).find((o) => o.value === selected.value)
+  if (opt) return optionLabel(opt)
+  return selected.value
+})
 
 const filteredOptions = computed(() => {
   const qq = q.value
@@ -93,20 +112,23 @@ const emptyText = computed(() => {
 })
 
 const menuGroups = computed<OptionMenuGroup[]>(() => {
-  const groups: OptionMenuGroup[] = [
-    {
+  const groups: OptionMenuGroup[] = []
+
+  if (props.includeEmpty) {
+    groups.push({
       id: 'default',
       items: [
         {
           id: '__empty__',
           label: props.emptyLabel,
           checked: !selected.value,
+          disabled: props.emptyDisabled,
           keywords: 'auto default',
           description: '',
         },
       ],
-    },
-  ]
+    })
+  }
 
   if (canOfferCustom.value) {
     groups.push({
@@ -229,12 +251,18 @@ function optionLabel(opt: PickerOption): string {
 
 <template>
   <div class="relative min-w-0">
-    <button ref="triggerEl" type="button" :disabled="disabled" :class="triggerClasses" @click="toggleOpen">
+    <button
+      ref="triggerEl"
+      type="button"
+      :disabled="disabled"
+      :class="triggerClasses"
+      @mousedown.prevent
+      @click.stop="toggleOpen"
+    >
       <span class="min-w-0 flex items-center gap-2">
         <component v-if="icon" :is="icon" class="h-4 w-4 text-muted-foreground flex-shrink-0" />
         <span :class="triggerValueClasses">
-          <template v-if="selected">{{ selected }}</template>
-          <template v-else>{{ emptyLabel || placeholder }}</template>
+          {{ selectedDisplayLabel }}
         </span>
       </span>
       <RiArrowDownSLine class="h-4 w-4 text-muted-foreground/70 flex-shrink-0" />
@@ -250,7 +278,9 @@ function optionLabel(opt: PickerOption): string {
       :search-placeholder="searchPlaceholder"
       :empty-text="emptyText"
       :helper-text="helperText"
-      :is-mobile-pointer="false"
+      :is-mobile-pointer="isMobilePointer"
+      :desktop-fixed="desktopFixed"
+      :desktop-anchor-el="desktopFixed ? triggerEl : null"
       desktop-placement="bottom-start"
       desktop-class="w-[min(420px,calc(100vw-2rem))]"
       filter-mode="external"

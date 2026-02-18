@@ -2,6 +2,7 @@
 import Button from '@/components/ui/Button.vue'
 import FormDialog from '@/components/ui/FormDialog.vue'
 import Input from '@/components/ui/Input.vue'
+import OptionPicker, { type PickerOption } from '@/components/ui/OptionPicker.vue'
 
 const props = defineProps<{
   open: boolean
@@ -41,9 +42,14 @@ function onUpdateInterval(key: 'fetch' | 'sync', v: string | number) {
   if (key === 'sync') emit('update:autoSyncInterval', n)
 }
 
-function onUpdatePostCommitCommand(ev: Event) {
-  const el = ev.target as HTMLSelectElement | null
-  const v = (el?.value || '').trim()
+const postCommitCommandPickerOptions: PickerOption[] = [
+  { value: 'none', label: 'Prompt' },
+  { value: 'push', label: 'Push' },
+  { value: 'sync', label: 'Sync' },
+]
+
+function onUpdatePostCommitCommand(value: string | number) {
+  const v = String(value || '').trim()
   if (v === 'push' || v === 'sync') {
     emit('update:postCommitCommand', v)
     return
@@ -101,15 +107,15 @@ function onUpdatePostCommitCommand(ev: Event) {
         <div class="text-[11px] text-muted-foreground">
           After commit, run an action when the branch has an upstream and is ahead.
         </div>
-        <select
-          :value="postCommitCommand"
-          class="h-9 rounded-md border border-input bg-background px-2 text-xs"
-          @change="onUpdatePostCommitCommand"
-        >
-          <option value="none">Prompt</option>
-          <option value="push">Push</option>
-          <option value="sync">Sync</option>
-        </select>
+        <OptionPicker
+          :model-value="postCommitCommand"
+          :options="postCommitCommandPickerOptions"
+          title="Post-commit action"
+          search-placeholder="Search actions"
+          :include-empty="false"
+          trigger-class="bg-background px-2 text-xs"
+          @update:model-value="onUpdatePostCommitCommand"
+        />
       </div>
 
       <div class="flex justify-end">

@@ -52,9 +52,41 @@ export default defineComponent({
       return list.map((slug: string) => ({ value: slug, label: slug }))
     })
 
+    const toolIdPickerOptions = computed<PickerOption[]>(() => {
+      const list = Array.isArray(ctx.toolIdOptions) ? ctx.toolIdOptions : []
+      return list.map((id: string) => ({ value: id, label: id }))
+    })
+
+    const agentModePickerOptions: PickerOption[] = [
+      { value: 'default', label: 'default' },
+      { value: 'primary', label: 'primary' },
+      { value: 'subagent', label: 'subagent' },
+      { value: 'all', label: 'all' },
+    ]
+
+    const permissionRulePickerOptions: PickerOption[] = [
+      { value: 'default', label: 'default' },
+      { value: 'allow', label: 'allow' },
+      { value: 'ask', label: 'ask' },
+      { value: 'deny', label: 'deny' },
+      { value: 'pattern', label: 'pattern map' },
+    ]
+
+    const permissionActionPickerOptions: PickerOption[] = [
+      { value: 'allow', label: 'allow' },
+      { value: 'ask', label: 'ask' },
+      { value: 'deny', label: 'deny' },
+    ]
+
     // Vue template type-checking doesn't propagate the index signature through a spread.
     // Keep the injected ctx object shape and attach local computed helpers.
-    return Object.assign(ctx, { modelPickerOptions })
+    return Object.assign(ctx, {
+      modelPickerOptions,
+      toolIdPickerOptions,
+      agentModePickerOptions,
+      permissionRulePickerOptions,
+      permissionActionPickerOptions,
+    })
   },
 })
 </script>
@@ -257,24 +289,22 @@ export default defineComponent({
 
           <label class="grid gap-1">
             <span class="text-xs text-muted-foreground">Mode</span>
-            <select
-              :value="agent.mode || 'default'"
-              @change="
-                (e) =>
+            <OptionPicker
+              :model-value="agent.mode || 'default'"
+              @update:model-value="
+                (v) =>
                   setEntryField(
                     'agent',
                     agentId,
                     'mode',
-                    (e.target as HTMLSelectElement).value === 'default' ? null : (e.target as HTMLSelectElement).value,
+                    String(v || '') === 'default' ? null : String(v || ''),
                   )
               "
-              class="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-            >
-              <option value="default">default</option>
-              <option value="primary">primary</option>
-              <option value="subagent">subagent</option>
-              <option value="all">all</option>
-            </select>
+              :options="agentModePickerOptions"
+              title="Mode"
+              search-placeholder="Search modes"
+              :include-empty="false"
+            />
             <span v-if="issuesForPathPrefix(`agent.${agentId}.hidden`).length" class="text-[11px] text-amber-600">
               {{ issuesForPathPrefix(`agent.${agentId}.hidden`)[0]?.message }}
             </span>
@@ -373,28 +403,33 @@ export default defineComponent({
             <div class="text-[11px] text-muted-foreground">Unset keys inherit global permission.</div>
           </div>
 
-          <div class="grid gap-3">
-            <div class="flex items-center gap-2">
-              <select
-                v-model="agentPermissionNewTool[agentId]"
-                class="h-9 min-w-[220px] rounded-md border border-input bg-transparent px-3 text-sm"
-              >
-                <option value="">Select tool id…</option>
-                <option v-for="id in toolIdOptions" :key="`ap-add:${agentId}:${id}`" :value="id">{{ id }}</option>
-              </select>
-              <select
-                v-model="agentPermissionNewAction[agentId]"
-                class="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-              >
-                <option value="allow">allow</option>
-                <option value="ask">ask</option>
-                <option value="deny">deny</option>
-              </select>
-              <Tooltip>
-                <Button
-                  size="icon"
-                  variant="outline"
-                  class="h-9 w-9"
+            <div class="grid gap-3">
+              <div class="flex items-center gap-2">
+                <div class="min-w-[220px] flex-1 max-w-[520px]">
+                  <OptionPicker
+                    v-model="agentPermissionNewTool[agentId]"
+                    :options="toolIdPickerOptions"
+                    title="Tool id"
+                    search-placeholder="Search tools"
+                    empty-label="Select tool id…"
+                    monospace
+                  />
+                </div>
+
+                <div class="w-[160px]">
+                  <OptionPicker
+                    v-model="agentPermissionNewAction[agentId]"
+                    :options="permissionActionPickerOptions"
+                    title="Action"
+                    search-placeholder="Search actions"
+                    :include-empty="false"
+                  />
+                </div>
+                <Tooltip>
+                  <Button
+                    size="icon"
+                    variant="outline"
+                    class="h-9 w-9"
                   title="Add"
                   aria-label="Add permission rule"
                   @click="addAgentPermissionRule(agentId)"
@@ -411,19 +446,14 @@ export default defineComponent({
                 <div class="grid gap-3 lg:grid-cols-3">
                   <label v-for="item in group" :key="`ap:${agentId}:${item.key}`" class="grid gap-1">
                     <span class="text-xs text-muted-foreground">{{ item.label }}</span>
-                    <select
-                      :value="agentPermissionRuleValue(agentId, item.key, false)"
-                      @change="
-                        (e) => onAgentPermissionSelectChange(agentId, item.key, (e.target as HTMLSelectElement).value)
-                      "
-                      class="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-                    >
-                      <option value="default">default</option>
-                      <option value="allow">allow</option>
-                      <option value="ask">ask</option>
-                      <option value="deny">deny</option>
-                      <option value="pattern">pattern map</option>
-                    </select>
+                    <OptionPicker
+                      :model-value="agentPermissionRuleValue(agentId, item.key, false)"
+                      @update:model-value="(v) => onAgentPermissionSelectChange(agentId, item.key, String(v || ''))"
+                      :options="permissionRulePickerOptions"
+                      title="Permission"
+                      search-placeholder="Search rules"
+                      :include-empty="false"
+                    />
                     <div class="flex items-center justify-between gap-2">
                       <button
                         type="button"
@@ -504,14 +534,13 @@ export default defineComponent({
                               onAgentPermissionPatternKeydown(agentId, item.key, idx, row, $event as KeyboardEvent)
                             "
                           />
-                          <select
+                          <OptionPicker
                             v-model="row.action"
-                            class="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-                          >
-                            <option value="allow">allow</option>
-                            <option value="ask">ask</option>
-                            <option value="deny">deny</option>
-                          </select>
+                            :options="permissionActionPickerOptions"
+                            title="Action"
+                            search-placeholder="Search actions"
+                            :include-empty="false"
+                          />
                           <div class="flex items-center gap-1">
                             <Button
                               size="icon"

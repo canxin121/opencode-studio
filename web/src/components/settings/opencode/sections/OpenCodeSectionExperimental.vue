@@ -4,6 +4,7 @@ import { RiArrowDownSLine, RiArrowUpSLine, RiRestartLine } from '@remixicon/vue'
 
 import Button from '@/components/ui/Button.vue'
 import Input from '@/components/ui/Input.vue'
+import OptionPicker, { type PickerOption } from '@/components/ui/OptionPicker.vue'
 import Tooltip from '@/components/ui/Tooltip.vue'
 
 import { useOpencodeConfigPanelContext } from '../opencodeConfigContext'
@@ -12,6 +13,7 @@ export default defineComponent({
   components: {
     Button,
     Input,
+    OptionPicker,
     Tooltip,
     RiArrowDownSLine,
     RiArrowUpSLine,
@@ -20,7 +22,14 @@ export default defineComponent({
   setup() {
     const ctx = useOpencodeConfigPanelContext()
     const showAdvancedPrimaryTools = ref(false)
-    return Object.assign(ctx, { showAdvancedPrimaryTools })
+
+    const triStatePickerOptions: PickerOption[] = [
+      { value: 'default', label: 'default' },
+      { value: 'true', label: 'true' },
+      { value: 'false', label: 'false' },
+    ]
+
+    return Object.assign(ctx, { showAdvancedPrimaryTools, triStatePickerOptions })
   },
 })
 </script>
@@ -58,44 +67,43 @@ export default defineComponent({
       <div class="grid gap-4 lg:grid-cols-3">
         <label class="grid gap-1">
           <span class="text-xs text-muted-foreground">Disable paste summary</span>
-          <select
+          <OptionPicker
             v-model="experimentalDisablePasteSummary"
-            class="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-          >
-            <option value="default">default</option>
-            <option value="true">true</option>
-            <option value="false">false</option>
-          </select>
+            :options="triStatePickerOptions"
+            title="Disable paste summary"
+            search-placeholder="Search"
+            :include-empty="false"
+          />
         </label>
         <label class="grid gap-1">
           <span class="text-xs text-muted-foreground">Batch tool</span>
-          <select v-model="experimentalBatchTool" class="h-9 rounded-md border border-input bg-transparent px-3 text-sm">
-            <option value="default">default</option>
-            <option value="true">true</option>
-            <option value="false">false</option>
-          </select>
+          <OptionPicker
+            v-model="experimentalBatchTool"
+            :options="triStatePickerOptions"
+            title="Batch tool"
+            search-placeholder="Search"
+            :include-empty="false"
+          />
         </label>
         <label class="grid gap-1">
           <span class="text-xs text-muted-foreground">OpenTelemetry</span>
-          <select
+          <OptionPicker
             v-model="experimentalOpenTelemetry"
-            class="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-          >
-            <option value="default">default</option>
-            <option value="true">true</option>
-            <option value="false">false</option>
-          </select>
+            :options="triStatePickerOptions"
+            title="OpenTelemetry"
+            search-placeholder="Search"
+            :include-empty="false"
+          />
         </label>
         <label class="grid gap-1">
           <span class="text-xs text-muted-foreground">Continue loop on deny</span>
-          <select
+          <OptionPicker
             v-model="experimentalContinueLoop"
-            class="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-          >
-            <option value="default">default</option>
-            <option value="true">true</option>
-            <option value="false">false</option>
-          </select>
+            :options="triStatePickerOptions"
+            title="Continue loop on deny"
+            search-placeholder="Search"
+            :include-empty="false"
+          />
         </label>
         <label class="grid gap-1">
           <span class="text-xs text-muted-foreground">MCP timeout (ms)</span>

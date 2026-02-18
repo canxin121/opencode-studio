@@ -12,6 +12,7 @@ import {
 
 import Button from '@/components/ui/Button.vue'
 import Input from '@/components/ui/Input.vue'
+import OptionPicker, { type PickerOption } from '@/components/ui/OptionPicker.vue'
 import Tooltip from '@/components/ui/Tooltip.vue'
 import VirtualList from '@/components/ui/VirtualList.vue'
 import CodeMirrorEditor from '@/components/CodeMirrorEditor.vue'
@@ -24,6 +25,7 @@ export default defineComponent({
   components: {
     Button,
     Input,
+    OptionPicker,
     Tooltip,
     VirtualList,
     CodeMirrorEditor,
@@ -41,6 +43,18 @@ export default defineComponent({
     const ctx = useOpencodeConfigPanelContext()
     const mcpCommandSuggestions = ['npx', 'uvx', 'docker', 'node', 'python', 'deno', 'bunx']
 
+    const mcpTypePickerOptions: PickerOption[] = [
+      { value: 'toggle', label: 'toggle' },
+      { value: 'local', label: 'local' },
+      { value: 'remote', label: 'remote' },
+    ]
+
+    const mcpOauthPickerOptions: PickerOption[] = [
+      { value: 'default', label: 'default' },
+      { value: 'config', label: 'config' },
+      { value: 'disabled', label: 'disabled' },
+    ]
+
     function openMcpConnections() {
       ui.setMcpDialogOpen(true)
     }
@@ -48,6 +62,8 @@ export default defineComponent({
     // Keep the injected context as the component instance surface area (it has a loose index signature).
     ctx.openMcpConnections = openMcpConnections
     ctx.mcpCommandSuggestions = mcpCommandSuggestions
+    ctx.mcpTypePickerOptions = mcpTypePickerOptions
+    ctx.mcpOauthPickerOptions = mcpOauthPickerOptions
     return ctx
   },
 })
@@ -132,15 +148,14 @@ export default defineComponent({
         </div>
         <label class="grid gap-1">
           <span class="text-xs text-muted-foreground">Type</span>
-          <select
-            :value="mcpType(mcp)"
-            @change="(e) => setMcpType(mcpName, (e.target as HTMLSelectElement).value)"
-            class="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-          >
-            <option value="toggle">toggle</option>
-            <option value="local">local</option>
-            <option value="remote">remote</option>
-          </select>
+          <OptionPicker
+            :model-value="mcpType(mcp)"
+            @update:model-value="(v) => setMcpType(mcpName, String(v || ''))"
+            :options="mcpTypePickerOptions"
+            title="Type"
+            search-placeholder="Search types"
+            :include-empty="false"
+          />
         </label>
 
         <template v-if="mcpType(mcp) === 'local'">
@@ -290,27 +305,24 @@ export default defineComponent({
           </label>
           <div class="grid gap-2">
             <span class="text-xs text-muted-foreground">OAuth</span>
-            <select
-              :value="mcp.oauth === false ? 'disabled' : mcp.oauth ? 'config' : 'default'"
-              @change="
-                (e) =>
+            <OptionPicker
+              :model-value="mcp.oauth === false ? 'disabled' : mcp.oauth ? 'config' : 'default'"
+              @update:model-value="
+                (v) => {
+                  const mode = String(v || 'default')
                   setEntryField(
                     'mcp',
                     mcpName,
                     'oauth',
-                    (e.target as HTMLSelectElement).value === 'disabled'
-                      ? false
-                      : (e.target as HTMLSelectElement).value === 'config'
-                        ? { clientId: '', clientSecret: '', scope: '' }
-                        : null,
+                    mode === 'disabled' ? false : mode === 'config' ? { clientId: '', clientSecret: '', scope: '' } : null,
                   )
+                }
               "
-              class="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-            >
-              <option value="default">default</option>
-              <option value="config">config</option>
-              <option value="disabled">disabled</option>
-            </select>
+              :options="mcpOauthPickerOptions"
+              title="OAuth"
+              search-placeholder="Search OAuth"
+              :include-empty="false"
+            />
           </div>
           <div v-if="mcp.oauth && mcp.oauth !== false" class="grid gap-3 lg:grid-cols-3">
             <label class="grid gap-1">

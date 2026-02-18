@@ -4,6 +4,7 @@ import { RiArrowDownSLine, RiArrowUpSLine, RiRestartLine } from '@remixicon/vue'
 
 import Button from '@/components/ui/Button.vue'
 import Input from '@/components/ui/Input.vue'
+import OptionPicker, { type PickerOption } from '@/components/ui/OptionPicker.vue'
 import Tooltip from '@/components/ui/Tooltip.vue'
 import VirtualList from '@/components/ui/VirtualList.vue'
 import CodeMirrorEditor from '@/components/CodeMirrorEditor.vue'
@@ -14,6 +15,7 @@ export default defineComponent({
   components: {
     Button,
     Input,
+    OptionPicker,
     Tooltip,
     VirtualList,
     CodeMirrorEditor,
@@ -22,7 +24,21 @@ export default defineComponent({
     RiRestartLine,
   },
   setup() {
-    return useOpencodeConfigPanelContext()
+    const ctx = useOpencodeConfigPanelContext()
+
+    const triStatePickerOptions: PickerOption[] = [
+      { value: 'default', label: 'default' },
+      { value: 'true', label: 'true' },
+      { value: 'false', label: 'false' },
+    ]
+
+    const diffStylePickerOptions: PickerOption[] = [
+      { value: 'default', label: 'default' },
+      { value: 'auto', label: 'auto' },
+      { value: 'stacked', label: 'stacked' },
+    ]
+
+    return Object.assign(ctx, { triStatePickerOptions, diffStylePickerOptions })
   },
 })
 </script>
@@ -69,19 +85,23 @@ export default defineComponent({
       </label>
       <label class="grid gap-1">
         <span class="text-xs text-muted-foreground">Scroll acceleration</span>
-        <select v-model="tuiScrollAcceleration" class="h-9 rounded-md border border-input bg-transparent px-3 text-sm">
-          <option value="default">default</option>
-          <option value="true">true</option>
-          <option value="false">false</option>
-        </select>
+        <OptionPicker
+          v-model="tuiScrollAcceleration"
+          :options="triStatePickerOptions"
+          title="Scroll acceleration"
+          search-placeholder="Search"
+          :include-empty="false"
+        />
       </label>
       <label class="grid gap-1">
         <span class="text-xs text-muted-foreground">Diff style</span>
-        <select v-model="tuiDiffStyle" class="h-9 rounded-md border border-input bg-transparent px-3 text-sm">
-          <option value="default">default</option>
-          <option value="auto">auto</option>
-          <option value="stacked">stacked</option>
-        </select>
+        <OptionPicker
+          v-model="tuiDiffStyle"
+          :options="diffStylePickerOptions"
+          title="Diff style"
+          search-placeholder="Search"
+          :include-empty="false"
+        />
       </label>
     </div>
   </section>

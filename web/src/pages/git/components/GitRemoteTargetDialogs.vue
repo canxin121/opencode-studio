@@ -1,7 +1,10 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+
 import FormDialog from '@/components/ui/FormDialog.vue'
 import Input from '@/components/ui/Input.vue'
 import MiniActionButton from '@/components/ui/MiniActionButton.vue'
+import OptionPicker, { type PickerOption } from '@/components/ui/OptionPicker.vue'
 
 type RemoteInfo = {
   remotes?: Array<{ name: string; protocol?: string | null; host?: string | null }>
@@ -38,6 +41,19 @@ const stashMessage = defineModel<string>('stashMessage', { required: true })
 const stashIncludeUntracked = defineModel<boolean>('stashIncludeUntracked', { required: true })
 const stashKeepIndex = defineModel<boolean>('stashKeepIndex', { required: true })
 const stashStaged = defineModel<boolean>('stashStaged', { required: true })
+
+const remotePickerOptions = computed<PickerOption[]>(() => {
+  const list = Array.isArray(props.remoteInfo?.remotes) ? props.remoteInfo?.remotes || [] : []
+  return list.map((r) => {
+    const proto = r.protocol ? String(r.protocol) : ''
+    const host = r.host ? String(r.host) : ''
+    const details = `${proto}${host ? `://${host}` : ''}`.trim()
+    return {
+      value: r.name,
+      label: details ? `${r.name} (${details})` : r.name,
+    }
+  })
+})
 </script>
 
 <template>
@@ -57,11 +73,15 @@ const stashStaged = defineModel<boolean>('stashStaged', { required: true })
       <div class="grid gap-3">
         <div class="grid gap-1">
           <div class="text-xs font-medium text-muted-foreground">Remote</div>
-          <select v-model="targetRemote" class="h-9 rounded border border-input bg-background text-xs px-2">
-            <option v-for="r in props.remoteInfo?.remotes || []" :key="r.name" :value="r.name">
-              {{ r.name }} ({{ r.protocol }}{{ r.host ? `://${r.host}` : '' }})
-            </option>
-          </select>
+          <OptionPicker
+            v-model="targetRemote"
+            :options="remotePickerOptions"
+            title="Remote"
+            search-placeholder="Search remotes"
+            :include-empty="false"
+            trigger-class="rounded border bg-background text-xs px-2"
+            size="sm"
+          />
         </div>
 
         <div class="grid gap-1">
@@ -144,11 +164,15 @@ const stashStaged = defineModel<boolean>('stashStaged', { required: true })
       <div class="grid gap-3">
         <div class="grid gap-1">
           <div class="text-xs font-medium text-muted-foreground">Remote</div>
-          <select v-model="targetRemote" class="h-9 rounded border border-input bg-background text-xs px-2">
-            <option v-for="r in props.remoteInfo?.remotes || []" :key="r.name" :value="r.name">
-              {{ r.name }} ({{ r.protocol }}{{ r.host ? `://${r.host}` : '' }})
-            </option>
-          </select>
+          <OptionPicker
+            v-model="targetRemote"
+            :options="remotePickerOptions"
+            title="Remote"
+            search-placeholder="Search remotes"
+            :include-empty="false"
+            trigger-class="rounded border bg-background text-xs px-2"
+            size="sm"
+          />
         </div>
 
         <div class="grid gap-1">
@@ -225,11 +249,15 @@ const stashStaged = defineModel<boolean>('stashStaged', { required: true })
       <div class="grid gap-3">
         <div class="grid gap-1">
           <div class="text-xs font-medium text-muted-foreground">Remote</div>
-          <select v-model="targetRemote" class="h-9 rounded border border-input bg-background text-xs px-2">
-            <option v-for="r in props.remoteInfo?.remotes || []" :key="r.name" :value="r.name">
-              {{ r.name }} ({{ r.protocol }}{{ r.host ? `://${r.host}` : '' }})
-            </option>
-          </select>
+          <OptionPicker
+            v-model="targetRemote"
+            :options="remotePickerOptions"
+            title="Remote"
+            search-placeholder="Search remotes"
+            :include-empty="false"
+            trigger-class="rounded border bg-background text-xs px-2"
+            size="sm"
+          />
         </div>
 
         <div class="grid gap-1">

@@ -3,6 +3,7 @@ import { defineComponent } from 'vue'
 import { RiCheckLine } from '@remixicon/vue'
 
 import Button from '@/components/ui/Button.vue'
+import OptionPicker, { type PickerOption } from '@/components/ui/OptionPicker.vue'
 import Tooltip from '@/components/ui/Tooltip.vue'
 
 import { useOpencodeConfigPanelContext } from '../opencodeConfigContext'
@@ -10,11 +11,25 @@ import { useOpencodeConfigPanelContext } from '../opencodeConfigContext'
 export default defineComponent({
   components: {
     Button,
+    OptionPicker,
     Tooltip,
     RiCheckLine,
   },
   setup() {
-    return useOpencodeConfigPanelContext()
+    const ctx = useOpencodeConfigPanelContext()
+
+    const permissionPresetPickerOptions: PickerOption[] = [
+      { value: 'safe', label: 'Safe default' },
+      { value: 'power', label: 'Power user' },
+      { value: 'readonly', label: 'Read-only' },
+    ]
+
+    const permissionPresetModePickerOptions: PickerOption[] = [
+      { value: 'merge', label: 'merge' },
+      { value: 'replace', label: 'replace' },
+    ]
+
+    return Object.assign(ctx, { permissionPresetPickerOptions, permissionPresetModePickerOptions })
   },
 })
 </script>
@@ -25,19 +40,23 @@ export default defineComponent({
     <div class="grid gap-3 lg:grid-cols-3">
       <label class="grid gap-1">
         <span class="text-xs text-muted-foreground">Preset</span>
-        <select v-model="permissionPreset" class="h-9 rounded-md border border-input bg-transparent px-3 text-sm">
-          <option value="">(none)</option>
-          <option value="safe">Safe default</option>
-          <option value="power">Power user</option>
-          <option value="readonly">Read-only</option>
-        </select>
+        <OptionPicker
+          v-model="permissionPreset"
+          :options="permissionPresetPickerOptions"
+          title="Preset"
+          search-placeholder="Search presets"
+          empty-label="(none)"
+        />
       </label>
       <label class="grid gap-1">
         <span class="text-xs text-muted-foreground">Apply mode</span>
-        <select v-model="permissionPresetMode" class="h-9 rounded-md border border-input bg-transparent px-3 text-sm">
-          <option value="merge">merge</option>
-          <option value="replace">replace</option>
-        </select>
+        <OptionPicker
+          v-model="permissionPresetMode"
+          :options="permissionPresetModePickerOptions"
+          title="Apply mode"
+          search-placeholder="Search modes"
+          :include-empty="false"
+        />
       </label>
     </div>
     <div class="flex items-center gap-2">

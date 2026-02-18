@@ -4,6 +4,7 @@ import { RiCheckLine, RiListCheck3 } from '@remixicon/vue'
 
 import Button from '@/components/ui/Button.vue'
 import type { PickerOption } from '@/components/ui/InlineSearchAdd.vue'
+import OptionPicker, { type PickerOption as OptionPickerOption } from '@/components/ui/OptionPicker.vue'
 import Tooltip from '@/components/ui/Tooltip.vue'
 import StringListEditor from '../StringListEditor.vue'
 
@@ -12,6 +13,7 @@ import { useOpencodeConfigPanelContext } from '../opencodeConfigContext'
 export default defineComponent({
   components: {
     Button,
+    OptionPicker,
     StringListEditor,
     Tooltip,
     RiCheckLine,
@@ -20,6 +22,26 @@ export default defineComponent({
   setup() {
     const ctx = useOpencodeConfigPanelContext()
 
+    const permissionBulkActionPickerOptions: OptionPickerOption[] = [
+      { value: 'allow', label: 'allow' },
+      { value: 'ask', label: 'ask' },
+      { value: 'deny', label: 'deny' },
+    ]
+
+    const permissionBulkTargetPickerOptions: OptionPickerOption[] = [
+      { value: 'selection', label: 'selection' },
+      { value: 'tag', label: 'by tag' },
+      { value: 'all_known', label: 'all known tools' },
+      { value: 'all_via_star', label: 'set * only' },
+    ]
+
+    const permissionBulkTagPickerOptions: OptionPickerOption[] = [
+      { value: 'filesystem', label: 'filesystem' },
+      { value: 'exec', label: 'exec' },
+      { value: 'network', label: 'network' },
+      { value: 'other', label: 'other' },
+    ]
+
     const toolPickerOptions = computed<PickerOption[]>(() => {
       const raw = ctx.toolIdOptions
       const list: string[] = Array.isArray(raw) ? raw : Array.isArray(raw?.value) ? raw.value : []
@@ -27,7 +49,12 @@ export default defineComponent({
     })
 
     // Vue template type-checking doesn't propagate the index signature through a spread.
-    return Object.assign(ctx, { toolPickerOptions })
+    return Object.assign(ctx, {
+      toolPickerOptions,
+      permissionBulkActionPickerOptions,
+      permissionBulkTargetPickerOptions,
+      permissionBulkTagPickerOptions,
+    })
   },
 })
 </script>
@@ -38,29 +65,33 @@ export default defineComponent({
     <div class="grid gap-3 lg:grid-cols-3">
       <label class="grid gap-1">
         <span class="text-xs text-muted-foreground">Action</span>
-        <select v-model="permissionBulkAction" class="h-9 rounded-md border border-input bg-transparent px-3 text-sm">
-          <option value="allow">allow</option>
-          <option value="ask">ask</option>
-          <option value="deny">deny</option>
-        </select>
+        <OptionPicker
+          v-model="permissionBulkAction"
+          :options="permissionBulkActionPickerOptions"
+          title="Action"
+          search-placeholder="Search actions"
+          :include-empty="false"
+        />
       </label>
       <label class="grid gap-1">
         <span class="text-xs text-muted-foreground">Target</span>
-        <select v-model="permissionBulkTarget" class="h-9 rounded-md border border-input bg-transparent px-3 text-sm">
-          <option value="selection">selection</option>
-          <option value="tag">by tag</option>
-          <option value="all_known">all known tools</option>
-          <option value="all_via_star">set * only</option>
-        </select>
+        <OptionPicker
+          v-model="permissionBulkTarget"
+          :options="permissionBulkTargetPickerOptions"
+          title="Target"
+          search-placeholder="Search targets"
+          :include-empty="false"
+        />
       </label>
       <label v-if="permissionBulkTarget === 'tag'" class="grid gap-1">
         <span class="text-xs text-muted-foreground">Tag</span>
-        <select v-model="permissionBulkTag" class="h-9 rounded-md border border-input bg-transparent px-3 text-sm">
-          <option value="filesystem">filesystem</option>
-          <option value="exec">exec</option>
-          <option value="network">network</option>
-          <option value="other">other</option>
-        </select>
+        <OptionPicker
+          v-model="permissionBulkTag"
+          :options="permissionBulkTagPickerOptions"
+          title="Tag"
+          search-placeholder="Search tags"
+          :include-empty="false"
+        />
       </label>
       <label v-else class="grid gap-1">
         <span class="text-xs text-muted-foreground">Clear others</span>

@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+
 import MiniActionButton from '@/components/ui/MiniActionButton.vue'
+import OptionPicker from '@/components/ui/OptionPicker.vue'
 
 type Gitmoji = { emoji: string; label: string }
 
@@ -24,13 +27,20 @@ function updateMessage(ev: Event) {
   emit('update:message', el?.value ?? '')
 }
 
-function updateSelectedGitmoji(ev: Event) {
-  const el = ev.target as HTMLSelectElement | null
-  emit('update:selectedGitmoji', el?.value ?? '')
-  emit('insertGitmoji')
+function updateSelectedGitmoji(value: string | number) {
+  const v = String(value || '')
+  emit('update:selectedGitmoji', v)
+  if (v) emit('insertGitmoji')
 }
 
 const canCommit = () => Boolean((props.message || '').trim()) && !props.committing
+
+const gitmojiPickerOptions = computed(() =>
+  (Array.isArray(props.gitmojis) ? props.gitmojis : []).map((g) => ({
+    value: g.emoji,
+    label: `${g.emoji} ${g.label}`,
+  })),
+)
 </script>
 
 <template>
@@ -47,14 +57,19 @@ const canCommit = () => Boolean((props.message || '').trim()) && !props.committi
 
     <div class="flex items-center justify-between gap-2">
       <div v-if="gitmojiEnabled" class="flex items-center gap-1">
-        <select
-          :value="selectedGitmoji"
-          class="h-6 w-24 rounded-sm border border-sidebar-border/70 bg-sidebar-accent/20 px-1 text-[10px]"
-          @change="updateSelectedGitmoji"
-        >
-          <option value="" disabled>Emoji</option>
-          <option v-for="g in gitmojis" :key="g.emoji" :value="g.emoji">{{ g.emoji }} {{ g.label }}</option>
-        </select>
+        <div class="w-24">
+          <OptionPicker
+            :model-value="selectedGitmoji"
+            :options="gitmojiPickerOptions"
+            title="Gitmoji"
+            search-placeholder="Search emojis"
+            empty-label="Emoji"
+            :empty-disabled="true"
+            trigger-class="h-6 px-1 text-[10px] rounded-sm border-sidebar-border/70 bg-sidebar-accent/20 shadow-none"
+            size="sm"
+            @update:model-value="updateSelectedGitmoji"
+          />
+        </div>
       </div>
 
       <MiniActionButton variant="default" class="ml-auto px-2.5" :disabled="!canCommit()" @click="$emit('commit')">

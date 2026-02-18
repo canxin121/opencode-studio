@@ -4,6 +4,7 @@ import { RiCloseLine, RiListCheck3 } from '@remixicon/vue'
 
 import Button from '@/components/ui/Button.vue'
 import InlineSearchAdd, { type PickerOption } from '@/components/ui/InlineSearchAdd.vue'
+import OptionPicker, { type PickerOption as OptionPickerOption } from '@/components/ui/OptionPicker.vue'
 import Tooltip from '@/components/ui/Tooltip.vue'
 
 import { useOpencodeConfigPanelContext } from '../opencodeConfigContext'
@@ -26,6 +27,13 @@ const providerPickerOptions = computed<PickerOption[]>(() => {
   const list = asStringArray(ctx.providerIdOptions)
   return list.map((id) => ({ value: id, label: id }))
 })
+
+const conflictPolicyPickerOptions: OptionPickerOption[] = [
+  { value: 'last-change-wins', label: 'last-change-wins' },
+  { value: 'enabled-wins', label: 'enabled-wins' },
+  { value: 'disabled-wins', label: 'disabled-wins' },
+  { value: 'keep-conflict', label: 'keep-conflict' },
+]
 </script>
 
 <template>
@@ -37,12 +45,13 @@ const providerPickerOptions = computed<PickerOption[]>(() => {
     <div class="grid gap-3 lg:grid-cols-2">
       <label class="grid gap-1">
         <span class="text-xs text-muted-foreground">Conflict policy</span>
-        <select v-model="providerConflictPolicy" class="h-9 rounded-md border border-input bg-transparent px-3 text-sm">
-          <option value="last-change-wins">last-change-wins</option>
-          <option value="enabled-wins">enabled-wins</option>
-          <option value="disabled-wins">disabled-wins</option>
-          <option value="keep-conflict">keep-conflict</option>
-        </select>
+        <OptionPicker
+          v-model="providerConflictPolicy"
+          :options="conflictPolicyPickerOptions"
+          title="Conflict policy"
+          search-placeholder="Search policies"
+          :include-empty="false"
+        />
       </label>
       <div class="lg:col-span-2 grid gap-1">
         <span class="text-xs text-muted-foreground">Selection</span>

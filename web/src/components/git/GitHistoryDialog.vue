@@ -5,6 +5,7 @@ import Button from '@/components/ui/Button.vue'
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import FormDialog from '@/components/ui/FormDialog.vue'
 import Input from '@/components/ui/Input.vue'
+import OptionPicker, { type PickerOption } from '@/components/ui/OptionPicker.vue'
 import ScrollArea from '@/components/ui/ScrollArea.vue'
 import DiffViewer from '@/components/DiffViewer.vue'
 
@@ -95,7 +96,24 @@ const selectedMeta = computed(() => {
 const selectedRefs = computed(() => props.selected?.refs || [])
 const selectedFileLabel = computed(() => props.selectedFile?.path || '')
 const refOptions = computed(() => (props.filterRefType === 'tag' ? props.tagOptions : props.branchOptions))
+
+const filterRefTypePickerOptions: PickerOption[] = [
+  { value: 'branch', label: 'Branch' },
+  { value: 'tag', label: 'Tag' },
+]
+
+const refPickerOptions = computed<PickerOption[]>(() => {
+  const list = Array.isArray(refOptions.value) ? refOptions.value : []
+  return list.map((r) => ({ value: r, label: r }))
+})
+
 const resetMode = ref<'soft' | 'mixed' | 'hard'>('mixed')
+
+const resetModePickerOptions: PickerOption[] = [
+  { value: 'soft', label: 'Reset soft' },
+  { value: 'mixed', label: 'Reset mixed' },
+  { value: 'hard', label: 'Reset hard' },
+]
 const hardResetOpen = ref(false)
 const hardResetText = ref('')
 const hardResetTarget = ref<GitLogCommit | null>(null)
@@ -132,9 +150,9 @@ function confirmHardReset() {
   hardResetText.value = ''
 }
 
-function onFilterRefTypeChange(event: Event) {
-  const value = (event.target as HTMLSelectElement | null)?.value
-  emit('update:filterRefType', value === 'tag' ? 'tag' : 'branch')
+function onFilterRefTypeChange(value: string | number) {
+  const v = String(value || '')
+  emit('update:filterRefType', v === 'tag' ? 'tag' : 'branch')
 }
 </script>
 
@@ -166,33 +184,38 @@ function onFilterRefTypeChange(event: Event) {
           <Button variant="ghost" size="sm" class="h-6" @click="$emit('clearFilter')">Clear</Button>
         </div>
 
-        <div class="grid gap-2 rounded-md border border-border/50 bg-muted/10 p-2">
-          <div class="text-[11px] font-medium text-muted-foreground">Search</div>
-          <div class="grid gap-2 lg:grid-cols-[120px_1fr]">
-            <select
-              :value="filterRefType"
-              class="h-8 rounded border border-input bg-background text-xs px-2"
-              @change="onFilterRefTypeChange"
-            >
-              <option value="branch">Branch</option>
-              <option value="tag">Tag</option>
-            </select>
-            <Input
+          <div class="grid gap-2 rounded-md border border-border/50 bg-muted/10 p-2">
+            <div class="text-[11px] font-medium text-muted-foreground">Search</div>
+            <div class="grid gap-2 lg:grid-cols-[120px_1fr]">
+              <OptionPicker
+                :model-value="filterRefType"
+                :options="filterRefTypePickerOptions"
+                title="Ref type"
+                search-placeholder="Search types"
+                :include-empty="false"
+                trigger-class="h-8 rounded border border-input bg-background text-xs px-2"
+                size="sm"
+                @update:model-value="onFilterRefTypeChange"
+              />
+              <Input
+                :model-value="filterRef"
+                class="h-8 font-mono text-xs"
+                :placeholder="filterRefType === 'tag' ? 'Tag name' : 'Branch name'"
+                @update:model-value="(v) => $emit('update:filterRef', String(v))"
+              />
+            </div>
+            <OptionPicker
+              v-if="refOptions.length"
               :model-value="filterRef"
-              class="h-8 font-mono text-xs"
-              :placeholder="filterRefType === 'tag' ? 'Tag name' : 'Branch name'"
-              @update:model-value="(v) => $emit('update:filterRef', String(v))"
+              @update:model-value="(v) => $emit('update:filterRef', String(v || ''))"
+              :options="refPickerOptions"
+              title="Ref"
+              search-placeholder="Search refs"
+              :empty-label="`All ${filterRefType === 'tag' ? 'tags' : 'branches'}`"
+              trigger-class="h-8 rounded border border-input bg-background text-xs px-2"
+              size="sm"
+              monospace
             />
-          </div>
-          <select
-            v-if="refOptions.length"
-            :value="filterRef"
-            class="h-8 rounded border border-input bg-background text-xs px-2"
-            @change="(e) => $emit('update:filterRef', (e.target as HTMLSelectElement).value)"
-          >
-            <option value="">All {{ filterRefType === 'tag' ? 'tags' : 'branches' }}</option>
-            <option v-for="r in refOptions" :key="r" :value="r">{{ r }}</option>
-          </select>
           <Input
             :model-value="filterAuthor"
             class="h-8 font-mono text-xs"
@@ -308,11 +331,17 @@ function onFilterRefTypeChange(event: Event) {
                 Compare with selected
               </Button>
               <div class="flex items-center gap-1">
-                <select v-model="resetMode" class="h-7 rounded border border-input bg-background text-[11px] px-2">
-                  <option value="soft">Reset soft</option>
-                  <option value="mixed">Reset mixed</option>
-                  <option value="hard">Reset hard</option>
-                </select>
+                <div class="w-[140px]">
+                  <OptionPicker
+                    v-model="resetMode"
+                    :options="resetModePickerOptions"
+                    title="Reset mode"
+                    search-placeholder="Search modes"
+                    :include-empty="false"
+                    trigger-class="h-7 rounded border border-input bg-background text-[11px] px-2"
+                    size="sm"
+                  />
+                </div>
                 <ConfirmPopover
                   title="Reset to this commit?"
                   description="This will move HEAD and update the working tree based on mode."

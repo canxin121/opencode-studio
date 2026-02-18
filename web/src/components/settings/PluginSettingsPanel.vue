@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 
 import Button from '@/components/ui/Button.vue'
+import OptionPicker from '@/components/ui/OptionPicker.vue'
 import { usePluginHostStore } from '@/stores/pluginHost'
 import { useToastsStore } from '@/stores/toasts'
 import type { JsonValue as JsonLike } from '@/types/json'
@@ -74,6 +75,13 @@ const pluginsWithSchema = computed(() =>
     const schema = asObject(manifest?.manifest).settingsSchema
     return !!schema && typeof schema === 'object' && !Array.isArray(schema)
   }),
+)
+
+const pluginPickerOptions = computed(() =>
+  pluginsWithSchema.value.map((plugin) => ({
+    value: plugin.id,
+    label: plugin.displayName || plugin.id,
+  })),
 )
 
 const forcedPluginId = computed(() => String(props.pluginId || '').trim())
@@ -452,6 +460,11 @@ function enumToken(value: JsonLike): string {
   return JSON.stringify(value)
 }
 
+function enumPickerOptions(values: JsonLike[]): Array<{ value: string; label: string }> {
+  const list = Array.isArray(values) ? values : []
+  return list.map((item) => ({ value: enumToken(item), label: String(item) }))
+}
+
 function enumCurrentToken(path: string[], prop: SchemaProperty): string {
   const value = draftValueAtPath(path) !== undefined ? draftValueAtPath(path) : prop.default
   if (value === undefined) return ''
@@ -484,16 +497,16 @@ function onBooleanInput(path: string[], event: Event) {
   setDraftPath(path, checked)
 }
 
-function onEnumInput(path: string[], event: Event) {
-  const raw = (event.target as HTMLSelectElement).value
-  if (!raw) {
+function onEnumSelect(path: string[], raw: string) {
+  const token = String(raw || '')
+  if (!token) {
     setDraftPath(path, undefined)
     return
   }
   try {
-    setDraftPath(path, JSON.parse(raw) as JsonLike)
+    setDraftPath(path, JSON.parse(token) as JsonLike)
   } catch {
-    setDraftPath(path, raw)
+    setDraftPath(path, token)
   }
 }
 
@@ -638,10 +651,10 @@ function onMapValueInput(path: string[], prop: SchemaProperty, rowIdx: number, e
   setMapRows(path, prop, rows)
 }
 
-function onMapValueSelect(path: string[], prop: SchemaProperty, rowIdx: number, event: Event) {
-  const raw = (event.target as HTMLSelectElement).value
+function onMapValueSelect(path: string[], prop: SchemaProperty, rowIdx: number, raw: string) {
+  const token = String(raw || '')
   const rows = [...ensureMapRows(path, prop)]
-  rows[rowIdx] = { ...(rows[rowIdx] || { key: '', value: '' }), value: raw }
+  rows[rowIdx] = { ...(rows[rowIdx] || { key: '', value: '' }), value: token }
   setMapRows(path, prop, rows)
 }
 
@@ -770,10 +783,10 @@ function onArrayRowInput(path: string[], prop: SchemaProperty, rowIdx: number, e
   setArrayRows(path, prop, rows)
 }
 
-function onArrayRowSelect(path: string[], prop: SchemaProperty, rowIdx: number, event: Event) {
-  const raw = (event.target as HTMLSelectElement).value
+function onArrayRowSelect(path: string[], prop: SchemaProperty, rowIdx: number, raw: string) {
+  const token = String(raw || '')
   const rows = [...ensureArrayRows(path, prop)]
-  rows[rowIdx] = raw
+  rows[rowIdx] = token
   setArrayRows(path, prop, rows)
 }
 
@@ -806,15 +819,16 @@ function clearArrayRows(path: string[], prop: SchemaProperty) {
 
     <template v-else>
       <div class="flex flex-wrap items-center gap-2">
-        <select
-          v-if="!hidePluginSelector"
-          v-model="selectedPluginId"
-          class="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-        >
-          <option v-for="plugin in pluginsWithSchema" :key="plugin.id" :value="plugin.id">
-            {{ plugin.displayName || plugin.id }}
-          </option>
-        </select>
+        <div v-if="!hidePluginSelector" class="min-w-[220px] flex-1 max-w-[420px]">
+          <OptionPicker
+            v-model="selectedPluginId"
+            :options="pluginPickerOptions"
+            title="Plugin"
+            search-placeholder="Search plugins"
+            :include-empty="false"
+            :disabled="loading || saving"
+          />
+        </div>
 
         <div v-else class="h-9 inline-flex items-center rounded-md border border-input bg-transparent px-3 text-sm">
           {{ selectedPluginLabel }}
@@ -854,21 +868,15 @@ function clearArrayRows(path: string[], prop: SchemaProperty) {
             <label class="text-sm font-medium leading-none">{{ getLabel(entry.key, entry.prop) }}</label>
             <div v-if="getDescription(entry.prop)" class="text-xs text-muted-foreground">{{ getDescription(entry.prop) }}</div>
 
-            <select
+            <OptionPicker
               v-if="Array.isArray(entry.prop.enum) && entry.prop.enum.length > 0"
-              :value="enumCurrentToken(entry.path, entry.prop)"
-              class="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-              @change="onEnumInput(entry.path, $event)"
-            >
-              <option value="">(default)</option>
-              <option
-                v-for="(item, itemIdx) in entry.prop.enum"
-                :key="`enum:${entry.path.join('.')}:${itemIdx}`"
-                :value="enumToken(item)"
-              >
-                {{ String(item) }}
-              </option>
-            </select>
+              :model-value="enumCurrentToken(entry.path, entry.prop)"
+              @update:model-value="(v) => onEnumSelect(entry.path, String(v || ''))"
+              :options="enumPickerOptions(entry.prop.enum)"
+              title="Select"
+              search-placeholder="Search options"
+              empty-label="(default)"
+            />
 
             <input
               v-else-if="entry.prop.type === 'string'"
@@ -904,32 +912,30 @@ function clearArrayRows(path: string[], prop: SchemaProperty) {
                   :key="`arr:${entry.path.join('.')}:${rowIdx}`"
                   class="flex items-center gap-2"
                 >
-                  <select
-                    v-if="arrayItemEnum(entry.prop).length > 0"
-                    :value="row"
-                    class="h-9 flex-1 rounded-md border border-input bg-transparent px-3 text-sm"
-                    @change="onArrayRowSelect(entry.path, entry.prop, rowIdx, $event)"
-                  >
-                    <option value="">(empty)</option>
-                    <option
-                      v-for="(item, itemIdx) in arrayItemEnum(entry.prop)"
-                      :key="`arr-enum:${entry.path.join('.')}:${rowIdx}:${itemIdx}`"
-                      :value="enumToken(item)"
-                    >
-                      {{ String(item) }}
-                    </option>
-                  </select>
+                  <div v-if="arrayItemEnum(entry.prop).length > 0" class="flex-1 min-w-0">
+                    <OptionPicker
+                      :model-value="row"
+                      @update:model-value="(v) => onArrayRowSelect(entry.path, entry.prop, rowIdx, String(v || ''))"
+                      :options="enumPickerOptions(arrayItemEnum(entry.prop))"
+                      title="Select"
+                      search-placeholder="Search options"
+                      empty-label="(empty)"
+                    />
+                  </div>
 
-                  <select
-                    v-else-if="arrayItemProp(entry.prop).type === 'boolean'"
-                    :value="row"
-                    class="h-9 flex-1 rounded-md border border-input bg-transparent px-3 text-sm"
-                    @change="onArrayRowSelect(entry.path, entry.prop, rowIdx, $event)"
-                  >
-                    <option value="">(empty)</option>
-                    <option value="true">true</option>
-                    <option value="false">false</option>
-                  </select>
+                  <div v-else-if="arrayItemProp(entry.prop).type === 'boolean'" class="flex-1 min-w-0">
+                    <OptionPicker
+                      :model-value="row"
+                      @update:model-value="(v) => onArrayRowSelect(entry.path, entry.prop, rowIdx, String(v || ''))"
+                      :options="[
+                        { value: 'true', label: 'true' },
+                        { value: 'false', label: 'false' },
+                      ]"
+                      title="Select"
+                      search-placeholder="Search options"
+                      empty-label="(empty)"
+                    />
+                  </div>
 
                   <input
                     v-else
@@ -977,32 +983,30 @@ function clearArrayRows(path: string[], prop: SchemaProperty) {
                     @input="onMapKeyInput(entry.path, entry.prop, rowIdx, $event)"
                   />
 
-                  <select
-                    v-if="mapValueEnum(entry.prop).length > 0"
-                    :value="row.value"
-                    class="h-9 flex-1 rounded-md border border-input bg-transparent px-3 text-sm"
-                    @change="onMapValueSelect(entry.path, entry.prop, rowIdx, $event)"
-                  >
-                    <option value="">(empty)</option>
-                    <option
-                      v-for="(item, itemIdx) in mapValueEnum(entry.prop)"
-                      :key="`map-enum:${entry.path.join('.')}:${rowIdx}:${itemIdx}`"
-                      :value="enumToken(item)"
-                    >
-                      {{ String(item) }}
-                    </option>
-                  </select>
+                  <div v-if="mapValueEnum(entry.prop).length > 0" class="flex-1 min-w-0">
+                    <OptionPicker
+                      :model-value="row.value"
+                      @update:model-value="(v) => onMapValueSelect(entry.path, entry.prop, rowIdx, String(v || ''))"
+                      :options="enumPickerOptions(mapValueEnum(entry.prop))"
+                      title="Select"
+                      search-placeholder="Search options"
+                      empty-label="(empty)"
+                    />
+                  </div>
 
-                  <select
-                    v-else-if="mapValueType(entry.prop) === 'boolean'"
-                    :value="row.value"
-                    class="h-9 flex-1 rounded-md border border-input bg-transparent px-3 text-sm"
-                    @change="onMapValueSelect(entry.path, entry.prop, rowIdx, $event)"
-                  >
-                    <option value="">(empty)</option>
-                    <option value="true">true</option>
-                    <option value="false">false</option>
-                  </select>
+                  <div v-else-if="mapValueType(entry.prop) === 'boolean'" class="flex-1 min-w-0">
+                    <OptionPicker
+                      :model-value="row.value"
+                      @update:model-value="(v) => onMapValueSelect(entry.path, entry.prop, rowIdx, String(v || ''))"
+                      :options="[
+                        { value: 'true', label: 'true' },
+                        { value: 'false', label: 'false' },
+                      ]"
+                      title="Select"
+                      search-placeholder="Search options"
+                      empty-label="(empty)"
+                    />
+                  </div>
 
                   <input
                     v-else

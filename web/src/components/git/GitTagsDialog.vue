@@ -1,8 +1,11 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+
 import Button from '@/components/ui/Button.vue'
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import FormDialog from '@/components/ui/FormDialog.vue'
 import Input from '@/components/ui/Input.vue'
+import OptionPicker from '@/components/ui/OptionPicker.vue'
 
 import type { GitTagInfo } from '@/types/git'
 
@@ -40,9 +43,10 @@ function onUpdateText(key: 'newTagName' | 'newTagRef' | 'newTagMessage', v: stri
   if (key === 'newTagMessage') emit('update:newTagMessage', s)
 }
 
-function onUpdateRemote(ev: Event) {
-  const el = ev.target as HTMLSelectElement | null
-  emit('update:tagRemote', el?.value ?? '')
+const remotePickerOptions = computed(() => props.remoteNames.map((r) => ({ value: r, label: r })))
+
+function onUpdateRemote(v: string | number) {
+  emit('update:tagRemote', String(v || ''))
 }
 </script>
 
@@ -85,13 +89,15 @@ function onUpdateRemote(ev: Event) {
 
         <div class="grid gap-1">
           <div class="text-xs font-medium text-muted-foreground">Remote for deleting tags</div>
-          <select
-            :value="tagRemote"
-            class="h-9 rounded border border-input bg-background text-xs px-2"
-            @change="onUpdateRemote"
-          >
-            <option v-for="r in remoteNames" :key="r" :value="r">{{ r }}</option>
-          </select>
+          <OptionPicker
+            :model-value="tagRemote"
+            :options="remotePickerOptions"
+            title="Remote"
+            search-placeholder="Search remotes"
+            :include-empty="false"
+            trigger-class="rounded border bg-background text-xs px-2"
+            @update:model-value="onUpdateRemote"
+          />
         </div>
       </div>
 

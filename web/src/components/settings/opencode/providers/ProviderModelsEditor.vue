@@ -3,11 +3,26 @@ import { RiAddLine, RiArrowDownSLine, RiArrowUpSLine, RiCheckLine, RiDeleteBinLi
 
 import Button from '@/components/ui/Button.vue'
 import Input from '@/components/ui/Input.vue'
+import OptionPicker, { type PickerOption } from '@/components/ui/OptionPicker.vue'
 import Tooltip from '@/components/ui/Tooltip.vue'
 
 import { useOpencodeConfigPanelContext } from '../opencodeConfigContext'
 
 const props = defineProps<{ providerId: string }>()
+
+const modelStatusPickerOptions: PickerOption[] = [
+  { value: 'default', label: 'default' },
+  { value: 'alpha', label: 'alpha' },
+  { value: 'beta', label: 'beta' },
+  { value: 'deprecated', label: 'deprecated' },
+]
+
+const modelInterleavedPickerOptions: PickerOption[] = [
+  { value: 'default', label: 'default' },
+  { value: 'true', label: 'true' },
+  { value: 'reasoning_content', label: 'reasoning_content' },
+  { value: 'reasoning_details', label: 'reasoning_details' },
+]
 
 type JsonPrimitive = string | number | boolean | null
 type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue } | undefined
@@ -208,37 +223,28 @@ const providerId = props.providerId
           </label>
           <label class="grid gap-1">
             <span class="text-xs text-muted-foreground">Status</span>
-            <select
-              :value="modelConfig.status || 'default'"
-              @change="
-                (e) =>
-                  setModelField(
-                    providerId,
-                    modelId as string,
-                    'status',
-                    (e.target as HTMLSelectElement).value === 'default' ? null : (e.target as HTMLSelectElement).value,
-                  )
+            <OptionPicker
+              :model-value="modelConfig.status || 'default'"
+              @update:model-value="
+                (v) =>
+                  setModelField(providerId, modelId as string, 'status', String(v || '') === 'default' ? null : String(v || ''))
               "
-              class="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-            >
-              <option value="default">default</option>
-              <option value="alpha">alpha</option>
-              <option value="beta">beta</option>
-              <option value="deprecated">deprecated</option>
-            </select>
+              :options="modelStatusPickerOptions"
+              title="Status"
+              search-placeholder="Search statuses"
+              :include-empty="false"
+            />
           </label>
           <label class="grid gap-1">
             <span class="text-xs text-muted-foreground">Interleaved</span>
-            <select
-              :value="getModelInterleaved(providerId, modelId as string)"
-              @change="(e) => setModelInterleaved(providerId, modelId as string, (e.target as HTMLSelectElement).value)"
-              class="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-            >
-              <option value="default">default</option>
-              <option value="true">true</option>
-              <option value="reasoning_content">reasoning_content</option>
-              <option value="reasoning_details">reasoning_details</option>
-            </select>
+            <OptionPicker
+              :model-value="getModelInterleaved(providerId, modelId as string)"
+              @update:model-value="(v) => setModelInterleaved(providerId, modelId as string, String(v || ''))"
+              :options="modelInterleavedPickerOptions"
+              title="Interleaved"
+              search-placeholder="Search modes"
+              :include-empty="false"
+            />
           </label>
         </div>
 

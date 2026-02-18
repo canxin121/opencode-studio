@@ -4,6 +4,7 @@ import { RiArrowDownSLine, RiArrowUpSLine, RiDeleteBinLine } from '@remixicon/vu
 
 import Button from '@/components/ui/Button.vue'
 import Input from '@/components/ui/Input.vue'
+import OptionPicker, { type PickerOption } from '@/components/ui/OptionPicker.vue'
 import Tooltip from '@/components/ui/Tooltip.vue'
 import type { JsonValue as JsonLike } from '@/types/json'
 
@@ -63,6 +64,12 @@ const {
 
 const providerId = props.providerId
 const provider = props.provider
+
+const timeoutModePickerOptions: PickerOption[] = [
+  { value: 'default', label: 'default' },
+  { value: 'disabled', label: 'disabled' },
+  { value: 'custom', label: 'custom' },
+]
 
 const providerEnvSuggestions = computed(() => {
   const out = new Set<string>()
@@ -262,15 +269,14 @@ const providerModelSuggestions = computed(() => {
           </label>
           <label class="grid gap-1">
             <span class="text-xs text-muted-foreground">Timeout</span>
-            <select
-              :value="getProviderTimeoutMode(providerId)"
-              @change="(e) => setProviderTimeoutMode(providerId, (e.target as HTMLSelectElement).value)"
-              class="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-            >
-              <option value="default">default</option>
-              <option value="disabled">disabled</option>
-              <option value="custom">custom</option>
-            </select>
+            <OptionPicker
+              :model-value="getProviderTimeoutMode(providerId)"
+              @update:model-value="(v) => setProviderTimeoutMode(providerId, String(v || ''))"
+              :options="timeoutModePickerOptions"
+              title="Timeout"
+              search-placeholder="Search modes"
+              :include-empty="false"
+            />
           </label>
           <label v-if="getProviderTimeoutMode(providerId) === 'custom'" class="grid gap-1">
             <span class="text-xs text-muted-foreground">Timeout (ms)</span>

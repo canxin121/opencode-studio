@@ -4,6 +4,7 @@ import { RiArrowDownSLine, RiArrowUpSLine, RiRestartLine } from '@remixicon/vue'
 
 import Button from '@/components/ui/Button.vue'
 import Input from '@/components/ui/Input.vue'
+import OptionPicker, { type PickerOption } from '@/components/ui/OptionPicker.vue'
 import Tooltip from '@/components/ui/Tooltip.vue'
 import VirtualList from '@/components/ui/VirtualList.vue'
 import CodeMirrorEditor from '@/components/CodeMirrorEditor.vue'
@@ -14,6 +15,7 @@ export default defineComponent({
   components: {
     Button,
     Input,
+    OptionPicker,
     Tooltip,
     VirtualList,
     CodeMirrorEditor,
@@ -22,7 +24,13 @@ export default defineComponent({
     RiRestartLine,
   },
   setup() {
-    return useOpencodeConfigPanelContext()
+    const ctx = useOpencodeConfigPanelContext()
+    const triStatePickerOptions: PickerOption[] = [
+      { value: 'default', label: 'default' },
+      { value: 'true', label: 'true' },
+      { value: 'false', label: 'false' },
+    ]
+    return Object.assign(ctx, { triStatePickerOptions })
   },
 })
 </script>
@@ -59,19 +67,23 @@ export default defineComponent({
     <div v-if="isSectionOpen('compaction')" class="grid gap-4 lg:grid-cols-2">
       <label class="grid gap-1">
         <span class="text-xs text-muted-foreground">Auto-compact</span>
-        <select v-model="compactionAuto" class="h-9 rounded-md border border-input bg-transparent px-3 text-sm">
-          <option value="default">default</option>
-          <option value="true">true</option>
-          <option value="false">false</option>
-        </select>
+        <OptionPicker
+          v-model="compactionAuto"
+          :options="triStatePickerOptions"
+          title="Auto-compact"
+          search-placeholder="Search"
+          :include-empty="false"
+        />
       </label>
       <label class="grid gap-1">
         <span class="text-xs text-muted-foreground">Prune tool output</span>
-        <select v-model="compactionPrune" class="h-9 rounded-md border border-input bg-transparent px-3 text-sm">
-          <option value="default">default</option>
-          <option value="true">true</option>
-          <option value="false">false</option>
-        </select>
+        <OptionPicker
+          v-model="compactionPrune"
+          :options="triStatePickerOptions"
+          title="Prune tool output"
+          search-placeholder="Search"
+          :include-empty="false"
+        />
       </label>
     </div>
   </section>

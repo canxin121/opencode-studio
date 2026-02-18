@@ -5,6 +5,7 @@ import { RiAddLine, RiArrowDownSLine, RiArrowUpSLine, RiCloseLine, RiRestartLine
 import Button from '@/components/ui/Button.vue'
 import Input from '@/components/ui/Input.vue'
 import InlineSearchAdd, { type PickerOption } from '@/components/ui/InlineSearchAdd.vue'
+import OptionPicker, { type PickerOption as OptionPickerOption } from '@/components/ui/OptionPicker.vue'
 import Tooltip from '@/components/ui/Tooltip.vue'
 import VirtualList from '@/components/ui/VirtualList.vue'
 import CodeMirrorEditor from '@/components/CodeMirrorEditor.vue'
@@ -16,6 +17,7 @@ export default defineComponent({
     Button,
     Input,
     InlineSearchAdd,
+    OptionPicker,
     Tooltip,
     VirtualList,
     CodeMirrorEditor,
@@ -27,6 +29,13 @@ export default defineComponent({
   },
   setup() {
     const ctx = useOpencodeConfigPanelContext()
+
+    const triStatePickerOptions: OptionPickerOption[] = [
+      { value: 'default', label: 'default' },
+      { value: 'true', label: 'true' },
+      { value: 'false', label: 'false' },
+    ]
+
     const corsSuggestionOptions: PickerOption[] = [
       { value: 'http://localhost:5173' },
       { value: 'http://localhost:3000' },
@@ -40,7 +49,7 @@ export default defineComponent({
       { value: '**/.venv' },
       { value: '**/target' },
     ]
-    return Object.assign(ctx, { corsSuggestionOptions, watcherIgnoreSuggestionOptions })
+    return Object.assign(ctx, { triStatePickerOptions, corsSuggestionOptions, watcherIgnoreSuggestionOptions })
   },
 })
 </script>
@@ -91,11 +100,13 @@ export default defineComponent({
         </label>
         <label class="grid gap-1">
           <span class="text-xs text-muted-foreground">mDNS</span>
-          <select v-model="serverMdns" class="h-9 rounded-md border border-input bg-transparent px-3 text-sm">
-            <option value="default">default</option>
-            <option value="true">true</option>
-            <option value="false">false</option>
-          </select>
+          <OptionPicker
+            v-model="serverMdns"
+            :options="triStatePickerOptions"
+            title="mDNS"
+            search-placeholder="Search"
+            :include-empty="false"
+          />
         </label>
         <label class="grid gap-1 lg:col-span-3">
           <span class="text-xs text-muted-foreground">mDNS domain</span>

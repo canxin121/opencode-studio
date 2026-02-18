@@ -2,6 +2,7 @@
 import { computed, reactive, ref, toRef, watch } from 'vue'
 
 import Button from '@/components/ui/Button.vue'
+import OptionPicker from '@/components/ui/OptionPicker.vue'
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import { opencodeSections } from './opencodeSections'
 
@@ -92,6 +93,12 @@ const directoryStore = useDirectoryStore()
 const toasts = useToastsStore()
 
 const scope = ref<OpencodeConfigScope>(configStore.scope || 'user')
+
+const scopePickerOptions = [
+  { value: 'user', label: 'User config' },
+  { value: 'project', label: 'Project config' },
+  { value: 'custom', label: 'Custom (OPENCODE_CONFIG)' },
+]
 
 const directory = computed(() => directoryStore.currentDirectory || '')
 const activePath = computed(() => configStore.activePath || '')
@@ -890,20 +897,22 @@ export type OpenCodeConfigPanelProvidedContext = typeof panelContext
 <template>
   <div class="oc-config space-y-6">
     <div class="sticky top-2 z-20 rounded-md border border-border bg-background/95 px-3 py-2 backdrop-blur">
-      <div class="flex flex-wrap items-center gap-3">
-        <div class="flex items-center gap-2">
-          <select
-            v-model="scope"
-            class="h-9 rounded-lg border border-border bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-          >
-            <option value="user">User config</option>
-            <option value="project">Project config</option>
-            <option value="custom">Custom (OPENCODE_CONFIG)</option>
-          </select>
-          <Button variant="ghost" size="sm" @click="refresh" :disabled="configStore.loading" title="Refresh">
-            <RiRefreshLine class="h-4 w-4" />
-          </Button>
-        </div>
+        <div class="flex flex-wrap items-center gap-3">
+          <div class="flex items-center gap-2">
+            <div class="min-w-[220px]">
+              <OptionPicker
+                v-model="scope"
+                :options="scopePickerOptions"
+                title="Config scope"
+                search-placeholder="Search scopes"
+                :include-empty="false"
+                trigger-class="rounded-lg border-border bg-background"
+              />
+            </div>
+            <Button variant="ghost" size="sm" @click="refresh" :disabled="configStore.loading" title="Refresh">
+              <RiRefreshLine class="h-4 w-4" />
+            </Button>
+          </div>
 
         <div class="flex items-center gap-2 ml-auto">
           <Button variant="outline" size="sm" @click="resetDraft" :disabled="resetDisabled" title="Reset">

@@ -72,7 +72,74 @@ export default defineComponent({
       return list.map((slug: string) => ({ value: slug, label: slug }))
     })
 
-    return Object.assign(ctx, { normalizeAgentName, defaultAgentPickerOptions, modelPickerOptions })
+    const modelProviderFilterPickerOptions = computed<PickerOption[]>(() => {
+      const list = Array.isArray(ctx.modelProviderOptions) ? ctx.modelProviderOptions : []
+      return list.map((pid: string) => ({ value: pid, label: pid }))
+    })
+
+    const modelFamilyFilterPickerOptions = computed<PickerOption[]>(() => {
+      const list = Array.isArray(ctx.modelFamilyOptions) ? ctx.modelFamilyOptions : []
+      return list.map((f: string) => ({ value: f, label: f }))
+    })
+
+    const modelStatusFilterPickerOptions: PickerOption[] = [
+      { value: 'active', label: 'active' },
+      { value: 'beta', label: 'beta' },
+      { value: 'alpha', label: 'alpha' },
+      { value: 'deprecated', label: 'deprecated' },
+    ]
+
+    const modelSortPickerOptions: PickerOption[] = [
+      { value: 'alpha', label: 'alpha' },
+      { value: 'context_desc', label: 'context ↓' },
+      { value: 'output_desc', label: 'output ↓' },
+      { value: 'cost_total_asc', label: 'cost (in+out) ↑' },
+      { value: 'cost_input_asc', label: 'cost in ↑' },
+      { value: 'cost_output_asc', label: 'cost out ↑' },
+      { value: 'release_desc', label: 'release ↓' },
+    ]
+
+    const logLevelPickerOptions: PickerOption[] = [
+      { value: 'default', label: 'default' },
+      { value: 'DEBUG', label: 'DEBUG' },
+      { value: 'INFO', label: 'INFO' },
+      { value: 'WARN', label: 'WARN' },
+      { value: 'ERROR', label: 'ERROR' },
+    ]
+
+    const shareModePickerOptions: PickerOption[] = [
+      { value: 'default', label: 'default' },
+      { value: 'manual', label: 'manual' },
+      { value: 'auto', label: 'auto' },
+      { value: 'disabled', label: 'disabled' },
+    ]
+
+    const autoUpdateModePickerOptions: PickerOption[] = [
+      { value: 'default', label: 'default' },
+      { value: 'notify', label: 'notify' },
+      { value: 'true', label: 'true' },
+      { value: 'false', label: 'false' },
+    ]
+
+    const snapshotModePickerOptions: PickerOption[] = [
+      { value: 'default', label: 'default' },
+      { value: 'true', label: 'true' },
+      { value: 'false', label: 'false' },
+    ]
+
+    return Object.assign(ctx, {
+      normalizeAgentName,
+      defaultAgentPickerOptions,
+      modelPickerOptions,
+      modelProviderFilterPickerOptions,
+      modelFamilyFilterPickerOptions,
+      modelStatusFilterPickerOptions,
+      modelSortPickerOptions,
+      logLevelPickerOptions,
+      shareModePickerOptions,
+      autoUpdateModePickerOptions,
+      snapshotModePickerOptions,
+    })
   },
 })
 </script>
@@ -272,36 +339,33 @@ export default defineComponent({
             </label>
             <label class="grid gap-1">
               <span class="text-xs text-muted-foreground">Provider</span>
-              <select
+              <OptionPicker
                 v-model="modelProviderFilter"
-                class="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-              >
-                <option value="">All</option>
-                <option v-for="pid in modelProviderOptions" :key="`mp:${pid}`" :value="pid">{{ pid }}</option>
-              </select>
+                :options="modelProviderFilterPickerOptions"
+                title="Provider"
+                search-placeholder="Search providers"
+                empty-label="All"
+              />
             </label>
             <label class="grid gap-1">
               <span class="text-xs text-muted-foreground">Status</span>
-              <select
+              <OptionPicker
                 v-model="modelStatusFilter"
-                class="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-              >
-                <option value="">All</option>
-                <option value="active">active</option>
-                <option value="beta">beta</option>
-                <option value="alpha">alpha</option>
-                <option value="deprecated">deprecated</option>
-              </select>
+                :options="modelStatusFilterPickerOptions"
+                title="Status"
+                search-placeholder="Search statuses"
+                empty-label="All"
+              />
             </label>
             <label class="grid gap-1">
               <span class="text-xs text-muted-foreground">Family</span>
-              <select
+              <OptionPicker
                 v-model="modelFamilyFilter"
-                class="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-              >
-                <option value="">All</option>
-                <option v-for="f in modelFamilyOptions" :key="`mf:${f}`" :value="f">{{ f }}</option>
-              </select>
+                :options="modelFamilyFilterPickerOptions"
+                title="Family"
+                search-placeholder="Search families"
+                empty-label="All"
+              />
             </label>
             <label class="grid gap-1">
               <span class="text-xs text-muted-foreground">Min context</span>
@@ -341,15 +405,15 @@ export default defineComponent({
             <div class="flex-1" />
             <label class="inline-flex items-center gap-2 text-sm">
               <span class="text-xs text-muted-foreground">Sort</span>
-              <select v-model="modelSort" class="h-9 rounded-md border border-input bg-transparent px-3 text-sm">
-                <option value="alpha">alpha</option>
-                <option value="context_desc">context ↓</option>
-                <option value="output_desc">output ↓</option>
-                <option value="cost_total_asc">cost (in+out) ↑</option>
-                <option value="cost_input_asc">cost in ↑</option>
-                <option value="cost_output_asc">cost out ↑</option>
-                <option value="release_desc">release ↓</option>
-              </select>
+              <div class="w-[190px]">
+                <OptionPicker
+                  v-model="modelSort"
+                  :options="modelSortPickerOptions"
+                  title="Sort"
+                  search-placeholder="Search sorts"
+                  :include-empty="false"
+                />
+              </div>
             </label>
           </div>
 
@@ -417,39 +481,43 @@ export default defineComponent({
         </div>
         <label class="grid gap-1">
           <span class="text-xs text-muted-foreground">Log level</span>
-          <select v-model="logLevel" class="h-9 rounded-md border border-input bg-transparent px-3 text-sm">
-            <option value="default">default</option>
-            <option value="DEBUG">DEBUG</option>
-            <option value="INFO">INFO</option>
-            <option value="WARN">WARN</option>
-            <option value="ERROR">ERROR</option>
-          </select>
+          <OptionPicker
+            v-model="logLevel"
+            :options="logLevelPickerOptions"
+            title="Log level"
+            search-placeholder="Search log levels"
+            :include-empty="false"
+          />
         </label>
         <label class="grid gap-1">
           <span class="text-xs text-muted-foreground">Share mode</span>
-          <select v-model="shareMode" class="h-9 rounded-md border border-input bg-transparent px-3 text-sm">
-            <option value="default">default</option>
-            <option value="manual">manual</option>
-            <option value="auto">auto</option>
-            <option value="disabled">disabled</option>
-          </select>
+          <OptionPicker
+            v-model="shareMode"
+            :options="shareModePickerOptions"
+            title="Share mode"
+            search-placeholder="Search share modes"
+            :include-empty="false"
+          />
         </label>
         <label class="grid gap-1">
           <span class="text-xs text-muted-foreground">Auto-update</span>
-          <select v-model="autoUpdateMode" class="h-9 rounded-md border border-input bg-transparent px-3 text-sm">
-            <option value="default">default</option>
-            <option value="notify">notify</option>
-            <option value="true">true</option>
-            <option value="false">false</option>
-          </select>
+          <OptionPicker
+            v-model="autoUpdateMode"
+            :options="autoUpdateModePickerOptions"
+            title="Auto-update"
+            search-placeholder="Search update modes"
+            :include-empty="false"
+          />
         </label>
         <label class="grid gap-1">
           <span class="text-xs text-muted-foreground">Snapshot tracking</span>
-          <select v-model="snapshotMode" class="h-9 rounded-md border border-input bg-transparent px-3 text-sm">
-            <option value="default">default</option>
-            <option value="true">true</option>
-            <option value="false">false</option>
-          </select>
+          <OptionPicker
+            v-model="snapshotMode"
+            :options="snapshotModePickerOptions"
+            title="Snapshot tracking"
+            search-placeholder="Search snapshot modes"
+            :include-empty="false"
+          />
         </label>
       </div>
     </div>

@@ -11,6 +11,7 @@ import {
 
 import Button from '@/components/ui/Button.vue'
 import Input from '@/components/ui/Input.vue'
+import OptionPicker, { type PickerOption } from '@/components/ui/OptionPicker.vue'
 import Tooltip from '@/components/ui/Tooltip.vue'
 import VirtualList from '@/components/ui/VirtualList.vue'
 import CodeMirrorEditor from '@/components/CodeMirrorEditor.vue'
@@ -22,6 +23,7 @@ export default defineComponent({
   components: {
     Button,
     Input,
+    OptionPicker,
     Tooltip,
     VirtualList,
     CodeMirrorEditor,
@@ -59,7 +61,18 @@ export default defineComponent({
       '.yaml',
       '.yml',
     ]
-    return Object.assign(ctx, { formatterCommandSuggestions, lspCommandSuggestions, extensionSuggestions })
+
+    const lspModePickerOptions: PickerOption[] = [
+      { value: 'config', label: 'config' },
+      { value: 'disabled', label: 'disabled' },
+    ]
+
+    return Object.assign(ctx, {
+      formatterCommandSuggestions,
+      lspCommandSuggestions,
+      extensionSuggestions,
+      lspModePickerOptions,
+    })
   },
 })
 </script>
@@ -268,14 +281,14 @@ export default defineComponent({
           </div>
           <label class="grid gap-1">
             <span class="text-xs text-muted-foreground">Mode</span>
-            <select
-              :value="lspMode(lsp)"
-              @change="(e) => setLspMode(lspId, (e.target as HTMLSelectElement).value)"
-              class="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-            >
-              <option value="config">config</option>
-              <option value="disabled">disabled</option>
-            </select>
+            <OptionPicker
+              :model-value="lspMode(lsp)"
+              @update:model-value="(v) => setLspMode(lspId, String(v || ''))"
+              :options="lspModePickerOptions"
+              title="Mode"
+              search-placeholder="Search modes"
+              :include-empty="false"
+            />
           </label>
           <div v-if="lspMode(lsp) === 'config'" class="grid gap-3">
             <label class="grid gap-1">

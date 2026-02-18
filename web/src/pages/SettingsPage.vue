@@ -10,6 +10,7 @@ import { useToastsStore } from '@/stores/toasts'
 import { useUiStore } from '@/stores/ui'
 
 import Button from '@/components/ui/Button.vue'
+import OptionPicker from '@/components/ui/OptionPicker.vue'
 import SidebarTextButton from '@/components/ui/SidebarTextButton.vue'
 import ScrollArea from '@/components/ui/ScrollArea.vue'
 import OpenCodeConfigPanel from '@/components/settings/OpenCodeConfigPanel.vue'
@@ -284,6 +285,24 @@ const fontSize = makeSetting('fontSize', 90)
 const padding = makeSetting('padding', 100)
 const cornerRadius = makeSetting('cornerRadius', 10)
 const inputBarOffset = makeSetting('inputBarOffset', 0)
+
+const themeVariantPickerOptions = [
+  { value: 'light', label: 'light' },
+  { value: 'dark', label: 'dark' },
+]
+
+const uiFontPickerOptions = [
+  { value: 'system', label: 'system' },
+  { value: 'ibm-plex-sans', label: 'IBM Plex Sans' },
+  { value: 'atkinson', label: 'Atkinson Hyperlegible' },
+  { value: 'serif', label: 'serif' },
+]
+
+const monoFontPickerOptions = [
+  { value: 'system', label: 'system' },
+  { value: 'ibm-plex-mono', label: 'IBM Plex Mono' },
+  { value: 'jetbrains-mono', label: 'JetBrains Mono' },
+]
 
 const showChatTimestamps = makeSetting('showChatTimestamps', true)
 const showReasoningTraces = makeSetting('showReasoningTraces', false)
@@ -574,14 +593,16 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
                     <input type="checkbox" v-model="useSystemTheme" />
                     Use system theme
                   </label>
-                  <select
-                    v-model="themeVariant"
-                    class="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-                    :disabled="useSystemTheme"
-                  >
-                    <option value="light">light</option>
-                    <option value="dark">dark</option>
-                  </select>
+                  <div class="w-28 min-w-[7rem]">
+                    <OptionPicker
+                      v-model="themeVariant"
+                      :options="themeVariantPickerOptions"
+                      title="Theme"
+                      search-placeholder="Search themes"
+                      :include-empty="false"
+                      :disabled="useSystemTheme"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -590,20 +611,23 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
                   <div class="grid gap-1">
                     <div class="text-xs text-muted-foreground">UI font</div>
-                    <select v-model="uiFont" class="h-9 rounded-md border border-input bg-transparent px-3 text-sm">
-                      <option value="system">system</option>
-                      <option value="ibm-plex-sans">IBM Plex Sans</option>
-                      <option value="atkinson">Atkinson Hyperlegible</option>
-                      <option value="serif">serif</option>
-                    </select>
+                    <OptionPicker
+                      v-model="uiFont"
+                      :options="uiFontPickerOptions"
+                      title="UI font"
+                      search-placeholder="Search fonts"
+                      :include-empty="false"
+                    />
                   </div>
                   <div class="grid gap-1">
                     <div class="text-xs text-muted-foreground">Mono font</div>
-                    <select v-model="monoFont" class="h-9 rounded-md border border-input bg-transparent px-3 text-sm">
-                      <option value="system">system</option>
-                      <option value="ibm-plex-mono">IBM Plex Mono</option>
-                      <option value="jetbrains-mono">JetBrains Mono</option>
-                    </select>
+                    <OptionPicker
+                      v-model="monoFont"
+                      :options="monoFontPickerOptions"
+                      title="Mono font"
+                      search-placeholder="Search fonts"
+                      :include-empty="false"
+                    />
                   </div>
                 </div>
               </div>

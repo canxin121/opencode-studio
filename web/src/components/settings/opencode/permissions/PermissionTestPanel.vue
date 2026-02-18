@@ -1,16 +1,25 @@
 <script lang="ts">
-import { defineComponent } from 'vue'
+import { computed, defineComponent } from 'vue'
 
 import Input from '@/components/ui/Input.vue'
+import OptionPicker, { type PickerOption } from '@/components/ui/OptionPicker.vue'
 
 import { useOpencodeConfigPanelContext } from '../opencodeConfigContext'
 
 export default defineComponent({
   components: {
     Input,
+    OptionPicker,
   },
   setup() {
-    return useOpencodeConfigPanelContext()
+    const ctx = useOpencodeConfigPanelContext()
+
+    const permissionTestToolPickerOptions = computed<PickerOption[]>(() => {
+      const list = Array.isArray(ctx.permissionTestToolOptions) ? ctx.permissionTestToolOptions : []
+      return list.map((id: string) => ({ value: id, label: id }))
+    })
+
+    return Object.assign(ctx, { permissionTestToolPickerOptions })
   },
 })
 </script>
@@ -21,9 +30,14 @@ export default defineComponent({
     <div class="grid gap-3 lg:grid-cols-3">
       <label class="grid gap-1">
         <span class="text-xs text-muted-foreground">Tool</span>
-        <select v-model="permissionTestTool" class="h-9 rounded-md border border-input bg-transparent px-3 text-sm">
-          <option v-for="id in permissionTestToolOptions" :key="`pt:${id}`" :value="id">{{ id }}</option>
-        </select>
+        <OptionPicker
+          v-model="permissionTestTool"
+          :options="permissionTestToolPickerOptions"
+          title="Tool"
+          search-placeholder="Search tools"
+          :include-empty="false"
+          monospace
+        />
       </label>
       <label class="grid gap-1 lg:col-span-2">
         <span class="text-xs text-muted-foreground">Input (path/command)</span>

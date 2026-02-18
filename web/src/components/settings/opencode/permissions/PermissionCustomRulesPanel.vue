@@ -1,5 +1,5 @@
 <script lang="ts">
-import { defineComponent } from 'vue'
+import { computed, defineComponent } from 'vue'
 import {
   RiAddLine,
   RiArrowDownLine,
@@ -12,6 +12,7 @@ import {
 
 import Button from '@/components/ui/Button.vue'
 import Input from '@/components/ui/Input.vue'
+import OptionPicker, { type PickerOption } from '@/components/ui/OptionPicker.vue'
 import Tooltip from '@/components/ui/Tooltip.vue'
 
 import { useOpencodeConfigPanelContext } from '../opencodeConfigContext'
@@ -20,6 +21,7 @@ export default defineComponent({
   components: {
     Button,
     Input,
+    OptionPicker,
     Tooltip,
     RiAddLine,
     RiArrowDownLine,
@@ -30,7 +32,40 @@ export default defineComponent({
     RiRestartLine,
   },
   setup() {
-    return useOpencodeConfigPanelContext()
+    const ctx = useOpencodeConfigPanelContext()
+
+    const toolIdPickerOptions = computed<PickerOption[]>(() => {
+      const list = Array.isArray(ctx.toolIdOptions) ? ctx.toolIdOptions : []
+      return (list as string[]).map((id) => ({ value: id, label: id }))
+    })
+
+    const permissionRulePickerOptions: PickerOption[] = [
+      { value: 'default', label: 'default' },
+      { value: 'allow', label: 'allow' },
+      { value: 'ask', label: 'ask' },
+      { value: 'deny', label: 'deny' },
+      { value: 'pattern', label: 'pattern map' },
+    ]
+
+    const permissionActionPickerOptions: PickerOption[] = [
+      { value: 'allow', label: 'allow' },
+      { value: 'ask', label: 'ask' },
+      { value: 'deny', label: 'deny' },
+    ]
+
+    const newPermissionActionPickerOptions: PickerOption[] = [
+      { value: 'default', label: 'default' },
+      { value: 'allow', label: 'allow' },
+      { value: 'ask', label: 'ask' },
+      { value: 'deny', label: 'deny' },
+    ]
+
+    return Object.assign(ctx, {
+      toolIdPickerOptions,
+      permissionRulePickerOptions,
+      permissionActionPickerOptions,
+      newPermissionActionPickerOptions,
+    })
   },
 })
 </script>
@@ -39,19 +74,25 @@ export default defineComponent({
   <div class="grid gap-2">
     <span class="text-xs text-muted-foreground">Custom tool rules</span>
     <div class="flex flex-wrap items-center gap-2">
-      <select
-        v-model="newPermissionTool"
-        class="h-9 min-w-[220px] rounded-md border border-input bg-transparent px-3 text-sm"
-      >
-        <option value="">Select tool id…</option>
-        <option v-for="id in toolIdOptions" :key="`perm-add:${id}`" :value="id">{{ id }}</option>
-      </select>
-      <select v-model="newPermissionAction" class="h-9 rounded-md border border-input bg-transparent px-3 text-sm">
-        <option value="default">default</option>
-        <option value="allow">allow</option>
-        <option value="ask">ask</option>
-        <option value="deny">deny</option>
-      </select>
+      <div class="min-w-[220px] flex-1 max-w-[520px]">
+        <OptionPicker
+          v-model="newPermissionTool"
+          :options="toolIdPickerOptions"
+          title="Tool id"
+          search-placeholder="Search tools"
+          empty-label="Select tool id…"
+          monospace
+        />
+      </div>
+      <div class="w-[180px]">
+        <OptionPicker
+          v-model="newPermissionAction"
+          :options="newPermissionActionPickerOptions"
+          title="Action"
+          search-placeholder="Search actions"
+          :include-empty="false"
+        />
+      </div>
       <Tooltip>
         <Button
           size="icon"
@@ -83,17 +124,16 @@ export default defineComponent({
       >
         <div class="flex flex-wrap items-center gap-2">
           <span class="font-mono text-xs break-all">{{ key }}</span>
-          <select
-            :value="permissionRuleValue(key)"
-            @change="(e) => onPermissionSelectChange(key, (e.target as HTMLSelectElement).value)"
-            class="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-          >
-            <option value="default">default</option>
-            <option value="allow">allow</option>
-            <option value="ask">ask</option>
-            <option value="deny">deny</option>
-            <option value="pattern">pattern map</option>
-          </select>
+          <div class="w-[200px]">
+            <OptionPicker
+              :model-value="permissionRuleValue(key)"
+              @update:model-value="(v) => onPermissionSelectChange(key, String(v || ''))"
+              :options="permissionRulePickerOptions"
+              title="Permission"
+              search-placeholder="Search rules"
+              :include-empty="false"
+            />
+          </div>
           <Button
             size="sm"
             variant="ghost"
@@ -178,11 +218,13 @@ export default defineComponent({
                 class="font-mono"
                 @keydown="onPermissionPatternKeydown(key, idx, row, $event as KeyboardEvent)"
               />
-              <select v-model="row.action" class="h-9 rounded-md border border-input bg-transparent px-3 text-sm">
-                <option value="allow">allow</option>
-                <option value="ask">ask</option>
-                <option value="deny">deny</option>
-              </select>
+              <OptionPicker
+                v-model="row.action"
+                :options="permissionActionPickerOptions"
+                title="Action"
+                search-placeholder="Search actions"
+                :include-empty="false"
+              />
               <div class="flex items-center gap-1">
                 <Button
                   size="icon"
