@@ -3,10 +3,19 @@ name: CI
 on:
   push:
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -18,7 +27,15 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v1
         with:
-          bun-version: latest
+          bun-version: 1.3.9
+
+      - name: Cache Bun downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('web/bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
 
       - name: Install web deps
         run: bun install --cwd web --frozen-lockfile
@@ -32,5 +49,8 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Cache Rust builds
+        uses: Swatinem/rust-cache@v2
+
       - name: Rust tests
-        run: cargo test -q --manifest-path server/Cargo.toml
+        run: cargo test -q --locked --manifest-path server/Cargo.toml
