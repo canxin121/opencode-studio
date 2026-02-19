@@ -16,7 +16,12 @@ import { router } from './router'
 import { readSessionIdFromQuery } from './app/navigation/sessionQuery'
 import { useToastsStore } from './stores/toasts'
 import { useAuthStore } from './stores/auth'
-import { OC_AUTH_REQUIRED_EVENT, type AuthRequiredDetail } from './lib/authEvents.ts'
+import {
+  OC_AUTH_REQUIRED_EVENT,
+  readAuthRequiredFromStorage,
+  clearAuthRequiredFromStorage,
+  type AuthRequiredDetail,
+} from './lib/authEvents.ts'
 
 // Capture initial page-load context so components that mount lazily (e.g. mobile sidebar)
 // can still tell whether a session query came from a fresh load vs in-app navigation.
@@ -40,9 +45,6 @@ const app = createApp(App)
 const pinia = createPinia()
 app.use(pinia)
 app.use(router)
-app.mount('#app')
-
-// PWA: keep SW updated in the background.
 const toasts = useToastsStore(pinia)
 const auth = useAuthStore(pinia)
 
@@ -61,27 +63,49 @@ function ensureAuthRefreshSoon() {
     })
 }
 
+function handleAuthRequired(detail?: AuthRequiredDetail) {
+  const msg = String(detail?.message || 'UI authentication required').trim() || 'UI authentication required'
+
+  const now = Date.now()
+  if (msg !== lastAuthToastMsg || now - lastAuthToastAt > 4000) {
+    lastAuthToastMsg = msg
+    lastAuthToastAt = now
+    toasts.push('error', msg, 4500)
+  }
+
+  // Switch to the login screen immediately, then reconcile state from /auth/session.
+  try {
+    auth.requireLogin()
+  } catch {
+    // ignore
+  }
+  ensureAuthRefreshSoon()
+}
+
 if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
   window.addEventListener(OC_AUTH_REQUIRED_EVENT, (evt) => {
-    const detail = (evt as CustomEvent<AuthRequiredDetail>).detail
-    const msg = String(detail?.message || 'UI authentication required').trim() || 'UI authentication required'
-
-    const now = Date.now()
-    if (msg !== lastAuthToastMsg || now - lastAuthToastAt > 4000) {
-      lastAuthToastMsg = msg
-      lastAuthToastAt = now
-      toasts.push('error', msg, 4500)
-    }
-
-    // Switch to the login screen immediately, then reconcile state from /auth/session.
-    try {
-      auth.requireLogin()
-    } catch {
-      // ignore
-    }
-    ensureAuthRefreshSoon()
+    const detail = (evt as unknown as { detail?: AuthRequiredDetail }).detail
+    handleAuthRequired(detail)
   })
 }
+
+if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+  document.addEventListener(OC_AUTH_REQUIRED_EVENT, (evt) => {
+    const detail = (evt as unknown as { detail?: AuthRequiredDetail }).detail
+    handleAuthRequired(detail)
+  })
+}
+
+// Best-effort replay for early or non-CustomEvent environments.
+const stored = readAuthRequiredFromStorage()
+clearAuthRequiredFromStorage()
+if (stored && stored.at > 0 && Date.now() - stored.at < 30_000) {
+  handleAuthRequired(stored.detail)
+}
+
+app.mount('#app')
+
+// PWA: keep SW updated in the background.
 
 let updateToastShown = false
 const updateSW = registerSW({

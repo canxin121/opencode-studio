@@ -36,6 +36,7 @@ import { useSidebarLocate } from '@/layout/chatSidebar/useSidebarLocate'
 import { normalizeDirectories } from '@/features/sessions/model/projects'
 import { normalizeSidebarUiPrefsForUi } from '@/features/sessions/model/sidebarUiPrefs'
 import { DIRECTORIES_PAGE_SIZE_DEFAULT } from '@/stores/directorySessions/index'
+import { ApiError } from '@/lib/api'
 
 const props = defineProps<{ mobileVariant?: boolean }>()
 
@@ -49,6 +50,32 @@ const toasts = useToastsStore()
 const activity = useSessionActivityStore()
 const directoryStore = useDirectoryStore()
 const directorySessions = useDirectorySessionStore()
+
+const lastSidebarErrorToastByKey = new Map<string, { at: number; message: string }>()
+
+function pushSidebarErrorToast(key: string, message: string, timeoutMs = 4500, dedupeWindowMs = 4500) {
+  const k = (key || '').trim() || '__sidebar__'
+  const msg = String(message || '').trim()
+  if (!msg) return
+
+  const now = Date.now()
+  const prev = lastSidebarErrorToastByKey.get(k)
+  if (prev && prev.message === msg && now - prev.at < Math.max(0, Math.floor(dedupeWindowMs))) return
+  lastSidebarErrorToastByKey.set(k, { at: now, message: msg })
+  toasts.push('error', msg, timeoutMs)
+}
+
+function isUiAuthRequiredError(err: unknown): boolean {
+  if (err instanceof ApiError) {
+    return err.status === 401 && (err.code || '').trim().toLowerCase() === 'auth_required'
+  }
+  const msg = err instanceof Error ? err.message : String(err)
+  return msg.trim().toLowerCase() === 'ui authentication required'
+}
+
+function isUiAuthRequiredMessage(message: string): boolean {
+  return String(message || '').trim().toLowerCase() === 'ui authentication required'
+}
 
 function toIdSet(input: string[]): Set<string> {
   return new Set(input.map((v) => String(v || '').trim()).filter(Boolean))
@@ -500,6 +527,16 @@ async function refreshVisibleDirectories() {
   for (const p of pagedDirectories.value) {
     await ensureDirectoryAggregateLoaded(p.id, p.path, { force: true })
   }
+}
+
+async function handleSidebarRefresh() {
+  await settings.refresh()
+  if (settings.error && !isUiAuthRequiredMessage(settings.error)) {
+    pushSidebarErrorToast('sidebar:settings', settings.error, 4500, 8000)
+  }
+
+  await refreshVisibleDirectories()
+  await chat.refreshSessions()
 }
 
 async function newSessionInline(p: DirectoryEntry) {
@@ -1160,7 +1197,6 @@ async function ensureDirectoryAggregateLoaded(
       : sessionRootPage(pid)
 
   try {
-    chat.sessionsError = null
     await directorySessions.ensureDirectoryAggregateLoaded(pid, root, {
       force: opts?.force,
       focusSessionId: opts?.focusSessionId,
@@ -1170,7 +1206,10 @@ async function ensureDirectoryAggregateLoaded(
       includeWorktrees: true,
     })
   } catch (err) {
-    chat.sessionsError = err instanceof Error ? err.message : String(err)
+    // Don't render errors inside the sidebar; use toasts instead.
+    if (isUiAuthRequiredError(err)) return
+    const msg = err instanceof Error ? err.message : String(err)
+    pushSidebarErrorToast('sidebar:sessions', msg || 'Failed to load sessions', 4500, 8000)
   }
 }
 
@@ -1573,8 +1612,6 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
         :directoryPaging="directoryPaging || directoryPageLoading"
         :sessionsLoading="sessionsLoading"
         :query="sidebarQuery"
-        :settingsError="settings.error"
-        :sessionsError="chat.sessionsError"
         @update:query="(v) => (sidebarQuery = v)"
         @update:directoryPage="
           (v) => {
@@ -1583,13 +1620,7 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
           }
         "
         @add-directory="() => (isAddDirectoryOpen = true)"
-        @refresh="
-          () => {
-            settings.refresh()
-            refreshVisibleDirectories()
-            chat.refreshSessions()
-          }
-        "
+        @refresh="handleSidebarRefresh"
       />
 
       <DirectoriesList

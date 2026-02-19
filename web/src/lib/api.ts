@@ -82,8 +82,12 @@ export async function apiJson<T>(url: string, init?: RequestInit): Promise<T> {
       }
     }
 
-    if (err.status === 401 && (err.code || '').trim() === 'auth_required') {
-      emitAuthRequired({ message: err.message, status: err.status, code: err.code, url })
+    const code = (err.code || '').trim()
+    const isUiAuthRequired =
+      err.status === 401 &&
+      (code === 'auth_required' || String(err.message || '').trim().toLowerCase() === 'ui authentication required')
+    if (isUiAuthRequired) {
+      emitAuthRequired({ message: err.message, status: err.status, code: code || 'auth_required', url })
     }
     throw err
   }
@@ -135,8 +139,12 @@ export async function apiText(url: string, init?: RequestInit): Promise<string> 
       }
     }
 
-    if (err.status === 401 && (err.code || '').trim() === 'auth_required') {
-      emitAuthRequired({ message: err.message, status: err.status, code: err.code, url })
+    const code = (err.code || '').trim()
+    const isUiAuthRequired =
+      err.status === 401 &&
+      (code === 'auth_required' || String(err.message || '').trim().toLowerCase() === 'ui authentication required')
+    if (isUiAuthRequired) {
+      emitAuthRequired({ message: err.message, status: err.status, code: code || 'auth_required', url })
     }
 
     throw err

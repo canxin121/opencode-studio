@@ -11,8 +11,6 @@ const props = defineProps<{
   directoryPaging?: boolean
   sessionsLoading: boolean
   query: string
-  settingsError?: string | null
-  sessionsError?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -78,11 +76,4 @@ const emit = defineEmits<{
     </div>
   </div>
 
-  <div v-if="settingsError" class="px-3 py-2 text-xs text-destructive">
-    {{ settingsError }}
-  </div>
-
-  <div v-if="sessionsError" class="px-3 py-2 text-xs text-destructive">
-    {{ sessionsError }}
-  </div>
 </template>

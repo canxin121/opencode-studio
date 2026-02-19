@@ -609,8 +609,17 @@ export const useChatStore = defineStore('chat', () => {
       })
       sessions.value = list
     } catch (err) {
-      sessionsError.value = err instanceof Error ? err.message : String(err)
-      sessions.value = []
+      const msg = err instanceof Error ? err.message : String(err)
+      const authRequired =
+        err instanceof ApiError && err.status === 401 && (err.code || '').trim().toLowerCase() === 'auth_required'
+
+      // Don't surface transport/auth errors inside the sidebar; use toasts instead.
+      sessionsError.value = null
+      if (!authRequired) {
+        pushErrorToastWithDedupe('sessions', msg || 'Failed to load sessions', 4500, 12_000)
+      }
+
+      // Keep existing cache so sidebar doesn't flicker empty on transient failures.
     } finally {
       sessionsLoading.value = false
     }
