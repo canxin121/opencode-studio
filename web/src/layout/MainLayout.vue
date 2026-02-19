@@ -55,7 +55,7 @@ const mobileBottomNavInset =
         <div class="relative flex-1 h-full overflow-hidden">
           <div
             v-if="ui.isMobile && usesChatShellSidebar"
-            class="absolute inset-x-0 top-0 z-20 bg-sidebar"
+            class="absolute inset-x-0 top-0 z-40 bg-sidebar"
             :class="ui.isSessionSwitcherOpen ? '' : 'pointer-events-none opacity-0'"
             :style="{ bottom: mobileBottomNavInset }"
             :aria-hidden="!ui.isSessionSwitcherOpen"

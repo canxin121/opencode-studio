@@ -195,15 +195,6 @@ async function setTheme(mode: 'light' | 'dark' | 'system') {
         </section>
       </div>
 
-      <div class="mt-4 p-3 rounded-xl bg-muted/30 border border-border/40">
-        <div class="flex items-start gap-2">
-          <RiQuestionLine class="h-4 w-4 text-muted-foreground mt-0.5" />
-          <div class="text-sm text-muted-foreground">
-            <div class="font-medium text-foreground mb-1">Pro Tips</div>
-            <div>Press {{ mod }}+. anytime to open this shortcuts sheet.</div>
-          </div>
-        </div>
-      </div>
     </div>
   </Dialog>
 </template>

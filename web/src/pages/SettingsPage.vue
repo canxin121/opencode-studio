@@ -539,7 +539,10 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
       </aside>
 
       <!-- Content -->
-      <main class="flex-1 overflow-y-auto bg-background" v-show="!ui.isMobile || !ui.isSessionSwitcherOpen">
+      <main
+        class="flex-1 min-w-0 overflow-y-auto bg-background"
+        v-show="!ui.isMobile || !ui.isSessionSwitcherOpen"
+      >
         <div :class="['mx-auto w-full p-4 lg:p-8 space-y-8', activeTab === 'opencode' ? 'max-w-6xl' : 'max-w-3xl']">
           <div
             v-if="dirtyHint"

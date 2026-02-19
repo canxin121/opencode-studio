@@ -807,8 +807,8 @@ function clearArrayRows(path: string[], prop: SchemaProperty) {
 </script>
 
 <template>
-  <section class="rounded-lg border border-border bg-muted/10 p-4 space-y-4">
-    <div class="flex items-center gap-2">
+  <section class="rounded-lg border border-border bg-muted/10 p-4 space-y-4 min-w-0">
+    <div class="flex flex-wrap items-center gap-2 min-w-0">
       <div class="text-sm font-medium">Plugin settings</div>
       <div class="ml-auto text-xs text-muted-foreground">Config is persisted by each plugin</div>
     </div>
@@ -830,8 +830,8 @@ function clearArrayRows(path: string[], prop: SchemaProperty) {
           />
         </div>
 
-        <div v-else class="h-9 inline-flex items-center rounded-md border border-input bg-transparent px-3 text-sm">
-          {{ selectedPluginLabel }}
+        <div v-else class="h-9 inline-flex items-center rounded-md border border-input bg-transparent px-3 text-sm max-w-full min-w-0">
+          <span class="truncate">{{ selectedPluginLabel }}</span>
         </div>
 
         <Button variant="outline" size="sm" :disabled="loading || saving" @click="loadPluginConfig">Reload</Button>
@@ -840,7 +840,10 @@ function clearArrayRows(path: string[], prop: SchemaProperty) {
         </Button>
       </div>
 
-        <div v-if="error" class="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <div
+          v-if="error"
+          class="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive break-words"
+        >
           {{ error }}
         </div>
 
@@ -854,19 +857,21 @@ function clearArrayRows(path: string[], prop: SchemaProperty) {
           <div
             v-for="entry in schemaEntries"
             :key="entry.path.join('.')"
-            class="grid gap-1"
+            class="grid gap-1 min-w-0"
             :style="{ paddingLeft: `${Math.max(0, (entry.depth - 1) * 12)}px` }"
           >
             <template v-if="entry.kind === 'group'">
-              <div class="pt-2 text-xs font-semibold text-muted-foreground">{{ getLabel(entry.key, entry.prop) }}</div>
-              <div v-if="getDescription(entry.prop)" class="text-xs text-muted-foreground">
+              <div class="pt-2 text-xs font-semibold text-muted-foreground break-words">
+                {{ getLabel(entry.key, entry.prop) }}
+              </div>
+              <div v-if="getDescription(entry.prop)" class="text-xs text-muted-foreground break-words">
                 {{ getDescription(entry.prop) }}
               </div>
             </template>
 
           <template v-else>
-            <label class="text-sm font-medium leading-none">{{ getLabel(entry.key, entry.prop) }}</label>
-            <div v-if="getDescription(entry.prop)" class="text-xs text-muted-foreground">{{ getDescription(entry.prop) }}</div>
+            <label class="text-sm font-medium leading-none break-words">{{ getLabel(entry.key, entry.prop) }}</label>
+            <div v-if="getDescription(entry.prop)" class="text-xs text-muted-foreground break-words">{{ getDescription(entry.prop) }}</div>
 
             <OptionPicker
               v-if="Array.isArray(entry.prop.enum) && entry.prop.enum.length > 0"
@@ -882,7 +887,7 @@ function clearArrayRows(path: string[], prop: SchemaProperty) {
               v-else-if="entry.prop.type === 'string'"
               type="text"
               :value="stringValue(entry.path, entry.prop)"
-              class="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+              class="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
               @input="onStringInput(entry.path, $event)"
             />
 
@@ -892,7 +897,7 @@ function clearArrayRows(path: string[], prop: SchemaProperty) {
               :step="entry.prop.type === 'integer' ? '1' : 'any'"
               :min="typeof entry.prop.minimum === 'number' ? entry.prop.minimum : undefined"
               :value="numberValue(entry.path, entry.prop)"
-              class="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+              class="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
               @input="onNumberInput(entry.path, entry.prop, $event)"
             />
 
@@ -910,9 +915,9 @@ function clearArrayRows(path: string[], prop: SchemaProperty) {
                 <div
                   v-for="(row, rowIdx) in ensureArrayRows(entry.path, entry.prop)"
                   :key="`arr:${entry.path.join('.')}:${rowIdx}`"
-                  class="flex items-center gap-2"
+                  class="flex flex-col gap-2 sm:flex-row sm:items-center min-w-0"
                 >
-                  <div v-if="arrayItemEnum(entry.prop).length > 0" class="flex-1 min-w-0">
+                  <div v-if="arrayItemEnum(entry.prop).length > 0" class="w-full sm:flex-1 sm:min-w-0">
                     <OptionPicker
                       :model-value="row"
                       @update:model-value="(v) => onArrayRowSelect(entry.path, entry.prop, rowIdx, String(v || ''))"
@@ -923,7 +928,7 @@ function clearArrayRows(path: string[], prop: SchemaProperty) {
                     />
                   </div>
 
-                  <div v-else-if="arrayItemProp(entry.prop).type === 'boolean'" class="flex-1 min-w-0">
+                  <div v-else-if="arrayItemProp(entry.prop).type === 'boolean'" class="w-full sm:flex-1 sm:min-w-0">
                     <OptionPicker
                       :model-value="row"
                       @update:model-value="(v) => onArrayRowSelect(entry.path, entry.prop, rowIdx, String(v || ''))"
@@ -943,11 +948,16 @@ function clearArrayRows(path: string[], prop: SchemaProperty) {
                     :inputmode="arrayItemType(entry.prop) === 'integer' ? 'numeric' : arrayItemType(entry.prop) === 'number' ? 'decimal' : 'text'"
                     :placeholder="arrayItemType(entry.prop) === 'integer' ? 'Integer' : arrayItemType(entry.prop) === 'number' ? 'Number' : 'Value'"
                     :value="row"
-                    class="h-9 flex-1 rounded-md border border-input bg-transparent px-3 text-sm"
+                    class="h-9 w-full sm:flex-1 sm:min-w-0 rounded-md border border-input bg-transparent px-3 text-sm"
                     @input="onArrayRowInput(entry.path, entry.prop, rowIdx, $event)"
                   />
 
-                  <Button variant="outline" size="sm" @click="removeArrayRow(entry.path, entry.prop, rowIdx)">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    class="w-full sm:w-auto"
+                    @click="removeArrayRow(entry.path, entry.prop, rowIdx)"
+                  >
                     Remove
                   </Button>
                 </div>
@@ -973,17 +983,17 @@ function clearArrayRows(path: string[], prop: SchemaProperty) {
                 <div
                   v-for="(row, rowIdx) in ensureMapRows(entry.path, entry.prop)"
                   :key="`map:${entry.path.join('.')}:${rowIdx}`"
-                  class="flex items-center gap-2"
+                  class="flex flex-col gap-2 sm:flex-row sm:items-center min-w-0"
                 >
                   <input
                     type="text"
                     placeholder="Key"
                     :value="row.key"
-                    class="h-9 w-[40%] min-w-[160px] rounded-md border border-input bg-transparent px-3 text-sm"
+                    class="h-9 w-full sm:w-[40%] sm:min-w-[160px] sm:max-w-[320px] rounded-md border border-input bg-transparent px-3 text-sm"
                     @input="onMapKeyInput(entry.path, entry.prop, rowIdx, $event)"
                   />
 
-                  <div v-if="mapValueEnum(entry.prop).length > 0" class="flex-1 min-w-0">
+                  <div v-if="mapValueEnum(entry.prop).length > 0" class="w-full sm:flex-1 sm:min-w-0">
                     <OptionPicker
                       :model-value="row.value"
                       @update:model-value="(v) => onMapValueSelect(entry.path, entry.prop, rowIdx, String(v || ''))"
@@ -994,7 +1004,7 @@ function clearArrayRows(path: string[], prop: SchemaProperty) {
                     />
                   </div>
 
-                  <div v-else-if="mapValueType(entry.prop) === 'boolean'" class="flex-1 min-w-0">
+                  <div v-else-if="mapValueType(entry.prop) === 'boolean'" class="w-full sm:flex-1 sm:min-w-0">
                     <OptionPicker
                       :model-value="row.value"
                       @update:model-value="(v) => onMapValueSelect(entry.path, entry.prop, rowIdx, String(v || ''))"
@@ -1014,11 +1024,16 @@ function clearArrayRows(path: string[], prop: SchemaProperty) {
                     :inputmode="mapValueType(entry.prop) === 'integer' ? 'numeric' : mapValueType(entry.prop) === 'number' ? 'decimal' : 'text'"
                     :placeholder="mapValueType(entry.prop) === 'integer' ? 'Integer' : mapValueType(entry.prop) === 'number' ? 'Number' : 'Value'"
                     :value="row.value"
-                    class="h-9 flex-1 rounded-md border border-input bg-transparent px-3 text-sm"
+                    class="h-9 w-full sm:flex-1 sm:min-w-0 rounded-md border border-input bg-transparent px-3 text-sm"
                     @input="onMapValueInput(entry.path, entry.prop, rowIdx, $event)"
                   />
 
-                  <Button variant="outline" size="sm" @click="removeMapRow(entry.path, entry.prop, rowIdx)">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    class="w-full sm:w-auto"
+                    @click="removeMapRow(entry.path, entry.prop, rowIdx)"
+                  >
                     Remove
                   </Button>
                 </div>
@@ -1042,7 +1057,7 @@ function clearArrayRows(path: string[], prop: SchemaProperty) {
             <textarea
               v-else
               :value="jsonTextValue(entry.path, entry.prop)"
-              class="min-h-[120px] rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs"
+              class="min-h-[120px] w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs"
               spellcheck="false"
               @input="onJsonTextInput(entry.path, $event)"
               @blur="commitJsonText(entry.path, entry.prop)"

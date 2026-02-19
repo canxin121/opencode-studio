@@ -110,6 +110,19 @@ export function useChatComposerLayout(opts: {
     }
   }
 
+  function syncFullscreenHeight() {
+    if (!editorFullscreen.value || editorClosing.value) return
+
+    const el = pageRef.value
+    const h = el ? Math.round(el.getBoundingClientRect().height) : 0
+    if (Number.isFinite(h) && h > 0) {
+      composerTargetHeight.value = h
+      return
+    }
+
+    composerTargetHeight.value = window.innerHeight
+  }
+
   function openEditorFullscreen() {
     commandOpen.value = false
     composerPickerOpen.value = null
@@ -117,18 +130,15 @@ export function useChatComposerLayout(opts: {
     editorClosing.value = false
     editorFullscreen.value = true
 
-    // Calculate max height (approximate or exact)
-    // VerticalSplitPane handles max constraint, so we can just set a very large number
-    // to ensure it fills the space, OR preferably, set it to the container height.
-    if (pageRef.value) {
-      composerTargetHeight.value = pageRef.value.clientHeight
-    } else {
-      composerTargetHeight.value = window.innerHeight
-    }
+    syncFullscreenHeight()
 
     void nextTick(() => {
       scrollToBottom('auto')
-      getComposerTextareaEl(composerRef.value)?.focus()
+
+      // Mobile UX: don't auto-open the IME just because the user toggled fullscreen.
+      if (!ui.isMobilePointer) {
+        getComposerTextareaEl(composerRef.value)?.focus()
+      }
     })
   }
 
@@ -142,7 +152,11 @@ export function useChatComposerLayout(opts: {
     setTimeout(() => {
       editorFullscreen.value = false
       editorClosing.value = false
-      getComposerTextareaEl(composerRef.value)?.focus()
+
+      // Keep desktop behavior (restore focus), but avoid reopening the keyboard on mobile.
+      if (!ui.isMobilePointer) {
+        getComposerTextareaEl(composerRef.value)?.focus()
+      }
     }, 240) // Match transition duration
   }
 
@@ -157,6 +171,9 @@ export function useChatComposerLayout(opts: {
 
   // Keep track of actual shell height for UI adjustments (like scroll nav position)
   let composerShellObserver: ResizeObserver | null = null
+  let pageObserver: ResizeObserver | null = null
+
+  const viewport = typeof window !== 'undefined' ? window.visualViewport : null
 
   onMounted(() => {
     if (typeof ResizeObserver !== 'undefined') {
@@ -170,15 +187,24 @@ export function useChatComposerLayout(opts: {
         composerShellObserver.observe(el)
         composerShellHeight.value = Math.round(el.getBoundingClientRect().height)
       }
+
+      // Track chat page size changes that don't emit window.resize (iOS keyboard, dvh changes,
+      // bottom-nav padding tweaks).
+      pageObserver = new ResizeObserver(() => {
+        syncFullscreenHeight()
+      })
+      if (pageRef.value) {
+        pageObserver.observe(pageRef.value)
+      }
     }
 
     window.addEventListener('resize', handleWindowResize)
+    viewport?.addEventListener('resize', handleWindowResize)
+    viewport?.addEventListener('scroll', handleWindowResize)
   })
 
   function handleWindowResize() {
-    if (editorFullscreen.value && pageRef.value) {
-      composerTargetHeight.value = pageRef.value.clientHeight
-    }
+    syncFullscreenHeight()
   }
 
   onBeforeUnmount(() => {
@@ -186,7 +212,13 @@ export function useChatComposerLayout(opts: {
       composerShellObserver.disconnect()
       composerShellObserver = null
     }
+    if (pageObserver) {
+      pageObserver.disconnect()
+      pageObserver = null
+    }
     window.removeEventListener('resize', handleWindowResize)
+    viewport?.removeEventListener('resize', handleWindowResize)
+    viewport?.removeEventListener('scroll', handleWindowResize)
   })
 
   // Stub for compatibility if ChatPage calls it directly (though we'll remove usage)
@@ -196,7 +228,7 @@ export function useChatComposerLayout(opts: {
 
   // Stub for compatibility
   function syncExpandedComposerHeight() {
-    if (editorFullscreen.value) handleWindowResize()
+    syncFullscreenHeight()
   }
 
   return {

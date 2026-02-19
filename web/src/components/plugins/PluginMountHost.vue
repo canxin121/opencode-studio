@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 
+import Skeleton from '@/components/ui/Skeleton.vue'
 import { invokeHostPluginAction, subscribeHostPluginEvents } from '@/plugins/host/sdk'
 import { pluginAssetEntryUrl, type ChatMount } from '@/plugins/host/mounts'
 import type { JsonValue as JsonLike } from '@/types/json'
@@ -252,7 +253,7 @@ function onIframeError() {
 </script>
 
 <template>
-  <div class="relative w-full" :style="containerStyle">
+  <div class="relative w-full" :style="containerStyle" :aria-busy="!loaded">
     <template v-if="mountMode === 'iframe'">
       <iframe
         class="w-full bg-background"
@@ -276,14 +277,42 @@ function onIframeError() {
 
     <div
       v-if="!loaded"
-      class="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground bg-background/85"
+      class="absolute inset-0 bg-background/85 backdrop-blur-sm"
+      role="status"
+      aria-label="Loading plugin UI"
     >
-      Loading plugin UI...
+      <div class="h-full w-full flex items-center justify-center p-3">
+        <div class="w-full max-w-md">
+          <div class="rounded-xl border border-border/60 bg-muted/10 p-3">
+            <div class="flex items-center gap-3">
+              <Skeleton class="h-3 w-28" />
+              <Skeleton class="h-3 w-16" />
+              <div class="ml-auto flex items-center gap-2">
+                <Skeleton class="h-7 w-7 rounded-md" />
+                <Skeleton class="h-7 w-7 rounded-md" />
+              </div>
+            </div>
+
+            <div class="mt-3 grid gap-3">
+              <Skeleton class="h-16 w-full rounded-lg" />
+              <div class="grid grid-cols-2 gap-3">
+                <Skeleton class="h-9 w-full" />
+                <Skeleton class="h-9 w-full" />
+              </div>
+              <div class="space-y-2">
+                <Skeleton class="h-2.5 w-[86%]" />
+                <Skeleton class="h-2.5 w-[62%]" />
+                <Skeleton class="h-2.5 w-[78%]" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div
       v-else-if="loadError"
-      class="absolute inset-0 flex items-center justify-center px-3 text-xs text-destructive bg-background/85"
+      class="absolute inset-0 flex items-center justify-center px-3 text-xs text-destructive bg-background/85 break-words text-center"
     >
       {{ loadError }}
     </div>

@@ -12,6 +12,7 @@ export function installKeyboardInsets(options: Options) {
 
   let keyboardInset = 0
   let keyboardAvoidTarget: HTMLElement | null = null
+  let keyboardAvoidOffset = 0
 
   // When the page uses modern "dynamic viewport" units (dvh) or browsers that resize the
   // layout viewport on keyboard open (Android Chrome), `documentElement.clientHeight` can
@@ -34,6 +35,7 @@ export function installKeyboardInsets(options: Options) {
 
   const clearKeyboardAvoid = () => {
     if (!keyboardAvoidTarget) return
+    keyboardAvoidOffset = 0
     keyboardAvoidTarget.style.setProperty('--oc-keyboard-avoid-offset', '0px')
     keyboardAvoidTarget.removeAttribute('data-keyboard-avoid-active')
     keyboardAvoidTarget = null
@@ -95,10 +97,19 @@ export function installKeyboardInsets(options: Options) {
     }
 
     const viewportBottom = offsetTop + height
-    const rect = active.getBoundingClientRect()
-    const overlap = rect.bottom - viewportBottom
+
+    // For chat-like UIs we want the whole composer bar to stay visible (model/agent/send
+    // controls included), not only the focused textarea.
+    //
+    // Note: the avoid target is shifted via `top: -offset`. Use the last applied offset to
+    // compute overlap against the target's *natural* (unshifted) position to avoid oscillation.
+    const rect = keyboardAvoidTarget.getBoundingClientRect()
+    const naturalBottom = rect.bottom + keyboardAvoidOffset
+    const overlap = naturalBottom - viewportBottom
     const clearance = 8
     const avoidOffset = overlap > clearance && keyboardInset > 0 ? Math.min(overlap, keyboardInset) : 0
+
+    keyboardAvoidOffset = avoidOffset
     keyboardAvoidTarget.style.setProperty('--oc-keyboard-avoid-offset', `${avoidOffset}px`)
     keyboardAvoidTarget.setAttribute('data-keyboard-avoid-active', 'true')
   }

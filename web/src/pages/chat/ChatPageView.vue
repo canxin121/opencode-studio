@@ -346,7 +346,7 @@ void sessionActionsMenuRef
         </div>
 
         <div
-          v-if="chat.selectedSessionId && !ui.isSessionSwitcherOpen"
+          v-if="chat.selectedSessionId && !ui.isSessionSwitcherOpen && !composerFullscreenActive"
           class="pointer-events-none absolute inset-x-0 bottom-2 z-30"
         >
           <div class="chat-column">
