@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import ToastHost from '@/components/ToastHost.vue'
 import HelpDialog from '@/components/HelpDialog.vue'
 import McpDialog from '@/components/McpDialog.vue'
 import AppHeader from '@/layout/AppHeader.vue'
@@ -31,7 +30,6 @@ const mobileBottomNavInset =
 
 <template>
   <div class="main-content-safe-area relative h-[100dvh] bg-background text-foreground overflow-hidden flex flex-col">
-    <ToastHost />
     <HelpDialog />
     <McpDialog />
 

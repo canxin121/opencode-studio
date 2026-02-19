@@ -1,5 +1,7 @@
 import type { JsonValue as JsonLike } from '@/types/json'
 
+import { emitAuthRequired } from './authEvents.ts'
+
 export class ApiError extends Error {
   status: number
   bodyText?: string
@@ -79,6 +81,10 @@ export async function apiJson<T>(url: string, init?: RequestInit): Promise<T> {
         if (typeof bodyRecord.hint === 'string') err.hint = bodyRecord.hint
       }
     }
+
+    if (err.status === 401 && (err.code || '').trim() === 'auth_required') {
+      emitAuthRequired({ message: err.message, status: err.status, code: err.code, url })
+    }
     throw err
   }
 
@@ -89,7 +95,51 @@ export async function apiText(url: string, init?: RequestInit): Promise<string> 
   const resp = await fetch(url, init)
   if (!resp.ok) {
     const txt = await readBodyText(resp)
-    throw new ApiError(txt || `Request failed (${resp.status})`, resp.status, txt)
+
+    // Match apiJson's error extraction so callers get actionable messages.
+    let bodyJson: JsonLike = undefined
+    const ct = (resp.headers.get('content-type') || '').toLowerCase()
+    const looksJson = ct.includes('application/json') || txt.trim().startsWith('{') || txt.trim().startsWith('[')
+    if (txt && looksJson) {
+      try {
+        bodyJson = JSON.parse(txt)
+      } catch {
+        bodyJson = undefined
+      }
+    }
+
+    let message = txt || `Request failed (${resp.status})`
+    const bodyRecord = asRecord(bodyJson)
+    if (bodyRecord) {
+      const errorValue = bodyRecord.error
+      const errorRecord = asRecord(errorValue)
+      const extracted =
+        (typeof errorValue === 'string' && errorValue) ||
+        (typeof bodyRecord.message === 'string' && bodyRecord.message) ||
+        (typeof errorRecord?.message === 'string' && errorRecord.message)
+      if (extracted && extracted.trim()) message = extracted.trim()
+
+      const hint = typeof bodyRecord.hint === 'string' ? bodyRecord.hint.trim() : ''
+      if (hint) {
+        message = `${message}\n${hint}`
+      }
+    }
+
+    const err = new ApiError(message, resp.status, txt)
+    if (bodyJson !== undefined) {
+      err.bodyJson = bodyJson
+      const bodyRecord = asRecord(bodyJson)
+      if (bodyRecord) {
+        if (typeof bodyRecord.code === 'string') err.code = bodyRecord.code
+        if (typeof bodyRecord.hint === 'string') err.hint = bodyRecord.hint
+      }
+    }
+
+    if (err.status === 401 && (err.code || '').trim() === 'auth_required') {
+      emitAuthRequired({ message: err.message, status: err.status, code: err.code, url })
+    }
+
+    throw err
   }
   return await resp.text()
 }

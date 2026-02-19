@@ -23,7 +23,7 @@ export type TerminalUiState = {
   folders: TerminalUiFolder[]
 }
 
-import { ApiError, apiJson } from '@/lib/api'
+import { ApiError, apiJson, apiText } from '@/lib/api'
 import type { JsonValue as JsonLike } from '@/types/json'
 
 function asObject(value: JsonLike): Record<string, JsonLike> | null {
@@ -168,35 +168,23 @@ export async function getTerminalSessionInfo(id: string): Promise<TerminalSessio
 }
 
 export async function sendTerminalInput(id: string, data: string): Promise<void> {
-  const resp = await fetch(`${terminalPath(id)}/input`, {
+  await apiText(`${terminalPath(id)}/input`, {
     method: 'POST',
     headers: { 'content-type': 'text/plain' },
     body: data,
   })
-  if (!resp.ok) {
-    const txt = await resp.text().catch(() => '')
-    throw new ApiError(txt || `Request failed (${resp.status})`, resp.status, txt)
-  }
 }
 
 export async function resizeTerminal(id: string, cols: number, rows: number): Promise<void> {
-  const resp = await fetch(`${terminalPath(id)}/resize`, {
+  await apiText(`${terminalPath(id)}/resize`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ cols, rows }),
   })
-  if (!resp.ok) {
-    const txt = await resp.text().catch(() => '')
-    throw new ApiError(txt || `Request failed (${resp.status})`, resp.status, txt)
-  }
 }
 
 export async function deleteTerminalSession(id: string): Promise<void> {
-  const resp = await fetch(terminalPath(id), { method: 'DELETE' })
-  if (!resp.ok) {
-    const txt = await resp.text().catch(() => '')
-    throw new ApiError(txt || `Request failed (${resp.status})`, resp.status, txt)
-  }
+  await apiText(terminalPath(id), { method: 'DELETE' })
 }
 
 export async function restartTerminalSession(input: {

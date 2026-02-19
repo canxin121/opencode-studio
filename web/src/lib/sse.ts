@@ -1,5 +1,7 @@
 import type { JsonValue as JsonLike } from '@/types/json'
 
+import { emitAuthRequired, extractAuthRequiredMessageFromBodyText } from './authEvents.ts'
+
 export type SseEvent = {
   type: string
   // Some emitters use { type, properties } shaped events.
@@ -383,7 +385,26 @@ export function connectSse(opts: SseClientOptions): SseClient {
           cache: 'no-store',
           signal: linked.signal,
         })
-        if (!resp.ok) throw new Error(`SSE failed: ${resp.status} ${resp.statusText}`)
+        if (!resp.ok) {
+          if (resp.status === 401) {
+            let msg = ''
+            try {
+              const txt = await resp.text().catch(() => '')
+              msg = extractAuthRequiredMessageFromBodyText(txt)
+            } catch {
+              // ignore
+            }
+            emitAuthRequired({
+              message: msg || 'UI authentication required',
+              status: resp.status,
+              code: 'auth_required',
+              url,
+            })
+            // Stop reconnect loop until the app is re-authenticated.
+            closed = true
+          }
+          throw new Error(`SSE failed: ${resp.status} ${resp.statusText}`)
+        }
         if (!resp.body || typeof resp.body.getReader !== 'function') {
           throw new Error('SSE streaming required')
         }

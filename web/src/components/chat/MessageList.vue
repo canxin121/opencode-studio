@@ -179,22 +179,6 @@ function sessionErrorAtLabel(): string {
   </div>
 
   <template v-else>
-    <div v-if="messagesError" class="group mb-3">
-      <div class="flex">
-        <div class="w-full min-w-0">
-          <div class="flex items-center gap-2 px-1 mb-1 text-[11px] text-muted-foreground/70">
-            <span class="font-semibold uppercase tracking-wider text-destructive">system</span>
-          </div>
-          <div
-            class="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm leading-relaxed text-destructive relative"
-          >
-            <div class="pointer-events-none absolute inset-y-0 left-0 w-1 rounded-l-lg bg-destructive/70" />
-            <div class="break-words">{{ messagesError }}</div>
-          </div>
-        </div>
-      </div>
-    </div>
-
     <div v-if="loadingOlder" class="mb-2 px-1 text-[11px] text-muted-foreground/70 flex items-center gap-2">
       <RiLoader4Line class="h-3.5 w-3.5 animate-spin" />
       Loading older messages...

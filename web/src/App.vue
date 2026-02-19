@@ -9,6 +9,7 @@ import { applyAppearanceSettingsToDom } from './lib/appearance'
 
 import LoginPage from './pages/LoginPage.vue'
 import MainLayout from './layout/MainLayout.vue'
+import ToastHost from './components/ToastHost.vue'
 
 const auth = useAuthStore()
 const health = useHealthStore()
@@ -30,6 +31,7 @@ watchEffect(() => {
 
 <template>
   <div class="app-root">
+    <ToastHost />
     <!-- Initial Loading State: Matches Login Page aesthetic for seamless transition -->
     <div v-if="initialLoading" class="flex min-h-screen items-center justify-center bg-background px-4">
       <div class="flex flex-col items-center gap-6 animate-pulse">

@@ -15,6 +15,15 @@ export const useAuthStore = defineStore('auth', () => {
 
   const needsLogin = computed(() => checked.value && !disabled.value && locked.value)
 
+  function requireLogin() {
+    // Force the app into the locked state immediately (e.g. when an API call returns auth_required).
+    checked.value = true
+    authenticated.value = false
+    disabled.value = false
+    locked.value = true
+    lastError.value = null
+  }
+
   async function refresh() {
     lastError.value = null
     try {
@@ -74,5 +83,6 @@ export const useAuthStore = defineStore('auth', () => {
     needsLogin,
     refresh,
     login,
+    requireLogin,
   }
 })

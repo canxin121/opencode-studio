@@ -35,6 +35,8 @@ import { STORAGE_LAST_SESSION, STORAGE_RUN_CONFIG } from './chat/storeKeys'
 import { applyStreamingEventToMessages } from './chat/streaming'
 import type { JsonObject as UnknownRecord, JsonValue } from '@/types/json'
 
+import { ApiError } from '../lib/api'
+
 export type {
   AttentionEvent,
   MessageEntry,
@@ -273,13 +275,13 @@ export const useChatStore = defineStore('chat', () => {
     return { message, rendered, code, name, classification, details }
   }
 
-  function pushErrorToastWithDedupe(key: string, message: string, timeoutMs = 4500) {
+  function pushErrorToastWithDedupe(key: string, message: string, timeoutMs = 4500, dedupeWindowMs = 1200) {
     const dedupeKey = (key || '').trim() || '__global__'
     const msg = (message || '').trim()
     if (!msg) return
     const now = Date.now()
     const prev = lastSessionErrorToastByKey.get(dedupeKey)
-    if (prev && prev.message === msg && now - prev.at < 1200) return
+    if (prev && prev.message === msg && now - prev.at < Math.max(0, Math.floor(dedupeWindowMs))) return
     lastSessionErrorToastByKey.set(dedupeKey, { at: now, message: msg })
     toasts.push('error', msg, timeoutMs)
   }
@@ -781,13 +783,34 @@ export const useChatStore = defineStore('chat', () => {
       // Messages refresh is a good time to rehydrate pending prompts (page refresh / missed SSE).
       void refreshAttention(sid)
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      const authRequired =
+        err instanceof ApiError && err.status === 401 && (err.code || '').trim().toLowerCase() === 'auth_required'
+
       if (isSelected) {
-        messagesError.value = err instanceof Error ? err.message : String(err)
+        // Transport/auth failures should not become timeline messages.
+        messagesError.value = null
+
+        if (authRequired) {
+          // The global auth-required handler will toast + switch to LoginPage.
+          // Stop retry loops while locked to avoid spamming the backend.
+          clearMessageRefreshRetry(sid)
+        } else {
+          pushErrorToastWithDedupe(
+            `messages:${sid}`,
+            msg || 'Failed to load messages',
+            silent ? 3500 : 4500,
+            // Refresh retries can happen frequently; keep this heavily throttled.
+            silent ? 20_000 : 8000,
+          )
+        }
       }
-      if (hasCache) {
+
+      if (!authRequired && hasCache) {
         scheduleMessageRefreshRetry(sid, 240, { limit: opts?.limit })
       }
-      if (!silent) {
+      if (!hasCache && !silent) {
+        // No cache: keep UI consistent with the empty state.
         setSessionMessages(sid, [])
       }
     } finally {
@@ -1340,11 +1363,8 @@ export const useChatStore = defineStore('chat', () => {
 
     if (sid && t === 'session.error') {
       const normalized = normalizeSessionError(evt)
-      const rendered = normalized.rendered
       const at = Date.now()
       const selected = selectedSessionId.value === sid
-      const title = firstNonEmpty([sessionsById.value[sid]?.title, sessions.value.find((s) => s.id === sid)?.title])
-      const toastMessage = selected ? rendered : `${title || sid}: ${rendered}`
 
       // Errors terminate the active run; reset status so UI doesn't get stuck.
       sessionStatusBySession.value = {
@@ -1362,8 +1382,6 @@ export const useChatStore = defineStore('chat', () => {
       }
 
       clearAttention(sid)
-
-      pushErrorToastWithDedupe(`session:${sid}`, toastMessage)
 
       if (selected) {
         if (refreshMessagesTimer) window.clearTimeout(refreshMessagesTimer)
