@@ -6,6 +6,19 @@ OpenCode Studio 是一个面向 OpenCode 的本地优先 Web UI。它运行一�
 
 > 说明：本项目为社区实现，非 OpenCode 团队官方项目，与其不存在官方隶属关系。OpenCode 上游项目：https://github.com/anomalyco/opencode
 
+<details>
+<summary><strong>界面截图</strong>（点击展开）</summary>
+
+<p align="center">
+  <a href="assets/studio-chat.png"><img src="assets/studio-chat.png" width="320" alt="聊天界面" /></a>
+  <a href="assets/studio-files.png"><img src="assets/studio-files.png" width="320" alt="文件浏览与编辑" /></a>
+  <a href="assets/studio-terminal.png"><img src="assets/studio-terminal.png" width="320" alt="内置终端" /></a>
+  <a href="assets/studio-git.png"><img src="assets/studio-git.png" width="320" alt="Git 状态与 Diff" /></a>
+  <a href="assets/studio-settings.png"><img src="assets/studio-settings.png" width="320" alt="设置页" /></a>
+</p>
+
+</details>
+
 ## 你会得到什么
 
 - 事件流代理与过滤控制（心跳、`Last-Event-ID` 恢复、可配置 activity/tool 过滤、payload 精简）

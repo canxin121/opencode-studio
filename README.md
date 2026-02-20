@@ -6,6 +6,19 @@ OpenCode Studio is a local-first web UI for OpenCode. It runs a Rust (Axum) serv
 
 > Note: This is a community project and is not built by the OpenCode team and is not affiliated with them. Upstream OpenCode: https://github.com/anomalyco/opencode
 
+<details>
+<summary><strong>Screenshots</strong> (click to expand)</summary>
+
+<p align="center">
+  <a href="assets/studio-chat.png"><img src="assets/studio-chat.png" width="320" alt="Chat view" /></a>
+  <a href="assets/studio-files.png"><img src="assets/studio-files.png" width="320" alt="Files explorer + editor" /></a>
+  <a href="assets/studio-terminal.png"><img src="assets/studio-terminal.png" width="320" alt="Integrated terminal" /></a>
+  <a href="assets/studio-git.png"><img src="assets/studio-git.png" width="320" alt="Git status + diff" /></a>
+  <a href="assets/studio-settings.png"><img src="assets/studio-settings.png" width="320" alt="Settings" /></a>
+</p>
+
+</details>
+
 ## What you get
 
 - Event stream proxy with filtering/control (heartbeats, `Last-Event-ID` resume, configurable activity/tool filters, payload pruning)
