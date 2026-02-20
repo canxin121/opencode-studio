@@ -194,7 +194,6 @@ async function setTheme(mode: 'light' | 'dark' | 'system') {
           </div>
         </section>
       </div>
-
     </div>
   </Dialog>
 </template>

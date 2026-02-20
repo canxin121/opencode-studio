@@ -84,10 +84,10 @@ impl SessionActivityManager {
         let phase_changed = existing_phase != Some(phase);
 
         // Cancel existing cooldown timer whenever phase changes or when leaving cooldown.
-        if phase_changed || phase != SessionPhase::Cooldown {
-            if let Some((_, handle)) = self.cooldown_cancel.remove(session_id) {
-                let _ = handle.cancel.send(());
-            }
+        if (phase_changed || phase != SessionPhase::Cooldown)
+            && let Some((_, handle)) = self.cooldown_cancel.remove(session_id)
+        {
+            let _ = handle.cancel.send(());
         }
 
         self.phases.insert(

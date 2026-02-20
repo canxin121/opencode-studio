@@ -282,14 +282,14 @@ pub async fn git_compare(Query(q): Query<GitCompareQuery>) -> Response {
         .as_deref()
         .map(|s| s.trim())
         .filter(|s| !s.is_empty());
-    if let Some(p) = path {
-        if !is_safe_repo_rel_path(p) {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(serde_json::json!({"error": "Invalid path", "code": "invalid_path"})),
-            )
-                .into_response();
-        }
+    if let Some(p) = path
+        && !is_safe_repo_rel_path(p)
+    {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "Invalid path", "code": "invalid_path"})),
+        )
+            .into_response();
     }
 
     let context = q

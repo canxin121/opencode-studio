@@ -227,7 +227,12 @@ const providerId = props.providerId
               :model-value="modelConfig.status || 'default'"
               @update:model-value="
                 (v) =>
-                  setModelField(providerId, modelId as string, 'status', String(v || '') === 'default' ? null : String(v || ''))
+                  setModelField(
+                    providerId,
+                    modelId as string,
+                    'status',
+                    String(v || '') === 'default' ? null : String(v || ''),
+                  )
               "
               :options="modelStatusPickerOptions"
               title="Status"

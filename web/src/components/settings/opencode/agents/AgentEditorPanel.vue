@@ -292,13 +292,7 @@ export default defineComponent({
             <OptionPicker
               :model-value="agent.mode || 'default'"
               @update:model-value="
-                (v) =>
-                  setEntryField(
-                    'agent',
-                    agentId,
-                    'mode',
-                    String(v || '') === 'default' ? null : String(v || ''),
-                  )
+                (v) => setEntryField('agent', agentId, 'mode', String(v || '') === 'default' ? null : String(v || ''))
               "
               :options="agentModePickerOptions"
               title="Mode"
@@ -403,33 +397,33 @@ export default defineComponent({
             <div class="text-[11px] text-muted-foreground">Unset keys inherit global permission.</div>
           </div>
 
-            <div class="grid gap-3">
-              <div class="flex items-center gap-2">
-                <div class="min-w-[220px] flex-1 max-w-[520px]">
-                  <OptionPicker
-                    v-model="agentPermissionNewTool[agentId]"
-                    :options="toolIdPickerOptions"
-                    title="Tool id"
-                    search-placeholder="Search tools"
-                    empty-label="Select tool id…"
-                    monospace
-                  />
-                </div>
+          <div class="grid gap-3">
+            <div class="flex items-center gap-2">
+              <div class="min-w-[220px] flex-1 max-w-[520px]">
+                <OptionPicker
+                  v-model="agentPermissionNewTool[agentId]"
+                  :options="toolIdPickerOptions"
+                  title="Tool id"
+                  search-placeholder="Search tools"
+                  empty-label="Select tool id…"
+                  monospace
+                />
+              </div>
 
-                <div class="w-[160px]">
-                  <OptionPicker
-                    v-model="agentPermissionNewAction[agentId]"
-                    :options="permissionActionPickerOptions"
-                    title="Action"
-                    search-placeholder="Search actions"
-                    :include-empty="false"
-                  />
-                </div>
-                <Tooltip>
-                  <Button
-                    size="icon"
-                    variant="outline"
-                    class="h-9 w-9"
+              <div class="w-[160px]">
+                <OptionPicker
+                  v-model="agentPermissionNewAction[agentId]"
+                  :options="permissionActionPickerOptions"
+                  title="Action"
+                  search-placeholder="Search actions"
+                  :include-empty="false"
+                />
+              </div>
+              <Tooltip>
+                <Button
+                  size="icon"
+                  variant="outline"
+                  class="h-9 w-9"
                   title="Add"
                   aria-label="Add permission rule"
                   @click="addAgentPermissionRule(agentId)"

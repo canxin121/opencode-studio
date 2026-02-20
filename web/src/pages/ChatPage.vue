@@ -395,7 +395,9 @@ const composerPickerGroups = computed<OptionMenuGroup[]>(() => {
     const variantItems = (modelSelection.variantOptions.value as string[])
       .filter((variant) => {
         if (!query) return true
-        return String(variant || '').toLowerCase().includes(query)
+        return String(variant || '')
+          .toLowerCase()
+          .includes(query)
       })
       .map((variant) => ({
         id: `variant:${variant}`,
@@ -696,7 +698,9 @@ const activityDefaultExpandedToolSet = computed<Set<string>>(() => {
 })
 
 function activityExpandKeyForPart(part: JsonObject): ChatActivityExpandKey | '' {
-  const t = String(part?.type || '').trim().toLowerCase()
+  const t = String(part?.type || '')
+    .trim()
+    .toLowerCase()
   if (t === 'tool' || (!t && typeof part?.tool === 'string')) return 'tool'
   if (t === 'reasoning' || t === 'thinking' || t === 'reasoning_content' || t === 'reasoning_details') return 'thinking'
   if (t.includes('justification')) return 'justification'

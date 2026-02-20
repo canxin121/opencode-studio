@@ -1,6 +1,13 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch, type CSSProperties, type Component } from 'vue'
-import { RiArrowDownSLine, RiArrowLeftSLine, RiArrowRightSLine, RiCheckLine, RiCloseLine, RiMore2Line } from '@remixicon/vue'
+import {
+  RiArrowDownSLine,
+  RiArrowLeftSLine,
+  RiArrowRightSLine,
+  RiCheckLine,
+  RiCloseLine,
+  RiMore2Line,
+} from '@remixicon/vue'
 
 import Button from '@/components/ui/Button.vue'
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'

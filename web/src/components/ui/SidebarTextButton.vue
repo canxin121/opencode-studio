@@ -15,7 +15,9 @@ const attrs = useAttrs()
   <button
     v-bind="attrs"
     type="button"
-    :class="cn('min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50', props.class)"
+    :class="
+      cn('min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50', props.class)
+    "
   >
     <slot />
   </button>

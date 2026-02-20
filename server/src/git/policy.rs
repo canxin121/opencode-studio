@@ -88,17 +88,17 @@ pub(crate) async fn git_strict_patch_validation(state: &Arc<crate::AppState>) ->
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum GitBranchProtectionPrompt {
-    AlwaysCommit,
-    AlwaysCommitToNewBranch,
-    AlwaysPrompt,
+    Commit,
+    CommitToNewBranch,
+    Prompt,
 }
 
 impl GitBranchProtectionPrompt {
     pub(crate) fn as_str(self) -> &'static str {
         match self {
-            Self::AlwaysCommit => "alwaysCommit",
-            Self::AlwaysCommitToNewBranch => "alwaysCommitToNewBranch",
-            Self::AlwaysPrompt => "alwaysPrompt",
+            Self::Commit => "alwaysCommit",
+            Self::CommitToNewBranch => "alwaysCommitToNewBranch",
+            Self::Prompt => "alwaysPrompt",
         }
     }
 }
@@ -109,11 +109,11 @@ fn parse_branch_protection_prompt(value: Option<&Value>) -> GitBranchProtectionP
         _ => "",
     };
     if raw.eq_ignore_ascii_case("alwaysCommit") {
-        GitBranchProtectionPrompt::AlwaysCommit
+        GitBranchProtectionPrompt::Commit
     } else if raw.eq_ignore_ascii_case("alwaysCommitToNewBranch") {
-        GitBranchProtectionPrompt::AlwaysCommitToNewBranch
+        GitBranchProtectionPrompt::CommitToNewBranch
     } else {
-        GitBranchProtectionPrompt::AlwaysPrompt
+        GitBranchProtectionPrompt::Prompt
     }
 }
 
@@ -189,17 +189,17 @@ mod tests {
     fn prompt_defaults_to_always_prompt() {
         assert_eq!(
             parse_branch_protection_prompt(None),
-            GitBranchProtectionPrompt::AlwaysPrompt
+            GitBranchProtectionPrompt::Prompt
         );
         assert_eq!(
             parse_branch_protection_prompt(Some(&Value::String("alwaysCommit".to_string()))),
-            GitBranchProtectionPrompt::AlwaysCommit
+            GitBranchProtectionPrompt::Commit
         );
         assert_eq!(
             parse_branch_protection_prompt(Some(&Value::String(
                 "alwaysCommitToNewBranch".to_string()
             ))),
-            GitBranchProtectionPrompt::AlwaysCommitToNewBranch
+            GitBranchProtectionPrompt::CommitToNewBranch
         );
     }
 

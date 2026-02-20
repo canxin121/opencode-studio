@@ -811,10 +811,7 @@ onBeforeUnmount(() => {
                           :disabled="deletingPaths.has(entry.row.node.path)"
                           @click.stop
                         >
-                          <RiLoader4Line
-                            v-if="deletingPaths.has(entry.row.node.path)"
-                            class="h-3 w-3 animate-spin"
-                          />
+                          <RiLoader4Line v-if="deletingPaths.has(entry.row.node.path)" class="h-3 w-3 animate-spin" />
                           <RiDeleteBinLine v-else class="h-3 w-3" />
                         </SidebarIconButton>
                       </ConfirmPopover>

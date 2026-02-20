@@ -289,6 +289,7 @@ async fn acquire_state_disk_lock() -> Result<std::fs::File, String> {
             .create(true)
             .read(true)
             .write(true)
+            .truncate(false)
             .open(&lock_path)
             .map_err(|error| error.to_string())?;
 

@@ -115,17 +115,22 @@ export function useGitHistoryLog(opts: { repoRoot: { value: string | null }; git
     historyLoading.value = true
     historyError.value = null
     try {
-      const resp = await gitJson<GitLogResponse>('log', dir, {
-        offset: historyOffset.value,
-        limit: historyLimit,
-        path: historyFilterPath.value || undefined,
-        author: historyFilterAuthor.value.trim() || undefined,
-        message: historyFilterMessage.value.trim() || undefined,
-        ref: normalizeRefInput(),
-        graph: true,
-      }, {
-        signal: abortController.signal,
-      })
+      const resp = await gitJson<GitLogResponse>(
+        'log',
+        dir,
+        {
+          offset: historyOffset.value,
+          limit: historyLimit,
+          path: historyFilterPath.value || undefined,
+          author: historyFilterAuthor.value.trim() || undefined,
+          message: historyFilterMessage.value.trim() || undefined,
+          ref: normalizeRefInput(),
+          graph: true,
+        },
+        {
+          signal: abortController.signal,
+        },
+      )
       if (requestSeq !== historyLoadSeq || abortController.signal.aborted) return
 
       const next = Array.isArray(resp?.commits) ? resp.commits : []
@@ -188,10 +193,15 @@ export function useGitHistoryLog(opts: { repoRoot: { value: string | null }; git
     try {
       const [filesResp, diffResp] = await Promise.all([
         gitJson<GitCommitFilesResponse>('commit-files', dir, { commit: hash }, { signal: abortController.signal }),
-        gitJson<GitCommitDiffResponse>('commit-diff', dir, {
-          commit: hash,
-          contextLines: 3,
-        }, { signal: abortController.signal }),
+        gitJson<GitCommitDiffResponse>(
+          'commit-diff',
+          dir,
+          {
+            commit: hash,
+            contextLines: 3,
+          },
+          { signal: abortController.signal },
+        ),
       ])
 
       if (requestSeq !== selectCommitSeq || abortController.signal.aborted) return
@@ -247,11 +257,16 @@ export function useGitHistoryLog(opts: { repoRoot: { value: string | null }; git
 
     historyFileDiffLoading.value = true
     try {
-      const resp = await gitJson<GitCommitDiffResponse>('commit-file-diff', dir, {
-        commit: hash,
-        path,
-        contextLines: 3,
-      }, { signal: abortController.signal })
+      const resp = await gitJson<GitCommitDiffResponse>(
+        'commit-file-diff',
+        dir,
+        {
+          commit: hash,
+          path,
+          contextLines: 3,
+        },
+        { signal: abortController.signal },
+      )
 
       if (requestSeq !== selectFileSeq || abortController.signal.aborted) return
 

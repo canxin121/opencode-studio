@@ -230,7 +230,7 @@ fn sanitize_projects(input: Option<&Value>) -> Option<Value> {
     Some(Value::Array(out))
 }
 
-fn project_entries_payload<'a>(obj: &'a serde_json::Map<String, Value>) -> Option<&'a Value> {
+fn project_entries_payload(obj: &serde_json::Map<String, Value>) -> Option<&Value> {
     if obj.get("directories").is_some() {
         obj.get("directories")
     } else {

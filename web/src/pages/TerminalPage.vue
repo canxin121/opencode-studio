@@ -769,7 +769,8 @@ function applyTerminalUiStateSnapshot(snapshot: TerminalUiState) {
     normalizedFolders.length > 0 ? normalizedFolders : [{ id: DEFAULT_FOLDER_ID, name: DEFAULT_FOLDER_NAME }]
 
   const requestedActive = normalizeSessionId(snapshot.activeSessionId || '')
-  const nextActive = requestedActive && allowedSessionIds.has(requestedActive) ? requestedActive : normalizedSessionIds[0] || ''
+  const nextActive =
+    requestedActive && allowedSessionIds.has(requestedActive) ? requestedActive : normalizedSessionIds[0] || ''
 
   const previousSessionIds = sessionList.value.slice()
 
@@ -2325,10 +2326,7 @@ watch(el, () => {
                     <RiArrowDownSLine v-else class="h-4 w-4" />
                   </IconButton>
 
-                  <SidebarTextButton
-                    class="flex-1 rounded-sm"
-                    @click="toggleFolderCollapsed(folder.id)"
-                  >
+                  <SidebarTextButton class="flex-1 rounded-sm" @click="toggleFolderCollapsed(folder.id)">
                     <div class="typography-ui font-semibold truncate">{{ folder.name }}</div>
                   </SidebarTextButton>
 
@@ -2538,13 +2536,17 @@ watch(el, () => {
                   </div>
                 </template>
 
-                <template v-if="folder.recentSessions.length || (!ui.isMobilePointer && sessionCreatingFolderId === folder.id)">
+                <template
+                  v-if="folder.recentSessions.length || (!ui.isMobilePointer && sessionCreatingFolderId === folder.id)"
+                >
                   <div class="px-1.5 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
                     Recent
                   </div>
 
                   <div v-if="!ui.isMobilePointer && sessionCreatingFolderId === folder.id" class="group relative">
-                    <div class="flex items-center gap-1 rounded-md transition-colors text-foreground hover:bg-primary/6">
+                    <div
+                      class="flex items-center gap-1 rounded-md transition-colors text-foreground hover:bg-primary/6"
+                    >
                       <div class="flex-1 min-w-0 py-1 pl-2 pr-1.5">
                         <div class="flex min-w-0 items-center gap-2">
                           <span class="inline-flex h-1.5 w-1.5 flex-shrink-0 rounded-full opacity-0" />

@@ -1,7 +1,11 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { patchSessionIdInQuery, readSessionIdFromFullPath, readSessionIdFromQuery } from '../src/app/navigation/sessionQuery.ts'
+import {
+  patchSessionIdInQuery,
+  readSessionIdFromFullPath,
+  readSessionIdFromQuery,
+} from '../src/app/navigation/sessionQuery.ts'
 
 test('readSessionIdFromQuery: accepts legacy session keys', () => {
   assert.equal(readSessionIdFromQuery({ sessionid: 'legacy-1' }), 'legacy-1')

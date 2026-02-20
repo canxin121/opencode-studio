@@ -143,7 +143,9 @@ export function stageTrustedTerminalHandoff(send: string, opts?: { target?: Term
 }
 
 export function consumeTrustedTerminalHandoffPayload(token: string): ConsumedTerminalHandoff | null {
-  const id = String(token || '').trim().toLowerCase()
+  const id = String(token || '')
+    .trim()
+    .toLowerCase()
   if (!TOKEN_RE.test(id)) return null
 
   const key = `${TERMINAL_HANDOFF_KEY_PREFIX}${id}`

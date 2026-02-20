@@ -17,8 +17,7 @@ export function normalizeRuntime(input?: RuntimeInput): SessionRuntimeState {
   const phase =
     input?.phase === 'idle' || input?.phase === 'busy' || input?.phase === 'cooldown' ? input.phase : 'unknown'
   const attention = input?.attention === 'permission' || input?.attention === 'question' ? input.attention : null
-  const updatedAt =
-    typeof input?.updatedAt === 'number' && Number.isFinite(input.updatedAt) ? input.updatedAt : 0
+  const updatedAt = typeof input?.updatedAt === 'number' && Number.isFinite(input.updatedAt) ? input.updatedAt : 0
   return { statusType, phase, attention, updatedAt }
 }
 
@@ -49,7 +48,10 @@ function readIncomingAttention(input: RuntimeInput): { provided: boolean; value:
   return { provided: false, value: null }
 }
 
-export function mergeRuntimeState(current: SessionRuntimeState | undefined, incomingRaw: RuntimeInput): SessionRuntimeState {
+export function mergeRuntimeState(
+  current: SessionRuntimeState | undefined,
+  incomingRaw: RuntimeInput,
+): SessionRuntimeState {
   const incoming = normalizeRuntime(incomingRaw)
   const incomingUpdatedAt = readIncomingUpdatedAt(incomingRaw)
 
@@ -61,7 +63,9 @@ export function mergeRuntimeState(current: SessionRuntimeState | undefined, inco
   }
 
   const existing = normalizeRuntime(current)
-  const preferIncoming = incomingUpdatedAt.provided ? incomingUpdatedAt.value >= existing.updatedAt : existing.updatedAt <= 0
+  const preferIncoming = incomingUpdatedAt.provided
+    ? incomingUpdatedAt.value >= existing.updatedAt
+    : existing.updatedAt <= 0
 
   const statusType = preferIncoming
     ? incoming.statusType !== 'unknown'

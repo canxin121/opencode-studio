@@ -371,13 +371,13 @@ pub(crate) fn start_global_sse_hub_if_needed(state: Arc<crate::AppState>) {
                 );
                 headers.insert(reqwest::header::CACHE_CONTROL, "no-cache".parse().unwrap());
                 headers.insert(reqwest::header::CONNECTION, "keep-alive".parse().unwrap());
-                if let Some(last_id) = last_upstream_event_id.as_deref() {
-                    if !last_id.trim().is_empty() {
-                        headers.insert(
-                            reqwest::header::HeaderName::from_static("last-event-id"),
-                            last_id.parse().unwrap(),
-                        );
-                    }
+                if let Some(last_id) = last_upstream_event_id.as_deref()
+                    && !last_id.trim().is_empty()
+                {
+                    headers.insert(
+                        reqwest::header::HeaderName::from_static("last-event-id"),
+                        last_id.parse().unwrap(),
+                    );
                 }
             }
 
@@ -503,13 +503,12 @@ pub(crate) fn start_global_sse_hub_if_needed(state: Arc<crate::AppState>) {
 
                                 match ty.as_str() {
                                     "session.created" | "session.updated" => {
-                                        if let Some(props) = props {
-                                            if let Some(session) = props.get("session") {
+                                        if let Some(props) = props
+                                            && let Some(session) = props.get("session") {
                                                 state
                                                     .directory_session_index
                                                     .upsert_summary_from_value(session);
                                             }
-                                        }
                                     }
                                     "session.deleted" => {
                                         if let Some(sid) = read_session_id(props) {
@@ -525,13 +524,12 @@ pub(crate) fn start_global_sse_hub_if_needed(state: Arc<crate::AppState>) {
                                                 .and_then(|v| v.as_str())
                                                 .unwrap_or("")
                                                 .trim();
-                                            if let Some(sid) = sid {
-                                                if status == "busy" || status == "retry" || status == "idle" {
+                                            if let Some(sid) = sid
+                                                && (status == "busy" || status == "retry" || status == "idle") {
                                                     state
                                                         .directory_session_index
                                                         .upsert_runtime_status(&sid, status);
                                                 }
-                                            }
                                         }
                                     }
                                     "session.idle" => {
@@ -610,11 +608,11 @@ fn backoff_delay(attempt: u64) -> Duration {
     }
     let exp = 2u64.saturating_pow(attempt.saturating_sub(1).min(10) as u32);
     let ms = UPSTREAM_RETRY_BASE_DELAY.as_millis() as u64;
-    let out = Duration::from_millis(
+
+    Duration::from_millis(
         ms.saturating_mul(exp)
             .min(UPSTREAM_RETRY_MAX_DELAY.as_millis() as u64),
-    );
-    out
+    )
 }
 
 fn publish_disconnect_once(reason: &str, last_reason: &mut Option<String>) {

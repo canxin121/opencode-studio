@@ -138,12 +138,12 @@ pub async fn git_push(
             git_current_branch(&dir).await
         }
     };
-    if git_enforce_branch_protection(&state).await {
-        if let Some(branch_name) = branch_for_policy
-            && let Some(prompt_mode) = git_branch_protection_for_branch(&state, &branch_name).await
-            && prompt_mode == GitBranchProtectionPrompt::AlwaysCommitToNewBranch
-        {
-            return (
+    if git_enforce_branch_protection(&state).await
+        && let Some(branch_name) = branch_for_policy
+        && let Some(prompt_mode) = git_branch_protection_for_branch(&state, &branch_name).await
+        && prompt_mode == GitBranchProtectionPrompt::CommitToNewBranch
+    {
+        return (
                 StatusCode::FORBIDDEN,
                 Json(serde_json::json!({
                     "error": format!("Branch '{branch_name}' is protected; push from a new branch instead."),
@@ -155,7 +155,6 @@ pub async fn git_push(
                 })),
             )
                 .into_response();
-        }
     }
 
     let mut auth_opts: Vec<String> = Vec::new();

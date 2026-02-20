@@ -21,35 +21,53 @@ function sameSession(left, right) {
 
 test('upsertSessionInPageState: inserts new root on page 0 and increments total', () => {
   const page = { page: 0, totalRoots: 2, sessions: [{ id: 's1' }] }
-  const next = upsertSessionInPageState(page, { id: 's2' }, {
-    incrementRootTotal: true,
-    readSessionId,
-    readParentId,
-    equals: sameSession,
-  })
+  const next = upsertSessionInPageState(
+    page,
+    { id: 's2' },
+    {
+      incrementRootTotal: true,
+      readSessionId,
+      readParentId,
+      equals: sameSession,
+    },
+  )
 
   assert.ok(next)
-  assert.deepEqual(next.sessions.map((s) => s.id), ['s1', 's2'])
+  assert.deepEqual(
+    next.sessions.map((s) => s.id),
+    ['s1', 's2'],
+  )
   assert.equal(next.totalRoots, 3)
 })
 
 test('upsertSessionInPageState: inserts child only when parent is present in page slice', () => {
   const pageWithoutParent = { page: 0, totalRoots: 1, sessions: [{ id: 'root-a' }] }
-  const noInsert = upsertSessionInPageState(pageWithoutParent, { id: 'child-x', parentID: 'root-b' }, {
-    readSessionId,
-    readParentId,
-    equals: sameSession,
-  })
+  const noInsert = upsertSessionInPageState(
+    pageWithoutParent,
+    { id: 'child-x', parentID: 'root-b' },
+    {
+      readSessionId,
+      readParentId,
+      equals: sameSession,
+    },
+  )
   assert.equal(noInsert, null)
 
   const pageWithParent = { page: 0, totalRoots: 1, sessions: [{ id: 'root-a' }] }
-  const inserted = upsertSessionInPageState(pageWithParent, { id: 'child-a', parentID: 'root-a' }, {
-    readSessionId,
-    readParentId,
-    equals: sameSession,
-  })
+  const inserted = upsertSessionInPageState(
+    pageWithParent,
+    { id: 'child-a', parentID: 'root-a' },
+    {
+      readSessionId,
+      readParentId,
+      equals: sameSession,
+    },
+  )
   assert.ok(inserted)
-  assert.deepEqual(inserted.sessions.map((s) => s.id), ['root-a', 'child-a'])
+  assert.deepEqual(
+    inserted.sessions.map((s) => s.id),
+    ['root-a', 'child-a'],
+  )
   assert.equal(inserted.totalRoots, 1)
 })
 
@@ -61,7 +79,10 @@ test('removeSessionFromPageState: decrements total even when root is outside cac
   })
 
   assert.ok(next)
-  assert.deepEqual(next.sessions.map((s) => s.id), ['s3'])
+  assert.deepEqual(
+    next.sessions.map((s) => s.id),
+    ['s3'],
+  )
   assert.equal(next.totalRoots, 4)
 })
 

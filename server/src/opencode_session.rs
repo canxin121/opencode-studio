@@ -59,7 +59,6 @@ pub(crate) struct SessionListQuery {
 
 #[derive(Debug, Deserialize, Default)]
 pub(crate) struct SessionMessagesQuery {
-    pub directory: Option<String>,
     pub offset: Option<String>,
     pub limit: Option<String>,
     #[serde(rename = "includeTotal")]
@@ -157,10 +156,10 @@ impl OpenCodeStorageCache {
             order.remove(pos);
         }
         order.push_back(key.clone());
-        if order.len() > DIR_CACHE_LIMIT {
-            if let Some(evicted) = order.pop_front() {
-                self.dir_cache.remove(&evicted);
-            }
+        if order.len() > DIR_CACHE_LIMIT
+            && let Some(evicted) = order.pop_front()
+        {
+            self.dir_cache.remove(&evicted);
         }
     }
 
@@ -170,10 +169,10 @@ impl OpenCodeStorageCache {
             order.remove(pos);
         }
         order.push_back(key.clone());
-        if order.len() > FILE_CACHE_LIMIT {
-            if let Some(evicted) = order.pop_front() {
-                self.file_cache.remove(&evicted);
-            }
+        if order.len() > FILE_CACHE_LIMIT
+            && let Some(evicted) = order.pop_front()
+        {
+            self.file_cache.remove(&evicted);
         }
     }
 }
@@ -186,10 +185,10 @@ pub async fn opencode_storage_cache_clear() -> ApiResult<Response> {
 }
 
 fn opencode_data_dir() -> PathBuf {
-    if let Ok(dir) = std::env::var("XDG_DATA_HOME") {
-        if !dir.trim().is_empty() {
-            return PathBuf::from(dir).join("opencode");
-        }
+    if let Ok(dir) = std::env::var("XDG_DATA_HOME")
+        && !dir.trim().is_empty()
+    {
+        return PathBuf::from(dir).join("opencode");
     }
 
     let home = std::env::var("HOME").unwrap_or_default();
@@ -375,10 +374,7 @@ async fn git_output(dir: &Path, args: &[&str]) -> Result<String, std::io::Error>
         .await?;
 
     if !output.status.success() {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "git command failed",
-        ));
+        return Err(std::io::Error::other("git command failed"));
     }
 
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
@@ -452,10 +448,10 @@ async fn list_json_ids_cached(dir: &Path) -> Vec<String> {
         None => return list_json_ids(dir).await,
     };
 
-    if let Some(entry) = STORAGE_CACHE.dir_cache.get(dir) {
-        if entry.modified == modified {
-            return entry.ids.clone();
-        }
+    if let Some(entry) = STORAGE_CACHE.dir_cache.get(dir)
+        && entry.modified == modified
+    {
+        return entry.ids.clone();
     }
 
     let ids = list_json_ids(dir).await;
@@ -527,7 +523,7 @@ async fn append_legacy_directory_scope_session_dirs(
     }
 }
 
-fn parse_number(raw: Option<String>, name: &str) -> Result<Option<f64>, Response> {
+fn parse_number(raw: Option<String>, name: &str) -> Result<Option<f64>, Box<Response>> {
     let Some(raw) = raw else {
         return Ok(None);
     };
@@ -537,9 +533,9 @@ fn parse_number(raw: Option<String>, name: &str) -> Result<Option<f64>, Response
     }
     let parsed = trimmed
         .parse::<f64>()
-        .map_err(|_| bad_request_invalid_number(name, trimmed))?;
+        .map_err(|_| Box::new(bad_request_invalid_number(name, trimmed)))?;
     if parsed.is_nan() {
-        return Err(bad_request_invalid_number(name, trimmed));
+        return Err(Box::new(bad_request_invalid_number(name, trimmed)));
     }
     Ok(Some(parsed))
 }
@@ -624,16 +620,16 @@ pub async fn session_list(
 
     let start = match parse_number(query.start, "start") {
         Ok(value) => value,
-        Err(resp) => return Ok(resp),
+        Err(resp) => return Ok(*resp),
     };
     let offset_provided = query.offset.as_deref().is_some();
     let offset_raw = match parse_number(query.offset, "offset") {
         Ok(value) => value,
-        Err(resp) => return Ok(resp),
+        Err(resp) => return Ok(*resp),
     };
     let limit_raw = match parse_number(query.limit, "limit") {
         Ok(value) => value,
-        Err(resp) => return Ok(resp),
+        Err(resp) => return Ok(*resp),
     };
     let term = query.search.map(|t| t.to_lowercase());
 
@@ -678,27 +674,25 @@ pub async fn session_list(
     let allow_descendants = false;
 
     let record_from_summary = |summary: crate::directory_session_index::SessionSummaryRecord| {
-        if !scope_project {
-            if let Some(ref filter) = filter_directory {
-                let matches_directory = normalize_dir_for_compare(&summary.directory_path)
-                    .is_some_and(|dir| {
-                        if allow_descendants {
-                            Path::new(&dir).starts_with(filter)
-                        } else {
-                            dir == *filter
-                        }
-                    });
-                if !matches_directory {
-                    return None;
-                }
+        if !scope_project && let Some(ref filter) = filter_directory {
+            let matches_directory =
+                normalize_dir_for_compare(&summary.directory_path).is_some_and(|dir| {
+                    if allow_descendants {
+                        Path::new(&dir).starts_with(filter)
+                    } else {
+                        dir == *filter
+                    }
+                });
+            if !matches_directory {
+                return None;
             }
         }
 
         let updated = summary.updated_at;
-        if let Some(start) = start {
-            if updated < start {
-                return None;
-            }
+        if let Some(start) = start
+            && updated < start
+        {
+            return None;
         }
 
         let session = summary.raw;
@@ -740,18 +734,17 @@ pub async fn session_list(
         if record.id.trim().is_empty() {
             continue;
         }
-        if !scope_project {
-            if let Some(ref filter) = filter_directory {
-                if !session_matches_directory(&record.value, filter, allow_descendants) {
-                    continue;
-                }
-            }
+        if !scope_project
+            && let Some(ref filter) = filter_directory
+            && !session_matches_directory(&record.value, filter, allow_descendants)
+        {
+            continue;
         }
 
-        if let Some(start) = start {
-            if record.updated < start {
-                continue;
-            }
+        if let Some(start) = start
+            && record.updated < start
+        {
+            continue;
         }
 
         if let Some(ref term) = term {
@@ -796,11 +789,11 @@ pub async fn session_list(
         for session_id in &ids_filter {
             let mut matched = false;
 
-            if let Some(summary) = state.directory_session_index.summary(session_id) {
-                if let Some(record) = record_from_summary(summary) {
-                    records.push(record);
-                    matched = true;
-                }
+            if let Some(summary) = state.directory_session_index.summary(session_id)
+                && let Some(record) = record_from_summary(summary)
+            {
+                records.push(record);
+                matched = true;
             }
 
             if matched {
@@ -826,12 +819,11 @@ pub async fn session_list(
                         consistency.note_stale_read();
                     }
 
-                    if !scope_project {
-                        if let Some(ref filter) = filter_directory {
-                            if !session_matches_directory(&session, filter, allow_descendants) {
-                                continue;
-                            }
-                        }
+                    if !scope_project
+                        && let Some(ref filter) = filter_directory
+                        && !session_matches_directory(&session, filter, allow_descendants)
+                    {
+                        continue;
                     }
 
                     let updated = session
@@ -840,10 +832,10 @@ pub async fn session_list(
                         .and_then(|v| v.as_f64())
                         .unwrap_or(0.0);
 
-                    if let Some(start) = start {
-                        if updated < start {
-                            continue;
-                        }
+                    if let Some(start) = start
+                        && updated < start
+                    {
+                        continue;
                     }
 
                     if let Some(ref term) = term {
@@ -927,12 +919,11 @@ pub async fn session_list(
                             Err(err) => return ScanFetchResult::ReadError(session_id, err),
                         };
 
-                        if !scope_project {
-                            if let Some(ref filter) = filter_directory {
-                                if !session_matches_directory(&session, filter, allow_descendants) {
-                                    return ScanFetchResult::Record(None, read_outcome);
-                                }
-                            }
+                        if !scope_project
+                            && let Some(ref filter) = filter_directory
+                            && !session_matches_directory(&session, filter, allow_descendants)
+                        {
+                            return ScanFetchResult::Record(None, read_outcome);
                         }
 
                         let updated = session
@@ -941,10 +932,10 @@ pub async fn session_list(
                             .and_then(|v| v.as_f64())
                             .unwrap_or(0.0);
 
-                        if let Some(start) = start {
-                            if updated < start {
-                                return ScanFetchResult::Record(None, read_outcome);
-                            }
+                        if let Some(start) = start
+                            && updated < start
+                        {
+                            return ScanFetchResult::Record(None, read_outcome);
                         }
 
                         if let Some(ref term) = term {
@@ -1009,14 +1000,13 @@ pub async fn session_list(
                             mark_consistency_read_error(&mut consistency, &err);
                             if let Some(summary) =
                                 state.directory_session_index.summary(&session_id)
+                                && let Some(record) = record_from_summary(summary)
                             {
-                                if let Some(record) = record_from_summary(summary) {
-                                    consistency.note_fallback_summary();
-                                    if !seen_ids.insert(record.id.clone()) {
-                                        continue;
-                                    }
-                                    records.push(record);
+                                consistency.note_fallback_summary();
+                                if !seen_ids.insert(record.id.clone()) {
+                                    continue;
                                 }
+                                records.push(record);
                             }
                         }
                     }
@@ -1026,9 +1016,9 @@ pub async fn session_list(
     }
 
     let mut sessions: Vec<Value> = Vec::new();
-    let mut total = 0usize;
-    let mut has_more = false;
-    let mut next_offset: Option<usize> = None;
+    let total: usize;
+    let has_more: bool;
+    let next_offset: Option<usize>;
     let mut focus_root_id: Option<String> = None;
     let mut focus_root_index: Option<usize> = None;
 
@@ -1044,13 +1034,13 @@ pub async fn session_list(
 
         let mut children_by_id: HashMap<String, Vec<String>> = HashMap::new();
         for record in &records {
-            if let Some(parent) = record.parent_id.as_ref() {
-                if by_id.contains_key(parent) {
-                    children_by_id
-                        .entry(parent.clone())
-                        .or_default()
-                        .push(record.id.clone());
-                }
+            if let Some(parent) = record.parent_id.as_ref()
+                && by_id.contains_key(parent)
+            {
+                children_by_id
+                    .entry(parent.clone())
+                    .or_default()
+                    .push(record.id.clone());
             }
         }
 
@@ -1060,7 +1050,7 @@ pub async fn session_list(
                 record
                     .parent_id
                     .as_ref()
-                    .map_or(true, |pid| !by_id.contains_key(pid))
+                    .is_none_or(|pid| !by_id.contains_key(pid))
             })
             .map(|record| record.id.clone())
             .collect();
@@ -1076,36 +1066,35 @@ pub async fn session_list(
 
         total = root_ids.len();
 
-        if let Some(focus_id) = focus_session_id.as_ref() {
-            if by_id.contains_key(focus_id) {
-                let mut current = focus_id.clone();
-                let mut seen: HashSet<String> = HashSet::new();
-                loop {
-                    if !seen.insert(current.clone()) {
-                        break;
-                    }
-                    let parent = by_id
-                        .get(&current)
-                        .and_then(|r| r.parent_id.clone())
-                        .filter(|pid| by_id.contains_key(pid));
-                    let Some(parent) = parent else {
-                        break;
-                    };
-                    current = parent;
+        if let Some(focus_id) = focus_session_id.as_ref()
+            && by_id.contains_key(focus_id)
+        {
+            let mut current = focus_id.clone();
+            let mut seen: HashSet<String> = HashSet::new();
+            loop {
+                if !seen.insert(current.clone()) {
+                    break;
                 }
-                focus_root_id = Some(current.clone());
-                if let Some(idx) = root_ids.iter().position(|id| id == &current) {
-                    focus_root_index = Some(idx);
-                }
+                let parent = by_id
+                    .get(&current)
+                    .and_then(|r| r.parent_id.clone())
+                    .filter(|pid| by_id.contains_key(pid));
+                let Some(parent) = parent else {
+                    break;
+                };
+                current = parent;
+            }
+            focus_root_id = Some(current.clone());
+            if let Some(idx) = root_ids.iter().position(|id| id == &current) {
+                focus_root_index = Some(idx);
             }
         }
 
-        if !offset_provided {
-            if let (Some(idx), Some(limit)) = (focus_root_index, limit) {
-                if limit > 0 {
-                    offset = (idx / limit) * limit;
-                }
-            }
+        if !offset_provided
+            && let (Some(idx), Some(limit)) = (focus_root_index, limit)
+            && limit > 0
+        {
+            offset = (idx / limit) * limit;
         }
 
         if offset > total {
@@ -1248,11 +1237,11 @@ pub async fn session_message_get(
     let include_total = parse_boolish(query.include_total);
     let offset = match parse_number(query.offset, "offset") {
         Ok(value) => value.unwrap_or(0.0),
-        Err(resp) => return Ok(resp),
+        Err(resp) => return Ok(*resp),
     };
     let limit = match parse_number(query.limit, "limit") {
         Ok(value) => value.filter(|v| *v != 0.0),
-        Err(resp) => return Ok(resp),
+        Err(resp) => return Ok(*resp),
     };
     let offset = if offset.is_sign_negative() {
         0usize
@@ -1270,7 +1259,7 @@ pub async fn session_message_get(
     let sqlite_db_exists = fs::metadata(opencode_db_path()).await.is_ok();
     let mut consistency = ResponseConsistency::default();
     let mut entries = Vec::new();
-    let mut total = 0usize;
+    let total: usize;
 
     if let Some(page) =
         load_session_message_page_from_sqlite(&session_id, offset, limit, include_total).await
@@ -1294,10 +1283,10 @@ pub async fn session_message_get(
                 skipped += 1;
                 continue;
             }
-            if let Some(limit) = limit {
-                if entries.len() >= limit {
-                    break;
-                }
+            if let Some(limit) = limit
+                && entries.len() >= limit
+            {
+                break;
             }
 
             let message_path = message_dir.join(format!("{message_id}.json"));
@@ -1502,10 +1491,10 @@ pub async fn session_message_part_get(
         obj.insert("sessionID".to_string(), Value::String(sid.to_string()));
         obj.insert("messageID".to_string(), Value::String(mid.to_string()));
         obj.insert("partID".to_string(), Value::String(pid.to_string()));
-        if !obj
+        if obj
             .get("id")
             .and_then(|v| v.as_str())
-            .is_some_and(|v| !v.trim().is_empty())
+            .is_none_or(|v| v.trim().is_empty())
         {
             obj.insert("id".to_string(), Value::String(pid.to_string()));
         }
@@ -1516,6 +1505,8 @@ pub async fn session_message_part_get(
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::await_holding_lock)]
+
     use super::*;
     use axum::body::to_bytes;
     use axum::extract::{Query, State};
@@ -2655,7 +2646,6 @@ mod tests {
         let response = session_message_get(
             State(dummy_state()),
             Query(SessionMessagesQuery {
-                directory: None,
                 offset: Some("0".to_string()),
                 limit: Some("1".to_string()),
                 include_total: Some("true".to_string()),
@@ -2743,7 +2733,6 @@ mod tests {
         let response = session_message_get(
             State(dummy_state()),
             Query(SessionMessagesQuery {
-                directory: None,
                 offset: Some("0".to_string()),
                 limit: Some("30".to_string()),
                 include_total: Some("true".to_string()),
@@ -2778,13 +2767,12 @@ mod tests {
             consistency.get("degraded").and_then(|v| v.as_bool()),
             Some(true)
         );
-        assert_eq!(
+        assert!(
             consistency
                 .get("ioSkips")
                 .and_then(|v| v.as_u64())
                 .unwrap_or(0)
-                >= 1,
-            true
+                >= 1
         );
     }
 
@@ -2940,7 +2928,6 @@ mod tests {
         let response = session_message_get(
             State(dummy_state()),
             Query(SessionMessagesQuery {
-                directory: None,
                 offset: Some("0".to_string()),
                 limit: Some("30".to_string()),
                 include_total: Some("true".to_string()),
@@ -2974,13 +2961,12 @@ mod tests {
             consistency.get("degraded").and_then(|v| v.as_bool()),
             Some(true)
         );
-        assert_eq!(
+        assert!(
             consistency
                 .get("transientSkips")
                 .and_then(|v| v.as_u64())
                 .unwrap_or(0)
-                >= 1,
-            true
+                >= 1
         );
         assert_eq!(
             consistency.get("retryAfterMs").and_then(|v| v.as_u64()),

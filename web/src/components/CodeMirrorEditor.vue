@@ -893,13 +893,13 @@ watch(modelPath, () => {
   --oc-blame-accent: 0.68 0.13 45;
 }
 :global(.oc-blame-commit-color-2) {
-  --oc-blame-accent: 0.70 0.12 65;
+  --oc-blame-accent: 0.7 0.12 65;
 }
 :global(.oc-blame-commit-color-3) {
-  --oc-blame-accent: 0.70 0.12 85;
+  --oc-blame-accent: 0.7 0.12 85;
 }
 :global(.oc-blame-commit-color-4) {
-  --oc-blame-accent: 0.70 0.11 105;
+  --oc-blame-accent: 0.7 0.11 105;
 }
 :global(.oc-blame-commit-color-5) {
   --oc-blame-accent: 0.68 0.12 125;

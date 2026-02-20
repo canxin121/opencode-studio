@@ -9,7 +9,7 @@
     "build:rust-debug": "vue-tsc -b && vite build --mode rust-debug",
     "fmt": "prettier -w .",
     "fmt:check": "prettier -c .",
-    "test": "node --test tests/*.test.js",
+    "test": "bun test",
     "preview": "vite preview"
   },
   "dependencies": {

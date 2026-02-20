@@ -42,7 +42,13 @@ export default defineComponent({
       </div>
       <div class="flex items-center gap-2">
         <Tooltip>
-          <Button size="icon" variant="ghost" class="h-8 w-8" title="Reset section" @click="resetSection('experimental')">
+          <Button
+            size="icon"
+            variant="ghost"
+            class="h-8 w-8"
+            title="Reset section"
+            @click="resetSection('experimental')"
+          >
             <RiRestartLine class="h-4 w-4" />
           </Button>
           <template #content>Reset section</template>
@@ -141,7 +147,9 @@ export default defineComponent({
             </div>
           </div>
           <div class="text-[11px] text-muted-foreground">If set, OpenCode prefers these tools when planning.</div>
-          <div v-if="toolIdsError" class="text-[11px] text-muted-foreground break-all">Tool IDs unavailable: {{ toolIdsError }}</div>
+          <div v-if="toolIdsError" class="text-[11px] text-muted-foreground break-all">
+            Tool IDs unavailable: {{ toolIdsError }}
+          </div>
           <textarea
             v-if="showAdvancedPrimaryTools"
             v-model="experimentalPrimaryTools"

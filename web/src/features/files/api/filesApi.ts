@@ -152,12 +152,14 @@ export async function replaceFileContent(input: {
 }
 
 export async function readFileText(input: { directory: string; path: string }): Promise<string> {
-  return apiText(
-    `/api/fs/read?directory=${encodeURIComponent(input.directory)}&path=${encodeURIComponent(input.path)}`,
-  )
+  return apiText(`/api/fs/read?directory=${encodeURIComponent(input.directory)}&path=${encodeURIComponent(input.path)}`)
 }
 
-export async function writeFile(input: { directory: string; path: string; content: string }): Promise<{ success: boolean }> {
+export async function writeFile(input: {
+  directory: string
+  path: string
+  content: string
+}): Promise<{ success: boolean }> {
   return apiJson<{ success: boolean }>(`/api/fs/write?directory=${encodeURIComponent(input.directory)}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },

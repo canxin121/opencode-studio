@@ -336,10 +336,7 @@ fn infer_repo_dir(url: &str) -> Option<String> {
     if trimmed.is_empty() {
         return None;
     }
-    let last = trimmed
-        .rsplit(|c| c == '/' || c == ':')
-        .next()
-        .unwrap_or(trimmed);
+    let last = trimmed.rsplit(['/', ':']).next().unwrap_or(trimmed);
     let mut name = last.to_string();
     if let Some(stripped) = name.strip_suffix(".git") {
         name = stripped.to_string();
@@ -432,16 +429,16 @@ pub async fn git_clone(
 
     if let Ok(meta) = tokio::fs::metadata(&target).await {
         if meta.is_dir() {
-            if let Ok(mut entries) = tokio::fs::read_dir(&target).await {
-                if entries.next_entry().await.ok().flatten().is_some() {
-                    return (
+            if let Ok(mut entries) = tokio::fs::read_dir(&target).await
+                && entries.next_entry().await.ok().flatten().is_some()
+            {
+                return (
                         StatusCode::CONFLICT,
                         Json(
                             serde_json::json!({"error": "Target directory not empty", "code": "target_not_empty"}),
                         ),
                     )
                         .into_response();
-                }
             }
         } else {
             return (
@@ -452,14 +449,14 @@ pub async fn git_clone(
         }
     }
 
-    if let Some(parent) = target.parent() {
-        if let Err(err) = tokio::fs::create_dir_all(parent).await {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": err.to_string(), "code": "mkdir_failed"})),
-            )
-                .into_response();
-        }
+    if let Some(parent) = target.parent()
+        && let Err(err) = tokio::fs::create_dir_all(parent).await
+    {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": err.to_string(), "code": "mkdir_failed"})),
+        )
+            .into_response();
     }
 
     let target_str = target.to_string_lossy().to_string();

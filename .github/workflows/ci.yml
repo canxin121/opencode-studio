@@ -19,11 +19,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-
       - name: Setup Bun
         uses: oven-sh/setup-bun@v1
         with:
@@ -40,17 +35,28 @@ jobs:
       - name: Install web deps
         run: bun install --cwd web --frozen-lockfile
 
+      - name: Web format check
+        run: bun run --cwd web fmt:check
+
       - name: Web build
         run: bun run --cwd web build
 
       - name: Web tests
-        run: bun run --cwd web test
+        run: bun test --cwd web
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
 
       - name: Cache Rust builds
         uses: Swatinem/rust-cache@v2
+
+      - name: Rust format check
+        run: cargo fmt --all -- --check
+
+      - name: Rust clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
       - name: Rust tests
         run: cargo test -q --locked --manifest-path server/Cargo.toml

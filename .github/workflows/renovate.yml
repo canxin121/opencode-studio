@@ -1,0 +1,28 @@
+name: Renovate
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Daily at 03:17 UTC
+    - cron: "17 3 * * *"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: renovate-${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  renovate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Run Renovate
+        uses: renovatebot/github-action@v40
+        with:
+          # Prefer a PAT or GitHub App token in RENOVATE_TOKEN.
+          # Fallback to GITHUB_TOKEN for convenience (note: it cannot trigger downstream workflows).
+          token: ${{ secrets.RENOVATE_TOKEN || github.token }}
+          configurationFile: renovate.json

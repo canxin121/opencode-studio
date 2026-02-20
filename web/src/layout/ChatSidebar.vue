@@ -74,7 +74,11 @@ function isUiAuthRequiredError(err: unknown): boolean {
 }
 
 function isUiAuthRequiredMessage(message: string): boolean {
-  return String(message || '').trim().toLowerCase() === 'ui authentication required'
+  return (
+    String(message || '')
+      .trim()
+      .toLowerCase() === 'ui authentication required'
+  )
 }
 
 function toIdSet(input: string[]): Set<string> {
@@ -266,7 +270,10 @@ const visibleDirectories = computed<DirectoryEntry[]>(() => {
 })
 
 const directoryPageCount = computed(() => {
-  return Math.max(1, Math.ceil(Math.max(directoryPageTotal.value, pagedDirectories.value.length) / DIRECTORIES_PAGE_SIZE))
+  return Math.max(
+    1,
+    Math.ceil(Math.max(directoryPageTotal.value, pagedDirectories.value.length) / DIRECTORIES_PAGE_SIZE),
+  )
 })
 
 const directoryPageLoading = computed<boolean>(() => {
@@ -281,22 +288,26 @@ function scheduleDirectoryPageFetch(delayMs = 0) {
     window.clearTimeout(directoryPageFetchTimer)
     directoryPageFetchTimer = null
   }
-  directoryPageFetchTimer = window.setTimeout(() => {
-    directoryPageFetchTimer = null
-    const page = Math.max(0, Math.floor(directoryPage.value || 0))
-    void directorySessions
-      .loadDirectoryPage({ page, pageSize: DIRECTORIES_PAGE_SIZE, query: sidebarQueryNorm.value })
-      .then((result) => {
-        const resolvedPage = typeof result?.page === 'number' && Number.isFinite(result.page) ? Math.floor(result.page) : page
-        if (resolvedPage !== directoryPage.value) {
-          skipDirectoryPageWatchOnce = true
-          directoryPage.value = resolvedPage
-        }
-      })
-      .catch(() => {
-        // keep current directory page data when paging fetch fails
-      })
-  }, Math.max(0, Math.floor(delayMs)))
+  directoryPageFetchTimer = window.setTimeout(
+    () => {
+      directoryPageFetchTimer = null
+      const page = Math.max(0, Math.floor(directoryPage.value || 0))
+      void directorySessions
+        .loadDirectoryPage({ page, pageSize: DIRECTORIES_PAGE_SIZE, query: sidebarQueryNorm.value })
+        .then((result) => {
+          const resolvedPage =
+            typeof result?.page === 'number' && Number.isFinite(result.page) ? Math.floor(result.page) : page
+          if (resolvedPage !== directoryPage.value) {
+            skipDirectoryPageWatchOnce = true
+            directoryPage.value = resolvedPage
+          }
+        })
+        .catch(() => {
+          // keep current directory page data when paging fetch fails
+        })
+    },
+    Math.max(0, Math.floor(delayMs)),
+  )
 }
 
 async function requestDirectoryPage(nextPage: number) {
@@ -312,7 +323,8 @@ async function requestDirectoryPage(nextPage: number) {
       pageSize: DIRECTORIES_PAGE_SIZE,
       query: sidebarQueryNorm.value,
     })
-    const resolvedPage = typeof result?.page === 'number' && Number.isFinite(result.page) ? Math.floor(result.page) : target
+    const resolvedPage =
+      typeof result?.page === 'number' && Number.isFinite(result.page) ? Math.floor(result.page) : target
     if (resolvedPage !== directoryPage.value) {
       skipDirectoryPageWatchOnce = true
       directoryPage.value = resolvedPage

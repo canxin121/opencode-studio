@@ -1023,7 +1023,12 @@ function onSendSelection() {
             title="View settings"
             aria-label="View settings"
             @mousedown.prevent
-            @click.stop="viewMenuQuery = ''; viewMenuOpen = !viewMenuOpen"
+            @click.stop="
+              () => {
+                viewMenuQuery = ''
+                viewMenuOpen = !viewMenuOpen
+              }
+            "
           >
             <RiMore2Line class="h-4 w-4" />
           </Button>
@@ -1079,7 +1084,9 @@ function onSendSelection() {
           :show-action="true"
           @action="props.openSidebar"
         />
-        <div v-else class="h-full grid place-items-center text-muted-foreground typography-meta">Pick a file from the tree.</div>
+        <div v-else class="h-full grid place-items-center text-muted-foreground typography-meta">
+          Pick a file from the tree.
+        </div>
       </template>
 
       <div v-else-if="fileLoading" class="p-3 flex items-center gap-2 text-muted-foreground typography-meta">

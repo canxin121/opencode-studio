@@ -149,10 +149,7 @@ function mapValueEnum(prop: SchemaProperty): JsonLike[] {
   return ap && Array.isArray(ap.enum) ? ap.enum : []
 }
 
-function flattenSchema(
-  properties: Record<string, SchemaProperty>,
-  basePath: string[] = [],
-): SchemaEntry[] {
+function flattenSchema(properties: Record<string, SchemaProperty>, basePath: string[] = []): SchemaEntry[] {
   const out: SchemaEntry[] = []
 
   for (const [key, raw] of Object.entries(properties)) {
@@ -830,7 +827,10 @@ function clearArrayRows(path: string[], prop: SchemaProperty) {
           />
         </div>
 
-        <div v-else class="h-9 inline-flex items-center rounded-md border border-input bg-transparent px-3 text-sm max-w-full min-w-0">
+        <div
+          v-else
+          class="h-9 inline-flex items-center rounded-md border border-input bg-transparent px-3 text-sm max-w-full min-w-0"
+        >
           <span class="truncate">{{ selectedPluginLabel }}</span>
         </div>
 
@@ -840,38 +840,40 @@ function clearArrayRows(path: string[], prop: SchemaProperty) {
         </Button>
       </div>
 
-        <div
-          v-if="error"
-          class="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive break-words"
-        >
-          {{ error }}
+      <div
+        v-if="error"
+        class="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive break-words"
+      >
+        {{ error }}
+      </div>
+
+      <div v-if="loading" class="text-xs text-muted-foreground">Loading plugin config…</div>
+
+      <div v-else class="grid gap-3">
+        <div v-if="schemaEntries.length === 0" class="text-xs text-muted-foreground">
+          This plugin did not declare any settings fields.
         </div>
 
-        <div v-if="loading" class="text-xs text-muted-foreground">Loading plugin config…</div>
-
-        <div v-else class="grid gap-3">
-          <div v-if="schemaEntries.length === 0" class="text-xs text-muted-foreground">
-            This plugin did not declare any settings fields.
-          </div>
-
-          <div
-            v-for="entry in schemaEntries"
-            :key="entry.path.join('.')"
-            class="grid gap-1 min-w-0"
-            :style="{ paddingLeft: `${Math.max(0, (entry.depth - 1) * 12)}px` }"
-          >
-            <template v-if="entry.kind === 'group'">
-              <div class="pt-2 text-xs font-semibold text-muted-foreground break-words">
-                {{ getLabel(entry.key, entry.prop) }}
-              </div>
-              <div v-if="getDescription(entry.prop)" class="text-xs text-muted-foreground break-words">
-                {{ getDescription(entry.prop) }}
-              </div>
-            </template>
+        <div
+          v-for="entry in schemaEntries"
+          :key="entry.path.join('.')"
+          class="grid gap-1 min-w-0"
+          :style="{ paddingLeft: `${Math.max(0, (entry.depth - 1) * 12)}px` }"
+        >
+          <template v-if="entry.kind === 'group'">
+            <div class="pt-2 text-xs font-semibold text-muted-foreground break-words">
+              {{ getLabel(entry.key, entry.prop) }}
+            </div>
+            <div v-if="getDescription(entry.prop)" class="text-xs text-muted-foreground break-words">
+              {{ getDescription(entry.prop) }}
+            </div>
+          </template>
 
           <template v-else>
             <label class="text-sm font-medium leading-none break-words">{{ getLabel(entry.key, entry.prop) }}</label>
-            <div v-if="getDescription(entry.prop)" class="text-xs text-muted-foreground break-words">{{ getDescription(entry.prop) }}</div>
+            <div v-if="getDescription(entry.prop)" class="text-xs text-muted-foreground break-words">
+              {{ getDescription(entry.prop) }}
+            </div>
 
             <OptionPicker
               v-if="Array.isArray(entry.prop.enum) && entry.prop.enum.length > 0"
@@ -945,8 +947,20 @@ function clearArrayRows(path: string[], prop: SchemaProperty) {
                   <input
                     v-else
                     type="text"
-                    :inputmode="arrayItemType(entry.prop) === 'integer' ? 'numeric' : arrayItemType(entry.prop) === 'number' ? 'decimal' : 'text'"
-                    :placeholder="arrayItemType(entry.prop) === 'integer' ? 'Integer' : arrayItemType(entry.prop) === 'number' ? 'Number' : 'Value'"
+                    :inputmode="
+                      arrayItemType(entry.prop) === 'integer'
+                        ? 'numeric'
+                        : arrayItemType(entry.prop) === 'number'
+                          ? 'decimal'
+                          : 'text'
+                    "
+                    :placeholder="
+                      arrayItemType(entry.prop) === 'integer'
+                        ? 'Integer'
+                        : arrayItemType(entry.prop) === 'number'
+                          ? 'Number'
+                          : 'Value'
+                    "
                     :value="row"
                     class="h-9 w-full sm:flex-1 sm:min-w-0 rounded-md border border-input bg-transparent px-3 text-sm"
                     @input="onArrayRowInput(entry.path, entry.prop, rowIdx, $event)"
@@ -1021,8 +1035,20 @@ function clearArrayRows(path: string[], prop: SchemaProperty) {
                   <input
                     v-else
                     type="text"
-                    :inputmode="mapValueType(entry.prop) === 'integer' ? 'numeric' : mapValueType(entry.prop) === 'number' ? 'decimal' : 'text'"
-                    :placeholder="mapValueType(entry.prop) === 'integer' ? 'Integer' : mapValueType(entry.prop) === 'number' ? 'Number' : 'Value'"
+                    :inputmode="
+                      mapValueType(entry.prop) === 'integer'
+                        ? 'numeric'
+                        : mapValueType(entry.prop) === 'number'
+                          ? 'decimal'
+                          : 'text'
+                    "
+                    :placeholder="
+                      mapValueType(entry.prop) === 'integer'
+                        ? 'Integer'
+                        : mapValueType(entry.prop) === 'number'
+                          ? 'Number'
+                          : 'Value'
+                    "
                     :value="row.value"
                     class="h-9 w-full sm:flex-1 sm:min-w-0 rounded-md border border-input bg-transparent px-3 text-sm"
                     @input="onMapValueInput(entry.path, entry.prop, rowIdx, $event)"
@@ -1064,7 +1090,10 @@ function clearArrayRows(path: string[], prop: SchemaProperty) {
             />
 
             <div v-if="jsonError(entry.path)" class="text-xs text-destructive">{{ jsonError(entry.path) }}</div>
-            <div v-else-if="entry.prop.type === 'object' || entry.prop.type === 'array'" class="text-xs text-muted-foreground">
+            <div
+              v-else-if="entry.prop.type === 'object' || entry.prop.type === 'array'"
+              class="text-xs text-muted-foreground"
+            >
               Edit as JSON.
             </div>
           </template>

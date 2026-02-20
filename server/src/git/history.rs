@@ -87,14 +87,14 @@ pub async fn git_log(Query(q): Query<GitLogQuery>) -> Response {
         .filter(|s| !s.is_empty());
     let include_graph = q.graph.unwrap_or(false);
 
-    if let Some(p) = path {
-        if !is_safe_repo_rel_path(p) {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(serde_json::json!({"error": "Invalid path", "code": "invalid_path"})),
-            )
-                .into_response();
-        }
+    if let Some(p) = path
+        && !is_safe_repo_rel_path(p)
+    {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "Invalid path", "code": "invalid_path"})),
+        )
+            .into_response();
     }
 
     let max_count = limit + 1;
@@ -291,14 +291,14 @@ fn normalize_numstat_path(raw: &str) -> String {
     if raw.is_empty() {
         return "".to_string();
     }
-    if let (Some(start), Some(end)) = (raw.find('{'), raw.find('}')) {
-        if end > start {
-            let inside = &raw[start + 1..end];
-            if let Some((_, new)) = inside.split_once(" => ") {
-                let prefix = &raw[..start];
-                let suffix = &raw[end + 1..];
-                return format!("{}{}{}", prefix, new, suffix).trim().to_string();
-            }
+    if let (Some(start), Some(end)) = (raw.find('{'), raw.find('}'))
+        && end > start
+    {
+        let inside = &raw[start + 1..end];
+        if let Some((_, new)) = inside.split_once(" => ") {
+            let prefix = &raw[..start];
+            let suffix = &raw[end + 1..];
+            return format!("{}{}{}", prefix, new, suffix).trim().to_string();
         }
     }
     if let Some((_, new)) = raw.rsplit_once(" => ") {

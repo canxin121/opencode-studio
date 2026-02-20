@@ -2106,7 +2106,6 @@ async function restoreForRoot(next: string) {
     await loadDirectory(dir).catch(() => {})
     if (isStaleRootRestore(seq, next)) return
   }
-
 }
 
 watch(
@@ -2538,10 +2537,7 @@ onMounted(async () => {
               </FilesExplorerPane>
             </div>
 
-            <div
-              class="flex-1 min-h-0 overflow-hidden m-0 p-0"
-              v-show="!isMobile || !ui.isSessionSwitcherOpen"
-            >
+            <div class="flex-1 min-h-0 overflow-hidden m-0 p-0" v-show="!isMobile || !ui.isSessionSwitcherOpen">
               <FileViewerPane
                 v-model:showMobileViewer="showMobileViewer"
                 v-model:autoSaveEnabled="autoSaveEnabled"

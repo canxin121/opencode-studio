@@ -94,10 +94,7 @@ export function createOpenCodeConfigPanelValidation(opts: {
         if (disabled) continue
 
         const extensions = cfgRecord.extensions
-        if (
-          !Array.isArray(extensions) ||
-          extensions.filter((s) => typeof s === 'string' && s.trim()).length === 0
-        ) {
+        if (!Array.isArray(extensions) || extensions.filter((s) => typeof s === 'string' && s.trim()).length === 0) {
           addIssue(out, `lsp.${serverId}.extensions`, `Custom LSP server '${serverId}' requires extensions`, 'error')
         }
       }

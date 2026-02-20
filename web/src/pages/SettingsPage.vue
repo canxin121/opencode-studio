@@ -539,10 +539,7 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
       </aside>
 
       <!-- Content -->
-      <main
-        class="flex-1 min-w-0 overflow-y-auto bg-background"
-        v-show="!ui.isMobile || !ui.isSessionSwitcherOpen"
-      >
+      <main class="flex-1 min-w-0 overflow-y-auto bg-background" v-show="!ui.isMobile || !ui.isSessionSwitcherOpen">
         <div :class="['mx-auto w-full p-4 lg:p-8 space-y-8', activeTab === 'opencode' ? 'max-w-6xl' : 'max-w-3xl']">
           <div
             v-if="dirtyHint"
@@ -746,7 +743,11 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
                           </tr>
                         </thead>
                         <tbody>
-                          <tr v-for="opt in toolActivityOptions" :key="`tool-matrix-${opt.id}`" class="border-t border-border/50">
+                          <tr
+                            v-for="opt in toolActivityOptions"
+                            :key="`tool-matrix-${opt.id}`"
+                            class="border-t border-border/50"
+                          >
                             <td class="px-3 py-2 align-top">
                               <div>{{ opt.label }}</div>
                               <div class="text-[11px] text-muted-foreground">{{ opt.description }}</div>

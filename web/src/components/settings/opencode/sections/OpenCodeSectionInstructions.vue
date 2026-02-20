@@ -160,9 +160,7 @@ export default defineComponent({
             <template #content>Clear</template>
           </Tooltip>
         </div>
-        <div class="text-[11px] text-muted-foreground">
-          Additional folders that contain reusable OpenCode skills.
-        </div>
+        <div class="text-[11px] text-muted-foreground">Additional folders that contain reusable OpenCode skills.</div>
 
         <div class="flex flex-wrap gap-2">
           <span

@@ -638,7 +638,7 @@ fn resolve_events_poll_interval_ms(plugin: &RegisteredPlugin, query_value: Optio
         .unwrap_or(1200);
 
     let raw = query_value.unwrap_or(manifest_default);
-    raw.max(250).min(5000)
+    raw.clamp(250, 5000)
 }
 
 fn extract_cursor_from_poll_result(value: &Value) -> Option<String> {
@@ -971,7 +971,7 @@ fn parse_bridge_timeout_ms(value: &Value) -> Result<u64, String> {
         })
         .ok_or_else(|| "bridge.timeoutMs must be a positive integer".to_string())?;
 
-    Ok(raw.min(MAX_BRIDGE_TIMEOUT_MS).max(1))
+    Ok(raw.clamp(1, MAX_BRIDGE_TIMEOUT_MS))
 }
 
 fn resolve_bridge_cwd(base: &Path, raw: &str) -> Result<PathBuf, String> {
@@ -992,10 +992,10 @@ fn resolve_bridge_cwd(base: &Path, raw: &str) -> Result<PathBuf, String> {
 }
 
 fn resolve_spec_path_with_base(raw: &str, base: &Path) -> PathBuf {
-    if let Some(rest) = raw.strip_prefix("~/") {
-        if let Ok(home) = std::env::var("HOME") {
-            return PathBuf::from(home).join(rest);
-        }
+    if let Some(rest) = raw.strip_prefix("~/")
+        && let Ok(home) = std::env::var("HOME")
+    {
+        return PathBuf::from(home).join(rest);
     }
 
     let path = PathBuf::from(raw);
@@ -1467,10 +1467,10 @@ fn looks_like_path(spec: &str) -> bool {
 }
 
 fn resolve_spec_path(spec: &str) -> PathBuf {
-    if let Some(rest) = spec.strip_prefix("~/") {
-        if let Ok(home) = std::env::var("HOME") {
-            return PathBuf::from(home).join(rest);
-        }
+    if let Some(rest) = spec.strip_prefix("~/")
+        && let Ok(home) = std::env::var("HOME")
+    {
+        return PathBuf::from(home).join(rest);
     }
 
     let path = PathBuf::from(spec);

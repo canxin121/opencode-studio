@@ -130,7 +130,7 @@ async fn reconcile_runtime_status_from_opencode(state: &Arc<AppState>) {
         }
         return;
     } else {
-        let tasks = futures_stream::iter(directories.iter().cloned().map(|directory| {
+        let tasks = futures_stream::iter(directories.into_iter().map(|directory| {
             let bridge = bridge.clone();
             async move {
                 let payload = fetch_session_status_map(&bridge, Some(&directory)).await;

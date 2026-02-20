@@ -1,10 +1,6 @@
 import type { DirectoryEntry } from '@/features/sessions/model/types'
 import type { SessionRuntimeSnapshot, SessionSummarySnapshot } from '@/data/directorySessionSnapshotDb'
-import {
-  defaultChatSidebarUiPrefs,
-  patchChatSidebarUiPrefs,
-  type ChatSidebarUiPrefs,
-} from '@/data/chatSidebarUiPrefs'
+import { defaultChatSidebarUiPrefs, patchChatSidebarUiPrefs, type ChatSidebarUiPrefs } from '@/data/chatSidebarUiPrefs'
 
 type PrefValue = unknown
 type PrefRecord = Record<string, PrefValue>
@@ -93,9 +89,7 @@ export function normalizeUiPrefs(input: Partial<ChatSidebarUiPrefs> | null | und
   return patchChatSidebarUiPrefs(defaultChatSidebarUiPrefs(), (input || {}) as Partial<ChatSidebarUiPrefs>)
 }
 
-function uiPrefsRecency(
-  prefs: Partial<ChatSidebarUiPrefs> | null | undefined,
-): { version: number; updatedAt: number } {
+function uiPrefsRecency(prefs: Partial<ChatSidebarUiPrefs> | null | undefined): { version: number; updatedAt: number } {
   const version =
     typeof prefs?.version === 'number' && Number.isFinite(prefs.version) ? Math.max(0, Math.floor(prefs.version)) : 0
   const updatedAt =

@@ -78,7 +78,7 @@ impl SettingsEventHub {
     }
 
     fn push_buffered_event(&self, evt: SequencedSettingsEvent) {
-        let bytes = evt.payload.as_bytes().len();
+        let bytes = evt.payload.len();
 
         let mut buffer = self.buffer.lock().unwrap();
         buffer.items.push_back(evt);
@@ -88,7 +88,7 @@ impl SettingsEventHub {
             || buffer.bytes > SETTINGS_EVENT_HUB_REPLAY_MAX_BYTES
         {
             if let Some(front) = buffer.items.pop_front() {
-                buffer.bytes = buffer.bytes.saturating_sub(front.payload.as_bytes().len());
+                buffer.bytes = buffer.bytes.saturating_sub(front.payload.len());
             } else {
                 buffer.bytes = 0;
                 break;
@@ -125,10 +125,10 @@ impl SettingsEventHub {
         }
 
         // If the client's cursor is older than the earliest replayable event, force a snapshot.
-        if let Some(oldest) = self.oldest_seq() {
-            if last_event_id.saturating_add(1) < oldest {
-                return true;
-            }
+        if let Some(oldest) = self.oldest_seq()
+            && last_event_id.saturating_add(1) < oldest
+        {
+            return true;
         }
 
         false
@@ -176,7 +176,7 @@ pub(crate) async fn publish_settings_replace(settings: Value) {
     // Settings are usually small, but can grow (e.g. large bookmark arrays).
     // If a single payload exceeds the replay budget, skip buffering it and force
     // reconnecting clients to take a snapshot.
-    if evt.payload.as_bytes().len() > SETTINGS_EVENT_HUB_REPLAY_MAX_BYTES {
+    if evt.payload.len() > SETTINGS_EVENT_HUB_REPLAY_MAX_BYTES {
         SETTINGS_EVENT_HUB.mark_unbuffered_seq(seq);
     } else {
         SETTINGS_EVENT_HUB.push_buffered_event(evt.clone());

@@ -179,15 +179,6 @@ impl DirectorySessionsEventHub {
         let _ = self.tx.send(evt);
     }
 
-    fn replay_since(&self, last_seq: u64) -> Vec<SequencedPatchEvent> {
-        let buf = self.buffer.lock().unwrap();
-        buf.items
-            .iter()
-            .filter(|evt| evt.seq > last_seq)
-            .cloned()
-            .collect()
-    }
-
     fn replay_since_until(
         &self,
         last_seq: u64,
@@ -217,9 +208,8 @@ impl DirectorySessionsEventHub {
     }
 
     fn register_client_limit(&self, limit_per_directory: usize) -> u64 {
-        let limit = limit_per_directory
-            .max(DIRECTORY_SESSIONS_LIMIT_MIN)
-            .min(DIRECTORY_SESSIONS_LIMIT_MAX);
+        let limit =
+            limit_per_directory.clamp(DIRECTORY_SESSIONS_LIMIT_MIN, DIRECTORY_SESSIONS_LIMIT_MAX);
         let client_id = self.next_client_id.fetch_add(1, Ordering::Relaxed);
         let mut map = self.active_limit_by_client_id.lock().unwrap();
         map.insert(client_id, limit);
@@ -237,8 +227,7 @@ impl DirectorySessionsEventHub {
             .copied()
             .max()
             .unwrap_or(DIRECTORY_SESSIONS_LIMIT_DEFAULT)
-            .max(DIRECTORY_SESSIONS_LIMIT_MIN)
-            .min(DIRECTORY_SESSIONS_LIMIT_MAX)
+            .clamp(DIRECTORY_SESSIONS_LIMIT_MIN, DIRECTORY_SESSIONS_LIMIT_MAX)
     }
 
     fn downstream_client_count(&self) -> usize {
@@ -313,8 +302,7 @@ fn parse_limit(raw: Option<usize>) -> usize {
     // Keep at least 40 summaries per directory so the global recent-40 index
     // can be maintained without falling back to full scans.
     raw.unwrap_or(DIRECTORY_SESSIONS_LIMIT_DEFAULT)
-        .max(DIRECTORY_SESSIONS_LIMIT_MIN)
-        .min(DIRECTORY_SESSIONS_LIMIT_MAX)
+        .clamp(DIRECTORY_SESSIONS_LIMIT_MIN, DIRECTORY_SESSIONS_LIMIT_MAX)
 }
 
 const DIRECTORY_SESSIONS_FETCH_CONCURRENCY: usize = 6;
@@ -1151,7 +1139,7 @@ mod tests {
             "session": { "id": "s_2" }
         })]);
 
-        let replay = hub.replay_since(1);
+        let replay = hub.replay_since_until(1, hub.latest_seq());
         assert_eq!(replay.len(), 1);
         assert_eq!(replay[0].seq, 2);
         assert!(replay[0].payload.contains("s_2"));
@@ -1165,7 +1153,7 @@ mod tests {
             "session": { "id": "s_1" }
         })]);
 
-        let replay = hub.replay_since(999);
+        let replay = hub.replay_since_until(999, hub.latest_seq());
         assert!(replay.is_empty());
     }
 
@@ -1274,7 +1262,7 @@ mod tests {
             }
         })]);
 
-        let replay = hub.replay_since(0);
+        let replay = hub.replay_since_until(0, hub.latest_seq());
         assert_eq!(hub.oldest_seq(), Some(2));
         assert_eq!(replay.len(), 1);
         assert_eq!(replay[0].seq, 2);
@@ -1292,7 +1280,7 @@ mod tests {
             }
         })]);
 
-        assert_eq!(hub.replay_since(0).len(), 0);
+        assert_eq!(hub.replay_since_until(0, hub.latest_seq()).len(), 0);
         assert_eq!(hub.replay_bytes(), 0);
     }
 

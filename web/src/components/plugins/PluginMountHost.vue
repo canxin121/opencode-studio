@@ -145,7 +145,12 @@ async function ensureModuleMounted() {
     const ctx = safeContext()
     const host: MountHostApi = {
       invokeAction: async (action, payload = null, context = null) => {
-        return await invokeHostPluginAction(props.mount.pluginId, action, payload ?? null, context ?? (ctx as unknown as JsonLike))
+        return await invokeHostPluginAction(
+          props.mount.pluginId,
+          action,
+          payload ?? null,
+          context ?? (ctx as unknown as JsonLike),
+        )
       },
       subscribeEvents: (handlers) => subscribeHostPluginEvents(props.mount.pluginId, handlers),
     }
@@ -268,11 +273,7 @@ function onIframeError() {
     </template>
 
     <template v-else>
-      <div
-        ref="moduleRootEl"
-        class="w-full"
-        :class="fixedHeight > 0 ? 'h-full overflow-auto' : ''"
-      />
+      <div ref="moduleRootEl" class="w-full" :class="fixedHeight > 0 ? 'h-full overflow-auto' : ''" />
     </template>
 
     <div

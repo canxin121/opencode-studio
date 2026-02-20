@@ -18,7 +18,9 @@ const frameHeight = computed(() => {
 
 <template>
   <section class="rounded-lg border border-border bg-muted/10 overflow-hidden">
-    <header class="px-3 py-2 border-b border-border/60 bg-background/80 text-xs text-muted-foreground flex items-center">
+    <header
+      class="px-3 py-2 border-b border-border/60 bg-background/80 text-xs text-muted-foreground flex items-center"
+    >
       <span class="font-medium text-foreground">{{ mount.title }}</span>
       <span class="ml-2 font-mono opacity-70">{{ mount.pluginId }}</span>
     </header>

@@ -384,7 +384,10 @@ export function useChatRunUi(opts: {
     if (!chat.selectedSessionId) return false
     return (
       aborting.value === false &&
-      (currentPhase.value === 'busy' || awaitingAssistant.value || statusType.value === 'busy' || statusType.value === 'retry')
+      (currentPhase.value === 'busy' ||
+        awaitingAssistant.value ||
+        statusType.value === 'busy' ||
+        statusType.value === 'retry')
     )
   })
 

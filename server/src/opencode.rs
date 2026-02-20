@@ -39,10 +39,7 @@ fn parse_forward_logs_value(raw: Option<&str>) -> bool {
     if v.is_empty() {
         return false;
     }
-    match v.to_ascii_lowercase().as_str() {
-        "1" | "true" | "yes" | "on" => true,
-        _ => false,
-    }
+    matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on")
 }
 
 fn forward_logs_enabled() -> bool {

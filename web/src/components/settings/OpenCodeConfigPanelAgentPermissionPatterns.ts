@@ -138,8 +138,7 @@ export function useOpenCodeConfigPanelAgentPermissionPatterns(opts: {
   function onAgentPermissionSelectChange(agentId: string, key: string, value: string) {
     if (value === 'pattern') {
       const current = opts.agentPermissionMap(agentId)[key]
-      const action: PermissionAction =
-        current === 'allow' || current === 'deny' || current === 'ask' ? current : 'ask'
+      const action: PermissionAction = current === 'allow' || current === 'deny' || current === 'ask' ? current : 'ask'
       const map = { ...opts.agentPermissionMap(agentId) }
       if (!opts.isPlainObject(map[key])) {
         map[key] = { '*': action }

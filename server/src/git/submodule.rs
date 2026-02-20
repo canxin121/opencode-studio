@@ -27,10 +27,10 @@ fn parse_gitmodules(contents: &str) -> Vec<GitSubmoduleInfo> {
     let mut current_url: Option<String> = None;
     let mut current_branch: Option<String> = None;
 
-    let mut flush = |out: &mut Vec<GitSubmoduleInfo>,
-                     path: &mut Option<String>,
-                     url: &mut Option<String>,
-                     branch: &mut Option<String>| {
+    let flush = |out: &mut Vec<GitSubmoduleInfo>,
+                 path: &mut Option<String>,
+                 url: &mut Option<String>,
+                 branch: &mut Option<String>| {
         if let (Some(p), Some(u)) = (path.take(), url.take()) {
             out.push(GitSubmoduleInfo {
                 path: p,

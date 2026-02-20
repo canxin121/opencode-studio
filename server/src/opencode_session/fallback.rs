@@ -51,12 +51,11 @@ pub(super) async fn read_json_value(
         .get(path)
         .map(|entry| (entry.modified, entry.value.clone()));
 
-    if let Some(modified) = modified {
-        if let Some((cached_modified, cached_value)) = cached.as_ref() {
-            if *cached_modified == modified {
-                return Ok((cached_value.clone(), ReadJsonOutcome::default()));
-            }
-        }
+    if let Some(modified) = modified
+        && let Some((cached_modified, cached_value)) = cached.as_ref()
+        && *cached_modified == modified
+    {
+        return Ok((cached_value.clone(), ReadJsonOutcome::default()));
     }
 
     let mut attempt = 0usize;

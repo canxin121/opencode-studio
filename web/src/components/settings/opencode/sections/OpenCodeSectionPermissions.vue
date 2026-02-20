@@ -42,7 +42,13 @@ export default defineComponent({
       </div>
       <div class="flex items-center gap-2">
         <Tooltip>
-          <Button size="icon" variant="ghost" class="h-8 w-8" title="Reset section" @click="resetSection('permissions')">
+          <Button
+            size="icon"
+            variant="ghost"
+            class="h-8 w-8"
+            title="Reset section"
+            @click="resetSection('permissions')"
+          >
             <RiRestartLine class="h-4 w-4" />
           </Button>
           <template #content>Reset section</template>

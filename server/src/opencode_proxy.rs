@@ -110,22 +110,22 @@ fn sanitize_chat_session_response_payload(payload: &mut serde_json::Value) {
         return;
     }
 
-    if let Some(session) = obj.get_mut("session") {
-        if !prune_session_summary_value(session) {
-            obj.remove("session");
-        }
+    if let Some(session) = obj.get_mut("session")
+        && !prune_session_summary_value(session)
+    {
+        obj.remove("session");
     }
 
-    if let Some(value) = obj.get_mut("value") {
-        if !prune_session_summary_value(value) {
-            obj.remove("value");
-        }
+    if let Some(value) = obj.get_mut("value")
+        && !prune_session_summary_value(value)
+    {
+        obj.remove("value");
     }
 
-    if let Some(data) = obj.get_mut("data") {
-        if !prune_session_summary_value(data) {
-            obj.remove("data");
-        }
+    if let Some(data) = obj.get_mut("data")
+        && !prune_session_summary_value(data)
+    {
+        obj.remove("data");
     }
 
     if let Some(sessions) = obj.get_mut("sessions").and_then(|v| v.as_array_mut()) {
@@ -265,14 +265,6 @@ pub(crate) async fn proxy_opencode_sse_event(
     uri: Uri,
 ) -> ApiResult<Response> {
     proxy_opencode_sse_event_inner(state, headers, uri, "/event").await
-}
-
-pub(crate) async fn proxy_opencode_sse_global_event(
-    State(state): State<Arc<crate::AppState>>,
-    headers: HeaderMap,
-    uri: Uri,
-) -> ApiResult<Response> {
-    proxy_opencode_sse_event_inner(state, headers, uri, "/global/event").await
 }
 
 fn sse_passthrough_with_heartbeat_and_activity(
@@ -741,12 +733,13 @@ pub(crate) async fn proxy_opencode_rest_inner(
         Ok(bytes) => {
             let mut body_bytes = bytes.to_vec();
 
-            if status.is_success() && should_sanitize_chat_session_response(&path) {
-                if let Ok(mut payload) = serde_json::from_slice::<serde_json::Value>(&body_bytes) {
-                    sanitize_chat_session_response_payload(&mut payload);
-                    if let Ok(encoded) = serde_json::to_vec(&payload) {
-                        body_bytes = encoded;
-                    }
+            if status.is_success()
+                && should_sanitize_chat_session_response(&path)
+                && let Ok(mut payload) = serde_json::from_slice::<serde_json::Value>(&body_bytes)
+            {
+                sanitize_chat_session_response_payload(&mut payload);
+                if let Ok(encoded) = serde_json::to_vec(&payload) {
+                    body_bytes = encoded;
                 }
             }
 
@@ -1004,13 +997,11 @@ fn truncate_chars(input: &str, max_chars: usize) -> (String, bool) {
         return ("".to_string(), !input.is_empty());
     }
     let mut out = String::new();
-    let mut count = 0usize;
-    for ch in input.chars() {
+    for (count, ch) in input.chars().enumerate() {
         if count >= max_chars {
             return (out, true);
         }
         out.push(ch);
-        count += 1;
     }
     (out, false)
 }
@@ -1182,12 +1173,11 @@ fn prune_tool_state_for_collapsed_summary(
         "question" => {
             // Keep count-ish info without shipping huge payloads.
             // If questions is an array, keep at most 1 entry.
-            if let Some(q) = input_obj.get_mut("questions") {
-                if let Some(arr) = q.as_array_mut() {
-                    if arr.len() > 1 {
-                        arr.truncate(1);
-                    }
-                }
+            if let Some(q) = input_obj.get_mut("questions")
+                && let Some(arr) = q.as_array_mut()
+                && arr.len() > 1
+            {
+                arr.truncate(1);
             }
             retain_only_keys(input_obj, &["questions"]);
         }
@@ -1541,7 +1531,7 @@ fn prune_message_error_value(value: &mut serde_json::Value) -> bool {
         .or_else(|| error_data.and_then(|obj| read_trimmed_from_map(obj, &["message"])))
         .or_else(|| nested_error.and_then(|obj| read_trimmed_from_map(obj, &["message"])))
         .or_else(|| response_message.clone())
-        .or_else(|| response_body_message);
+        .or(response_body_message);
 
     let mut out = serde_json::Map::new();
     if let Some(name) = error_name {
@@ -2152,13 +2142,13 @@ fn prune_part_for_sse(
         obj.remove("files");
     }
 
-    if part_type == "snapshot" || part_type == "step-start" {
-        if let Some(s) = obj.get("snapshot").and_then(|v| v.as_str()) {
-            let (tr, did) = truncate_chars(s, 256);
-            if did {
-                truncated = true;
-                obj.insert("snapshot".to_string(), serde_json::Value::String(tr));
-            }
+    if (part_type == "snapshot" || part_type == "step-start")
+        && let Some(s) = obj.get("snapshot").and_then(|v| v.as_str())
+    {
+        let (tr, did) = truncate_chars(s, 256);
+        if did {
+            truncated = true;
+            obj.insert("snapshot".to_string(), serde_json::Value::String(tr));
         }
     }
 
@@ -2325,10 +2315,10 @@ fn sanitize_message_part_event_properties(
         );
         if let Some(pid) = part_id.as_ref() {
             part_obj.insert("partID".to_string(), serde_json::Value::String(pid.clone()));
-            if !part_obj
+            if part_obj
                 .get("id")
                 .and_then(|v| v.as_str())
-                .is_some_and(|v| !v.trim().is_empty())
+                .is_none_or(|v| v.trim().is_empty())
             {
                 part_obj.insert("id".to_string(), serde_json::Value::String(pid.clone()));
             }
@@ -3112,13 +3102,13 @@ pub(crate) fn filter_message_payload(
                     obj.remove("files");
                 }
 
-                if part_type == "snapshot" || part_type == "step-start" {
-                    if let Some(s) = obj.get("snapshot").and_then(|v| v.as_str()) {
-                        let (tr, did) = truncate_chars(s, 256);
-                        if did {
-                            truncated = true;
-                            obj.insert("snapshot".to_string(), serde_json::Value::String(tr));
-                        }
+                if (part_type == "snapshot" || part_type == "step-start")
+                    && let Some(s) = obj.get("snapshot").and_then(|v| v.as_str())
+                {
+                    let (tr, did) = truncate_chars(s, 256);
+                    if did {
+                        truncated = true;
+                        obj.insert("snapshot".to_string(), serde_json::Value::String(tr));
                     }
                 }
 
@@ -3143,125 +3133,6 @@ pub(crate) fn filter_message_payload(
             mark_part_lazy(part, truncated);
         }
     }
-}
-
-fn inject_message_part_ids(session_id: &str, payload: &mut serde_json::Value) {
-    let Some(list) = payload.as_array_mut() else {
-        return;
-    };
-
-    for entry in list.iter_mut() {
-        let Some(obj) = entry.as_object_mut() else {
-            continue;
-        };
-        let message_id = obj
-            .get("info")
-            .and_then(|v| v.get("id"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .trim()
-            .to_string();
-        if message_id.is_empty() {
-            continue;
-        }
-
-        let Some(parts) = obj.get_mut("parts").and_then(|v| v.as_array_mut()) else {
-            continue;
-        };
-        for part in parts.iter_mut() {
-            let Some(pobj) = part.as_object_mut() else {
-                continue;
-            };
-            pobj.insert(
-                "sessionID".to_string(),
-                serde_json::Value::String(session_id.to_string()),
-            );
-            pobj.insert(
-                "messageID".to_string(),
-                serde_json::Value::String(message_id.clone()),
-            );
-            let pid = pobj
-                .get("id")
-                .and_then(|v| v.as_str())
-                .or_else(|| pobj.get("partID").and_then(|v| v.as_str()))
-                .unwrap_or("")
-                .trim();
-            if !pid.is_empty() {
-                pobj.insert(
-                    "partID".to_string(),
-                    serde_json::Value::String(pid.to_string()),
-                );
-            }
-        }
-    }
-}
-
-pub(crate) async fn session_message_get(
-    State(state): State<Arc<crate::AppState>>,
-    uri: Uri,
-    AxumPath(session_id): AxumPath<String>,
-) -> ApiResult<Response> {
-    let oc = state.opencode.status().await;
-    if oc.restarting || !oc.ready {
-        return Ok(open_code_restarting());
-    }
-    let Some(bridge) = state.opencode.bridge().await else {
-        return Ok(open_code_unavailable());
-    };
-
-    let upstream_path = format!("/session/{}/message", urlencoding::encode(&session_id));
-    let target = match bridge.build_url(&upstream_path, Some(&uri)) {
-        Ok(url) => url,
-        Err(_) => return Ok(open_code_unavailable()),
-    };
-
-    let resp = bridge
-        .client
-        .get(target)
-        .send()
-        .await
-        .map_err(|_| AppError::bad_gateway("OpenCode request failed"))?;
-
-    let resp_status = resp.status();
-    let status = StatusCode::from_u16(resp_status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
-    let bytes = resp
-        .bytes()
-        .await
-        .map_err(|_| AppError::bad_gateway("Failed to read OpenCode response"))?;
-
-    if !resp_status.is_success() {
-        return Ok(Response::builder()
-            .status(status)
-            .body(axum::body::Body::from(bytes))
-            .unwrap_or_else(|_| StatusCode::BAD_GATEWAY.into_response()));
-    }
-
-    let mut payload: serde_json::Value = match serde_json::from_slice(&bytes) {
-        Ok(v) => v,
-        Err(_) => {
-            return Ok(Response::builder()
-                .status(status)
-                .body(axum::body::Body::from(bytes))
-                .unwrap_or_else(|_| StatusCode::BAD_GATEWAY.into_response()));
-        }
-    };
-
-    let settings = state.settings.read().await;
-    let filter = activity_filter_from_settings(&settings);
-    let detail = activity_detail_policy_from_settings(&settings);
-    filter_message_payload(&mut payload, &filter, &detail);
-
-    inject_message_part_ids(&session_id, &mut payload);
-
-    let body = serde_json::to_vec(&payload)
-        .map_err(|_| AppError::bad_gateway("Failed to encode filtered payload"))?;
-    let mut out = Response::new(axum::body::Body::from(body));
-    *out.status_mut() = status;
-    out.headers_mut().insert(
-        axum::http::header::CONTENT_TYPE,
-        "application/json".parse().unwrap(),
-    );
-    Ok(out)
 }
 
 pub(crate) async fn session_status_get(
@@ -3317,14 +3188,14 @@ pub(crate) async fn session_status_get(
         .directory_session_index
         .merge_runtime_status_map(&payload);
 
-    if let Some(session_id) = normalize_session_id(&q.session_id) {
-        if let Some(obj) = payload.as_object() {
-            let mut filtered = serde_json::Map::new();
-            if let Some(value) = obj.get(&session_id) {
-                filtered.insert(session_id, value.clone());
-            }
-            payload = serde_json::Value::Object(filtered);
+    if let Some(session_id) = normalize_session_id(&q.session_id)
+        && let Some(obj) = payload.as_object()
+    {
+        let mut filtered = serde_json::Map::new();
+        if let Some(value) = obj.get(&session_id) {
+            filtered.insert(session_id, value.clone());
         }
+        payload = serde_json::Value::Object(filtered);
     }
 
     prune_session_status_payload(&mut payload);
@@ -3348,15 +3219,12 @@ fn filter_attention_list(
     let mut filtered: Vec<serde_json::Value> = list;
 
     if let Some(session_id) = normalize_session_id(&query.session_id) {
-        filtered = filtered
-            .into_iter()
-            .filter(|value| {
-                value
-                    .get("sessionID")
-                    .and_then(|v| v.as_str())
-                    .is_some_and(|v| v == session_id)
-            })
-            .collect();
+        filtered.retain(|value| {
+            value
+                .get("sessionID")
+                .and_then(|v| v.as_str())
+                .is_some_and(|v| v == session_id)
+        });
     }
 
     let offset = parse_usize_param(query.offset.clone()).unwrap_or(0);
@@ -3587,52 +3455,51 @@ pub(crate) async fn opencode_studio_session_locate(
             urlencoding::encode(&indexed_directory)
         );
 
-        if let Ok(resp) = bridge.client.get(url).send().await {
-            if resp.status().is_success() {
-                if let Ok(session) = resp.json::<serde_json::Value>().await {
-                    let directory = session
-                        .get("directory")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or(indexed_directory.as_str())
-                        .trim()
-                        .to_string();
+        if let Ok(resp) = bridge.client.get(url).send().await
+            && resp.status().is_success()
+            && let Ok(session) = resp.json::<serde_json::Value>().await
+        {
+            let directory = session
+                .get("directory")
+                .and_then(|v| v.as_str())
+                .unwrap_or(indexed_directory.as_str())
+                .trim()
+                .to_string();
 
-                    let norm = |p: &str| {
-                        p.trim()
-                            .replace('\\', "/")
-                            .trim_end_matches('/')
-                            .to_string()
-                    };
-                    let directory_norm = norm(&directory);
+            let norm = |p: &str| {
+                p.trim()
+                    .replace('\\', "/")
+                    .trim_end_matches('/')
+                    .to_string()
+            };
+            let directory_norm = norm(&directory);
 
-                    let matched = settings.projects.iter().find(|p| {
-                        let root = p.path.trim();
-                        if root.is_empty() {
-                            return false;
-                        }
-                        let root_norm = norm(root);
-                        directory_norm == root_norm
-                            || directory_norm
-                                .strip_prefix(&(root_norm.clone() + "/"))
-                                .is_some()
-                    });
-
-                    let (project_id, project_path) = if let Some(p) = matched {
-                        (p.id.trim().to_string(), p.path.trim().to_string())
-                    } else {
-                        ("global".to_string(), indexed_directory.clone())
-                    };
-
-                    let out = SessionLocateResponse {
-                        session_id: session_id.clone(),
-                        project_id,
-                        project_path,
-                        directory,
-                        session,
-                    };
-                    return Ok(Json(out).into_response());
+            let matched = settings.projects.iter().find(|p| {
+                let root = p.path.trim();
+                if root.is_empty() {
+                    return false;
                 }
-            }
+                let root_norm = norm(root);
+                directory_norm == root_norm
+                    || directory_norm
+                        .strip_prefix(&(root_norm.clone() + "/"))
+                        .is_some()
+            });
+
+            let (project_id, project_path) = if let Some(p) = matched {
+                (p.id.trim().to_string(), p.path.trim().to_string())
+            } else {
+                ("global".to_string(), indexed_directory.clone())
+            };
+
+            let out = SessionLocateResponse {
+                session_id: session_id.clone(),
+                project_id,
+                project_path,
+                directory,
+                session,
+            };
+            return Ok(Json(out).into_response());
         }
     }
 

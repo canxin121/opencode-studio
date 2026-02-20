@@ -23,7 +23,8 @@ export function useGitWorkingTreeOps(opts: {
   refreshAfterStageOp?: () => Promise<void>
   refreshDiff: () => void
 }) {
-  const { root, selectedFile, toasts, gitJson, withRepoBusy, handleGitBusy, load, refreshAfterStageOp, refreshDiff } = opts
+  const { root, selectedFile, toasts, gitJson, withRepoBusy, handleGitBusy, load, refreshAfterStageOp, refreshDiff } =
+    opts
   const refreshStageState = refreshAfterStageOp || load
 
   async function stagePaths(paths: string[]) {

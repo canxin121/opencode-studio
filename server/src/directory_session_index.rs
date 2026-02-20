@@ -356,9 +356,7 @@ impl DirectorySessionIndexManager {
     }
 
     pub fn directory_id_for_path(&self, directory_path: &str) -> Option<String> {
-        let Some(directory_key) = normalize_directory_for_index(directory_path) else {
-            return None;
-        };
+        let directory_key = normalize_directory_for_index(directory_path)?;
         self.directory_id_by_path
             .get(&directory_key)
             .map(|value| value.value().trim().to_string())
@@ -441,14 +439,13 @@ impl DirectorySessionIndexManager {
         let attention = current.as_ref().and_then(|v| v.attention.clone());
         let effective = normalize_effective_type(status, &phase, attention.as_deref()).to_string();
 
-        if let Some(existing) = current.as_ref() {
-            if existing.status_type == status
-                && existing.phase == phase
-                && existing.attention == attention
-                && existing.effective_type == effective
-            {
-                return;
-            }
+        if let Some(existing) = current.as_ref()
+            && existing.status_type == status
+            && existing.phase == phase
+            && existing.attention == attention
+            && existing.effective_type == effective
+        {
+            return;
         }
 
         self.runtime_by_session.insert(
@@ -481,14 +478,13 @@ impl DirectorySessionIndexManager {
         let attention = current.as_ref().and_then(|v| v.attention.clone());
         let effective = normalize_effective_type(&status, phase, attention.as_deref()).to_string();
 
-        if let Some(existing) = current.as_ref() {
-            if existing.status_type == status
-                && existing.phase == phase
-                && existing.attention == attention
-                && existing.effective_type == effective
-            {
-                return;
-            }
+        if let Some(existing) = current.as_ref()
+            && existing.status_type == status
+            && existing.phase == phase
+            && existing.attention == attention
+            && existing.effective_type == effective
+        {
+            return;
         }
 
         self.runtime_by_session.insert(
@@ -530,14 +526,13 @@ impl DirectorySessionIndexManager {
             .unwrap_or_else(|| "idle".to_string());
         let effective = normalize_effective_type(&status, &phase, attention.as_deref()).to_string();
 
-        if let Some(existing) = current.as_ref() {
-            if existing.status_type == status
-                && existing.phase == phase
-                && existing.attention == attention
-                && existing.effective_type == effective
-            {
-                return;
-            }
+        if let Some(existing) = current.as_ref()
+            && existing.status_type == status
+            && existing.phase == phase
+            && existing.attention == attention
+            && existing.effective_type == effective
+        {
+            return;
         }
 
         self.runtime_by_session.insert(

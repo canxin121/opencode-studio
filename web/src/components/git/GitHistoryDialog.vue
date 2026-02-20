@@ -157,7 +157,13 @@ function onFilterRefTypeChange(value: string | number) {
 </script>
 
 <template>
-  <FormDialog :open="open" title="History" description="Recent commits" maxWidth="max-w-6xl" @update:open="onUpdateOpen">
+  <FormDialog
+    :open="open"
+    title="History"
+    description="Recent commits"
+    maxWidth="max-w-6xl"
+    @update:open="onUpdateOpen"
+  >
     <div class="grid gap-4 lg:grid-cols-[300px_minmax(0,1fr)]">
       <div class="space-y-3">
         <div class="flex items-center justify-between">
@@ -184,38 +190,38 @@ function onFilterRefTypeChange(value: string | number) {
           <Button variant="ghost" size="sm" class="h-6" @click="$emit('clearFilter')">Clear</Button>
         </div>
 
-          <div class="grid gap-2 rounded-md border border-border/50 bg-muted/10 p-2">
-            <div class="text-[11px] font-medium text-muted-foreground">Search</div>
-            <div class="grid gap-2 lg:grid-cols-[120px_1fr]">
-              <OptionPicker
-                :model-value="filterRefType"
-                :options="filterRefTypePickerOptions"
-                title="Ref type"
-                search-placeholder="Search types"
-                :include-empty="false"
-                trigger-class="h-8 rounded border border-input bg-background text-xs px-2"
-                size="sm"
-                @update:model-value="onFilterRefTypeChange"
-              />
-              <Input
-                :model-value="filterRef"
-                class="h-8 font-mono text-xs"
-                :placeholder="filterRefType === 'tag' ? 'Tag name' : 'Branch name'"
-                @update:model-value="(v) => $emit('update:filterRef', String(v))"
-              />
-            </div>
+        <div class="grid gap-2 rounded-md border border-border/50 bg-muted/10 p-2">
+          <div class="text-[11px] font-medium text-muted-foreground">Search</div>
+          <div class="grid gap-2 lg:grid-cols-[120px_1fr]">
             <OptionPicker
-              v-if="refOptions.length"
-              :model-value="filterRef"
-              @update:model-value="(v) => $emit('update:filterRef', String(v || ''))"
-              :options="refPickerOptions"
-              title="Ref"
-              search-placeholder="Search refs"
-              :empty-label="`All ${filterRefType === 'tag' ? 'tags' : 'branches'}`"
+              :model-value="filterRefType"
+              :options="filterRefTypePickerOptions"
+              title="Ref type"
+              search-placeholder="Search types"
+              :include-empty="false"
               trigger-class="h-8 rounded border border-input bg-background text-xs px-2"
               size="sm"
-              monospace
+              @update:model-value="onFilterRefTypeChange"
             />
+            <Input
+              :model-value="filterRef"
+              class="h-8 font-mono text-xs"
+              :placeholder="filterRefType === 'tag' ? 'Tag name' : 'Branch name'"
+              @update:model-value="(v) => $emit('update:filterRef', String(v))"
+            />
+          </div>
+          <OptionPicker
+            v-if="refOptions.length"
+            :model-value="filterRef"
+            @update:model-value="(v) => $emit('update:filterRef', String(v || ''))"
+            :options="refPickerOptions"
+            title="Ref"
+            search-placeholder="Search refs"
+            :empty-label="`All ${filterRefType === 'tag' ? 'tags' : 'branches'}`"
+            trigger-class="h-8 rounded border border-input bg-background text-xs px-2"
+            size="sm"
+            monospace
+          />
           <Input
             :model-value="filterAuthor"
             class="h-8 font-mono text-xs"

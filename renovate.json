@@ -1,0 +1,17 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "labels": ["dependencies"],
+  "ignorePaths": ["web/package-lock.json"],
+  "packageRules": [
+    {
+      "matchManagers": ["cargo"],
+      "groupName": "rust dependencies"
+    },
+    {
+      "matchManagers": ["npm"],
+      "matchPaths": ["web/package.json"],
+      "groupName": "web dependencies"
+    }
+  ]
+}

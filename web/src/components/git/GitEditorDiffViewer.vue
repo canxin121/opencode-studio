@@ -165,12 +165,7 @@ async function runHunkAction(hunk: DiffHunkView, mode: HunkActionMode) {
   if (!hunk.patchReady || !hunk.patch) return
   if (isAnyActionBusy.value) return
 
-  const apply =
-    mode === 'stage'
-      ? props.onStageHunk
-      : mode === 'unstage'
-        ? props.onUnstageHunk
-        : props.onDiscardHunk
+  const apply = mode === 'stage' ? props.onStageHunk : mode === 'unstage' ? props.onUnstageHunk : props.onDiscardHunk
   if (!apply) return
 
   activeHunkAction.value = { hunkId: hunk.id, mode }
@@ -330,7 +325,9 @@ watch(
         <div v-if="path" class="path">{{ path }}</div>
         <div class="toolbar-actions">
           <Button v-if="canOpenFile" variant="secondary" size="sm" class="h-7" @click="openFile">Open file</Button>
-          <Button v-if="canRevealFile" variant="secondary" size="sm" class="h-7" @click="revealFile">Reveal in Files</Button>
+          <Button v-if="canRevealFile" variant="secondary" size="sm" class="h-7" @click="revealFile"
+            >Reveal in Files</Button
+          >
         </div>
       </div>
 

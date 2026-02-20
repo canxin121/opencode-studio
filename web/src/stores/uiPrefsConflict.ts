@@ -6,9 +6,7 @@ export function isUiPrefsConflictError(error: JsonValue): boolean {
   return error instanceof ApiError && (error.status === 409 || error.status === 428)
 }
 
-export function readUiPrefsConflictCurrent(
-  error: JsonValue,
-): Partial<ChatSidebarUiPrefs> | null {
+export function readUiPrefsConflictCurrent(error: JsonValue): Partial<ChatSidebarUiPrefs> | null {
   if (!(error instanceof ApiError)) return null
   if (!isUiPrefsConflictError(error)) return null
 

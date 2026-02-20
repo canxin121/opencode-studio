@@ -33,28 +33,29 @@ fn count_status_paths(status_output: &str) -> usize {
     seen.len()
 }
 
-fn resolve_worktree_migrate_source_path(raw: &str, repo: &Path) -> Result<PathBuf, Response> {
+fn resolve_worktree_migrate_source_path(raw: &str, repo: &Path) -> Result<PathBuf, Box<Response>> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
-        return Err((
+        return Err(Box::new((
             StatusCode::BAD_REQUEST,
             Json(serde_json::json!({"error": "sourcePath is required", "code": "missing_source_path"})),
         )
-            .into_response());
+            .into_response()));
     }
     let p = Path::new(trimmed);
-    let full = if p.is_absolute() {
-        p.to_path_buf()
-    } else {
-        if !is_safe_repo_rel_path(trimmed) {
-            return Err((
+    let full =
+        if p.is_absolute() {
+            p.to_path_buf()
+        } else {
+            if !is_safe_repo_rel_path(trimmed) {
+                return Err(Box::new((
                 StatusCode::BAD_REQUEST,
                 Json(serde_json::json!({"error": "Invalid sourcePath", "code": "invalid_path"})),
             )
-                .into_response());
-        }
-        repo.join(trimmed)
-    };
+                .into_response()));
+            }
+            repo.join(trimmed)
+        };
     Ok(full)
 }
 
@@ -185,36 +186,40 @@ pub struct GitWorktreeAddBody {
     pub create_branch: Option<bool>,
 }
 
-fn resolve_worktree_path(repo: &Path, raw: &str) -> Result<PathBuf, Response> {
+fn resolve_worktree_path(repo: &Path, raw: &str) -> Result<PathBuf, Box<Response>> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({"error": "path is required", "code": "missing_path"})),
-        )
-            .into_response());
+        return Err(Box::new(
+            (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "path is required", "code": "missing_path"})),
+            )
+                .into_response(),
+        ));
     }
     let p = Path::new(trimmed);
     let full = if p.is_absolute() {
         p.to_path_buf()
     } else {
         if !is_safe_repo_rel_path(trimmed) {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                Json(serde_json::json!({"error": "Invalid path", "code": "invalid_path"})),
-            )
-                .into_response());
+            return Err(Box::new(
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(serde_json::json!({"error": "Invalid path", "code": "invalid_path"})),
+                )
+                    .into_response(),
+            ));
         }
         repo.join(trimmed)
     };
     if !full.starts_with(repo) {
-        return Err((
+        return Err(Box::new((
             StatusCode::BAD_REQUEST,
             Json(
                 serde_json::json!({"error": "Worktree path must be within repo", "code": "path_outside_repo"}),
             ),
         )
-            .into_response());
+            .into_response()));
     }
     Ok(full)
 }
@@ -242,7 +247,7 @@ pub async fn git_worktree_add(
     };
     let target = match resolve_worktree_path(&dir, path_raw) {
         Ok(p) => p,
-        Err(resp) => return resp,
+        Err(resp) => return *resp,
     };
 
     let branch = body
@@ -327,7 +332,7 @@ pub async fn git_worktree_remove(
     };
     let target = match resolve_worktree_path(&dir, path_raw) {
         Ok(p) => p,
-        Err(resp) => return resp,
+        Err(resp) => return *resp,
     };
 
     let target_str = target.to_string_lossy().to_string();
@@ -412,7 +417,7 @@ pub async fn git_worktree_migrate(
     };
     let source = match resolve_worktree_migrate_source_path(source_raw, &dir) {
         Ok(p) => p,
-        Err(resp) => return resp,
+        Err(resp) => return *resp,
     };
     if source == dir {
         return (

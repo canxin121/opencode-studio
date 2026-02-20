@@ -25,6 +25,7 @@ fn now_millis() -> u64 {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[derive(Default)]
 pub(crate) struct SessionsSidebarPreferences {
     #[serde(default)]
     pub version: u64,
@@ -52,26 +53,6 @@ pub(crate) struct SessionsSidebarPreferences {
     pub running_sessions_open: bool,
     #[serde(default)]
     pub running_sessions_page: usize,
-}
-
-impl Default for SessionsSidebarPreferences {
-    fn default() -> Self {
-        Self {
-            version: 0,
-            updated_at: 0,
-            collapsed_directory_ids: Vec::new(),
-            expanded_parent_session_ids: Vec::new(),
-            pinned_session_ids: Vec::new(),
-            directories_page: 0,
-            session_root_page_by_directory_id: BTreeMap::new(),
-            pinned_sessions_open: false,
-            pinned_sessions_page: 0,
-            recent_sessions_open: false,
-            recent_sessions_page: 0,
-            running_sessions_open: false,
-            running_sessions_page: 0,
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -128,15 +109,6 @@ impl SessionsSidebarPreferencesEventHub {
     fn oldest_seq(&self) -> Option<u64> {
         let buf = self.buffer.lock().unwrap();
         buf.items.front().map(|event| event.seq)
-    }
-
-    fn replay_since(&self, last_seq: u64) -> Vec<SequencedPreferenceEvent> {
-        let buf = self.buffer.lock().unwrap();
-        buf.items
-            .iter()
-            .filter(|event| event.seq > last_seq)
-            .cloned()
-            .collect()
     }
 
     fn replay_since_until(
@@ -288,6 +260,7 @@ async fn acquire_preferences_disk_lock() -> Result<std::fs::File, String> {
             .create(true)
             .read(true)
             .write(true)
+            .truncate(false)
             .open(&lock_path)
             .map_err(|error| error.to_string())?;
 
@@ -683,7 +656,7 @@ mod tests {
             ..SessionsSidebarPreferences::default()
         });
 
-        let replay = hub.replay_since(1);
+        let replay = hub.replay_since_until(1, hub.latest_seq());
         assert_eq!(replay.len(), 1);
         assert_eq!(replay[0].seq, 2);
         assert!(replay[0].payload.contains("s_1"));
@@ -719,7 +692,7 @@ mod tests {
             ..SessionsSidebarPreferences::default()
         });
 
-        assert_eq!(hub.replay_since(0).len(), 0);
+        assert_eq!(hub.replay_since_until(0, hub.latest_seq()).len(), 0);
         assert_eq!(hub.replay_bytes(), 0);
     }
 

@@ -41,10 +41,7 @@ function normalizeSessionId(value: JsonLike): string {
 
 function normalizeCollapsedName(value: JsonLike, maxLen: number): string {
   const raw = typeof value === 'string' ? value : ''
-  const collapsed = raw
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, maxLen)
+  const collapsed = raw.replace(/\s+/g, ' ').trim().slice(0, maxLen)
   return collapsed
 }
 

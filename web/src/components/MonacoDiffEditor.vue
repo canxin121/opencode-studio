@@ -474,7 +474,13 @@ watch(
 )
 
 watch(
-  () => [props.hunkActionsEnabled, props.hunkActionsBusy, props.activeHunkActionId, props.activeHunkActionKind, props.hunkActions],
+  () => [
+    props.hunkActionsEnabled,
+    props.hunkActionsBusy,
+    props.activeHunkActionId,
+    props.activeHunkActionKind,
+    props.hunkActions,
+  ],
   () => scheduleHunkActionZoneRefresh(),
   { deep: true },
 )

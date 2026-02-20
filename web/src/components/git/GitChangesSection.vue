@@ -1,11 +1,5 @@
 <script setup lang="ts">
-import {
-  RiAddLine,
-  RiArrowGoBackLine,
-  RiDeleteBinLine,
-  RiHistoryLine,
-  RiPencilLine,
-} from '@remixicon/vue'
+import { RiAddLine, RiArrowGoBackLine, RiDeleteBinLine, RiHistoryLine, RiPencilLine } from '@remixicon/vue'
 
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import SectionToggleButton from '@/components/ui/SectionToggleButton.vue'

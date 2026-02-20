@@ -56,7 +56,11 @@ const hasMounts = computed(() => props.mounts.length > 0)
   <div v-if="hasMounts" class="pointer-events-none w-full flex flex-col items-stretch gap-2">
     <div v-for="mount in mounts" :key="mountKey(mount)" class="pointer-events-none w-full">
       <div class="pointer-events-auto w-full min-w-0">
-        <PluginMountHost class="w-full min-w-0" :mount="mount" @reserve-change="(px) => setReserve(mountKey(mount), px)" />
+        <PluginMountHost
+          class="w-full min-w-0"
+          :mount="mount"
+          @reserve-change="(px) => setReserve(mountKey(mount), px)"
+        />
       </div>
     </div>
   </div>

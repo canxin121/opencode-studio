@@ -110,13 +110,18 @@ function normalizeSummary(value: unknown, fallback: GitDiffSummary): GitDiffSumm
   }
 }
 
-function normalizeMetaHunk(fileHeader: string[], rawHunk: GitDiffHunkMeta | Record<string, unknown>, index: number): ParsedUnifiedDiffHunk {
+function normalizeMetaHunk(
+  fileHeader: string[],
+  rawHunk: GitDiffHunkMeta | Record<string, unknown>,
+  index: number,
+): ParsedUnifiedDiffHunk {
   const header = String(rawHunk.header || '').trim()
   const parsedHeader = parseHunkHeader(header)
   const lines = Array.isArray(rawHunk.lines) ? rawHunk.lines.map((line) => normalizeLine(line)) : []
   const counted = countHunkChanges(lines)
   const patchAllowed = hasPatchHeader(fileHeader)
-  const patch = typeof rawHunk.patch === 'string' ? rawHunk.patch : patchAllowed ? buildHunkPatch(fileHeader, header, lines) : ''
+  const patch =
+    typeof rawHunk.patch === 'string' ? rawHunk.patch : patchAllowed ? buildHunkPatch(fileHeader, header, lines) : ''
   const range = String(rawHunk.range || '').trim() || formatHunkRange(header)
   const oldStart = asSafeInt(rawHunk.oldStart, parsedHeader.oldStart)
   const oldCount = asSafeInt(rawHunk.oldCount, parsedHeader.oldCount)

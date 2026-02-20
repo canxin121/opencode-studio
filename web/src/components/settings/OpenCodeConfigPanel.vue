@@ -764,129 +764,129 @@ const { refresh, reloadOpenCode, save, resetDraft, reloading, requiresJsoncRewri
 // Provide a shared context so section templates can be split into smaller SFCs
 // without prop drilling.
 const panelContext = reactive({
-    // Section UI
-    isSectionOpen,
-    toggleSection,
+  // Section UI
+  isSectionOpen,
+  toggleSection,
 
-    // Field bindings (general/tui/server/compaction/experimental toggles)
-    ...fields,
+  // Field bindings (general/tui/server/compaction/experimental toggles)
+  ...fields,
 
-    // Option list-derived warnings/formatters
-    ...optionLists,
-    issueText,
-    resetSection,
+  // Option list-derived warnings/formatters
+  ...optionLists,
+  issueText,
+  resetSection,
 
-    // Instructions helpers
-    addInstructionsTags,
-    addSkillsPathsTags,
-    addPluginsTags,
+  // Instructions helpers
+  addInstructionsTags,
+  addSkillsPathsTags,
+  addPluginsTags,
 
-    // Server & Watcher helpers
-    addServerCorsTags,
-    addWatcherIgnoreTags,
+  // Server & Watcher helpers
+  addServerCorsTags,
+  addWatcherIgnoreTags,
 
-    // Providers
-    providerFilter,
-    showProviderBrowse,
-    showAdvancedProviderLists,
-    providerConflictPolicy,
-    providersList,
-    filteredProvidersList,
-    enabledProviderInput,
-    disabledProviderInput,
-    bulkProviderSelection,
-    bulkProviderInput,
-    removeFromList,
-    removeProvider,
-    addProvider,
-    newProviderId,
-    toggleProviderOpen,
-    selectProvider,
-    selectProviderModel,
-    selectedProviderId,
-    selectedModelId,
-    isKnownProviderId,
-    isProviderOpen,
-    ...providersDerived,
-    ...providersLists,
-    ...providerModelsEditor,
-    ...providerOptions,
-    ...providerHealth,
-    ensureJsonBuffer,
-    applyJsonBuffer,
-    listToText,
-    textToList,
-    setEntryField,
-    modalities,
-    refreshOptionLists,
+  // Providers
+  providerFilter,
+  showProviderBrowse,
+  showAdvancedProviderLists,
+  providerConflictPolicy,
+  providersList,
+  filteredProvidersList,
+  enabledProviderInput,
+  disabledProviderInput,
+  bulkProviderSelection,
+  bulkProviderInput,
+  removeFromList,
+  removeProvider,
+  addProvider,
+  newProviderId,
+  toggleProviderOpen,
+  selectProvider,
+  selectProviderModel,
+  selectedProviderId,
+  selectedModelId,
+  isKnownProviderId,
+  isProviderOpen,
+  ...providersDerived,
+  ...providersLists,
+  ...providerModelsEditor,
+  ...providerOptions,
+  ...providerHealth,
+  ensureJsonBuffer,
+  applyJsonBuffer,
+  listToText,
+  textToList,
+  setEntryField,
+  modalities,
+  refreshOptionLists,
 
-    // Shared draft helpers
-    scope,
-    draft,
-    jsonBuffers,
-    getPath,
-    setOrClear,
-    removeEntry,
-    parseNumberInput,
-    markDirty,
-    issuesForPathPrefix,
+  // Shared draft helpers
+  scope,
+  draft,
+  jsonBuffers,
+  getPath,
+  setOrClear,
+  removeEntry,
+  parseNumberInput,
+  markDirty,
+  issuesForPathPrefix,
 
-    // Commands
-    commandFilter,
-    filteredCommandsList,
-    newCommandName,
-    newCommandTemplate,
-    addCommand,
-    ...entriesCtx,
+  // Commands
+  commandFilter,
+  filteredCommandsList,
+  newCommandName,
+  newCommandTemplate,
+  addCommand,
+  ...entriesCtx,
 
-    // Agents
-    agentFilter,
-    filteredAgentsList,
-    newAgentName,
-    selectedAgentId,
-    selectedAgentRows,
-    agentEditorTab,
-    addAgent,
-    PROMPT_SKELETON,
-    FRONTMATTER_SKELETON,
-    commandModelMeta,
-    ...agentPermissionPatterns,
+  // Agents
+  agentFilter,
+  filteredAgentsList,
+  newAgentName,
+  selectedAgentId,
+  selectedAgentRows,
+  agentEditorTab,
+  addAgent,
+  PROMPT_SKELETON,
+  FRONTMATTER_SKELETON,
+  commandModelMeta,
+  ...agentPermissionPatterns,
 
-    // Permissions
-    permissionQuickGroups,
-    customPermissionKeys,
-    newPermissionTool,
-    newPermissionAction,
-    addCustomPermissionRule,
-    permissionPreset,
-    permissionPresetMode,
-    applyPermissionPreset,
-    permissionBulkTarget,
-    permissionBulkAction,
-    permissionBulkClearOthers,
-    permissionBulkTag,
-    permissionBulkSelection,
-    permissionBulkInput,
-    addPermissionBulkSelectionTags,
-    selectPermissionBulkByTag,
-    applyPermissionBulk,
-    permissionTestToolOptions,
-    permissionTestTool,
-    permissionTestInput,
-    permissionTestResult,
-    toolFilter,
-    toolIdsByTag,
-    ...toolOptions,
-    ...permissionPatterns,
-    setPermissionRule,
+  // Permissions
+  permissionQuickGroups,
+  customPermissionKeys,
+  newPermissionTool,
+  newPermissionAction,
+  addCustomPermissionRule,
+  permissionPreset,
+  permissionPresetMode,
+  applyPermissionPreset,
+  permissionBulkTarget,
+  permissionBulkAction,
+  permissionBulkClearOthers,
+  permissionBulkTag,
+  permissionBulkSelection,
+  permissionBulkInput,
+  addPermissionBulkSelectionTags,
+  selectPermissionBulkByTag,
+  applyPermissionBulk,
+  permissionTestToolOptions,
+  permissionTestTool,
+  permissionTestInput,
+  permissionTestResult,
+  toolFilter,
+  toolIdsByTag,
+  ...toolOptions,
+  ...permissionPatterns,
+  setPermissionRule,
 
-    // MCP/Formatter/LSP
-    ...mcpFormatterLsp,
+  // MCP/Formatter/LSP
+  ...mcpFormatterLsp,
 
-    // Keybinds
-    keybindGroups,
+  // Keybinds
+  keybindGroups,
 
-    // Experimental
+  // Experimental
 })
 
 provideOpencodeConfigPanelContext(panelContext)
@@ -897,22 +897,22 @@ export type OpenCodeConfigPanelProvidedContext = typeof panelContext
 <template>
   <div class="oc-config space-y-6">
     <div class="sticky top-2 z-20 rounded-md border border-border bg-background/95 px-3 py-2 backdrop-blur">
-        <div class="flex flex-wrap items-center gap-3">
-          <div class="flex items-center gap-2">
-            <div class="min-w-[220px]">
-              <OptionPicker
-                v-model="scope"
-                :options="scopePickerOptions"
-                title="Config scope"
-                search-placeholder="Search scopes"
-                :include-empty="false"
-                trigger-class="rounded-lg border-border bg-background"
-              />
-            </div>
-            <Button variant="ghost" size="sm" @click="refresh" :disabled="configStore.loading" title="Refresh">
-              <RiRefreshLine class="h-4 w-4" />
-            </Button>
+      <div class="flex flex-wrap items-center gap-3">
+        <div class="flex items-center gap-2">
+          <div class="min-w-[220px]">
+            <OptionPicker
+              v-model="scope"
+              :options="scopePickerOptions"
+              title="Config scope"
+              search-placeholder="Search scopes"
+              :include-empty="false"
+              trigger-class="rounded-lg border-border bg-background"
+            />
           </div>
+          <Button variant="ghost" size="sm" @click="refresh" :disabled="configStore.loading" title="Refresh">
+            <RiRefreshLine class="h-4 w-4" />
+          </Button>
+        </div>
 
         <div class="flex items-center gap-2 ml-auto">
           <Button variant="outline" size="sm" @click="resetDraft" :disabled="resetDisabled" title="Reset">

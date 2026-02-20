@@ -29,7 +29,10 @@ function onUpdateOpen(v: boolean) {
   >
     <div class="space-y-2">
       <div v-if="loading" class="text-xs text-muted-foreground">Loading stash diff...</div>
-      <div v-else-if="error" class="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
+      <div
+        v-else-if="error"
+        class="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive"
+      >
         {{ error }}
       </div>
       <div v-else-if="diff.trim()" class="max-h-[70vh] overflow-auto">

@@ -314,7 +314,11 @@ export default defineComponent({
                     'mcp',
                     mcpName,
                     'oauth',
-                    mode === 'disabled' ? false : mode === 'config' ? { clientId: '', clientSecret: '', scope: '' } : null,
+                    mode === 'disabled'
+                      ? false
+                      : mode === 'config'
+                        ? { clientId: '', clientSecret: '', scope: '' }
+                        : null,
                   )
                 }
               "

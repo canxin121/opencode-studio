@@ -91,21 +91,21 @@ const selectedInfo = computed(() => props.remotes.find((r) => r.name === props.s
         <Button size="sm" :disabled="!newRemoteName.trim() || !newRemoteUrl.trim()" @click="$emit('add')">Add</Button>
       </div>
 
-        <div class="grid gap-2">
-          <div class="text-xs font-medium text-muted-foreground">Manage remote</div>
-          <OptionPicker
-            :model-value="selectedRemote"
-            :options="remotePickerOptions"
-            title="Remote"
-            search-placeholder="Search remotes"
-            empty-label="Select a remote"
-            :empty-disabled="true"
-            trigger-class="rounded border bg-background text-xs px-2"
-            @update:model-value="onSelectRemote"
-          />
-          <div v-if="selectedInfo" class="text-[11px] text-muted-foreground font-mono break-all">
-            {{ selectedInfo.url }}
-          </div>
+      <div class="grid gap-2">
+        <div class="text-xs font-medium text-muted-foreground">Manage remote</div>
+        <OptionPicker
+          :model-value="selectedRemote"
+          :options="remotePickerOptions"
+          title="Remote"
+          search-placeholder="Search remotes"
+          empty-label="Select a remote"
+          :empty-disabled="true"
+          trigger-class="rounded border bg-background text-xs px-2"
+          @update:model-value="onSelectRemote"
+        />
+        <div v-if="selectedInfo" class="text-[11px] text-muted-foreground font-mono break-all">
+          {{ selectedInfo.url }}
+        </div>
 
         <div class="grid gap-2 lg:grid-cols-[1fr_auto]">
           <Input

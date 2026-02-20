@@ -450,21 +450,21 @@ pub async fn git_delete_remote_branch(
 
     let mut remote: Option<String> = None;
     let mut branch: Option<String> = None;
-    if let Some(raw) = body.name.as_deref() {
-        if let Some((r, b)) = parse_remote_branch(raw.trim()) {
-            remote = Some(r);
-            branch = Some(b);
-        }
+    if let Some(raw) = body.name.as_deref()
+        && let Some((r, b)) = parse_remote_branch(raw.trim())
+    {
+        remote = Some(r);
+        branch = Some(b);
     }
 
-    if remote.is_none() || branch.is_none() {
-        if let (Some(r), Some(b)) = (body.remote.as_deref(), body.branch.as_deref()) {
-            let r = r.trim();
-            let b = b.trim();
-            if !r.is_empty() && !b.is_empty() {
-                remote = Some(r.to_string());
-                branch = Some(b.to_string());
-            }
+    if (remote.is_none() || branch.is_none())
+        && let (Some(r), Some(b)) = (body.remote.as_deref(), body.branch.as_deref())
+    {
+        let r = r.trim();
+        let b = b.trim();
+        if !r.is_empty() && !b.is_empty() {
+            remote = Some(r.to_string());
+            branch = Some(b.to_string());
         }
     }
 

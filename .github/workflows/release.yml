@@ -1,0 +1,116 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to release (e.g. v0.1.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+  RELEASE_REF: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.tag) || github.ref }}
+  BUN_VERSION: 1.3.9
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: ${{ env.RELEASE_TAG }}
+          generate_release_notes: true
+
+  web:
+    needs: create-release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Cache Bun downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('web/bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install web deps
+        run: bun install --cwd web --frozen-lockfile
+
+      - name: Web format check
+        run: bun run --cwd web fmt:check
+
+      - name: Web tests
+        run: bun test --cwd web
+
+      - name: Web build
+        run: bun run --cwd web build
+
+      - name: Pack web dist
+        run: mkdir -p release-assets
+
+      - name: Archive web dist
+        working-directory: web
+        run: |
+          tar -czf ../release-assets/opencode-studio-web-dist-${{ env.RELEASE_TAG }}.tar.gz dist
+          zip -r ../release-assets/opencode-studio-web-dist-${{ env.RELEASE_TAG }}.zip dist
+
+      - name: Upload web assets to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          files: |
+            release-assets/opencode-studio-web-dist-${{ env.RELEASE_TAG }}.tar.gz
+            release-assets/opencode-studio-web-dist-${{ env.RELEASE_TAG }}.zip
+
+  rust:
+    needs: create-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: macos-latest
+            target: x86_64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build + upload Rust binary
+        uses: taiki-e/upload-rust-binary-action@v1
+        with:
+          bin: opencode-studio
+          manifest-path: server/Cargo.toml
+          target: ${{ matrix.target }}
+          ref: ${{ env.RELEASE_REF }}
+          locked: true
+          checksum: sha256
+          tar: unix
+          zip: windows
+          include: LICENSE,README.md
+          token: ${{ github.token }}

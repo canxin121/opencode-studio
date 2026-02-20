@@ -374,12 +374,12 @@ pub async fn git_commit(
             .into_response();
     }
 
-    if git_enforce_branch_protection(&state).await {
-        if let Some(branch) = super::remote::git_current_branch(&dir).await
-            && let Some(prompt_mode) = git_branch_protection_for_branch(&state, &branch).await
-            && prompt_mode == GitBranchProtectionPrompt::AlwaysCommitToNewBranch
-        {
-            return (
+    if git_enforce_branch_protection(&state).await
+        && let Some(branch) = super::remote::git_current_branch(&dir).await
+        && let Some(prompt_mode) = git_branch_protection_for_branch(&state, &branch).await
+        && prompt_mode == GitBranchProtectionPrompt::CommitToNewBranch
+    {
+        return (
                 StatusCode::FORBIDDEN,
                 Json(serde_json::json!({
                     "error": format!("Branch '{branch}' is protected; commit on a new branch instead."),
@@ -391,7 +391,6 @@ pub async fn git_commit(
                 })),
             )
                 .into_response();
-        }
     }
 
     // If the repo uses GPG signing and the key is passphrase protected, we can't prompt

@@ -1,11 +1,7 @@
 import type { JsonValue as JsonLike } from '@/types/json'
 import type { PluginManifestResponse } from '@/plugins/host/types'
 
-export type ChatMountSurface =
-  | 'chat.sidebar'
-  | 'chat.activity.inline'
-  | 'chat.message.footer'
-  | 'chat.overlay.bottom'
+export type ChatMountSurface = 'chat.sidebar' | 'chat.activity.inline' | 'chat.message.footer' | 'chat.overlay.bottom'
 
 export type PluginMountMode = 'iframe' | 'module'
 
@@ -38,7 +34,9 @@ function asObject(value: JsonLike): Record<string, JsonLike> {
 }
 
 function normalizeSurface(value: string): ChatMountSurface | null {
-  const v = String(value || '').trim().toLowerCase()
+  const v = String(value || '')
+    .trim()
+    .toLowerCase()
   if (CHAT_SURFACES.includes(v as ChatMountSurface)) return v as ChatMountSurface
   return null
 }
@@ -67,7 +65,9 @@ function defaultModeFromManifest(manifest: PluginManifestResponse): PluginMountM
 }
 
 function basenameLike(path: string): string {
-  const normalized = String(path || '').trim().replace(/\\/g, '/')
+  const normalized = String(path || '')
+    .trim()
+    .replace(/\\/g, '/')
   const parts = normalized.split('/').filter(Boolean)
   return parts.length ? parts[parts.length - 1]! : ''
 }
@@ -148,7 +148,17 @@ function mountsFromManifest(manifest: PluginManifestResponse): ChatMount[] {
     for (const surface of mountKeys) {
       const raw = mountsObj[surface]
       if (raw === true) {
-        pushMount(out, manifest.id, pluginTitle, surface, defaultEntry, undefined, defaultMode, undefined, pluginVersion)
+        pushMount(
+          out,
+          manifest.id,
+          pluginTitle,
+          surface,
+          defaultEntry,
+          undefined,
+          defaultMode,
+          undefined,
+          pluginVersion,
+        )
         continue
       }
       if (typeof raw === 'string') {
@@ -172,7 +182,17 @@ function mountsFromManifest(manifest: PluginManifestResponse): ChatMount[] {
   const capabilities = Array.isArray(root.capabilities) ? root.capabilities : []
   const hasSidebarCapability = capabilities.some((item) => String(item || '').trim() === 'chat.sidebar')
   if (hasSidebarCapability && defaultEntry) {
-    pushMount(out, manifest.id, pluginTitle, 'chat.sidebar', defaultEntry, undefined, defaultMode, undefined, pluginVersion)
+    pushMount(
+      out,
+      manifest.id,
+      pluginTitle,
+      'chat.sidebar',
+      defaultEntry,
+      undefined,
+      defaultMode,
+      undefined,
+      pluginVersion,
+    )
   }
 
   return out
@@ -198,7 +218,9 @@ export function resolveChatMounts(manifestsById: Record<string, PluginManifestRe
 
 export function pluginAssetEntryUrl(pluginId: string, entry: string): string {
   const id = String(pluginId || '').trim()
-  const rawEntry = String(entry || '').trim().replace(/^\/+/, '')
+  const rawEntry = String(entry || '')
+    .trim()
+    .replace(/^\/+/, '')
   const encodedPath = rawEntry
     .split('/')
     .filter(Boolean)

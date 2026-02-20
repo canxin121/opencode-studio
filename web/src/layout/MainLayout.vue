@@ -17,15 +17,18 @@ const { startDesktopSidebarResize } = useDesktopSidebarResize()
 useAppRuntime()
 
 const usesChatShellSidebar = computed(() => {
-  const shellSidebar = String(route.meta?.shellSidebar || '').trim().toLowerCase()
+  const shellSidebar = String(route.meta?.shellSidebar || '')
+    .trim()
+    .toLowerCase()
   if (shellSidebar === 'chat') return true
   if (shellSidebar === 'none') return false
-  return String(route.path || '').toLowerCase().startsWith('/chat')
+  return String(route.path || '')
+    .toLowerCase()
+    .startsWith('/chat')
 })
 
 const mobileBottomNavInset =
   'calc(var(--oc-bottom-nav-height, 56px) + var(--oc-safe-area-bottom, 0px) - clamp(0px, var(--oc-keyboard-inset, 0px), var(--oc-bottom-nav-height, 56px)))'
-
 </script>
 
 <template>

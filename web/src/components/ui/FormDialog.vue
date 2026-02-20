@@ -54,7 +54,9 @@ const mobileContentClass = computed(() =>
 )
 
 const contentClass = computed(() => (isMobileSheet.value ? mobileContentClass.value : desktopContentClass.value))
-const contentStyle = computed<CSSProperties | undefined>(() => (isMobileSheet.value ? mobileSheetStyle.value : undefined))
+const contentStyle = computed<CSSProperties | undefined>(() =>
+  isMobileSheet.value ? mobileSheetStyle.value : undefined,
+)
 const sheetTitle = computed(() => (isMobileSheet.value && props.mobileTitle ? props.mobileTitle : props.title || ''))
 
 let mobileViewportEventsBound = false

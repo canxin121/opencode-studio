@@ -18,11 +18,7 @@ test('connectSse: reports onSequenceGap when id jumps forward', async () => {
   installDomLikeGlobals()
   const originalFetch = globalThis.fetch
 
-  const chunks = [
-    'id: 1\n' + 'data: {"type":"noop"}\n\n' +
-      'id: 3\n' +
-      'data: {"type":"noop"}\n\n',
-  ]
+  const chunks = ['id: 1\n' + 'data: {"type":"noop"}\n\n' + 'id: 3\n' + 'data: {"type":"noop"}\n\n']
 
   globalThis.fetch = async () => {
     let idx = 0

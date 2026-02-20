@@ -54,15 +54,11 @@ pub enum TerminalError {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 enum PersistedTerminalBackend {
+    #[default]
     Shell,
     Tmux,
-}
-
-impl Default for PersistedTerminalBackend {
-    fn default() -> Self {
-        Self::Shell
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -212,6 +208,7 @@ fn persist_session_registry(
         .create(true)
         .read(true)
         .write(true)
+        .truncate(false)
         .open(&lock_path)
         .map_err(|error| error.to_string())?;
     fs2::FileExt::lock_exclusive(&lock_file).map_err(|error| error.to_string())?;

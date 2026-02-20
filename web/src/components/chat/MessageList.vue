@@ -428,10 +428,7 @@ function sessionErrorAtLabel(): string {
 
             <div class="flex flex-wrap items-center gap-2 text-xs font-semibold">
               <span>{{ sessionErrorClassificationLabel() }}</span>
-              <span
-                v-if="sessionErrorAtLabel()"
-                class="text-[10px] font-mono text-rose-900/70 dark:text-rose-200/80"
-              >
+              <span v-if="sessionErrorAtLabel()" class="text-[10px] font-mono text-rose-900/70 dark:text-rose-200/80">
                 {{ sessionErrorAtLabel() }}
               </span>
             </div>

@@ -56,8 +56,8 @@ fn operation_from_args(args: &[&str]) -> Option<&'static str> {
         "revert" => Some("revert"),
         "add" => Some("stage"),
         "apply" => {
-            let reverse = args.iter().any(|a| *a == "--reverse");
-            let cached = args.iter().any(|a| *a == "--cached");
+            let reverse = args.contains(&"--reverse");
+            let cached = args.contains(&"--cached");
             if reverse && cached {
                 Some("unstage")
             } else if reverse {

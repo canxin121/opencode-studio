@@ -380,7 +380,6 @@ export function useAppRuntime() {
 
     await pluginHost.bootstrap().catch(() => {})
 
-
     // Check for updates a few seconds after mount.
     updateTimer = window.setTimeout(() => {
       void updates.checkForUpdates()

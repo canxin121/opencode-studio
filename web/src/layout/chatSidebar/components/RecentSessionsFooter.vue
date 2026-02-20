@@ -145,7 +145,8 @@ function statusMeta(sessionId: string) {
           @toggle-thread="emit('toggle-thread', item.id)"
           @open-actions="item.session && item.directory ? openSessionActions(item.directory, item.session) : undefined"
           @open-action-menu="
-            (event) => item.session && item.directory ? openSessionActionMenu(item.directory, item.session, event) : undefined
+            (event) =>
+              item.session && item.directory ? openSessionActionMenu(item.directory, item.session, event) : undefined
           "
           @toggle-pin="togglePin(item.id)"
           @delete="deleteSession(item.id)"

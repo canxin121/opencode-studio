@@ -8,7 +8,13 @@ type SessionLike = {
   share?: { url?: string | null } | null
 }
 
-export type SessionActionItem = { id: string; label: string; description?: string; icon?: Component; disabled?: boolean }
+export type SessionActionItem = {
+  id: string
+  label: string
+  description?: string
+  icon?: Component
+  disabled?: boolean
+}
 
 function shareUrlForSession(session: SessionLike | null | undefined): string {
   return typeof session?.share?.url === 'string' ? String(session.share.url) : ''

@@ -119,8 +119,18 @@ const sourceControlActionGroups = computed<OptionMenuGroup[]>(() => [
     id: 'commit',
     title: 'Commit',
     items: [
-      { id: 'commit-no-verify', label: 'No verify', description: 'Skip pre-commit hooks', checked: props.commitNoVerify },
-      { id: 'commit-signoff', label: 'Sign-off', description: 'Append Signed-off-by trailer', checked: props.commitSignoff },
+      {
+        id: 'commit-no-verify',
+        label: 'No verify',
+        description: 'Skip pre-commit hooks',
+        checked: props.commitNoVerify,
+      },
+      {
+        id: 'commit-signoff',
+        label: 'Sign-off',
+        description: 'Append Signed-off-by trailer',
+        checked: props.commitSignoff,
+      },
       { id: 'commit-amend', label: 'Amend', description: 'Amend the latest commit', checked: props.commitAmend },
       {
         id: 'commit-no-gpg-sign',

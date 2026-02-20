@@ -72,10 +72,11 @@ pub async fn git_ignore(
     };
 
     let full = dir.join(&entry);
-    if let Ok(meta) = tokio::fs::metadata(&full).await {
-        if meta.is_dir() && !entry.ends_with('/') {
-            entry.push('/');
-        }
+    if let Ok(meta) = tokio::fs::metadata(&full).await
+        && meta.is_dir()
+        && !entry.ends_with('/')
+    {
+        entry.push('/');
     }
 
     let ignore_path = dir.join(".gitignore");

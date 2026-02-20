@@ -169,7 +169,9 @@ const mobileTitle = computed(() => {
     terminal: 'Terminal',
     git: 'Git',
   }
-  const panel = String(route.meta?.mobilePanel || '').trim().toLowerCase()
+  const panel = String(route.meta?.mobilePanel || '')
+    .trim()
+    .toLowerCase()
   if (panelMap[panel]) return panelMap[panel]
 
   const tabMap: Record<string, string> = {

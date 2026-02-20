@@ -68,11 +68,7 @@ const actionsClass = computed(() =>
     </div>
 
     <!-- Actions (Visible on group hover or if always visible is forced by parent) -->
-    <div
-      v-if="$slots.actions"
-      :class="actionsClass"
-      @click.stop
-    >
+    <div v-if="$slots.actions" :class="actionsClass" @click.stop>
       <slot name="actions" />
     </div>
   </component>
