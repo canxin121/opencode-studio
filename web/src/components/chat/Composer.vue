@@ -60,7 +60,7 @@ defineExpose({ shellEl, textareaEl, openFilePicker })
     <div class="absolute top-1 right-1 z-10 flex items-center gap-1">
       <button
         type="button"
-        data-oc-keyboard-tap="keep"
+        :data-oc-keyboard-tap="fullscreen ? 'blur' : 'keep'"
         class="h-6 w-6 rounded-md text-muted-foreground/80 hover:text-foreground hover:bg-secondary/60 flex items-center justify-center backdrop-blur bg-background/40 shadow-sm"
         :title="fullscreen ? 'Collapse editor' : 'Open editor'"
         :aria-label="fullscreen ? 'Collapse editor' : 'Open editor'"

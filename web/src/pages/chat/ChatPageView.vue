@@ -97,6 +97,7 @@ const {
 
   // Composer layout.
   composerFullscreenActive,
+  composerSplitTopCollapsed,
   composerTargetHeight,
   handleComposerResize,
   resetComposerHeight,
@@ -228,6 +229,7 @@ void sessionActionsMenuRef
   <section ref="pageRef" class="h-full min-h-0 flex flex-col overflow-hidden relative">
     <VerticalSplitPane
       :model-value="composerTargetHeight"
+      :collapse-top="composerSplitTopCollapsed"
       @update:model-value="handleComposerResize"
       @dblclick="resetComposerHeight"
       :min-height="ui.isMobile ? 160 : 180"
@@ -359,7 +361,7 @@ void sessionActionsMenuRef
         <div
           ref="composerBarRef"
           class="h-full flex flex-col min-h-0 bg-background/85 backdrop-blur ios-keyboard-safe-area"
-          data-keyboard-avoid
+          :data-keyboard-avoid="composerFullscreenActive ? 'resize' : 'shift'"
         >
           <div class="chat-column flex flex-col min-h-0 h-full" :class="ui.isMobile ? 'py-2' : 'py-3'">
             <div class="relative flex flex-1 flex-col min-h-0">

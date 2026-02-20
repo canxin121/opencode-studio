@@ -164,7 +164,7 @@
   }
 
   /* Keyboard avoidance (mobile) */
-  [data-keyboard-avoid-active='true'] {
+  [data-keyboard-avoid-active='true']:not([data-keyboard-avoid='resize']) {
     /*
       Avoid using transforms for keyboard avoidance.
       A transformed ancestor becomes the containing block for `position: fixed` children,
@@ -172,6 +172,15 @@
     */
     position: relative;
     top: calc(-1 * var(--oc-keyboard-avoid-offset, 0px));
+  }
+
+  /*
+    Keyboard avoidance: "resize" mode.
+    Used by the chat fullscreen composer so the container shrinks above the IME instead of
+    shifting upward (which can push the header controls offscreen and leave a visible gap).
+  */
+  [data-keyboard-avoid='resize'][data-keyboard-avoid-active='true'] {
+    height: max(0px, calc(100% - var(--oc-keyboard-avoid-offset, 0px)));
   }
 
   /* On mobile, let the keyboard cover the bottom nav instead of pushing it upward. */

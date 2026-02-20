@@ -68,3 +68,16 @@
     overscroll-behavior-y: none;
   }
 }
+
+/*
+  Chat fullscreen composer: treat it as true fullscreen on mobile.
+  This prevents the app shell bottom padding / nav from causing layout jumps when the IME
+  opens/closes (some browsers animate viewport metrics even after dismissing the keyboard).
+*/
+:root[data-oc-composer-fullscreen='true'] .oc-bottom-nav {
+  display: none !important;
+}
+
+:root[data-oc-composer-fullscreen='true'] main {
+  padding-bottom: 0px !important;
+}

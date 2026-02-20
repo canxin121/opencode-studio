@@ -6,6 +6,10 @@ const props = defineProps<{
   minHeight?: number
   maxHeight?: number
   disabled?: boolean
+  // When true, force the top pane to stay collapsed (0px) so bottom pane is pinned to the top.
+  // Useful for fullscreen-like UIs where transient viewport metric changes (mobile keyboard/toolbars)
+  // would otherwise briefly reveal the top pane and make the bottom pane "jump" downward.
+  collapseTop?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -98,12 +102,17 @@ onBeforeUnmount(() => {
 <template>
   <div class="flex flex-col h-full min-h-0 overflow-hidden">
     <!-- Top Pane (Flexible) -->
-    <div class="flex-1 min-h-0 overflow-hidden relative flex flex-col">
+    <div
+      class="min-h-0 overflow-hidden relative flex flex-col"
+      :class="collapseTop ? 'h-0 flex-none pointer-events-none' : 'flex-1'"
+      :aria-hidden="collapseTop ? 'true' : undefined"
+    >
       <slot name="top" />
     </div>
 
     <!-- Drag Handle -->
     <div
+      v-if="!collapseTop"
       class="relative z-20 flex items-center justify-center shrink-0 h-3 -my-1.5 cursor-row-resize select-none touch-none group"
       :class="{ 'pointer-events-none opacity-50': disabled }"
       @pointerdown="handlePointerDown"

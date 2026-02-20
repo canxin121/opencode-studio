@@ -131,6 +131,10 @@ export type ChatPageViewContext = {
   scrollToBottom: (behavior?: ScrollBehavior) => void
 
   composerFullscreenActive: MaybeRef<boolean>
+  // When true, the top pane is force-collapsed so the fullscreen composer stays pinned to the top.
+  // This prevents transient mobile viewport metric changes (IME/toolbars) from briefly revealing
+  // the message list and making the composer "jump".
+  composerSplitTopCollapsed: MaybeRef<boolean>
   composerTargetHeight: MaybeRef<number>
   handleComposerResize: (height: number) => void
   resetComposerHeight: () => void

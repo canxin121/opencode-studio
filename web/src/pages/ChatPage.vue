@@ -517,6 +517,7 @@ const composerLayout = useChatComposerLayout({
 
 const {
   composerTargetHeight,
+  composerSplitTopCollapsed,
   handleComposerResize,
   toggleEditorFullscreen,
   closeEditorFullscreen,
@@ -1246,6 +1247,7 @@ const viewCtx = {
   removeAttachment,
   clearAttachments,
   composerFullscreenActive,
+  composerSplitTopCollapsed,
   composerTargetHeight,
   handleComposerResize,
   resetComposerHeight,

@@ -1,4 +1,4 @@
-import { nextTick, onBeforeUnmount, onMounted, ref, type Ref } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
 
 type UiLike = { isMobile: boolean; isMobilePointer: boolean }
 
@@ -40,6 +40,7 @@ export function useChatComposerLayout(opts: {
     ui,
     editorFullscreen,
     editorClosing,
+    composerFullscreenActive,
     composerShellHeight,
     pageRef,
     composerBarRef,
@@ -50,6 +51,13 @@ export function useChatComposerLayout(opts: {
     scrollToBottom,
   } = opts
 
+  const root = typeof document !== 'undefined' ? document.documentElement : null
+  function syncComposerFullscreenRootFlag() {
+    if (!root) return
+    if (composerFullscreenActive.value) root.setAttribute('data-oc-composer-fullscreen', 'true')
+    else root.removeAttribute('data-oc-composer-fullscreen')
+  }
+
   const STORAGE_COMPOSER_USER_HEIGHT = 'oc2.chat.composerUserHeight'
   const DEFAULT_COMPOSER_HEIGHT = 240
   const DEFAULT_MOBILE_COMPOSER_HEIGHT = 160
@@ -57,6 +65,64 @@ export function useChatComposerLayout(opts: {
   // Height state
   const composerUserHeight = ref<number>(DEFAULT_COMPOSER_HEIGHT)
   const composerTargetHeight = ref<number>(DEFAULT_COMPOSER_HEIGHT)
+
+  // Mobile fullscreen: keep the editor pinned to the top.
+  //
+  // On mobile browsers, dismissing the IME can briefly toggle toolbar/viewport metrics.
+  // While the fullscreen composer is active we drive the split pane height from measurements,
+  // which can momentarily become smaller than the container height. In the normal split layout
+  // that reveals the top pane for a frame and makes the editor "jump" downward.
+  //
+  // Collapsing the top pane in fullscreen mode ensures the editor's top edge stays stable.
+  const composerSplitTopCollapsed = ref(false)
+  const SPLIT_TOP_COLLAPSE_DELAY_MS = 220
+  let splitTopCollapseTimer: ReturnType<typeof setTimeout> | null = null
+
+  const clearSplitTopCollapseTimer = () => {
+    if (splitTopCollapseTimer === null) return
+    try {
+      clearTimeout(splitTopCollapseTimer)
+    } catch {
+      // ignore
+    }
+    splitTopCollapseTimer = null
+  }
+
+  const scheduleSplitTopCollapse = () => {
+    clearSplitTopCollapseTimer()
+    splitTopCollapseTimer = setTimeout(() => {
+      splitTopCollapseTimer = null
+      // Re-check conditions at execution time.
+      if (!ui.isMobilePointer) return
+      if (!editorFullscreen.value) return
+      if (editorClosing.value) return
+      composerSplitTopCollapsed.value = true
+    }, SPLIT_TOP_COLLAPSE_DELAY_MS)
+  }
+
+  watch(
+    () => [ui.isMobilePointer, editorFullscreen.value, editorClosing.value] as const,
+    ([isMobilePointer, isFullscreen, isClosing]) => {
+      clearSplitTopCollapseTimer()
+
+      // Desktop/tablet: keep the normal split behavior.
+      if (!isMobilePointer) {
+        composerSplitTopCollapsed.value = false
+        return
+      }
+
+      // Closing animation should reveal the message list again.
+      if (!isFullscreen || isClosing) {
+        composerSplitTopCollapsed.value = false
+        return
+      }
+
+      // Delay collapse so the open transition still expands "up" from the bottom.
+      composerSplitTopCollapsed.value = false
+      scheduleSplitTopCollapse()
+    },
+    { immediate: true },
+  )
 
   // Initialize from storage
   try {
@@ -146,6 +212,15 @@ export function useChatComposerLayout(opts: {
     if (!editorFullscreen.value && !editorClosing.value) return
     editorClosing.value = true
 
+    // Mobile UX: collapsing the fullscreen editor should dismiss the IME.
+    if (ui.isMobilePointer) {
+      try {
+        getComposerTextareaEl(composerRef.value)?.blur()
+      } catch {
+        // ignore
+      }
+    }
+
     // Animate/Restore back to user height
     composerTargetHeight.value = composerUserHeight.value
 
@@ -176,6 +251,11 @@ export function useChatComposerLayout(opts: {
   const viewport = typeof window !== 'undefined' ? window.visualViewport : null
 
   onMounted(() => {
+    syncComposerFullscreenRootFlag()
+
+    // Keep app shell stable while the fullscreen composer is active.
+    watch(() => composerFullscreenActive.value, syncComposerFullscreenRootFlag, { immediate: true })
+
     if (typeof ResizeObserver !== 'undefined') {
       composerShellObserver = new ResizeObserver(() => {
         const el = composerBarRef.value
@@ -208,6 +288,11 @@ export function useChatComposerLayout(opts: {
   }
 
   onBeforeUnmount(() => {
+    // Ensure we don't leave the app shell in fullscreen state.
+    try {
+      root?.removeAttribute('data-oc-composer-fullscreen')
+    } catch {}
+
     if (composerShellObserver) {
       composerShellObserver.disconnect()
       composerShellObserver = null
@@ -219,6 +304,8 @@ export function useChatComposerLayout(opts: {
     window.removeEventListener('resize', handleWindowResize)
     viewport?.removeEventListener('resize', handleWindowResize)
     viewport?.removeEventListener('scroll', handleWindowResize)
+
+    clearSplitTopCollapseTimer()
   })
 
   // Stub for compatibility if ChatPage calls it directly (though we'll remove usage)
@@ -235,6 +322,7 @@ export function useChatComposerLayout(opts: {
     composerCollapsedHeight: ref(0), // Unused but kept for type compat if needed
     composerUserHeight,
     composerTargetHeight,
+    composerSplitTopCollapsed,
     startComposerResize,
     applyComposerUserHeight,
     syncExpandedComposerHeight,
