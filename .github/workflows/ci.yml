@@ -23,6 +23,9 @@ jobs:
         uses: oven-sh/setup-bun@v1
         with:
           bun-version: 1.3.9
+          # Disable setup-bun's own cache to avoid noisy cache warnings;
+          # we cache Bun's download directory explicitly below.
+          no-cache: true
 
       - name: Cache Bun downloads
         uses: actions/cache@v4
@@ -51,6 +54,10 @@ jobs:
 
       - name: Cache Rust builds
         uses: Swatinem/rust-cache@v2
+        with:
+          # Avoid CI annotations when GitHub's cache service is degraded.
+          # Restore is still useful; saving is optional.
+          save-if: false
 
       - name: Rust format check
         run: cargo fmt --all -- --check

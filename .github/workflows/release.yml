@@ -46,6 +46,7 @@ jobs:
         uses: oven-sh/setup-bun@v1
         with:
           bun-version: ${{ env.BUN_VERSION }}
+          no-cache: true
 
       - name: Cache Bun downloads
         uses: actions/cache@v4
