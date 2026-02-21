@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type Component } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { RiFileLine, RiFileTextLine, RiFileUploadLine, RiScissorsLine, RiSearchLine } from '@remixicon/vue'
+import { RiFileTextLine, RiScissorsLine, RiSearchLine } from '@remixicon/vue'
 
 import ChatPageView from './chat/ChatPageView.vue'
 import type { ChatPageViewContext } from './chat/chatPageViewContext'
@@ -90,6 +90,7 @@ const composerRef = ref<ComposerExpose | null>(null)
 const attachments = useChatAttachments({ toasts, composerRef })
 const {
   attachedFiles,
+  attachmentsBusy,
   attachProjectDialogOpen,
   attachProjectPath,
   formatBytes,
@@ -131,18 +132,6 @@ const composerActionItems = computed<ComposerActionItem[]>(() => [
     label: 'Review changes',
     description: 'Insert /review command into chat input',
     icon: RiSearchLine,
-  },
-  {
-    id: 'attach-local',
-    label: 'Attach from computer',
-    description: 'Upload local files',
-    icon: RiFileUploadLine,
-  },
-  {
-    id: 'attach-project',
-    label: 'Attach from project',
-    description: 'Select a file from this repo',
-    icon: RiFileLine,
   },
 ])
 
@@ -1238,6 +1227,7 @@ const viewCtx = {
   // Composer + attachments.
   draft,
   attachedFiles,
+  attachmentsBusy,
   formatBytes,
   handleDrop,
   handlePaste,
@@ -1246,6 +1236,8 @@ const viewCtx = {
   handleFileInputChange,
   removeAttachment,
   clearAttachments,
+  openFilePicker,
+  openProjectAttachDialog,
   composerFullscreenActive,
   composerSplitTopCollapsed,
   composerTargetHeight,

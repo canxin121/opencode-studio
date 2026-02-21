@@ -1,4 +1,4 @@
-import { ref, type Ref } from 'vue'
+import { computed, ref, type Ref } from 'vue'
 
 type ToastKind = 'info' | 'success' | 'error'
 type Toasts = { push: (kind: ToastKind, message: string, timeoutMs?: number) => void }
@@ -21,6 +21,12 @@ export function useChatAttachments(opts: { toasts: Toasts; composerRef: Ref<Comp
   const { toasts, composerRef } = opts
 
   const attachedFiles = ref<AttachedFile[]>([])
+
+  const attachBusyCount = ref(0)
+  const attachmentsBusy = computed(() => attachBusyCount.value > 0)
+
+  // Used to ignore late file reads after the user clears attachments.
+  let attachEpoch = 0
 
   // Keep local attachments conservative so base64+JSON stays within server body limits.
   const MAX_LOCAL_ATTACHMENT_BYTES = 25 * 1024 * 1024
@@ -46,45 +52,62 @@ export function useChatAttachments(opts: { toasts: Toasts; composerRef: Ref<Comp
   }
 
   async function attachLocalFiles(files: FileList | File[]) {
-    const list = Array.from(files)
-    let localTotal = attachedFiles.value
-      .filter((f) => !f.serverPath)
-      .reduce((acc, f) => acc + (Number.isFinite(f.size) ? f.size : 0), 0)
+    const epoch = attachEpoch
+    attachBusyCount.value += 1
+    try {
+      const list = Array.from(files)
+      let localTotal = attachedFiles.value
+        .filter((f) => !f.serverPath)
+        .reduce((acc, f) => acc + (Number.isFinite(f.size) ? f.size : 0), 0)
 
-    for (const file of list) {
-      if (!(file instanceof File)) continue
+      for (const file of list) {
+        if (epoch !== attachEpoch) break
+        if (!(file instanceof File)) continue
 
-      if (file.size > MAX_LOCAL_ATTACHMENT_BYTES) {
-        toasts.push('error', `File too large: ${file.name} (${formatBytes(file.size)})`)
-        continue
+        if (file.size > MAX_LOCAL_ATTACHMENT_BYTES) {
+          toasts.push('error', `File too large: ${file.name} (${formatBytes(file.size)})`)
+          continue
+        }
+        if (localTotal + file.size > MAX_LOCAL_ATTACHMENT_TOTAL_BYTES) {
+          toasts.push('error', `Attachments too large (max ${formatBytes(MAX_LOCAL_ATTACHMENT_TOTAL_BYTES)})`)
+          continue
+        }
+
+        const filename = (file.name || 'file').trim()
+        const size = Number(file.size || 0)
+        const mime = (file.type || 'application/octet-stream').trim()
+
+        // Basic duplicate check.
+        if (attachedFiles.value.some((f) => f.filename === filename && f.size === size)) continue
+
+        let url = ''
+        try {
+          url = await readFileAsDataUrl(file)
+        } catch (err) {
+          toasts.push('error', `Failed to read file: ${filename}`)
+          continue
+        }
+        if (epoch !== attachEpoch) break
+        if (!url.startsWith('data:')) {
+          toasts.push('error', `Unsupported file: ${filename}`)
+          continue
+        }
+
+        attachedFiles.value = [
+          ...attachedFiles.value,
+          {
+            id: `file-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            filename,
+            size,
+            mime,
+            url,
+          },
+        ]
+
+        localTotal += file.size
       }
-      if (localTotal + file.size > MAX_LOCAL_ATTACHMENT_TOTAL_BYTES) {
-        toasts.push('error', `Attachments too large (max ${formatBytes(MAX_LOCAL_ATTACHMENT_TOTAL_BYTES)})`)
-        continue
-      }
-
-      const filename = (file.name || 'file').trim()
-      const size = Number(file.size || 0)
-      const mime = (file.type || 'application/octet-stream').trim()
-
-      // Basic duplicate check.
-      if (attachedFiles.value.some((f) => f.filename === filename && f.size === size)) continue
-
-      const url = await readFileAsDataUrl(file)
-      if (!url.startsWith('data:')) continue
-
-      attachedFiles.value = [
-        ...attachedFiles.value,
-        {
-          id: `file-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          filename,
-          size,
-          mime,
-          url,
-        },
-      ]
-
-      localTotal += file.size
+    } finally {
+      attachBusyCount.value = Math.max(0, attachBusyCount.value - 1)
     }
   }
 
@@ -118,6 +141,7 @@ export function useChatAttachments(opts: { toasts: Toasts; composerRef: Ref<Comp
   }
 
   function clearAttachments() {
+    attachEpoch += 1
     attachedFiles.value = []
   }
 
@@ -191,6 +215,7 @@ export function useChatAttachments(opts: { toasts: Toasts; composerRef: Ref<Comp
 
   return {
     attachedFiles,
+    attachmentsBusy,
     attachProjectDialogOpen,
     attachProjectPath,
     formatBytes,

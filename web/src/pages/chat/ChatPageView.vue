@@ -4,6 +4,7 @@ import {
   RiArrowDownLine,
   RiArrowDownDoubleLine,
   RiArrowUpLine,
+  RiAttachmentLine,
   RiLoader4Line,
   RiMore2Line,
   RiSendPlane2Line,
@@ -21,6 +22,7 @@ import ChatHeader from '@/components/chat/ChatHeader.vue'
 import Composer from '@/components/chat/Composer.vue'
 import RenameSessionDialog from '@/components/chat/RenameSessionDialog.vue'
 import AttachProjectDialog from '@/components/chat/AttachProjectDialog.vue'
+import AttachmentsPanel from '@/components/chat/AttachmentsPanel.vue'
 import Button from '@/components/ui/Button.vue'
 import IconButton from '@/components/ui/IconButton.vue'
 import OptionMenu from '@/components/ui/OptionMenu.vue'
@@ -49,13 +51,14 @@ const {
   agentTriggerRef,
   sessionActionsMenuRef,
 
-  // Stores / state.
-  chat,
-  ui,
-  attachedFiles,
-  draft,
-  chatSidebarPluginMounts,
-  chatOverlayBottomPluginMounts,
+   // Stores / state.
+   chat,
+   ui,
+   attachedFiles,
+   attachmentsBusy,
+   draft,
+   chatSidebarPluginMounts,
+   chatOverlayBottomPluginMounts,
 
   // Message list.
   renderBlocks,
@@ -110,6 +113,8 @@ const {
   handleFileInputChange,
   removeAttachment,
   clearAttachments,
+  openFilePicker,
+  openProjectAttachDialog,
 
   // Header actions.
   canAbort,
@@ -178,6 +183,39 @@ const {
   handleRedoFromRevertMarker,
   handleUnrevertFromRevertMarker,
 } = ctx
+
+const attachmentsPanelOpen = ref(false)
+const attachmentsTriggerRef = ref<HTMLElement | null>(null)
+
+const attachmentsCount = computed(() => {
+  const list = unref(attachedFiles)
+  return Array.isArray(list) ? list.length : 0
+})
+
+const attachmentsCountLabel = computed(() => {
+  const n = attachmentsCount.value
+  if (n > 99) return '99+'
+  return String(n)
+})
+
+function closeAttachmentsPanel() {
+  attachmentsPanelOpen.value = false
+}
+
+function toggleAttachmentsPanel() {
+  const next = !attachmentsPanelOpen.value
+  attachmentsPanelOpen.value = next
+  if (!next) return
+
+  // Avoid stacking multiple pickers/menus.
+  closeComposerActionMenu()
+  setComposerPickerOpen(false)
+}
+
+function handleAttachProjectFromPanel() {
+  closeAttachmentsPanel()
+  openProjectAttachDialog()
+}
 
 const overlayReservePx = ref(0)
 
@@ -378,22 +416,18 @@ void sessionActionsMenuRef
               />
               <PluginChatMounts :mounts="chatSidebarPluginMounts" />
 
-              <Composer
-                ref="composerRef"
-                v-model:draft="draft"
-                :fullscreen="composerFullscreenActive"
-                :attached-files="attachedFiles"
-                :format-bytes="formatBytes"
-                class="flex-1 min-h-0"
-                @toggleFullscreen="toggleEditorFullscreen"
-                @drop="handleDrop"
-                @paste="handlePaste"
-                @draftInput="handleDraftInput"
-                @draftKeydown="handleDraftKeydown"
-                @filesSelected="handleFileInputChange"
-                @removeAttachment="removeAttachment"
-                @clearAttachments="clearAttachments"
-              >
+               <Composer
+                 ref="composerRef"
+                 v-model:draft="draft"
+                 :fullscreen="composerFullscreenActive"
+                 class="flex-1 min-h-0"
+                 @toggleFullscreen="toggleEditorFullscreen"
+                 @drop="handleDrop"
+                 @paste="handlePaste"
+                 @draftInput="handleDraftInput"
+                 @draftKeydown="handleDraftKeydown"
+                 @filesSelected="handleFileInputChange"
+               >
                 <template #controls>
                   <div ref="composerControlsRef" class="relative">
                     <OptionMenu
@@ -428,9 +462,65 @@ void sessionActionsMenuRef
                       :class="ui.isMobilePointer ? 'px-2 py-1.5' : 'px-2.5 py-2'"
                     >
                       <div
-                        class="min-w-0 flex-1 flex items-center gap-1.5 flex-nowrap overflow-x-auto scrollbar-none sm:flex-wrap sm:overflow-visible"
+                        class="min-w-0 flex-1 flex items-center gap-1.5 flex-nowrap overflow-x-auto oc-scrollbar-hidden sm:flex-wrap sm:overflow-visible"
                         data-oc-keyboard-tap="keep"
                       >
+                        <Tooltip v-if="!ui.isMobilePointer">
+                          <ToolbarChipButton
+                            ref="attachmentsTriggerRef"
+                            :active="attachmentsPanelOpen"
+                            title="Attachments"
+                            aria-label="Attachments"
+                            @mousedown.prevent
+                            @click.stop="toggleAttachmentsPanel"
+                          >
+                            <RiAttachmentLine class="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
+                            <span
+                              v-if="attachmentsBusy"
+                              class="inline-flex items-center justify-center h-5 w-5 rounded-full border border-border/60 bg-background/60"
+                              aria-hidden="true"
+                            >
+                              <RiLoader4Line class="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                            </span>
+                            <span
+                              v-else-if="attachmentsCount > 0"
+                              class="inline-flex items-center justify-center h-5 min-w-5 px-1 rounded-full border border-border/60 bg-secondary/60 text-[10px] font-mono tabular-nums"
+                              aria-hidden="true"
+                            >
+                              {{ attachmentsCountLabel }}
+                            </span>
+                          </ToolbarChipButton>
+                          <template #content>
+                            {{ attachmentsCount > 0 ? `Attachments (${attachmentsCount})` : 'Attachments' }}
+                          </template>
+                        </Tooltip>
+
+                        <ToolbarChipButton
+                          v-else
+                          ref="attachmentsTriggerRef"
+                          :active="attachmentsPanelOpen"
+                          title="Attachments"
+                          aria-label="Attachments"
+                          @mousedown.prevent
+                          @click.stop="toggleAttachmentsPanel"
+                        >
+                          <RiAttachmentLine class="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
+                          <span
+                            v-if="attachmentsBusy"
+                            class="inline-flex items-center justify-center h-5 w-5 rounded-full border border-border/60 bg-background/60"
+                            aria-hidden="true"
+                          >
+                            <RiLoader4Line class="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                          </span>
+                          <span
+                            v-else-if="attachmentsCount > 0"
+                            class="inline-flex items-center justify-center h-5 min-w-5 px-1 rounded-full border border-border/60 bg-secondary/60 text-[10px] font-mono tabular-nums"
+                            aria-hidden="true"
+                          >
+                            {{ attachmentsCountLabel }}
+                          </span>
+                        </ToolbarChipButton>
+
                         <IconButton
                           class="text-muted-foreground hover:text-foreground hover:bg-secondary/40"
                           :class="composerActionMenuOpen ? 'bg-secondary/60 text-foreground' : ''"
@@ -637,6 +727,20 @@ void sessionActionsMenuRef
     :attached-count="attachedFiles.length"
     @update:open="(v) => (attachProjectDialogOpen = v)"
     @add="addProjectAttachment"
+  />
+
+  <AttachmentsPanel
+    :open="attachmentsPanelOpen"
+    :is-mobile-pointer="ui.isMobilePointer"
+    :desktop-anchor-el="attachmentsTriggerRef"
+    :attached-files="attachedFiles"
+    :busy="attachmentsBusy"
+    :format-bytes="formatBytes"
+    @update:open="(v) => (attachmentsPanelOpen = v)"
+    @remove="removeAttachment"
+    @clear="clearAttachments"
+    @attachLocal="openFilePicker"
+    @attachProject="handleAttachProjectFromPanel"
   />
 </template>
 

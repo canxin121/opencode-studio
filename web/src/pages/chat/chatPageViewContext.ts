@@ -90,6 +90,7 @@ export type ChatPageViewContext = {
     setSessionSwitcherOpen: (open: boolean) => void
   }
   attachedFiles: MaybeRef<AttachedFile[]>
+  attachmentsBusy: MaybeRef<boolean>
   draft: MaybeRef<string>
 
   chatSidebarPluginMounts: MaybeRef<ChatMount[]>
@@ -147,6 +148,8 @@ export type ChatPageViewContext = {
   handleFileInputChange: (event: Event | FileList) => void | Promise<void>
   removeAttachment: (id: string) => void
   clearAttachments: () => void
+  openFilePicker: () => void
+  openProjectAttachDialog: () => void
 
   canAbort: MaybeRef<boolean>
   retryCountdownLabel: MaybeRef<string>

@@ -4,20 +4,9 @@ import { RiArrowDownLine, RiEditLine } from '@remixicon/vue'
 
 import AttachmentPicker from '@/components/chat/AttachmentPicker.vue'
 
-type AttachedFile = {
-  id: string
-  filename: string
-  size: number
-  mime: string
-  url?: string
-  serverPath?: string
-}
-
 const props = defineProps<{
   draft: string
   fullscreen: boolean
-  attachedFiles: AttachedFile[]
-  formatBytes: (bytes: number) => string
 }>()
 
 const emit = defineEmits<{
@@ -28,8 +17,6 @@ const emit = defineEmits<{
   (e: 'draftInput'): void
   (e: 'draftKeydown', ev: KeyboardEvent): void
   (e: 'filesSelected', files: FileList): void
-  (e: 'removeAttachment', id: string): void
-  (e: 'clearAttachments'): void
 }>()
 
 const shellEl = ref<HTMLDivElement | null>(null)
@@ -93,11 +80,7 @@ defineExpose({ shellEl, textareaEl, openFilePicker })
 
     <AttachmentPicker
       ref="attachmentPickerRef"
-      :attached-files="attachedFiles"
-      :format-bytes="formatBytes"
       @filesSelected="$emit('filesSelected', $event)"
-      @remove="$emit('removeAttachment', $event)"
-      @clear="$emit('clearAttachments')"
     />
 
     <slot name="controls" />
