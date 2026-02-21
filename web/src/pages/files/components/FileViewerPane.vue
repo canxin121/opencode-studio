@@ -1097,15 +1097,15 @@ function onSendSelection() {
 
       <div v-else-if="viewerMode === 'binary'" class="p-3">
         <div class="rounded-md border border-border bg-background/40 px-3 py-2 text-muted-foreground typography-meta">
-           Binary file preview not available.
-           <div v-if="fileError" class="mt-2 text-destructive">{{ fileError }}</div>
-           <div class="mt-2">
+          Binary file preview not available.
+          <div v-if="fileError" class="mt-2 text-destructive">{{ fileError }}</div>
+          <div class="mt-2">
             <Button variant="outline" size="sm" class="font-mono text-xs" @click="props.openRaw">Download raw</Button>
-           </div>
-         </div>
-       </div>
+          </div>
+        </div>
+      </div>
 
-       <div v-else-if="viewerMode === 'image' || isSelectedImage" class="flex h-full items-center justify-center p-3">
+      <div v-else-if="viewerMode === 'image' || isSelectedImage" class="flex h-full items-center justify-center p-3">
         <div v-if="!rawUrl" class="text-muted-foreground typography-meta">Loading image…</div>
         <img
           v-else
@@ -1113,7 +1113,7 @@ function onSendSelection() {
           :alt="selectedFile?.name || 'Image'"
           class="max-w-full max-h-[70vh] object-contain rounded-md border border-border/30 bg-primary/10"
         />
-       </div>
+      </div>
 
       <div v-else class="h-full flex min-h-0">
         <template v-if="timelineEnabled">

@@ -115,8 +115,7 @@ export const useBackendsStore = defineStore('backends', () => {
     if (!existing) return { ok: false, error: 'Backend not found' }
 
     const nextLabel = typeof input.label === 'string' ? input.label.trim() : existing.label
-    const nextBaseUrl =
-      typeof input.baseUrl === 'string' ? normalizeBackendBaseUrl(input.baseUrl) : existing.baseUrl
+    const nextBaseUrl = typeof input.baseUrl === 'string' ? normalizeBackendBaseUrl(input.baseUrl) : existing.baseUrl
     if (!nextLabel) return { ok: false, error: 'Label is required' }
     if (!nextBaseUrl) return { ok: false, error: 'Invalid URL' }
 

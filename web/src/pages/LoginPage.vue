@@ -39,10 +39,7 @@ const backendOptions = computed(() => {
     description: b.baseUrl,
   }))
 
-  return [
-    { value: NEW_BACKEND_ID, label: 'New backend…', description: 'Add a Studio backend URL' },
-    ...opts,
-  ]
+  return [{ value: NEW_BACKEND_ID, label: 'New backend…', description: 'Add a Studio backend URL' }, ...opts]
 })
 
 const isNewBackend = computed(() => selectedBackendId.value === NEW_BACKEND_ID)
@@ -238,105 +235,110 @@ async function submit() {
         </div>
       </div>
 
-        <div class="grid gap-4">
-          <div class="grid gap-2">
-            <label class="text-xs font-medium text-muted-foreground">Backend</label>
-            <div class="flex items-center gap-2">
-              <div class="flex-1 min-w-0">
-                <OptionPicker
-                  v-model="selectedBackendId"
-                  :options="backendOptions"
-                  title="Backend"
-                  search-placeholder="Search backends"
-                  :include-empty="false"
-                />
-              </div>
+      <div class="grid gap-4">
+        <div class="grid gap-2">
+          <label class="text-xs font-medium text-muted-foreground">Backend</label>
+          <div class="flex items-center gap-2">
+            <div class="flex-1 min-w-0">
+              <OptionPicker
+                v-model="selectedBackendId"
+                :options="backendOptions"
+                title="Backend"
+                search-placeholder="Search backends"
+                :include-empty="false"
+              />
+            </div>
 
+            <Button
+              v-if="canManageSelectedBackend"
+              variant="outline"
+              size="sm"
+              class="shrink-0"
+              :disabled="busy"
+              @click="openEditSelectedBackend"
+            >
+              Edit
+            </Button>
+
+            <ConfirmPopover
+              v-if="canManageSelectedBackend"
+              title="Remove backend?"
+              :description="selectedBackend?.baseUrl"
+              confirmText="Remove"
+              cancelText="Cancel"
+              variant="destructive"
+              :confirmDisabled="busy || backends.backends.length <= 1"
+              @confirm="removeSelectedBackend"
+            >
               <Button
-                v-if="canManageSelectedBackend"
                 variant="outline"
                 size="sm"
-                class="shrink-0"
-                :disabled="busy"
-                @click="openEditSelectedBackend"
+                class="shrink-0 text-destructive border-destructive/30 hover:bg-destructive/10"
+                :disabled="busy || backends.backends.length <= 1"
               >
-                Edit
+                Remove
               </Button>
+            </ConfirmPopover>
+          </div>
+          <div v-if="effectiveBackendBaseUrl" class="text-[11px] text-muted-foreground break-all font-mono">
+            {{ effectiveBackendBaseUrl }}
+          </div>
+        </div>
 
-              <ConfirmPopover
-                v-if="canManageSelectedBackend"
-                title="Remove backend?"
-                :description="selectedBackend?.baseUrl"
-                confirmText="Remove"
-                cancelText="Cancel"
-                variant="destructive"
-                :confirmDisabled="busy || backends.backends.length <= 1"
-                @confirm="removeSelectedBackend"
-              >
-                <Button
-                  variant="outline"
-                  size="sm"
-                  class="shrink-0 text-destructive border-destructive/30 hover:bg-destructive/10"
-                  :disabled="busy || backends.backends.length <= 1"
-                >
-                  Remove
-                </Button>
-              </ConfirmPopover>
-            </div>
-            <div v-if="effectiveBackendBaseUrl" class="text-[11px] text-muted-foreground break-all font-mono">
-              {{ effectiveBackendBaseUrl }}
-            </div>
+        <div v-if="isNewBackend" class="grid gap-3 rounded-lg border border-border bg-muted/10 p-3">
+          <div class="grid gap-2">
+            <label class="text-xs font-medium text-muted-foreground">Label</label>
+            <Input v-model="newBackendLabel" placeholder="e.g. Home Server" :disabled="busy" class="h-10" />
+          </div>
+          <div class="grid gap-2">
+            <label class="text-xs font-medium text-muted-foreground">Base URL</label>
+            <Input
+              v-model="newBackendUrl"
+              placeholder="http://127.0.0.1:3000"
+              :disabled="busy"
+              class="h-10"
+              autocomplete="url"
+              inputmode="url"
+            />
+          </div>
+        </div>
+
+        <div
+          v-else-if="editOpen && canManageSelectedBackend"
+          class="grid gap-3 rounded-lg border border-border bg-muted/10 p-3"
+        >
+          <div
+            v-if="editError"
+            class="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+          >
+            {{ editError }}
           </div>
 
-          <div v-if="isNewBackend" class="grid gap-3 rounded-lg border border-border bg-muted/10 p-3">
-            <div class="grid gap-2">
-              <label class="text-xs font-medium text-muted-foreground">Label</label>
-              <Input v-model="newBackendLabel" placeholder="e.g. Home Server" :disabled="busy" class="h-10" />
-            </div>
-            <div class="grid gap-2">
-              <label class="text-xs font-medium text-muted-foreground">Base URL</label>
-              <Input
-                v-model="newBackendUrl"
-                placeholder="http://127.0.0.1:3000"
-                :disabled="busy"
-                class="h-10"
-                autocomplete="url"
-                inputmode="url"
-              />
-            </div>
+          <div class="grid gap-2">
+            <label class="text-xs font-medium text-muted-foreground">Label</label>
+            <Input v-model="editLabel" placeholder="Backend" :disabled="busy || editBusy" class="h-10" />
+          </div>
+          <div class="grid gap-2">
+            <label class="text-xs font-medium text-muted-foreground">Base URL</label>
+            <Input
+              v-model="editBaseUrl"
+              placeholder="https://studio.cxits.cn"
+              :disabled="busy || editBusy"
+              class="h-10"
+              autocomplete="url"
+              inputmode="url"
+            />
           </div>
 
-          <div v-else-if="editOpen && canManageSelectedBackend" class="grid gap-3 rounded-lg border border-border bg-muted/10 p-3">
-            <div
-              v-if="editError"
-              class="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+          <div class="flex items-center justify-end gap-2">
+            <Button variant="secondary" size="sm" :disabled="busy || editBusy" @click="cancelEditSelectedBackend"
+              >Cancel</Button
             >
-              {{ editError }}
-            </div>
-
-            <div class="grid gap-2">
-              <label class="text-xs font-medium text-muted-foreground">Label</label>
-              <Input v-model="editLabel" placeholder="Backend" :disabled="busy || editBusy" class="h-10" />
-            </div>
-            <div class="grid gap-2">
-              <label class="text-xs font-medium text-muted-foreground">Base URL</label>
-              <Input
-                v-model="editBaseUrl"
-                placeholder="https://studio.cxits.cn"
-                :disabled="busy || editBusy"
-                class="h-10"
-                autocomplete="url"
-                inputmode="url"
-              />
-            </div>
-
-            <div class="flex items-center justify-end gap-2">
-              <Button variant="secondary" size="sm" :disabled="busy || editBusy" @click="cancelEditSelectedBackend">Cancel</Button>
-              <Button size="sm" :disabled="busy || editBusy" @click="submitEditSelectedBackend">
-                {{ editBusy ? 'Saving…' : 'Save' }}
-              </Button>
-            </div>
+            <Button size="sm" :disabled="busy || editBusy" @click="submitEditSelectedBackend">
+              {{ editBusy ? 'Saving…' : 'Save' }}
+            </Button>
           </div>
+        </div>
 
         <div class="grid gap-2">
           <Input

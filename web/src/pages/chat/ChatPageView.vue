@@ -51,14 +51,14 @@ const {
   agentTriggerRef,
   sessionActionsMenuRef,
 
-   // Stores / state.
-   chat,
-   ui,
-   attachedFiles,
-   attachmentsBusy,
-   draft,
-   chatSidebarPluginMounts,
-   chatOverlayBottomPluginMounts,
+  // Stores / state.
+  chat,
+  ui,
+  attachedFiles,
+  attachmentsBusy,
+  draft,
+  chatSidebarPluginMounts,
+  chatOverlayBottomPluginMounts,
 
   // Message list.
   renderBlocks,
@@ -416,18 +416,18 @@ void sessionActionsMenuRef
               />
               <PluginChatMounts :mounts="chatSidebarPluginMounts" />
 
-               <Composer
-                 ref="composerRef"
-                 v-model:draft="draft"
-                 :fullscreen="composerFullscreenActive"
-                 class="flex-1 min-h-0"
-                 @toggleFullscreen="toggleEditorFullscreen"
-                 @drop="handleDrop"
-                 @paste="handlePaste"
-                 @draftInput="handleDraftInput"
-                 @draftKeydown="handleDraftKeydown"
-                 @filesSelected="handleFileInputChange"
-               >
+              <Composer
+                ref="composerRef"
+                v-model:draft="draft"
+                :fullscreen="composerFullscreenActive"
+                class="flex-1 min-h-0"
+                @toggleFullscreen="toggleEditorFullscreen"
+                @drop="handleDrop"
+                @paste="handlePaste"
+                @draftInput="handleDraftInput"
+                @draftKeydown="handleDraftKeydown"
+                @filesSelected="handleFileInputChange"
+              >
                 <template #controls>
                   <div ref="composerControlsRef" class="relative">
                     <OptionMenu

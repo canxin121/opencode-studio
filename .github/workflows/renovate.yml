@@ -7,7 +7,7 @@ on:
     - cron: "17 3 * * *"
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
 
 concurrency:
@@ -20,7 +20,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Run Renovate
-        uses: renovatebot/github-action@v40
+        uses: renovatebot/github-action@v46.1.1
         with:
           # Prefer a PAT or GitHub App token in RENOVATE_TOKEN.
           # Fallback to GITHUB_TOKEN for convenience (note: it cannot trigger downstream workflows).

@@ -1,10 +1,4 @@
-import {
-  getLocalJson,
-  getSessionJson,
-  removeLocalKey,
-  removeSessionKey,
-  setLocalJson,
-} from './persist'
+import { getLocalJson, getSessionJson, removeLocalKey, removeSessionKey, setLocalJson } from './persist'
 import { readActiveBackendBaseUrl } from './backend'
 
 type TokenMap = Record<string, string>

@@ -78,10 +78,7 @@ defineExpose({ shellEl, textareaEl, openFilePicker })
       @keydown="$emit('draftKeydown', $event)"
     />
 
-    <AttachmentPicker
-      ref="attachmentPickerRef"
-      @filesSelected="$emit('filesSelected', $event)"
-    />
+    <AttachmentPicker ref="attachmentPickerRef" @filesSelected="$emit('filesSelected', $event)" />
 
     <slot name="controls" />
   </div>

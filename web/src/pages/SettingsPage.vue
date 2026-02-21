@@ -555,8 +555,8 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
             <OpenCodeConfigPanel :active-section="activeOpencodeSection || undefined" />
           </div>
 
-           <!-- Plugins Tab -->
-           <div v-else-if="activeTab === 'plugins'" class="space-y-6">
+          <!-- Plugins Tab -->
+          <div v-else-if="activeTab === 'plugins'" class="space-y-6">
             <div
               v-if="pluginsTabPlugins.length === 0"
               class="rounded-lg border border-border bg-muted/10 p-4 text-sm text-muted-foreground"
@@ -564,16 +564,16 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
               No plugins expose settings.
             </div>
 
-             <PluginSettingsPanel v-else :plugin-id="activePluginsSection" :hide-plugin-selector="true" />
-           </div>
+            <PluginSettingsPanel v-else :plugin-id="activePluginsSection" :hide-plugin-selector="true" />
+          </div>
 
-           <!-- Backends Tab -->
-           <div v-else-if="activeTab === 'backends'" class="space-y-6">
-             <BackendsPanel />
-           </div>
+          <!-- Backends Tab -->
+          <div v-else-if="activeTab === 'backends'" class="space-y-6">
+            <BackendsPanel />
+          </div>
 
-           <!-- Troubleshooting Tab -->
-           <div v-else-if="activeTab === 'troubleshooting'" class="space-y-6">
+          <!-- Troubleshooting Tab -->
+          <div v-else-if="activeTab === 'troubleshooting'" class="space-y-6">
             <div class="rounded-lg border border-border bg-muted/10 p-4">
               <div class="text-sm font-medium">Troubleshooting</div>
               <div class="mt-1 text-xs text-muted-foreground">

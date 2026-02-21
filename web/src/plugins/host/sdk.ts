@@ -43,9 +43,10 @@ export function subscribeHostPluginEvents(
       handlers.onEvent?.({
         type,
         data: raw !== undefined ? (raw as JsonLike) : (evt as unknown as JsonLike),
-        lastEventId: typeof (evt as unknown as { lastEventId?: unknown }).lastEventId === 'string'
-          ? String((evt as unknown as { lastEventId?: string }).lastEventId || '')
-          : undefined,
+        lastEventId:
+          typeof (evt as unknown as { lastEventId?: unknown }).lastEventId === 'string'
+            ? String((evt as unknown as { lastEventId?: string }).lastEventId || '')
+            : undefined,
       })
     },
     onError: () => {

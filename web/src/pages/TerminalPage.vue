@@ -863,9 +863,10 @@ function openTerminalUiStateEvents() {
     endpoint: terminalUiStateEventsUrl(terminalStateEventSeq > 0 ? terminalStateEventSeq : undefined),
     debugLabel: 'sse:terminal-ui-state',
     onEvent: (evt) => {
-      const lastEventId = typeof (evt as unknown as { lastEventId?: unknown }).lastEventId === 'string'
-        ? String((evt as unknown as { lastEventId?: string }).lastEventId || '')
-        : ''
+      const lastEventId =
+        typeof (evt as unknown as { lastEventId?: unknown }).lastEventId === 'string'
+          ? String((evt as unknown as { lastEventId?: string }).lastEventId || '')
+          : ''
       applyTerminalUiStateEventMessage(JSON.stringify(evt), lastEventId)
     },
     onError: () => {

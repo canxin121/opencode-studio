@@ -8,7 +8,7 @@ use argon2::{
 use axum::{
     Json,
     extract::State,
-    http::{HeaderMap, StatusCode, Method, header},
+    http::{HeaderMap, Method, StatusCode, header},
     middleware,
     response::IntoResponse,
 };
@@ -221,7 +221,11 @@ fn origin_matches_host(origin: &str, host: &str) -> bool {
         Ok(v) => v,
         Err(_) => return false,
     };
-    let origin_host = origin_url.host_str().unwrap_or("").trim().to_ascii_lowercase();
+    let origin_host = origin_url
+        .host_str()
+        .unwrap_or("")
+        .trim()
+        .to_ascii_lowercase();
     if origin_host.is_empty() {
         return false;
     }
@@ -568,7 +572,11 @@ pub(crate) async fn auth_session_create(
                 .sessions
                 .insert(token.clone(), SessionRecord { last_seen: now });
 
-            let jar = jar.add(build_session_cookie(&token, secure, state.ui_cookie_same_site));
+            let jar = jar.add(build_session_cookie(
+                &token,
+                secure,
+                state.ui_cookie_same_site,
+            ));
             (
                 StatusCode::OK,
                 jar,

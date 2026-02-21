@@ -23,7 +23,9 @@ export function apiUrl(path: string): string {
 }
 
 function hasHeader(initHeaders: RequestInit['headers'] | undefined, name: string): boolean {
-  const needle = String(name || '').trim().toLowerCase()
+  const needle = String(name || '')
+    .trim()
+    .toLowerCase()
   if (!needle) return false
 
   const h = initHeaders
@@ -40,7 +42,9 @@ function hasHeader(initHeaders: RequestInit['headers'] | undefined, name: string
   if (Array.isArray(h)) {
     for (const pair of h) {
       if (!Array.isArray(pair) || pair.length < 1) continue
-      const key = String(pair[0] || '').trim().toLowerCase()
+      const key = String(pair[0] || '')
+        .trim()
+        .toLowerCase()
       if (key === needle) return true
     }
     return false
@@ -48,7 +52,12 @@ function hasHeader(initHeaders: RequestInit['headers'] | undefined, name: string
 
   if (typeof h === 'object') {
     for (const k of Object.keys(h as Record<string, string>)) {
-      if (String(k || '').trim().toLowerCase() === needle) return true
+      if (
+        String(k || '')
+          .trim()
+          .toLowerCase() === needle
+      )
+        return true
     }
   }
   return false

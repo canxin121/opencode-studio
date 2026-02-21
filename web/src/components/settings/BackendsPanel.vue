@@ -191,11 +191,7 @@ function refreshFromStorage() {
     </div>
 
     <div class="grid gap-3">
-      <div
-        v-for="b in backends.backends"
-        :key="b.id"
-        class="rounded-lg border border-border bg-background/60 p-4"
-      >
+      <div v-for="b in backends.backends" :key="b.id" class="rounded-lg border border-border bg-background/60 p-4">
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0">
             <div class="flex items-center gap-2">
@@ -261,7 +257,9 @@ function refreshFromStorage() {
             autocomplete="url"
             inputmode="url"
           />
-          <div class="text-xs text-muted-foreground">Examples: `http://127.0.0.1:3000` or `https://studio.example.com`</div>
+          <div class="text-xs text-muted-foreground">
+            Examples: `http://127.0.0.1:3000` or `https://studio.example.com`
+          </div>
         </div>
 
         <label class="inline-flex items-center gap-2 text-sm">

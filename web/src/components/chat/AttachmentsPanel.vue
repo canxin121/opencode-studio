@@ -52,7 +52,9 @@ const countLabel = computed(() => {
 })
 
 function isImageFile(f: AttachedFile): boolean {
-  const mime = String(f?.mime || '').trim().toLowerCase()
+  const mime = String(f?.mime || '')
+    .trim()
+    .toLowerCase()
   const url = typeof f?.url === 'string' ? f.url : ''
   return mime.startsWith('image/') && url.startsWith('data:')
 }
@@ -67,7 +69,10 @@ function badgeTextForFilename(filename: string): string {
 
   const dot = name.lastIndexOf('.')
   if (dot <= 0 || dot >= name.length - 1) return 'FILE'
-  const ext = name.slice(dot + 1).trim().toUpperCase()
+  const ext = name
+    .slice(dot + 1)
+    .trim()
+    .toUpperCase()
   if (!ext) return 'FILE'
   return ext.length > 5 ? ext.slice(0, 5) : ext
 }

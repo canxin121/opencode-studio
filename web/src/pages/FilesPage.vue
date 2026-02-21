@@ -529,7 +529,8 @@ watch(
       rawUrl.value = href
     } catch (err) {
       if (seq !== rawUrlSeq) return
-      fileError.value = err instanceof ApiError ? err.message || err.bodyText || '' : err instanceof Error ? err.message : String(err)
+      fileError.value =
+        err instanceof ApiError ? err.message || err.bodyText || '' : err instanceof Error ? err.message : String(err)
       rawUrl.value = ''
     }
   },
@@ -1072,7 +1073,8 @@ async function triggerDownloadForPath(path: string, fileName?: string) {
       }
     }, 30_000)
   } catch (err) {
-    const msg = err instanceof ApiError ? err.message || err.bodyText || '' : err instanceof Error ? err.message : String(err)
+    const msg =
+      err instanceof ApiError ? err.message || err.bodyText || '' : err instanceof Error ? err.message : String(err)
     toasts.push('error', msg || 'Download failed')
   }
 }
