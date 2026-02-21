@@ -85,6 +85,7 @@ const props = defineProps<{
   selectTimelineCommit: (side: TimelineSide, commit: GitLogCommit) => boolean | void | Promise<boolean | void>
   openTimeline: () => boolean | void | Promise<boolean | void>
   openSidebar: () => boolean | void | Promise<boolean | void>
+  openRaw: () => boolean | void | Promise<boolean | void>
   save: () => boolean | void | Promise<boolean | void>
   copyToClipboard: (text: string) => void | Promise<void>
 }>()
@@ -1096,23 +1097,23 @@ function onSendSelection() {
 
       <div v-else-if="viewerMode === 'binary'" class="p-3">
         <div class="rounded-md border border-border bg-background/40 px-3 py-2 text-muted-foreground typography-meta">
-          Binary file preview not available.
-          <div v-if="fileError" class="mt-2 text-destructive">{{ fileError }}</div>
-          <div class="mt-2">
-            <a class="text-xs font-mono text-primary underline" :href="rawUrl" target="_blank" rel="noreferrer"
-              >open raw</a
-            >
-          </div>
-        </div>
-      </div>
+           Binary file preview not available.
+           <div v-if="fileError" class="mt-2 text-destructive">{{ fileError }}</div>
+           <div class="mt-2">
+            <Button variant="outline" size="sm" class="font-mono text-xs" @click="props.openRaw">Download raw</Button>
+           </div>
+         </div>
+       </div>
 
-      <div v-else-if="viewerMode === 'image' || isSelectedImage" class="flex h-full items-center justify-center p-3">
+       <div v-else-if="viewerMode === 'image' || isSelectedImage" class="flex h-full items-center justify-center p-3">
+        <div v-if="!rawUrl" class="text-muted-foreground typography-meta">Loading image…</div>
         <img
+          v-else
           :src="rawUrl"
           :alt="selectedFile?.name || 'Image'"
           class="max-w-full max-h-[70vh] object-contain rounded-md border border-border/30 bg-primary/10"
         />
-      </div>
+       </div>
 
       <div v-else class="h-full flex min-h-0">
         <template v-if="timelineEnabled">

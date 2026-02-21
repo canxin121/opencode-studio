@@ -1,6 +1,8 @@
 import type { JsonValue as JsonLike } from '@/types/json'
 
 import { emitAuthRequired, extractAuthRequiredMessageFromBodyText } from './authEvents.ts'
+import { apiUrl } from './api'
+import { buildActiveUiAuthHeaders } from './uiAuthToken'
 
 export type SseEvent = {
   type: string
@@ -31,6 +33,7 @@ export type SseClientOptions = {
   initialLastEventId?: string | null
   debugLabel?: string
   debug?: boolean
+  autoReconnect?: boolean
   stallTimeoutMsVisible?: number
   stallTimeoutMsHidden?: number
   onEvent: (evt: SseEvent) => void
@@ -154,7 +157,7 @@ export function advanceSseCursor(
 }
 
 export function connectSse(opts: SseClientOptions): SseClient {
-  const urlBase = (opts.endpoint || '/api/global/event').trim() || '/api/global/event'
+  const urlBase = apiUrl((opts.endpoint || '/api/global/event').trim() || '/api/global/event')
   const dir = typeof opts.directory === 'string' ? opts.directory.trim() : ''
   const url = dir ? `${urlBase}${urlBase.includes('?') ? '&' : '?'}directory=${encodeURIComponent(dir)}` : urlBase
 
@@ -375,6 +378,15 @@ export function connectSse(opts: SseClientOptions): SseClient {
         headers.set('accept', 'text/event-stream')
         if (lastEventId) headers.set('last-event-id', lastEventId)
 
+        const auth = buildActiveUiAuthHeaders()
+        if (auth.authorization) {
+          try {
+            headers.set('authorization', auth.authorization)
+          } catch {
+            // ignore
+          }
+        }
+
         const attemptAbort = new AbortController()
         const linked = linkAbortSignals([controller.signal, attemptAbort.signal])
         linkedCleanup = linked.cleanup
@@ -383,6 +395,7 @@ export function connectSse(opts: SseClientOptions): SseClient {
           method: 'GET',
           headers,
           cache: 'no-store',
+          credentials: auth.authorization ? 'omit' : 'include',
           signal: linked.signal,
         })
         if (!resp.ok) {
@@ -570,6 +583,11 @@ export function connectSse(opts: SseClientOptions): SseClient {
 
         // No fallback: modern browsers only.
         if (nextError instanceof Error && nextError.message.includes('SSE streaming required')) {
+          closed = true
+          break
+        }
+
+        if (opts.autoReconnect === false) {
           closed = true
           break
         }

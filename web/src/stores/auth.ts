@@ -1,9 +1,11 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 
-import { ApiError, apiJson } from '../lib/api'
+import { ApiError, apiJson, apiUrl } from '../lib/api'
+import { buildActiveUiAuthHeaders, clearUiAuthTokenForBaseUrl, writeUiAuthTokenForBaseUrl } from '../lib/uiAuthToken'
+import { readActiveBackendBaseUrl } from '../lib/backend'
 
-type AuthStatusOk = { authenticated: boolean; disabled?: boolean }
+type AuthStatusOk = { authenticated: boolean; disabled?: boolean; token?: string }
 type AuthStatusLocked = { authenticated: boolean; locked: boolean }
 
 export const useAuthStore = defineStore('auth', () => {
@@ -22,18 +24,38 @@ export const useAuthStore = defineStore('auth', () => {
     disabled.value = false
     locked.value = true
     lastError.value = null
+
+    // Clear any stored token for the active backend so we don't keep sending a stale credential.
+    try {
+      clearUiAuthTokenForBaseUrl(readActiveBackendBaseUrl())
+    } catch {
+      // ignore
+    }
   }
 
   async function refresh() {
     lastError.value = null
     try {
-      const resp = await fetch('/auth/session', { headers: { accept: 'application/json' } })
+      const authHeaders = buildActiveUiAuthHeaders()
+      const resp = await fetch(apiUrl('/auth/session'), {
+        headers: {
+          accept: 'application/json',
+          ...authHeaders,
+        },
+        credentials: authHeaders.authorization ? 'omit' : 'include',
+      })
       checked.value = true
       if (resp.ok) {
         const data = (await resp.json()) as AuthStatusOk
         authenticated.value = Boolean(data.authenticated)
         disabled.value = Boolean(data.disabled)
         locked.value = false
+
+        // Best-effort: if the backend returns a token (optional), persist it.
+        const token = typeof data.token === 'string' ? data.token.trim() : ''
+        if (token) {
+          writeUiAuthTokenForBaseUrl(readActiveBackendBaseUrl(), token)
+        }
         return
       }
 
@@ -42,6 +64,9 @@ export const useAuthStore = defineStore('auth', () => {
         authenticated.value = false
         disabled.value = false
         locked.value = Boolean(data?.locked)
+
+        // Token is missing/invalid.
+        clearUiAuthTokenForBaseUrl(readActiveBackendBaseUrl())
         return
       }
 
@@ -62,11 +87,16 @@ export const useAuthStore = defineStore('auth', () => {
   async function login(password: string) {
     lastError.value = null
     try {
-      await apiJson<AuthStatusOk>('/auth/session', {
+      const data = await apiJson<AuthStatusOk>('/auth/session', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ password }),
       })
+
+      const token = typeof data?.token === 'string' ? data.token.trim() : ''
+      if (token) {
+        writeUiAuthTokenForBaseUrl(readActiveBackendBaseUrl(), token)
+      }
       await refresh()
     } catch (err) {
       if (err instanceof ApiError) {

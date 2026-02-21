@@ -23,7 +23,7 @@ export type TerminalUiState = {
   folders: TerminalUiFolder[]
 }
 
-import { ApiError, apiJson, apiText } from '@/lib/api'
+import { ApiError, apiJson, apiText, apiUrl } from '@/lib/api'
 import type { JsonValue as JsonLike } from '@/types/json'
 
 function asObject(value: JsonLike): Record<string, JsonLike> | null {
@@ -199,7 +199,7 @@ export async function restartTerminalSession(input: {
 }
 
 export function terminalStreamUrl(id: string, since?: number): string {
-  const base = `/api/terminal/${encodeURIComponent(id)}/stream`
+  const base = apiUrl(`/api/terminal/${encodeURIComponent(id)}/stream`)
   if (typeof since !== 'number' || !Number.isFinite(since) || since <= 0) return base
   return `${base}?since=${Math.floor(since)}`
 }
@@ -219,7 +219,7 @@ export async function putTerminalUiState(input: TerminalUiState): Promise<Termin
 }
 
 export function terminalUiStateEventsUrl(since?: number): string {
-  const base = '/api/ui/terminal/state/events'
+  const base = apiUrl('/api/ui/terminal/state/events')
   if (typeof since !== 'number' || !Number.isFinite(since) || since <= 0) return base
   return `${base}?since=${Math.floor(since)}`
 }

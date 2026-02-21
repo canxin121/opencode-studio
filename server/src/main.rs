@@ -1,5 +1,5 @@
 use base64::Engine as _;
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use rand_core::{OsRng, RngCore};
 use tracing::Level;
 
@@ -84,9 +84,48 @@ pub(crate) struct Args {
 
     /// Directory with built UI assets (Vite dist).
     ///
-    /// Required: pass --ui-dir or set OPENCODE_STUDIO_UI_DIR.
+    /// When unset, OpenCode Studio runs API-only (no static UI).
     #[arg(long, env = "OPENCODE_STUDIO_UI_DIR", value_name = "PATH")]
-    pub(crate) ui_dir: String,
+    pub(crate) ui_dir: Option<String>,
+
+    /// Allowed CORS origins for cross-origin frontends.
+    ///
+    /// Use a comma-separated list via env (OPENCODE_STUDIO_CORS_ORIGINS) or repeat
+    /// this flag.
+    ///
+    /// Example: --cors-origin http://localhost:5173
+    #[arg(
+        long,
+        env = "OPENCODE_STUDIO_CORS_ORIGINS",
+        value_delimiter = ',',
+        value_name = "ORIGIN"
+    )]
+    pub(crate) cors_origin: Vec<String>,
+
+    /// SameSite policy for the UI session cookie.
+    ///
+    /// - auto: Strict by default; switches to None when CORS origins are configured
+    /// - none: required for cross-site cookie auth (e.g. localhost -> studio.cxits.cn)
+    ///
+    /// NOTE: SameSite=None requires Secure cookies, so ensure TLS (or a proxy that
+    /// sets X-Forwarded-Proto=https).
+    #[arg(
+        long,
+        env = "OPENCODE_STUDIO_UI_COOKIE_SAMESITE",
+        value_enum,
+        default_value = "auto",
+        value_name = "MODE"
+    )]
+    pub(crate) ui_cookie_samesite: UiCookieSameSite,
+}
+
+#[derive(Clone, Debug, ValueEnum)]
+#[value(rename_all = "kebab_case")]
+pub(crate) enum UiCookieSameSite {
+    Auto,
+    Strict,
+    Lax,
+    None,
 }
 
 pub(crate) fn issue_token() -> String {

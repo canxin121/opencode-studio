@@ -1,20 +1,11 @@
 import { invokePluginAction } from '@/plugins/host/api'
 import type { JsonValue as JsonLike } from '@/types/json'
+import { connectSse } from '@/lib/sse'
 
 export type PluginHostEvent = {
   type: string
   data: JsonLike
   lastEventId?: string
-}
-
-function parseEventData(raw: string): JsonLike {
-  const text = String(raw || '').trim()
-  if (!text) return null
-  try {
-    return JSON.parse(text) as JsonLike
-  } catch {
-    return text
-  }
 }
 
 export async function invokeHostPluginAction(
@@ -40,39 +31,33 @@ export function subscribeHostPluginEvents(
   const id = String(pluginId || '').trim()
   if (!id) return () => {}
 
-  const source = new EventSource(`/api/plugins/${encodeURIComponent(id)}/events`)
+  const client = connectSse({
+    endpoint: `/api/plugins/${encodeURIComponent(id)}/events`,
+    debugLabel: `sse:plugin:${id}`,
+    onEvent: (evt) => {
+      const type = String(evt?.type || '').trim()
+      if (!type) return
 
-  source.onmessage = (evt) => {
-    handlers.onEvent?.({
-      type: 'message',
-      data: parseEventData(evt.data),
-      lastEventId: evt.lastEventId,
-    })
-  }
-
-  source.addEventListener('plugin.event', (evt) => {
-    const msg = evt as MessageEvent
-    handlers.onEvent?.({
-      type: 'plugin.event',
-      data: parseEventData(msg.data),
-      lastEventId: msg.lastEventId,
-    })
+      // plugin_runtime now wraps event payloads as { type, data }.
+      const raw = (evt as unknown as { data?: unknown }).data
+      handlers.onEvent?.({
+        type,
+        data: raw !== undefined ? (raw as JsonLike) : (evt as unknown as JsonLike),
+        lastEventId: typeof (evt as unknown as { lastEventId?: unknown }).lastEventId === 'string'
+          ? String((evt as unknown as { lastEventId?: string }).lastEventId || '')
+          : undefined,
+      })
+    },
+    onError: () => {
+      try {
+        handlers.onError?.(new Event('error'))
+      } catch {
+        // ignore
+      }
+    },
   })
-
-  source.addEventListener('plugin.error', (evt) => {
-    const msg = evt as MessageEvent
-    handlers.onEvent?.({
-      type: 'plugin.error',
-      data: parseEventData(msg.data),
-      lastEventId: msg.lastEventId,
-    })
-  })
-
-  source.onerror = (evt) => {
-    handlers.onError?.(evt)
-  }
 
   return () => {
-    source.close()
+    client.close()
   }
 }

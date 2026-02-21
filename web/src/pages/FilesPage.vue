@@ -49,7 +49,7 @@ type ExplorerSidebarMode = 'tree' | 'search'
 type ExplorerSearchMode = 'files' | 'content'
 type ContentSearchScopeMode = 'workspace' | 'selected' | 'active-file'
 
-import { ApiError } from '@/lib/api'
+import { ApiError, apiBlob } from '@/lib/api'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import { gitJson } from '@/lib/gitApi'
 import {
@@ -485,11 +485,59 @@ watch(
 )
 
 const selectedPath = computed(() => selectedFile.value?.path || '')
-const rawUrl = computed(() => {
+const rawApiPath = computed(() => {
   const path = selectedPath.value
   const rootPath = root.value
   if (!path || !rootPath) return ''
   return `/api/fs/raw?directory=${encodeURIComponent(rootPath)}&path=${encodeURIComponent(path)}`
+})
+
+const rawUrl = ref('')
+let rawUrlSeq = 0
+
+function revokeRawUrl() {
+  const href = String(rawUrl.value || '').trim()
+  if (!href) return
+  if (href.startsWith('blob:')) {
+    try {
+      URL.revokeObjectURL(href)
+    } catch {
+      // ignore
+    }
+  }
+  rawUrl.value = ''
+}
+
+watch(
+  () => {
+    const filePath = selectedFile.value?.path || ''
+    const isImg = Boolean(filePath && isImagePath(filePath))
+    return [rawApiPath.value, isImg] as const
+  },
+  async ([path, isImg]) => {
+    rawUrlSeq += 1
+    const seq = rawUrlSeq
+
+    revokeRawUrl()
+    if (!isImg) return
+    if (!path) return
+
+    try {
+      const blob = await apiBlob(path)
+      if (seq !== rawUrlSeq) return
+      const href = URL.createObjectURL(blob)
+      rawUrl.value = href
+    } catch (err) {
+      if (seq !== rawUrlSeq) return
+      fileError.value = err instanceof ApiError ? err.message || err.bodyText || '' : err instanceof Error ? err.message : String(err)
+      rawUrl.value = ''
+    }
+  },
+  { immediate: true },
+)
+
+onBeforeUnmount(() => {
+  revokeRawUrl()
 })
 const isSelectedImage = computed(() => Boolean(selectedFile.value && isImagePath(selectedFile.value.path)))
 const isTruncated = computed(() => fileContent.value.length > MAX_VIEW_CHARS)
@@ -996,26 +1044,43 @@ async function copyToClipboard(text: string) {
   toasts.push('error', 'Copy failed')
 }
 
-function downloadUrlForPath(path: string): string {
+async function triggerDownloadForPath(path: string, fileName?: string) {
   const rootPath = root.value
   const normalized = normalizePath(String(path || '').trim())
-  if (!rootPath || !normalized || !withinWorkspace(normalized)) return ''
-  return `/api/fs/download?directory=${encodeURIComponent(rootPath)}&path=${encodeURIComponent(normalized)}`
+  if (!rootPath || !normalized || !withinWorkspace(normalized)) return
+
+  const url = `/api/fs/download?directory=${encodeURIComponent(rootPath)}&path=${encodeURIComponent(normalized)}`
+  try {
+    const blob = await apiBlob(url)
+    const href = URL.createObjectURL(blob)
+
+    const link = document.createElement('a')
+    link.href = href
+    if (fileName) {
+      link.download = fileName
+    }
+    link.style.display = 'none'
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+
+    window.setTimeout(() => {
+      try {
+        URL.revokeObjectURL(href)
+      } catch {
+        // ignore
+      }
+    }, 30_000)
+  } catch (err) {
+    const msg = err instanceof ApiError ? err.message || err.bodyText || '' : err instanceof Error ? err.message : String(err)
+    toasts.push('error', msg || 'Download failed')
+  }
 }
 
-function triggerDownloadForPath(path: string, fileName?: string) {
-  const href = downloadUrlForPath(path)
-  if (!href) return
-
-  const link = document.createElement('a')
-  link.href = href
-  if (fileName) {
-    link.download = fileName
-  }
-  link.style.display = 'none'
-  document.body.appendChild(link)
-  link.click()
-  link.remove()
+async function openSelectedFileRaw() {
+  const file = selectedFile.value
+  if (!file) return
+  await triggerDownloadForPath(file.path, file.name)
 }
 
 async function runExplorerFileAction(action: 'download' | 'copy-path', node: FileNode) {
@@ -2554,6 +2619,7 @@ onMounted(async () => {
                 :is-saving="isSaving"
                 :displayed-content="displayedContent"
                 :raw-url="rawUrl"
+                :open-raw="openSelectedFileRaw"
                 :selected-path="selectedPath"
                 :file-loading="fileLoading"
                 :file-error="fileError"

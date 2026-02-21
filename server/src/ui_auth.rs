@@ -8,7 +8,7 @@ use argon2::{
 use axum::{
     Json,
     extract::State,
-    http::{HeaderMap, StatusCode},
+    http::{HeaderMap, StatusCode, Method, header},
     middleware,
     response::IntoResponse,
 };
@@ -54,6 +54,8 @@ struct AuthStatusOk {
     authenticated: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     disabled: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    token: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -165,12 +167,13 @@ fn login_attempt_key(headers: &HeaderMap) -> String {
     "anonymous".to_string()
 }
 
-fn build_session_cookie(token: &str, secure: bool) -> Cookie<'static> {
+fn build_session_cookie(token: &str, secure: bool, same_site: SameSite) -> Cookie<'static> {
     let mut cookie = Cookie::new(UI_COOKIE_NAME, token.to_string());
     cookie.set_path("/");
     cookie.set_http_only(true);
-    cookie.set_same_site(SameSite::Strict);
-    cookie.set_secure(secure);
+    cookie.set_same_site(same_site);
+    // SameSite=None requires Secure cookies in modern browsers.
+    cookie.set_secure(secure || matches!(same_site, SameSite::None));
 
     // Cookie uses time::Duration / OffsetDateTime.
     cookie.set_expires(
@@ -180,15 +183,84 @@ fn build_session_cookie(token: &str, secure: bool) -> Cookie<'static> {
     cookie
 }
 
-fn build_expired_cookie(secure: bool) -> Cookie<'static> {
+fn build_expired_cookie(secure: bool, same_site: SameSite) -> Cookie<'static> {
     let mut cookie = Cookie::new(UI_COOKIE_NAME, "");
     cookie.set_path("/");
     cookie.set_http_only(true);
-    cookie.set_same_site(SameSite::Strict);
-    cookie.set_secure(secure);
+    cookie.set_same_site(same_site);
+    cookie.set_secure(secure || matches!(same_site, SameSite::None));
     cookie.set_expires(OffsetDateTime::UNIX_EPOCH);
     cookie.set_max_age(time::Duration::seconds(0));
     cookie
+}
+
+fn is_safe_method(method: &Method) -> bool {
+    matches!(*method, Method::GET | Method::HEAD | Method::OPTIONS)
+}
+
+fn normalize_origin_header_value(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if trimmed.eq_ignore_ascii_case("null") {
+        return None;
+    }
+    let Ok(url) = url::Url::parse(trimmed) else {
+        return None;
+    };
+    let scheme = url.scheme();
+    if scheme != "http" && scheme != "https" {
+        return None;
+    }
+    Some(url.origin().ascii_serialization())
+}
+
+fn origin_matches_host(origin: &str, host: &str) -> bool {
+    let origin_url = match url::Url::parse(origin) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+    let origin_host = origin_url.host_str().unwrap_or("").trim().to_ascii_lowercase();
+    if origin_host.is_empty() {
+        return false;
+    }
+    let host_trimmed = host.trim().to_ascii_lowercase();
+    if host_trimmed.is_empty() {
+        return false;
+    }
+
+    // Accept Host header with or without default port.
+    if host_trimmed == origin_host {
+        return true;
+    }
+    if let Some(port) = origin_url.port_or_known_default() {
+        let with_port = format!("{}:{}", origin_host, port);
+        if host_trimmed == with_port {
+            return true;
+        }
+    }
+    false
+}
+
+fn is_allowed_origin(headers: &HeaderMap, allowed: &[String]) -> bool {
+    let Some(raw_origin) = headers.get(header::ORIGIN).and_then(|v| v.to_str().ok()) else {
+        return false;
+    };
+    let Some(origin) = normalize_origin_header_value(raw_origin) else {
+        return false;
+    };
+
+    if allowed.iter().any(|o| o == &origin) {
+        return true;
+    }
+
+    // Always allow same-host origins even when no CORS allowlist is set (same-origin UI).
+    if let Some(host) = headers.get(header::HOST).and_then(|v| v.to_str().ok()) {
+        return origin_matches_host(&origin, host);
+    }
+
+    false
 }
 
 fn verify_password(phc: &str, candidate: &str) -> bool {
@@ -202,6 +274,22 @@ fn verify_password(phc: &str, candidate: &str) -> bool {
 
 fn get_token_from_jar(jar: &CookieJar) -> Option<String> {
     jar.get(UI_COOKIE_NAME).map(|c| c.value().to_string())
+}
+
+fn get_token_from_authorization(headers: &HeaderMap) -> Option<String> {
+    let raw = headers.get(header::AUTHORIZATION)?.to_str().ok()?;
+    let trimmed = raw.trim();
+    // Authorization: Bearer <token>
+    let mut parts = trimmed.split_whitespace();
+    let scheme = parts.next().unwrap_or("");
+    if !scheme.eq_ignore_ascii_case("bearer") {
+        return None;
+    }
+    let token = parts.next().unwrap_or("").trim();
+    if token.is_empty() {
+        return None;
+    }
+    Some(token.to_string())
 }
 
 fn is_session_valid(inner: &UiAuthInner, token: &str) -> bool {
@@ -349,32 +437,35 @@ pub(crate) async fn auth_session_status(
         UiAuth::Disabled => Json(AuthStatusOk {
             authenticated: true,
             disabled: Some(true),
+            token: None,
         })
         .into_response(),
         UiAuth::Enabled(inner) => {
             let secure = is_secure_request(&headers);
-            let Some(token) = get_token_from_jar(&jar) else {
-                let jar = jar.add(build_expired_cookie(secure));
-                return (
-                    StatusCode::UNAUTHORIZED,
-                    jar,
-                    Json(AuthStatusLocked {
-                        authenticated: false,
-                        locked: true,
-                    }),
-                )
-                    .into_response();
-            };
 
-            if is_session_valid(inner, &token) {
+            if let Some(token) = get_token_from_authorization(&headers)
+                && is_session_valid(inner, &token)
+            {
                 return Json(AuthStatusOk {
                     authenticated: true,
                     disabled: None,
+                    token: None,
                 })
                 .into_response();
             }
 
-            let jar = jar.add(build_expired_cookie(secure));
+            if let Some(token) = get_token_from_jar(&jar)
+                && is_session_valid(inner, &token)
+            {
+                return Json(AuthStatusOk {
+                    authenticated: true,
+                    disabled: None,
+                    token: None,
+                })
+                .into_response();
+            }
+
+            let jar = jar.add(build_expired_cookie(secure, state.ui_cookie_same_site));
             (
                 StatusCode::UNAUTHORIZED,
                 jar,
@@ -415,7 +506,7 @@ pub(crate) async fn auth_session_create(
             if let Some(retry_after_seconds) =
                 login_lockout_remaining_seconds(inner, &attempt_key, now)
             {
-                let jar = jar.add(build_expired_cookie(secure));
+                let jar = jar.add(build_expired_cookie(secure, state.ui_cookie_same_site));
                 return (
                     StatusCode::TOO_MANY_REQUESTS,
                     jar,
@@ -433,7 +524,7 @@ pub(crate) async fn auth_session_create(
             }
 
             if !verify_password(&inner.password_phc, &candidate) {
-                let jar = jar.add(build_expired_cookie(secure));
+                let jar = jar.add(build_expired_cookie(secure, state.ui_cookie_same_site));
                 if let Some(retry_after_seconds) =
                     record_failed_login_attempt(inner, &attempt_key, now)
                 {
@@ -477,13 +568,14 @@ pub(crate) async fn auth_session_create(
                 .sessions
                 .insert(token.clone(), SessionRecord { last_seen: now });
 
-            let jar = jar.add(build_session_cookie(&token, secure));
+            let jar = jar.add(build_session_cookie(&token, secure, state.ui_cookie_same_site));
             (
                 StatusCode::OK,
                 jar,
                 Json(AuthStatusOk {
                     authenticated: true,
                     disabled: None,
+                    token: Some(token),
                 }),
             )
                 .into_response()
@@ -501,14 +593,40 @@ pub(crate) async fn require_ui_auth(
     match &state.ui_auth {
         UiAuth::Disabled => next.run(req).await,
         UiAuth::Enabled(inner) => {
-            if let Some(token) = get_token_from_jar(&jar)
+            // Header token (preferred): avoids third-party cookie issues and doesn't
+            // require CSRF origin enforcement because the token isn't sent automatically.
+            if let Some(token) = get_token_from_authorization(&headers)
                 && is_session_valid(inner, &token)
             {
                 return next.run(req).await;
             }
 
+            // Cookie token fallback (legacy / same-origin): enforce Origin allowlist for
+            // unsafe methods when cookies may be sent cross-site.
+            if let Some(token) = get_token_from_jar(&jar)
+                && is_session_valid(inner, &token)
+            {
+                if !is_safe_method(req.method())
+                    && (matches!(state.ui_cookie_same_site, SameSite::None)
+                        || !state.cors_allowed_origins.is_empty())
+                    && !is_allowed_origin(&headers, &state.cors_allowed_origins)
+                {
+                    return (
+                        StatusCode::FORBIDDEN,
+                        Json(AuthErrorBody {
+                            error: "Request origin not allowed".to_string(),
+                            locked: None,
+                            code: Some("csrf_origin_forbidden".to_string()),
+                            retry_after_seconds: None,
+                        }),
+                    )
+                        .into_response();
+                }
+                return next.run(req).await;
+            }
+
             let secure = is_secure_request(&headers);
-            let jar = jar.add(build_expired_cookie(secure));
+            let jar = jar.add(build_expired_cookie(secure, state.ui_cookie_same_site));
             (
                 StatusCode::UNAUTHORIZED,
                 jar,

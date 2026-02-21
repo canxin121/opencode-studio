@@ -1576,6 +1576,8 @@ mod tests {
     fn dummy_state() -> Arc<crate::AppState> {
         Arc::new(crate::AppState {
             ui_auth: crate::ui_auth::UiAuth::Disabled,
+            ui_cookie_same_site: axum_extra::extract::cookie::SameSite::Strict,
+            cors_allowed_origins: Vec::new(),
             opencode: Arc::new(crate::opencode::OpenCodeManager::new(
                 "127.0.0.1".to_string(),
                 Some(1),

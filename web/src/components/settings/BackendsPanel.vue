@@ -1,0 +1,312 @@
+<script setup lang="ts">
+import { computed, ref, watch } from 'vue'
+import { RiAddLine, RiDeleteBinLine, RiEditLine, RiRefreshLine, RiSettings3Line } from '@remixicon/vue'
+
+import { useBackendsStore } from '@/stores/backends'
+import { useToastsStore } from '@/stores/toasts'
+import Button from '@/components/ui/Button.vue'
+import IconButton from '@/components/ui/IconButton.vue'
+import Input from '@/components/ui/Input.vue'
+import FormDialog from '@/components/ui/FormDialog.vue'
+import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
+
+type BackendDraft = {
+  id: string | null
+  label: string
+  baseUrl: string
+}
+
+const backends = useBackendsStore()
+const toasts = useToastsStore()
+
+const activeId = computed(() => backends.activeBackend?.id || null)
+const activeBaseUrl = computed(() => backends.activeBackend?.baseUrl || '')
+
+const addOpen = ref(false)
+const addBusy = ref(false)
+const addSetActive = ref(true)
+const addDraft = ref<BackendDraft>({ id: null, label: '', baseUrl: '' })
+
+const editOpen = ref(false)
+const editBusy = ref(false)
+const editOriginalBaseUrl = ref('')
+const editDraft = ref<BackendDraft>({ id: null, label: '', baseUrl: '' })
+
+function hardReload() {
+  try {
+    window.location.reload()
+  } catch {
+    // ignore
+  }
+}
+
+function openAdd() {
+  addDraft.value = { id: null, label: '', baseUrl: '' }
+  addSetActive.value = true
+  addOpen.value = true
+}
+
+async function submitAdd() {
+  if (addBusy.value) return
+  addBusy.value = true
+  try {
+    const result = backends.addBackend({
+      label: addDraft.value.label,
+      baseUrl: addDraft.value.baseUrl,
+      setActive: addSetActive.value,
+    })
+
+    if (!result.ok) {
+      toasts.push('error', result.error || 'Failed to add backend')
+      return
+    }
+
+    addOpen.value = false
+    toasts.push('success', addSetActive.value ? 'Backend added and activated' : 'Backend added')
+
+    if (addSetActive.value) {
+      hardReload()
+    }
+  } finally {
+    addBusy.value = false
+  }
+}
+
+function openEdit(id: string) {
+  const backend = backends.backends.find((b) => b.id === id)
+  if (!backend) return
+  editDraft.value = { id: backend.id, label: backend.label, baseUrl: backend.baseUrl }
+  editOriginalBaseUrl.value = backend.baseUrl
+  editOpen.value = true
+}
+
+async function submitEdit() {
+  if (editBusy.value) return
+  const id = String(editDraft.value.id || '').trim()
+  if (!id) return
+  editBusy.value = true
+  try {
+    const result = backends.updateBackend({
+      id,
+      label: editDraft.value.label,
+      baseUrl: editDraft.value.baseUrl,
+    })
+    if (!result.ok) {
+      toasts.push('error', result.error || 'Failed to update backend')
+      return
+    }
+
+    editOpen.value = false
+    toasts.push('success', 'Backend updated')
+
+    const isActive = activeId.value === id
+    const baseChanged = editOriginalBaseUrl.value && editOriginalBaseUrl.value !== editDraft.value.baseUrl
+    if (isActive && baseChanged) {
+      hardReload()
+    }
+  } finally {
+    editBusy.value = false
+  }
+}
+
+function activate(id: string) {
+  const trimmed = String(id || '').trim()
+  if (!trimmed || trimmed === activeId.value) return
+  backends.setActiveBackend(trimmed)
+  toasts.push('info', 'Switching backend…')
+  hardReload()
+}
+
+function remove(id: string) {
+  const trimmed = String(id || '').trim()
+  if (!trimmed) return
+  const wasActive = trimmed === activeId.value
+  const result = backends.removeBackend(trimmed)
+  if (!result.ok) {
+    toasts.push('error', result.error || 'Failed to remove backend')
+    return
+  }
+  toasts.push('success', 'Backend removed')
+  if (wasActive) {
+    toasts.push('info', 'Reloading…')
+    hardReload()
+  }
+}
+
+watch(
+  () => addOpen.value,
+  (open) => {
+    if (!open) {
+      addBusy.value = false
+    }
+  },
+)
+
+watch(
+  () => editOpen.value,
+  (open) => {
+    if (!open) {
+      editBusy.value = false
+      editOriginalBaseUrl.value = ''
+    }
+  },
+)
+
+function refreshFromStorage() {
+  backends.hydrate()
+  toasts.push('success', 'Backends refreshed')
+}
+</script>
+
+<template>
+  <div class="space-y-6">
+    <div class="rounded-lg border border-border bg-muted/10 p-4">
+      <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <div class="flex items-center gap-2">
+            <RiSettings3Line class="h-4 w-4 text-muted-foreground" />
+            <div class="text-sm font-medium">Backends</div>
+          </div>
+          <div class="mt-1 text-xs text-muted-foreground">
+            Manage Studio backend endpoints. Switching the active backend reloads the app.
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <Button variant="outline" size="sm" @click="openAdd">
+            <RiAddLine class="h-4 w-4 mr-2" />
+            Add
+          </Button>
+          <IconButton size="sm" title="Refresh" aria-label="Refresh" @click="refreshFromStorage">
+            <RiRefreshLine class="h-4 w-4" />
+          </IconButton>
+        </div>
+      </div>
+
+      <div v-if="activeBaseUrl" class="mt-4 rounded-md border border-border/60 bg-background/60 p-3">
+        <div class="text-xs text-muted-foreground">Active backend</div>
+        <div class="mt-1 text-sm font-medium break-words">{{ backends.activeBackend?.label || 'Backend' }}</div>
+        <div class="mt-1 text-xs font-mono text-muted-foreground break-all">{{ activeBaseUrl }}</div>
+      </div>
+    </div>
+
+    <div class="grid gap-3">
+      <div
+        v-for="b in backends.backends"
+        :key="b.id"
+        class="rounded-lg border border-border bg-background/60 p-4"
+      >
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <div class="flex items-center gap-2">
+              <div class="text-sm font-semibold break-words">{{ b.label }}</div>
+              <span
+                v-if="b.id === activeId"
+                class="inline-flex items-center rounded-full border border-border/70 bg-primary/10 px-2 py-0.5 text-[11px] font-medium"
+              >
+                Active
+              </span>
+            </div>
+            <div class="mt-1 text-xs font-mono text-muted-foreground break-all">{{ b.baseUrl }}</div>
+          </div>
+
+          <div class="flex items-center gap-2 shrink-0">
+            <Button v-if="b.id !== activeId" variant="outline" size="sm" @click="activate(b.id)">Use</Button>
+            <IconButton size="sm" title="Edit" aria-label="Edit" @click="openEdit(b.id)">
+              <RiEditLine class="h-4 w-4" />
+            </IconButton>
+            <ConfirmPopover
+              title="Remove backend?"
+              :description="b.baseUrl"
+              confirmText="Remove"
+              cancelText="Cancel"
+              variant="destructive"
+              :confirmDisabled="b.id === activeId && backends.backends.length <= 1"
+              @confirm="remove(b.id)"
+            >
+              <IconButton size="sm" title="Remove" aria-label="Remove">
+                <RiDeleteBinLine class="h-4 w-4 text-destructive" />
+              </IconButton>
+            </ConfirmPopover>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="backends.backends.length === 0" class="rounded-lg border border-border bg-muted/10 p-4 text-sm">
+        No backends configured.
+      </div>
+    </div>
+
+    <!-- Add Dialog -->
+    <FormDialog
+      :open="addOpen"
+      title="Add backend"
+      description="Add a Studio backend URL and (optionally) activate it."
+      maxWidth="max-w-md"
+      @update:open="(v) => (addOpen = v)"
+    >
+      <div class="grid gap-4">
+        <div class="grid gap-2">
+          <label class="text-sm font-medium">Label</label>
+          <Input v-model="addDraft.label" placeholder="e.g. Local Studio" :disabled="addBusy" class="h-10" />
+        </div>
+
+        <div class="grid gap-2">
+          <label class="text-sm font-medium">Base URL</label>
+          <Input
+            v-model="addDraft.baseUrl"
+            placeholder="http://127.0.0.1:3000"
+            :disabled="addBusy"
+            class="h-10"
+            autocomplete="url"
+            inputmode="url"
+          />
+          <div class="text-xs text-muted-foreground">Examples: `http://127.0.0.1:3000` or `https://studio.example.com`</div>
+        </div>
+
+        <label class="inline-flex items-center gap-2 text-sm">
+          <input type="checkbox" v-model="addSetActive" :disabled="addBusy" />
+          Set as active (reload)
+        </label>
+
+        <div class="flex items-center justify-end gap-2">
+          <Button variant="secondary" :disabled="addBusy" @click="addOpen = false">Cancel</Button>
+          <Button :disabled="addBusy" @click="submitAdd">{{ addBusy ? 'Saving…' : 'Add' }}</Button>
+        </div>
+      </div>
+    </FormDialog>
+
+    <!-- Edit Dialog -->
+    <FormDialog
+      :open="editOpen"
+      title="Edit backend"
+      description="Update backend label or URL. Changing the active backend URL reloads the app."
+      maxWidth="max-w-md"
+      @update:open="(v) => (editOpen = v)"
+    >
+      <div class="grid gap-4">
+        <div class="grid gap-2">
+          <label class="text-sm font-medium">Label</label>
+          <Input v-model="editDraft.label" placeholder="Backend" :disabled="editBusy" class="h-10" />
+        </div>
+
+        <div class="grid gap-2">
+          <label class="text-sm font-medium">Base URL</label>
+          <Input
+            v-model="editDraft.baseUrl"
+            placeholder="https://studio.example.com"
+            :disabled="editBusy"
+            class="h-10"
+            autocomplete="url"
+            inputmode="url"
+          />
+        </div>
+
+        <div class="flex items-center justify-end gap-2">
+          <Button variant="secondary" :disabled="editBusy" @click="editOpen = false">Cancel</Button>
+          <Button :disabled="editBusy" @click="submitEdit">{{ editBusy ? 'Saving…' : 'Save' }}</Button>
+        </div>
+      </div>
+    </FormDialog>
+  </div>
+</template>

@@ -1,23 +1,220 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 import { useAuthStore } from '../stores/auth'
+import { useBackendsStore } from '@/stores/backends'
+import { useHealthStore } from '@/stores/health'
+import { clearUiAuthTokenForBaseUrl } from '@/lib/uiAuthToken'
 import Button from '@/components/ui/Button.vue'
+import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import Input from '@/components/ui/Input.vue'
+import OptionPicker from '@/components/ui/OptionPicker.vue'
+
+const NEW_BACKEND_ID = '__new__'
 
 const auth = useAuthStore()
+const health = useHealthStore()
+const backends = useBackendsStore()
 
 const password = ref('')
 const busy = ref(false)
+const formError = ref<string | null>(null)
 
-const canSubmit = computed(() => password.value.trim().length > 0 && !busy.value)
+const selectedBackendId = ref('')
+const newBackendLabel = ref('')
+const newBackendUrl = ref('')
+
+const editOpen = ref(false)
+const editBusy = ref(false)
+const editError = ref<string | null>(null)
+const editLabel = ref('')
+const editBaseUrl = ref('')
+const editBackendId = ref<string | null>(null)
+const editOriginalBaseUrl = ref('')
+
+const backendOptions = computed(() => {
+  const opts = backends.backends.map((b) => ({
+    value: b.id,
+    label: b.label,
+    description: b.baseUrl,
+  }))
+
+  return [
+    { value: NEW_BACKEND_ID, label: 'New backend…', description: 'Add a Studio backend URL' },
+    ...opts,
+  ]
+})
+
+const isNewBackend = computed(() => selectedBackendId.value === NEW_BACKEND_ID)
+
+const selectedBackend = computed(() => {
+  const id = String(selectedBackendId.value || '').trim()
+  if (!id || id === NEW_BACKEND_ID) return null
+  return backends.backends.find((b) => b.id === id) || null
+})
+
+const effectiveBackendBaseUrl = computed(() => {
+  if (isNewBackend.value) return String(newBackendUrl.value || '').trim()
+  return selectedBackend.value?.baseUrl || backends.activeBackend?.baseUrl || ''
+})
+
+const canManageSelectedBackend = computed(() => {
+  return Boolean(selectedBackend.value && !isNewBackend.value)
+})
+
+function openEditSelectedBackend() {
+  const b = selectedBackend.value
+  if (!b) return
+  if (editOpen.value && editBackendId.value === b.id) {
+    editOpen.value = false
+    editError.value = null
+    return
+  }
+  editBackendId.value = b.id
+  editLabel.value = b.label
+  editBaseUrl.value = b.baseUrl
+  editOriginalBaseUrl.value = b.baseUrl
+  editError.value = null
+  editOpen.value = true
+}
+
+function cancelEditSelectedBackend() {
+  editOpen.value = false
+  editError.value = null
+}
+
+async function submitEditSelectedBackend() {
+  const id = String(editBackendId.value || '').trim()
+  if (!id) return
+  if (editBusy.value) return
+  editBusy.value = true
+  editError.value = null
+  try {
+    const previousBaseUrl = String(editOriginalBaseUrl.value || '').trim()
+    const nextBaseUrl = String(editBaseUrl.value || '').trim()
+    const res = backends.updateBackend({ id, label: editLabel.value, baseUrl: nextBaseUrl })
+    if (!res.ok) {
+      editError.value = res.error || 'Failed to update backend'
+      return
+    }
+
+    if (previousBaseUrl && nextBaseUrl && previousBaseUrl !== nextBaseUrl) {
+      clearUiAuthTokenForBaseUrl(previousBaseUrl)
+      // Don’t carry tokens across baseUrl changes.
+      clearUiAuthTokenForBaseUrl(nextBaseUrl)
+    }
+
+    editOpen.value = false
+  } finally {
+    editBusy.value = false
+  }
+}
+
+function removeSelectedBackend() {
+  const b = selectedBackend.value
+  if (!b) return
+  const res = backends.removeBackend(b.id)
+  if (!res.ok) {
+    formError.value = res.error || 'Failed to remove backend'
+    return
+  }
+  clearUiAuthTokenForBaseUrl(b.baseUrl)
+  // selection watcher will snap to active backend if needed.
+}
+
+watch(
+  () => selectedBackendId.value,
+  () => {
+    // Avoid editing the wrong target when switching selections.
+    editOpen.value = false
+    editBusy.value = false
+    editError.value = null
+    editBackendId.value = null
+    editOriginalBaseUrl.value = ''
+  },
+)
+
+watch(
+  () => backends.activeBackend?.id,
+  (id) => {
+    const current = String(selectedBackendId.value || '').trim()
+    const active = String(id || '').trim()
+    if (!current && active) {
+      selectedBackendId.value = active
+    }
+    // If the selected id no longer exists, fall back to active.
+    const exists = backendOptions.value.some((o) => o.value === current)
+    if (current && !exists && active) {
+      selectedBackendId.value = active
+    }
+  },
+  { immediate: true },
+)
+
+const canSubmit = computed(() => {
+  if (busy.value) return false
+  const id = String(selectedBackendId.value || '').trim()
+  if (!id) return false
+  if (id === NEW_BACKEND_ID) {
+    if (!newBackendLabel.value.trim()) return false
+    if (!newBackendUrl.value.trim()) return false
+  }
+  return true
+})
 
 async function submit() {
   if (!canSubmit.value) return
   busy.value = true
+  formError.value = null
   try {
-    await auth.login(password.value)
+    const activeBefore = backends.activeBackend?.id || null
+    const selectedId = String(selectedBackendId.value || '').trim()
+    let backendChanged = false
+
+    if (selectedId === NEW_BACKEND_ID) {
+      const res = backends.addBackend({
+        label: newBackendLabel.value,
+        baseUrl: newBackendUrl.value,
+        setActive: true,
+      })
+      if (!res.ok) {
+        formError.value = res.error || 'Failed to add backend'
+        return
+      }
+      backendChanged = true
+    } else if (selectedId && selectedId !== activeBefore) {
+      backends.setActiveBackend(selectedId)
+      backendChanged = true
+    }
+
+    // Check whether the selected backend requires UI auth.
+    await Promise.all([auth.refresh().catch(() => {}), health.refresh().catch(() => {})])
+
+    if (health.data === null) {
+      formError.value = health.error || 'Backend not reachable'
+      return
+    }
+
+    if (auth.needsLogin) {
+      if (password.value.trim().length === 0) {
+        formError.value = 'Password required'
+        return
+      }
+      await auth.login(password.value)
+      if (auth.needsLogin) {
+        // auth.login already refreshed state + lastError.
+        return
+      }
+    }
+
     password.value = ''
+    if (backendChanged) {
+      try {
+        window.location.reload()
+      } catch {
+        // ignore
+      }
+    }
   } finally {
     busy.value = false
   }
@@ -35,11 +232,112 @@ async function submit() {
         </div>
         <div class="space-y-1">
           <h1 class="text-2xl font-semibold tracking-tight text-foreground">OpenCode Studio</h1>
-          <p class="text-sm text-muted-foreground">Enter your password to continue</p>
+          <p class="text-sm text-muted-foreground">
+            Choose a backend. If it’s locked, enter your password to continue.
+          </p>
         </div>
       </div>
 
-      <div class="grid gap-4">
+        <div class="grid gap-4">
+          <div class="grid gap-2">
+            <label class="text-xs font-medium text-muted-foreground">Backend</label>
+            <div class="flex items-center gap-2">
+              <div class="flex-1 min-w-0">
+                <OptionPicker
+                  v-model="selectedBackendId"
+                  :options="backendOptions"
+                  title="Backend"
+                  search-placeholder="Search backends"
+                  :include-empty="false"
+                />
+              </div>
+
+              <Button
+                v-if="canManageSelectedBackend"
+                variant="outline"
+                size="sm"
+                class="shrink-0"
+                :disabled="busy"
+                @click="openEditSelectedBackend"
+              >
+                Edit
+              </Button>
+
+              <ConfirmPopover
+                v-if="canManageSelectedBackend"
+                title="Remove backend?"
+                :description="selectedBackend?.baseUrl"
+                confirmText="Remove"
+                cancelText="Cancel"
+                variant="destructive"
+                :confirmDisabled="busy || backends.backends.length <= 1"
+                @confirm="removeSelectedBackend"
+              >
+                <Button
+                  variant="outline"
+                  size="sm"
+                  class="shrink-0 text-destructive border-destructive/30 hover:bg-destructive/10"
+                  :disabled="busy || backends.backends.length <= 1"
+                >
+                  Remove
+                </Button>
+              </ConfirmPopover>
+            </div>
+            <div v-if="effectiveBackendBaseUrl" class="text-[11px] text-muted-foreground break-all font-mono">
+              {{ effectiveBackendBaseUrl }}
+            </div>
+          </div>
+
+          <div v-if="isNewBackend" class="grid gap-3 rounded-lg border border-border bg-muted/10 p-3">
+            <div class="grid gap-2">
+              <label class="text-xs font-medium text-muted-foreground">Label</label>
+              <Input v-model="newBackendLabel" placeholder="e.g. Home Server" :disabled="busy" class="h-10" />
+            </div>
+            <div class="grid gap-2">
+              <label class="text-xs font-medium text-muted-foreground">Base URL</label>
+              <Input
+                v-model="newBackendUrl"
+                placeholder="http://127.0.0.1:3000"
+                :disabled="busy"
+                class="h-10"
+                autocomplete="url"
+                inputmode="url"
+              />
+            </div>
+          </div>
+
+          <div v-else-if="editOpen && canManageSelectedBackend" class="grid gap-3 rounded-lg border border-border bg-muted/10 p-3">
+            <div
+              v-if="editError"
+              class="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+            >
+              {{ editError }}
+            </div>
+
+            <div class="grid gap-2">
+              <label class="text-xs font-medium text-muted-foreground">Label</label>
+              <Input v-model="editLabel" placeholder="Backend" :disabled="busy || editBusy" class="h-10" />
+            </div>
+            <div class="grid gap-2">
+              <label class="text-xs font-medium text-muted-foreground">Base URL</label>
+              <Input
+                v-model="editBaseUrl"
+                placeholder="https://studio.cxits.cn"
+                :disabled="busy || editBusy"
+                class="h-10"
+                autocomplete="url"
+                inputmode="url"
+              />
+            </div>
+
+            <div class="flex items-center justify-end gap-2">
+              <Button variant="secondary" size="sm" :disabled="busy || editBusy" @click="cancelEditSelectedBackend">Cancel</Button>
+              <Button size="sm" :disabled="busy || editBusy" @click="submitEditSelectedBackend">
+                {{ editBusy ? 'Saving…' : 'Save' }}
+              </Button>
+            </div>
+          </div>
+
         <div class="grid gap-2">
           <Input
             id="password"
@@ -59,15 +357,15 @@ async function submit() {
           class="h-11 w-full text-base font-medium shadow-lg shadow-primary/20 transition-all hover:shadow-primary/30"
           size="lg"
         >
-          {{ busy ? 'Verifying...' : 'Unlock' }}
+          {{ busy ? 'Connecting…' : auth.needsLogin ? 'Unlock' : 'Continue' }}
         </Button>
       </div>
 
-      <div v-if="auth.lastError" class="animate-in fade-in slide-in-from-top-2">
+      <div v-if="formError || auth.lastError" class="animate-in fade-in slide-in-from-top-2">
         <div
           class="rounded-lg bg-destructive/10 p-3 text-center text-sm font-medium text-destructive ring-1 ring-inset ring-destructive/20"
         >
-          {{ auth.lastError }}
+          {{ formError || auth.lastError }}
         </div>
       </div>
     </div>

@@ -478,10 +478,18 @@ pub(crate) async fn plugin_events_get(
 
                     let events = extract_events_from_poll_result(raw);
                     if events.is_empty() {
-                        yield Ok::<Event, Infallible>(Event::default().event("heartbeat").data("{}"));
+                        let payload = serde_json::to_string(&json!({
+                            "type": "plugin.heartbeat",
+                        }))
+                        .unwrap_or_else(|_| "{}".to_string());
+                        yield Ok::<Event, Infallible>(Event::default().event("heartbeat").data(payload));
                     } else {
                         for (event_name, event_id, event_data) in events {
-                            let data = serde_json::to_string(&event_data).unwrap_or_else(|_| "{}".to_string());
+                            let data = serde_json::to_string(&json!({
+                                "type": event_name,
+                                "data": event_data,
+                            }))
+                            .unwrap_or_else(|_| "{}".to_string());
                             let mut event = Event::default().event(event_name).data(data);
                             if let Some(id) = event_id {
                                 event = event.id(id);
@@ -499,7 +507,11 @@ pub(crate) async fn plugin_events_get(
                             "details": err.details,
                         }
                     });
-                    let data = serde_json::to_string(&payload).unwrap_or_else(|_| "{}".to_string());
+                    let data = serde_json::to_string(&json!({
+                        "type": "plugin.error",
+                        "data": payload,
+                    }))
+                    .unwrap_or_else(|_| "{}".to_string());
                     yield Ok::<Event, Infallible>(Event::default().event("plugin.error").data(data));
                 }
             }

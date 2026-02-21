@@ -34,6 +34,7 @@ import TerminalKeybar from '@/components/TerminalKeybar.vue'
 import { consumeTrustedTerminalHandoffPayload, type TerminalHandoffTarget } from '@/lib/terminalHandoff'
 import { getLocalString, removeLocalKey, setLocalString } from '@/lib/persist'
 import { ApiError } from '@/lib/api'
+import { connectSse } from '@/lib/sse'
 import {
   createTerminalSession,
   deleteTerminalSession,
@@ -326,7 +327,7 @@ let terminalStatePersistInFlight = false
 let terminalStatePersistQueued = false
 let terminalStateApplyInProgress = false
 
-let terminalStateEventsSource: EventSource | null = null
+let terminalStateEventsSource: ReturnType<typeof connectSse> | null = null
 let terminalStateEventSeq = 0
 
 if (sessionId.value && !sessionList.value.includes(sessionId.value)) {
@@ -858,18 +859,20 @@ function closeTerminalUiStateEvents() {
 
 function openTerminalUiStateEvents() {
   closeTerminalUiStateEvents()
-  const source = new EventSource(
-    terminalUiStateEventsUrl(terminalStateEventSeq > 0 ? terminalStateEventSeq : undefined),
-  )
-  terminalStateEventsSource = source
-
-  source.onmessage = (evt) => {
-    applyTerminalUiStateEventMessage(String(evt.data || ''), String(evt.lastEventId || ''))
-  }
-
-  source.onerror = () => {
-    // Browser EventSource reconnects automatically.
-  }
+  const client = connectSse({
+    endpoint: terminalUiStateEventsUrl(terminalStateEventSeq > 0 ? terminalStateEventSeq : undefined),
+    debugLabel: 'sse:terminal-ui-state',
+    onEvent: (evt) => {
+      const lastEventId = typeof (evt as unknown as { lastEventId?: unknown }).lastEventId === 'string'
+        ? String((evt as unknown as { lastEventId?: string }).lastEventId || '')
+        : ''
+      applyTerminalUiStateEventMessage(JSON.stringify(evt), lastEventId)
+    },
+    onError: () => {
+      // connectSse handles reconnects.
+    },
+  })
+  terminalStateEventsSource = client
 }
 
 async function bootstrapTerminalUiState() {
@@ -1548,7 +1551,7 @@ type SessionOutputBuffer = { chunks: string[]; bytes: number }
 const SESSION_OUTPUT_MAX_BYTES = 256 * 1024
 
 const streamStatusById = ref<Record<string, SessionStreamStatus>>({})
-const streamSourceById = new Map<string, EventSource>()
+const streamSourceById = new Map<string, ReturnType<typeof connectSse>>()
 const streamReconnectTimerById = new Map<string, number>()
 const streamReconnectAttemptsById = new Map<string, number>()
 const streamGenerationById = new Map<string, number>()
@@ -1771,14 +1774,15 @@ function connectSessionStream(id: string) {
   setStreamStatusForSession(sid, reconnectAttempts > 0 ? 'reconnecting' : 'connecting')
 
   const resumeSince = streamSeqForSession(sid)
-  const source = new EventSource(terminalStreamUrl(sid, resumeSince > 0 ? resumeSince : undefined))
-  streamSourceById.set(sid, source)
+  const source = connectSse({
+    endpoint: terminalStreamUrl(sid, resumeSince > 0 ? resumeSince : undefined),
+    debugLabel: `sse:terminal:${sid}`,
+    autoReconnect: false,
+    onEvent: (evt) => {
+      if (streamGeneration(sid) !== generation) return
+      const e = evt as unknown as TerminalStreamEvent
 
-  source.onmessage = (msg) => {
-    if (streamGeneration(sid) !== generation) return
-    try {
-      const evt = JSON.parse(msg.data) as TerminalStreamEvent
-      if (evt.type === 'connected') {
+      if (e.type === 'connected') {
         streamReconnectAttemptsById.set(sid, 0)
         setStreamStatusForSession(sid, 'connected')
         if (sessionId.value === sid) {
@@ -1788,25 +1792,25 @@ function connectSessionStream(id: string) {
         return
       }
 
-      if (evt.type === 'data') {
-        rememberStreamSeq(sid, evt.seq)
-        if (typeof evt.data === 'string') {
-          appendSessionOutput(sid, evt.data)
+      if (e.type === 'data') {
+        rememberStreamSeq(sid, e.seq)
+        if (typeof e.data === 'string') {
+          appendSessionOutput(sid, e.data)
           if (sessionId.value === sid && term.value) {
-            term.value.write(evt.data)
+            term.value.write(e.data)
           }
         }
         return
       }
 
-      if (evt.type === 'resync') {
+      if (e.type === 'resync') {
         if (sessionId.value === sid) {
           setError('Terminal stream recovered with partial history; some older output may be missing')
         }
         return
       }
 
-      if (evt.type === 'exit') {
+      if (e.type === 'exit') {
         setStreamStatusForSession(sid, 'exited')
         if (sessionId.value === sid) {
           setError('terminal exited')
@@ -1814,32 +1818,30 @@ function connectSessionStream(id: string) {
         closeSessionStream(sid, { keepStatus: true })
         removeTrackedSession(sid)
       }
-    } catch {
-      // ignore
-    }
-  }
+    },
+    onError: () => {
+      if (streamGeneration(sid) !== generation) return
 
-  source.onerror = () => {
-    if (streamGeneration(sid) !== generation) return
-
-    const current = streamSourceById.get(sid)
-    if (current === source) {
-      try {
-        source.close()
-      } catch {
-        // ignore
+      const current = streamSourceById.get(sid)
+      if (current === source) {
+        try {
+          source.close()
+        } catch {
+          // ignore
+        }
+        streamSourceById.delete(sid)
       }
-      streamSourceById.delete(sid)
-    }
 
-    if (streamManuallyDisconnected.has(sid)) {
-      setStreamStatusForSession(sid, 'disconnected')
-      return
-    }
+      if (streamManuallyDisconnected.has(sid)) {
+        setStreamStatusForSession(sid, 'disconnected')
+        return
+      }
 
-    setStreamStatusForSession(sid, 'reconnecting')
-    scheduleSessionReconnect(sid)
-  }
+      setStreamStatusForSession(sid, 'reconnecting')
+      scheduleSessionReconnect(sid)
+    },
+  })
+  streamSourceById.set(sid, source)
 }
 
 function ensureTrackedSessionStreams() {

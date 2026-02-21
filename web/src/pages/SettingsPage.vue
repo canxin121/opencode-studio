@@ -15,6 +15,7 @@ import SidebarTextButton from '@/components/ui/SidebarTextButton.vue'
 import ScrollArea from '@/components/ui/ScrollArea.vue'
 import OpenCodeConfigPanel from '@/components/settings/OpenCodeConfigPanel.vue'
 import PluginSettingsPanel from '@/components/settings/PluginSettingsPanel.vue'
+import BackendsPanel from '@/components/settings/BackendsPanel.vue'
 import { opencodeSections } from '@/components/settings/opencodeSections'
 import { clearBackendSessionCache } from '@/features/settings/api/settingsApi'
 import { useDesktopSidebarResize } from '@/composables/useDesktopSidebarResize'
@@ -32,7 +33,7 @@ import {
   type ChatToolActivityType,
 } from '@/lib/chatActivity'
 
-type SettingsTab = 'opencode' | 'plugins' | 'troubleshooting' | 'appearance'
+type SettingsTab = 'opencode' | 'plugins' | 'backends' | 'troubleshooting' | 'appearance'
 
 const settings = useSettingsStore()
 const chat = useChatStore()
@@ -81,6 +82,7 @@ async function clearSessionCache() {
 const tabs: Array<{ id: SettingsTab; label: string }> = [
   { id: 'opencode', label: 'OpenCode' },
   { id: 'plugins', label: 'Plugins' },
+  { id: 'backends', label: 'Backends' },
   { id: 'troubleshooting', label: 'Troubleshooting' },
   { id: 'appearance', label: 'Appearance' },
 ]
@@ -553,8 +555,8 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
             <OpenCodeConfigPanel :active-section="activeOpencodeSection || undefined" />
           </div>
 
-          <!-- Plugins Tab -->
-          <div v-else-if="activeTab === 'plugins'" class="space-y-6">
+           <!-- Plugins Tab -->
+           <div v-else-if="activeTab === 'plugins'" class="space-y-6">
             <div
               v-if="pluginsTabPlugins.length === 0"
               class="rounded-lg border border-border bg-muted/10 p-4 text-sm text-muted-foreground"
@@ -562,11 +564,16 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
               No plugins expose settings.
             </div>
 
-            <PluginSettingsPanel v-else :plugin-id="activePluginsSection" :hide-plugin-selector="true" />
-          </div>
+             <PluginSettingsPanel v-else :plugin-id="activePluginsSection" :hide-plugin-selector="true" />
+           </div>
 
-          <!-- Troubleshooting Tab -->
-          <div v-else-if="activeTab === 'troubleshooting'" class="space-y-6">
+           <!-- Backends Tab -->
+           <div v-else-if="activeTab === 'backends'" class="space-y-6">
+             <BackendsPanel />
+           </div>
+
+           <!-- Troubleshooting Tab -->
+           <div v-else-if="activeTab === 'troubleshooting'" class="space-y-6">
             <div class="rounded-lg border border-border bg-muted/10 p-4">
               <div class="text-sm font-medium">Troubleshooting</div>
               <div class="mt-1 text-xs text-muted-foreground">

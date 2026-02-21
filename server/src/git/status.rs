@@ -658,11 +658,21 @@ pub async fn git_watch(Query(q): Query<GitWatchQuery>) -> Response {
                 Ok(Ok(v)) => v,
                 Ok(Err(e)) => {
                     let msg = format!("git2 error: {e:?}");
-                    yield Ok::<Event, Infallible>(Event::default().event("error").data(msg));
+                    let payload = serde_json::to_string(&serde_json::json!({
+                        "type": "git.watch.error",
+                        "message": msg,
+                    }))
+                    .unwrap_or_else(|_| "{}".to_string());
+                    yield Ok::<Event, Infallible>(Event::default().event("error").data(payload));
                     break;
                 }
                 Err(e) => {
-                    yield Ok::<Event, Infallible>(Event::default().event("error").data(e.to_string()));
+                    let payload = serde_json::to_string(&serde_json::json!({
+                        "type": "git.watch.error",
+                        "message": e.to_string(),
+                    }))
+                    .unwrap_or_else(|_| "{}".to_string());
+                    yield Ok::<Event, Infallible>(Event::default().event("error").data(payload));
                     break;
                 }
             };
@@ -672,7 +682,11 @@ pub async fn git_watch(Query(q): Query<GitWatchQuery>) -> Response {
             }
             last = Some(payload.clone());
 
-            let json = serde_json::to_string(&payload).unwrap_or_else(|_| "{}".to_string());
+            let json = serde_json::to_string(&serde_json::json!({
+                "type": "git.watch.status",
+                "properties": payload,
+            }))
+            .unwrap_or_else(|_| "{}".to_string());
             yield Ok::<Event, Infallible>(Event::default().event("status").data(json));
         }
     };

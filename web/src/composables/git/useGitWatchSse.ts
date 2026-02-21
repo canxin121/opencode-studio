@@ -1,11 +1,13 @@
 import { ref } from 'vue'
 
+import { connectSse } from '@/lib/sse'
+
 export function useGitWatchSse<TPayload>(opts: {
   buildUrl: (directory: string) => string
   onPayload: (payload: TPayload, prev: TPayload | null) => void
   onError?: () => void
 }) {
-  const watchSource = ref<EventSource | null>(null)
+  const watchSource = ref<ReturnType<typeof connectSse> | null>(null)
   const watchRetryTimer = ref<number | null>(null)
   const watchRefreshTimer = ref<number | null>(null)
   const watchLastPayload = ref<TPayload | null>(null)
@@ -28,38 +30,33 @@ export function useGitWatchSse<TPayload>(opts: {
 
   function startWatch(directory: string, canRetry: () => boolean, retry: () => void) {
     stopWatch()
-    const url = opts.buildUrl(directory)
-    const es = new EventSource(url)
-    watchSource.value = es
-
-    es.addEventListener('status', (ev: MessageEvent) => {
-      let payload: TPayload | null = null
-      try {
-        payload = JSON.parse(String(ev.data || '')) as TPayload
-      } catch {
-        return
-      }
-      if (!payload) return
-
-      const prev = watchLastPayload.value
-      watchLastPayload.value = payload
-      opts.onPayload(payload, prev)
+    const endpoint = opts.buildUrl(directory)
+    const client = connectSse({
+      endpoint,
+      debugLabel: 'sse:git-watch',
+      onEvent: (evt) => {
+        if (String(evt?.type || '') !== 'git.watch.status') return
+        const payload = (evt as unknown as { properties?: unknown }).properties as TPayload | undefined
+        if (!payload) return
+        const prev = watchLastPayload.value
+        watchLastPayload.value = payload
+        opts.onPayload(payload, prev)
+      },
+      onError: () => {
+        opts.onError?.()
+        // Keep legacy retry signal for callers that want a full restart.
+        if (watchRetryTimer.value) return
+        watchRetryTimer.value = window.setTimeout(() => {
+          watchRetryTimer.value = null
+          if (!canRetry()) {
+            stopWatch()
+            return
+          }
+          retry()
+        }, 2000)
+      },
     })
-
-    es.addEventListener('error', () => {
-      opts.onError?.()
-      // EventSource retries internally, but we close + retry to keep behavior predictable
-      // when switching directories quickly or when the endpoint rejects.
-      if (watchRetryTimer.value) return
-      watchRetryTimer.value = window.setTimeout(() => {
-        watchRetryTimer.value = null
-        if (!canRetry()) {
-          stopWatch()
-          return
-        }
-        retry()
-      }, 2000)
-    })
+    watchSource.value = client
   }
 
   return {

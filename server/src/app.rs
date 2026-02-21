@@ -6,20 +6,26 @@ use std::sync::Arc;
 use axum::{
     Json, Router, middleware,
     response::{Html, IntoResponse},
+    http::{Method, header, HeaderValue},
     routing::{any, get, post},
 };
 use futures_util::stream::{self as futures_stream, StreamExt as _};
 use serde::Serialize;
 use tokio::sync::RwLock;
+use axum_extra::extract::cookie::SameSite;
 use tower_http::{
+    cors::{AllowOrigin, CorsLayer},
     limit::RequestBodyLimitLayer,
     services::{ServeDir, ServeFile},
     trace::TraceLayer,
 };
+use url::Url;
 
 #[derive(Clone)]
 pub(crate) struct AppState {
     pub(crate) ui_auth: crate::ui_auth::UiAuth,
+    pub(crate) ui_cookie_same_site: SameSite,
+    pub(crate) cors_allowed_origins: Vec<String>,
     pub(crate) opencode: Arc<crate::opencode::OpenCodeManager>,
     pub(crate) plugin_runtime: Arc<crate::plugin_runtime::PluginRuntime>,
     pub(crate) terminal: Arc<crate::terminal::TerminalManager>,
@@ -192,25 +198,113 @@ async fn session_activity(
 // Note: update/install is intentionally not exposed via the UI.
 
 pub(crate) async fn run(args: crate::Args) {
-    let ui_dir_path = {
-        let configured = args.ui_dir.trim();
-        if configured.is_empty() {
-            tracing::error!(
-                "Missing required UI directory path. Pass --ui-dir <path> or set OPENCODE_STUDIO_UI_DIR."
-            );
-            std::process::exit(2);
+    fn normalize_origin_str(raw: &str) -> Option<String> {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+        let Ok(url) = Url::parse(trimmed) else {
+            return None;
+        };
+        let scheme = url.scheme();
+        if scheme != "http" && scheme != "https" {
+            return None;
+        }
+        Some(url.origin().ascii_serialization())
+    }
+
+    fn build_cors_layer(origins: &[String]) -> Option<CorsLayer> {
+        if origins.is_empty() {
+            return None;
         }
 
-        let path = PathBuf::from(configured);
-        if path.is_absolute() {
-            path
-        } else {
-            // Treat explicit relative paths as relative to the current working directory.
-            let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-            cwd.join(path)
+        let mut values: Vec<HeaderValue> = Vec::new();
+        for origin in origins {
+            let Ok(v) = HeaderValue::from_str(origin) else {
+                tracing::warn!(
+                    target: "opencode_studio.cors",
+                    origin = %origin,
+                    "Ignoring invalid CORS origin header value"
+                );
+                continue;
+            };
+            values.push(v);
         }
+
+        if values.is_empty() {
+            return None;
+        }
+
+        let allow_headers = [
+            header::ACCEPT,
+            header::CONTENT_TYPE,
+            header::AUTHORIZATION,
+            header::HeaderName::from_static("last-event-id"),
+        ];
+        let allow_methods = [
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::DELETE,
+            Method::PATCH,
+            Method::OPTIONS,
+        ];
+
+        Some(
+            CorsLayer::new()
+                .allow_origin(AllowOrigin::list(values))
+                .allow_credentials(true)
+                .allow_headers(allow_headers)
+                .allow_methods(allow_methods)
+                .max_age(std::time::Duration::from_secs(60 * 60)),
+        )
+    }
+
+    let mut normalized_cors_origins: Vec<String> = Vec::new();
+    for raw in args.cors_origin.iter() {
+        let Some(origin) = normalize_origin_str(raw) else {
+            tracing::warn!(
+                target: "opencode_studio.cors",
+                origin = %raw,
+                "Ignoring invalid CORS origin"
+            );
+            continue;
+        };
+        normalized_cors_origins.push(origin);
+    }
+    normalized_cors_origins.sort();
+    normalized_cors_origins.dedup();
+
+    let ui_cookie_same_site = match args.ui_cookie_samesite {
+        crate::UiCookieSameSite::Auto => {
+            if normalized_cors_origins.is_empty() {
+                SameSite::Strict
+            } else {
+                SameSite::None
+            }
+        }
+        crate::UiCookieSameSite::Strict => SameSite::Strict,
+        crate::UiCookieSameSite::Lax => SameSite::Lax,
+        crate::UiCookieSameSite::None => SameSite::None,
     };
-    let ui_dir = ui_dir_path.to_string_lossy().into_owned();
+
+    let ui_dir_path: Option<PathBuf> = args
+        .ui_dir
+        .as_deref()
+        .map(|s| s.trim().to_string())
+        .and_then(|configured| {
+            if configured.is_empty() {
+                return None;
+            }
+            let path = PathBuf::from(configured);
+            Some(if path.is_absolute() {
+                path
+            } else {
+                // Treat explicit relative paths as relative to the current working directory.
+                let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+                cwd.join(path)
+            })
+        });
 
     let ui_auth = crate::ui_auth::init_ui_auth(args.ui_password.clone());
     if crate::ui_auth::spawn_cleanup_sessions_task_if_enabled(&ui_auth) {
@@ -253,6 +347,8 @@ pub(crate) async fn run(args: crate::Args) {
 
     let state = Arc::new(AppState {
         ui_auth,
+        ui_cookie_same_site,
+        cors_allowed_origins: normalized_cors_origins.clone(),
         opencode,
         plugin_runtime,
         terminal,
@@ -654,17 +750,27 @@ pub(crate) async fn run(args: crate::Args) {
             crate::ui_auth::require_ui_auth,
         ));
 
-    let index_file = ui_dir_path.join("index.html");
-    let has_ui = index_file.is_file();
-    tracing::info!(
-        "UI dir resolved to {} (index.html exists: {})",
-        ui_dir,
-        has_ui
-    );
-    // Serve Vite hashed assets with a real 404 when missing. The SPA fallback
-    // (index.html) is only appropriate for client routes, not JS/CSS chunks.
-    let asset_files = ServeDir::new(ui_dir_path.join("assets"));
-    let static_files = ServeDir::new(ui_dir_path).fallback(ServeFile::new(index_file));
+    let (has_ui, asset_files, static_files) = match &ui_dir_path {
+        None => {
+            tracing::info!("UI disabled (API-only mode)");
+            (false, None, None)
+        }
+        Some(dir) => {
+            let index_file = dir.join("index.html");
+            let has_ui = index_file.is_file();
+            tracing::info!(
+                "UI dir resolved to {} (index.html exists: {})",
+                dir.to_string_lossy(),
+                has_ui
+            );
+
+            // Serve Vite hashed assets with a real 404 when missing. The SPA fallback
+            // (index.html) is only appropriate for client routes, not JS/CSS chunks.
+            let asset_files = ServeDir::new(dir.join("assets"));
+            let static_files = ServeDir::new(dir).fallback(ServeFile::new(index_file));
+            (has_ui, Some(asset_files), Some(static_files))
+        }
+    };
 
     let mut app = Router::new()
         .route("/health", get(health))
@@ -676,14 +782,22 @@ pub(crate) async fn run(args: crate::Args) {
         .with_state(state)
         .layer(TraceLayer::new_for_http());
 
+    if let Some(cors) = build_cors_layer(&normalized_cors_origins) {
+        tracing::info!(
+            target: "opencode_studio.cors",
+            origins = %normalized_cors_origins.len(),
+            "CORS enabled"
+        );
+        app = app.layer(cors);
+    }
+
     app = if has_ui {
-        app.nest_service("/assets", asset_files)
-            .fallback_service(static_files)
+        app.nest_service("/assets", asset_files.expect("assets service"))
+            .fallback_service(static_files.expect("static service"))
     } else {
-        // Keep dev UX decent even before building the Vue app.
         app.fallback(|| async {
             Html(
-                "<html><body><h1>OpenCode Studio server running</h1><p>UI not built yet. Build the Vue app and point the server at its Vite <code>dist</code> directory via <code>--ui-dir</code> (or <code>OPENCODE_STUDIO_UI_DIR</code>).</p></body></html>",
+                "<html><body><h1>OpenCode Studio server running</h1><p>UI is not served by this instance (API-only mode). Configure a frontend separately and connect to this server via <code>/api/*</code>. To serve the built UI from this server, pass <code>--ui-dir &lt;dist&gt;</code> (or set <code>OPENCODE_STUDIO_UI_DIR</code>).</p></body></html>",
             )
         })
     };

@@ -1,5 +1,6 @@
 import type { JsonValue as JsonLike } from '@/types/json'
 import type { PluginManifestResponse } from '@/plugins/host/types'
+import { apiUrl } from '@/lib/api'
 
 export type ChatMountSurface = 'chat.sidebar' | 'chat.activity.inline' | 'chat.message.footer' | 'chat.overlay.bottom'
 
@@ -226,5 +227,5 @@ export function pluginAssetEntryUrl(pluginId: string, entry: string): string {
     .filter(Boolean)
     .map((segment) => encodeURIComponent(segment))
     .join('/')
-  return `/api/plugins/${encodeURIComponent(id)}/assets/${encodedPath}`
+  return apiUrl(`/api/plugins/${encodeURIComponent(id)}/assets/${encodedPath}`)
 }
