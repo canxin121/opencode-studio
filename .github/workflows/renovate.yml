@@ -28,6 +28,7 @@ jobs:
           # In action mode Renovate needs an explicit repo list, otherwise it exits with
           # "No repositories found" and won't create update branches/PRs.
           RENOVATE_REPOSITORIES: ${{ github.repository }}
+          LOG_LEVEL: debug
         with:
           # Prefer a PAT or GitHub App token in RENOVATE_TOKEN.
           # Fallback to GITHUB_TOKEN for convenience (note: it cannot trigger downstream workflows).
