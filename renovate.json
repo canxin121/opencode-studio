@@ -10,7 +10,7 @@
     },
     {
       "matchManagers": ["npm"],
-      "matchPaths": ["web/package.json"],
+      "matchFileNames": ["web/package.json"],
       "groupName": "web dependencies"
     }
   ]
