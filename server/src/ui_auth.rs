@@ -14,7 +14,6 @@ use axum::{
 };
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
 use dashmap::DashMap;
-use rand_core::OsRng;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
@@ -419,7 +418,9 @@ pub(crate) fn init_ui_auth(ui_password: Option<String>) -> UiAuth {
         return UiAuth::Disabled;
     }
 
-    let salt = SaltString::generate(OsRng);
+    let mut salt_bytes = [0u8; 16];
+    getrandom::fill(&mut salt_bytes).expect("init_ui_auth: getrandom failed");
+    let salt = SaltString::encode_b64(&salt_bytes).expect("init_ui_auth: encode salt");
     let password_phc = Argon2::default()
         .hash_password(password.as_bytes(), &salt)
         .expect("hash password")

@@ -1,6 +1,5 @@
 use base64::Engine as _;
 use clap::{Parser, ValueEnum};
-use rand_core::{OsRng, RngCore};
 use tracing::Level;
 
 mod app;
@@ -130,8 +129,7 @@ pub(crate) enum UiCookieSameSite {
 
 pub(crate) fn issue_token() -> String {
     let mut buf = [0u8; 32];
-    let mut rng = OsRng;
-    rng.fill_bytes(&mut buf);
+    getrandom::fill(&mut buf).expect("issue_token: getrandom failed");
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(buf)
 }
 
