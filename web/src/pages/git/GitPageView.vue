@@ -4,6 +4,8 @@ import { RiArrowDownSLine, RiArrowRightSLine, RiGitBranchLine, RiMore2Line, RiRe
 
 import MiniActionButton from '@/components/ui/MiniActionButton.vue'
 import MobileSidebarEmptyState from '@/components/ui/MobileSidebarEmptyState.vue'
+import IconButton from '@/components/ui/IconButton.vue'
+import OptionMenu, { type OptionMenuGroup, type OptionMenuItem } from '@/components/ui/OptionMenu.vue'
 import ScrollArea from '@/components/ui/ScrollArea.vue'
 import SidebarIconButton from '@/components/ui/SidebarIconButton.vue'
 import GitCommitBox from '@/components/git/GitCommitBox.vue'
@@ -506,6 +508,162 @@ const {
   migrateWorktreeChanges,
 } = props.ctx
 
+const rebaseActionMenuOpen = ref(false)
+const rebaseActionMenuQuery = ref('')
+
+const rebaseActionMenuGroups = computed<OptionMenuGroup[]>(() => {
+  const items: OptionMenuItem[] = []
+
+  if ((conflictPaths.value || []).length > 0) {
+    items.push({ id: 'open-conflict', label: 'Open Conflict' })
+  }
+
+  items.push({ id: 'skip', label: 'Skip' })
+  items.push({ id: 'use-terminal', label: 'Use Terminal' })
+
+  return [{ id: 'rebase-actions', items }]
+})
+
+function openRebaseActionMenu() {
+  const nextOpen = !rebaseActionMenuOpen.value
+  rebaseActionMenuOpen.value = nextOpen
+  if (nextOpen) rebaseActionMenuQuery.value = ''
+}
+
+function setRebaseActionMenuOpen(open: boolean) {
+  rebaseActionMenuOpen.value = open
+  if (!open) rebaseActionMenuQuery.value = ''
+}
+
+function onRebaseActionMenuSelect(item: OptionMenuItem) {
+  if (item.id === 'open-conflict') {
+    openFirstConflict()
+    return
+  }
+  if (item.id === 'skip') {
+    rebaseSkip()
+    return
+  }
+  if (item.id === 'use-terminal') {
+    openGitTerminalWithCommand(repoRoot.value || '', 'git rebase --continue')
+  }
+}
+
+const mergeActionMenuOpen = ref(false)
+const mergeActionMenuQuery = ref('')
+
+const mergeActionMenuGroups = computed<OptionMenuGroup[]>(() => {
+  const items: OptionMenuItem[] = []
+  if ((conflictPaths.value || []).length > 0) {
+    items.push({ id: 'open-conflict', label: 'Open Conflict' })
+  }
+  items.push({ id: 'use-terminal', label: 'Use Terminal' })
+  return [{ id: 'merge-actions', items }]
+})
+
+function openMergeActionMenu() {
+  const nextOpen = !mergeActionMenuOpen.value
+  mergeActionMenuOpen.value = nextOpen
+  if (nextOpen) mergeActionMenuQuery.value = ''
+}
+
+function setMergeActionMenuOpen(open: boolean) {
+  mergeActionMenuOpen.value = open
+  if (!open) mergeActionMenuQuery.value = ''
+}
+
+function onMergeActionMenuSelect(item: OptionMenuItem) {
+  if (item.id === 'open-conflict') {
+    openFirstConflict()
+    return
+  }
+  if (item.id === 'use-terminal') {
+    openGitTerminalWithCommand(repoRoot.value || '', 'git merge --continue')
+  }
+}
+
+const cherryPickActionMenuOpen = ref(false)
+const cherryPickActionMenuQuery = ref('')
+
+const cherryPickActionMenuGroups = computed<OptionMenuGroup[]>(() => {
+  const items: OptionMenuItem[] = []
+
+  if ((conflictPaths.value || []).length > 0) {
+    items.push({ id: 'open-conflict', label: 'Open Conflict' })
+  }
+
+  items.push({ id: 'skip', label: 'Skip' })
+  items.push({ id: 'use-terminal', label: 'Use Terminal' })
+
+  return [{ id: 'cherry-pick-actions', items }]
+})
+
+function openCherryPickActionMenu() {
+  const nextOpen = !cherryPickActionMenuOpen.value
+  cherryPickActionMenuOpen.value = nextOpen
+  if (nextOpen) cherryPickActionMenuQuery.value = ''
+}
+
+function setCherryPickActionMenuOpen(open: boolean) {
+  cherryPickActionMenuOpen.value = open
+  if (!open) cherryPickActionMenuQuery.value = ''
+}
+
+function onCherryPickActionMenuSelect(item: OptionMenuItem) {
+  if (item.id === 'open-conflict') {
+    openFirstConflict()
+    return
+  }
+  if (item.id === 'skip') {
+    cherryPickSkip()
+    return
+  }
+  if (item.id === 'use-terminal') {
+    openGitTerminalWithCommand(repoRoot.value || '', 'git cherry-pick --continue')
+  }
+}
+
+const revertActionMenuOpen = ref(false)
+const revertActionMenuQuery = ref('')
+
+const revertActionMenuGroups = computed<OptionMenuGroup[]>(() => {
+  const items: OptionMenuItem[] = []
+
+  if ((conflictPaths.value || []).length > 0) {
+    items.push({ id: 'open-conflict', label: 'Open Conflict' })
+  }
+
+  items.push({ id: 'skip', label: 'Skip' })
+  items.push({ id: 'use-terminal', label: 'Use Terminal' })
+
+  return [{ id: 'revert-actions', items }]
+})
+
+function openRevertActionMenu() {
+  const nextOpen = !revertActionMenuOpen.value
+  revertActionMenuOpen.value = nextOpen
+  if (nextOpen) revertActionMenuQuery.value = ''
+}
+
+function setRevertActionMenuOpen(open: boolean) {
+  revertActionMenuOpen.value = open
+  if (!open) revertActionMenuQuery.value = ''
+}
+
+function onRevertActionMenuSelect(item: OptionMenuItem) {
+  if (item.id === 'open-conflict') {
+    openFirstConflict()
+    return
+  }
+  if (item.id === 'skip') {
+    revertSkip()
+    return
+  }
+  if (item.id === 'use-terminal') {
+    openGitTerminalWithCommand(repoRoot.value || '', 'git revert --continue')
+  }
+}
+
 function openHistoryWithRefs() {
   openHistoryDialog()
   void loadBranches()
@@ -670,14 +828,35 @@ void diffPaneRef
               <div class="text-[11px] text-muted-foreground mt-0.5">
                 Resolve conflicts, then commit. Or abort the merge.
               </div>
-              <div class="mt-2 flex justify-end gap-2">
-                <MiniActionButton v-if="(conflictPaths || []).length > 0" @click="openFirstConflict"
-                  >Open Conflict</MiniActionButton
-                >
-                <MiniActionButton @click="openGitTerminalWithCommand(repoRoot || '', 'git merge --continue')"
-                  >Use Terminal</MiniActionButton
-                >
+              <div class="mt-2 flex flex-wrap items-center justify-end gap-2">
                 <MiniActionButton variant="destructive" @click="abortMerge">Abort</MiniActionButton>
+
+                <div class="relative">
+                  <IconButton
+                    size="sm"
+                    class="text-muted-foreground hover:text-foreground hover:bg-primary/6"
+                    title="More merge actions"
+                    aria-label="More merge actions"
+                    @click.stop="openMergeActionMenu"
+                  >
+                    <RiMore2Line class="h-4 w-4" />
+                  </IconButton>
+
+                  <OptionMenu
+                    :open="mergeActionMenuOpen"
+                    :query="mergeActionMenuQuery"
+                    :groups="mergeActionMenuGroups"
+                    title="Merge actions"
+                    mobile-title="Merge actions"
+                    :searchable="false"
+                    :is-mobile-pointer="ui.isMobilePointer"
+                    desktop-placement="bottom-end"
+                    desktop-class="w-48"
+                    @update:open="setMergeActionMenuOpen"
+                    @update:query="(v) => (mergeActionMenuQuery = v)"
+                    @select="onMergeActionMenuSelect"
+                  />
+                </div>
               </div>
             </div>
 
@@ -689,16 +868,36 @@ void diffPaneRef
               <div class="text-[11px] text-muted-foreground mt-0.5">
                 Continue/skip in a terminal, or abort the rebase.
               </div>
-              <div class="mt-2 flex justify-end gap-2">
-                <MiniActionButton v-if="(conflictPaths || []).length > 0" @click="openFirstConflict"
-                  >Open Conflict</MiniActionButton
-                >
-                <MiniActionButton @click="rebaseSkip">Skip</MiniActionButton>
+              <div class="mt-2 flex flex-wrap items-center justify-end gap-2">
                 <MiniActionButton @click="rebaseContinue">Continue</MiniActionButton>
-                <MiniActionButton @click="openGitTerminalWithCommand(repoRoot || '', 'git rebase --continue')"
-                  >Use Terminal</MiniActionButton
-                >
                 <MiniActionButton variant="destructive" @click="abortRebase">Abort</MiniActionButton>
+
+                <div class="relative">
+                  <IconButton
+                    size="sm"
+                    class="text-muted-foreground hover:text-foreground hover:bg-primary/6"
+                    title="More rebase actions"
+                    aria-label="More rebase actions"
+                    @click.stop="openRebaseActionMenu"
+                  >
+                    <RiMore2Line class="h-4 w-4" />
+                  </IconButton>
+
+                  <OptionMenu
+                    :open="rebaseActionMenuOpen"
+                    :query="rebaseActionMenuQuery"
+                    :groups="rebaseActionMenuGroups"
+                    title="Rebase actions"
+                    mobile-title="Rebase actions"
+                    :searchable="false"
+                    :is-mobile-pointer="ui.isMobilePointer"
+                    desktop-placement="bottom-end"
+                    desktop-class="w-48"
+                    @update:open="setRebaseActionMenuOpen"
+                    @update:query="(v) => (rebaseActionMenuQuery = v)"
+                    @select="onRebaseActionMenuSelect"
+                  />
+                </div>
               </div>
             </div>
 
@@ -710,16 +909,36 @@ void diffPaneRef
               <div class="text-[11px] text-muted-foreground mt-0.5">
                 Resolve conflicts, then continue/skip, or abort.
               </div>
-              <div class="mt-2 flex justify-end gap-2">
-                <MiniActionButton v-if="(conflictPaths || []).length > 0" @click="openFirstConflict"
-                  >Open Conflict</MiniActionButton
-                >
-                <MiniActionButton @click="cherryPickSkip">Skip</MiniActionButton>
+              <div class="mt-2 flex flex-wrap items-center justify-end gap-2">
                 <MiniActionButton @click="cherryPickContinue">Continue</MiniActionButton>
-                <MiniActionButton @click="openGitTerminalWithCommand(repoRoot || '', 'git cherry-pick --continue')"
-                  >Use Terminal</MiniActionButton
-                >
                 <MiniActionButton variant="destructive" @click="cherryPickAbort">Abort</MiniActionButton>
+
+                <div class="relative">
+                  <IconButton
+                    size="sm"
+                    class="text-muted-foreground hover:text-foreground hover:bg-primary/6"
+                    title="More cherry-pick actions"
+                    aria-label="More cherry-pick actions"
+                    @click.stop="openCherryPickActionMenu"
+                  >
+                    <RiMore2Line class="h-4 w-4" />
+                  </IconButton>
+
+                  <OptionMenu
+                    :open="cherryPickActionMenuOpen"
+                    :query="cherryPickActionMenuQuery"
+                    :groups="cherryPickActionMenuGroups"
+                    title="Cherry-pick actions"
+                    mobile-title="Cherry-pick actions"
+                    :searchable="false"
+                    :is-mobile-pointer="ui.isMobilePointer"
+                    desktop-placement="bottom-end"
+                    desktop-class="w-48"
+                    @update:open="setCherryPickActionMenuOpen"
+                    @update:query="(v) => (cherryPickActionMenuQuery = v)"
+                    @select="onCherryPickActionMenuSelect"
+                  />
+                </div>
               </div>
             </div>
 
@@ -731,16 +950,36 @@ void diffPaneRef
               <div class="text-[11px] text-muted-foreground mt-0.5">
                 Resolve conflicts, then continue/skip, or abort.
               </div>
-              <div class="mt-2 flex justify-end gap-2">
-                <MiniActionButton v-if="(conflictPaths || []).length > 0" @click="openFirstConflict"
-                  >Open Conflict</MiniActionButton
-                >
-                <MiniActionButton @click="revertSkip">Skip</MiniActionButton>
+              <div class="mt-2 flex flex-wrap items-center justify-end gap-2">
                 <MiniActionButton @click="revertContinue">Continue</MiniActionButton>
-                <MiniActionButton @click="openGitTerminalWithCommand(repoRoot || '', 'git revert --continue')"
-                  >Use Terminal</MiniActionButton
-                >
                 <MiniActionButton variant="destructive" @click="revertAbortSeq">Abort</MiniActionButton>
+
+                <div class="relative">
+                  <IconButton
+                    size="sm"
+                    class="text-muted-foreground hover:text-foreground hover:bg-primary/6"
+                    title="More revert actions"
+                    aria-label="More revert actions"
+                    @click.stop="openRevertActionMenu"
+                  >
+                    <RiMore2Line class="h-4 w-4" />
+                  </IconButton>
+
+                  <OptionMenu
+                    :open="revertActionMenuOpen"
+                    :query="revertActionMenuQuery"
+                    :groups="revertActionMenuGroups"
+                    title="Revert actions"
+                    mobile-title="Revert actions"
+                    :searchable="false"
+                    :is-mobile-pointer="ui.isMobilePointer"
+                    desktop-placement="bottom-end"
+                    desktop-class="w-48"
+                    @update:open="setRevertActionMenuOpen"
+                    @update:query="(v) => (revertActionMenuQuery = v)"
+                    @select="onRevertActionMenuSelect"
+                  />
+                </div>
               </div>
             </div>
 
