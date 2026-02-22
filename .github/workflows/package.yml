@@ -144,21 +144,38 @@ jobs:
       - name: Build backend
         run: cargo build --manifest-path server/Cargo.toml --release --target ${{ matrix.target }} --locked
 
-      - name: Archive backend
+      - name: Archive backend (Unix)
+        if: matrix.os != 'windows-latest'
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p release-assets
-          EXT=""
-          if [[ "${{ matrix.target }}" == *"windows"* ]]; then EXT=".exe"; fi
-          BIN="target/${{ matrix.target }}/release/opencode-studio${EXT}"
+          BIN="target/${{ matrix.target }}/release/opencode-studio"
           if [[ ! -f "$BIN" ]]; then echo "missing $BIN" >&2; exit 1; fi
           NAME="opencode-studio-${{ matrix.target }}"
-          if [[ "$EXT" == ".exe" ]]; then
-            (cd "$(dirname "$BIN")" && zip -r "${{ github.workspace }}/release-assets/${NAME}.zip" "$(basename "$BIN")")
-          else
-            tar -czf "release-assets/${NAME}.tar.gz" -C "$(dirname "$BIN")" "$(basename "$BIN")"
-          fi
+          tar -czf "release-assets/${NAME}.tar.gz" -C "$(dirname "$BIN")" "$(basename "$BIN")"
+
+      - name: Archive backend (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release-assets | Out-Null
+
+          $binDir = "target/${{ matrix.target }}/release"
+          $binName = "opencode-studio.exe"
+          $binPath = Join-Path $binDir $binName
+          if (-not (Test-Path $binPath)) { throw "missing $binPath" }
+
+          $name = "opencode-studio-${{ matrix.target }}"
+          $out = Join-Path $env:GITHUB_WORKSPACE ("release-assets/$name.zip")
+
+          Push-Location $binDir
+          try {
+            if (Test-Path $out) { Remove-Item -Force $out }
+            Compress-Archive -Path $binName -DestinationPath $out -Force
+          } finally {
+            Pop-Location
+          }
 
       - name: Upload backend artifact
         uses: actions/upload-artifact@v4
