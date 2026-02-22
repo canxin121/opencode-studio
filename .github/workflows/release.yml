@@ -158,86 +158,86 @@ jobs:
           # Release ref (tag)
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            ref: release-tag
             suffix: ""
             flavor: frontend
+            cef: false
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            ref: release-tag
             suffix: ""
             flavor: full
+            cef: false
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            ref: release-tag
             suffix: ""
             flavor: frontend
+            cef: false
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            ref: release-tag
             suffix: ""
             flavor: full
+            cef: false
           - os: macos-14
             target: aarch64-apple-darwin
-            ref: release-tag
             suffix: ""
             flavor: frontend
+            cef: false
           - os: macos-14
             target: aarch64-apple-darwin
-            ref: release-tag
             suffix: ""
             flavor: full
+            cef: false
           - os: macos-15-intel
             target: x86_64-apple-darwin
-            ref: release-tag
             suffix: ""
             flavor: frontend
+            cef: false
           - os: macos-15-intel
             target: x86_64-apple-darwin
-            ref: release-tag
             suffix: ""
             flavor: full
+            cef: false
 
-          # Extra builds from feat/cef
+          # Extra builds using Tauri's CEF runtime (suffix -cef)
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            ref: feat/cef
             suffix: "-cef"
             flavor: frontend
+            cef: true
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            ref: feat/cef
             suffix: "-cef"
             flavor: full
+            cef: true
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            ref: feat/cef
             suffix: "-cef"
             flavor: frontend
+            cef: true
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            ref: feat/cef
             suffix: "-cef"
             flavor: full
+            cef: true
           - os: macos-14
             target: aarch64-apple-darwin
-            ref: feat/cef
             suffix: "-cef"
             flavor: frontend
+            cef: true
           - os: macos-14
             target: aarch64-apple-darwin
-            ref: feat/cef
             suffix: "-cef"
             flavor: full
+            cef: true
           - os: macos-15-intel
             target: x86_64-apple-darwin
-            ref: feat/cef
             suffix: "-cef"
             flavor: frontend
+            cef: true
           - os: macos-15-intel
             target: x86_64-apple-darwin
-            ref: feat/cef
             suffix: "-cef"
             flavor: full
+            cef: true
 
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
@@ -251,7 +251,7 @@ jobs:
       - name: Checkout desktop source (Tauri variant)
         uses: actions/checkout@v4
         with:
-          ref: ${{ matrix.ref == 'release-tag' && env.RELEASE_REF || matrix.ref }}
+          ref: ${{ env.RELEASE_REF }}
           path: src-tauri
 
       - name: Install Linux deps (Tauri)
@@ -311,8 +311,13 @@ jobs:
             src-main/server -> src-main/server/target
           save-if: false
 
-      - name: Install Tauri CLI
+      - name: Install Tauri CLI (main)
+        if: matrix.cef != true
         run: cargo install tauri-cli --locked --version ${{ env.TAURI_CLI_VERSION }}
+
+      - name: Install Tauri CLI (cef)
+        if: matrix.cef == true
+        run: cargo install tauri-cli --locked --git https://github.com/tauri-apps/tauri --branch feat/cef
 
       - name: Build + install backend sidecar (full only, Unix)
         if: matrix.flavor == 'full' && matrix.os != 'windows-latest'
@@ -340,10 +345,15 @@ jobs:
         working-directory: src-tauri/desktop/src-tauri
         shell: bash
         run: |
+          EXTRA=""
+          if [ "${{ matrix.cef }}" = "true" ]; then
+            EXTRA="--features cef"
+          fi
+
           if [ "${{ matrix.flavor }}" = "full" ]; then
-            cargo tauri build --config tauri.conf.full.json --target ${{ matrix.target }}
+            cargo tauri build --config tauri.conf.full.json --target ${{ matrix.target }} $EXTRA
           else
-            cargo tauri build --config tauri.conf.frontend.json --target ${{ matrix.target }}
+            cargo tauri build --config tauri.conf.frontend.json --target ${{ matrix.target }} $EXTRA
           fi
 
       - name: Stage desktop installers (Unix)

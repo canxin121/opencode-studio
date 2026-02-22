@@ -114,9 +114,9 @@ The tray menu has an item to open this file.
 Two workflows are relevant:
 
 - `CI` (`.github/workflows/ci.yml`): lint/test for `web/` and `server/`.
-- `Package` (`.github/workflows/package.yml`): manual (workflow_dispatch) builds artifacts for:
-  - current ref
-  - `feat/cef` (desktop builds only)
+- `Package` (`.github/workflows/package.yml`): manual (workflow_dispatch) builds artifacts for the current ref. Desktop installers are built twice:
+  - main (system WebView)
+  - CEF runtime (suffix `-cef`, using Tauri's `feat/cef` branch)
 
 Mobile: use the hosted web UI (`web/dist`).
 
@@ -129,7 +129,7 @@ For releases:
     - Windows: `.msi` (and/or `.exe`)
     - macOS: `.dmg`
     - Linux: `.AppImage` + `.deb` + `.rpm`
-    plus the same again from `feat/cef` (suffix `-cef`)
+    plus the same again using Tauri's CEF runtime (suffix `-cef`)
   - service installer scripts
 
 ## Unsigned builds

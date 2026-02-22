@@ -1,7 +1,11 @@
 mod backend;
 mod config;
 
-use std::sync::Arc;
+#[cfg(not(feature = "cef"))]
+type AppRuntime = tauri::Wry;
+
+#[cfg(feature = "cef")]
+type AppRuntime = tauri::Cef;
 
 use tauri::{
   menu::{Menu, MenuItem},
@@ -14,7 +18,7 @@ use backend::BackendManager;
 struct TrayState(tauri::tray::TrayIcon);
 
 pub fn run() {
-  tauri::Builder::default()
+  tauri::Builder::<AppRuntime>::new()
     .plugin(tauri_plugin_shell::init())
     .plugin(tauri_plugin_opener::init())
     .invoke_handler(tauri::generate_handler![

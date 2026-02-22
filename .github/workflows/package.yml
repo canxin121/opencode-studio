@@ -15,33 +15,6 @@ env:
   TAURI_CLI_VERSION: 2.10.0
 
 jobs:
-  probe-cef:
-    name: Probe CEF ref
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
-    outputs:
-      has_cef: ${{ steps.probe.outputs.has_cef }}
-      cef_ref: ${{ steps.probe.outputs.cef_ref }}
-    steps:
-      - id: probe
-        env:
-          GH_TOKEN: ${{ github.token }}
-          CEF_BRANCH: feat/cef
-        shell: bash
-        run: |
-          set -euo pipefail
-          enc="${CEF_BRANCH//\//%2F}"
-          url="https://api.github.com/repos/${GITHUB_REPOSITORY}/branches/${enc}"
-          if curl -sfL -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" "$url" >/dev/null; then
-            echo "has_cef=true" >> "$GITHUB_OUTPUT"
-            echo "cef_ref=${CEF_BRANCH}" >> "$GITHUB_OUTPUT"
-            echo "Found branch: ${CEF_BRANCH}"
-          else
-            echo "has_cef=false" >> "$GITHUB_OUTPUT"
-            echo "cef_ref=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
-            echo "Branch missing; building CEF variants from current ref: ${GITHUB_SHA}" >&2
-          fi
-
   service-scripts:
     name: Service scripts
     runs-on: ubuntu-latest
@@ -399,7 +372,7 @@ jobs:
 
   desktop-cef:
     name: Desktop (cef, ${{ matrix.flavor }}, ${{ matrix.target }})
-    needs: [probe-cef, web, backend]
+    needs: [web, backend]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     strategy:
@@ -447,15 +420,9 @@ jobs:
             suffix: "-cef"
             flavor: full
     steps:
-      - name: Select CEF desktop ref
-        shell: bash
-        run: |
-          echo "has_cef=${{ needs.probe-cef.outputs.has_cef }}"
-          echo "cef_ref=${{ needs.probe-cef.outputs.cef_ref }}"
-
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.probe-cef.outputs.cef_ref }}
+          ref: ${{ github.sha }}
 
       - name: Install Linux deps (Tauri)
         if: matrix.os == 'ubuntu-latest'
@@ -501,7 +468,7 @@ jobs:
           save-if: false
 
       - name: Install Tauri CLI
-        run: cargo install tauri-cli --locked --version ${{ env.TAURI_CLI_VERSION }}
+        run: cargo install tauri-cli --locked --git https://github.com/tauri-apps/tauri --branch feat/cef
 
       - name: Download backend artifact (full only)
         if: matrix.flavor == 'full'
@@ -537,9 +504,9 @@ jobs:
         shell: bash
         run: |
           if [ "${{ matrix.flavor }}" = "full" ]; then
-            cargo tauri build --config tauri.conf.full.json --target ${{ matrix.target }}
+            cargo tauri build --config tauri.conf.full.json --target ${{ matrix.target }} --features cef
           else
-            cargo tauri build --config tauri.conf.frontend.json --target ${{ matrix.target }}
+            cargo tauri build --config tauri.conf.frontend.json --target ${{ matrix.target }} --features cef
           fi
 
       - name: Pack desktop bundles (Unix)
