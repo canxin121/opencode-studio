@@ -84,7 +84,9 @@ export function installKeyboardTapFix(options: Options): () => void {
     startY: number
     startedAt: number
     waitingForNativeClick: boolean
+    syntheticClickFired: boolean
     fallbackTimer: number | null
+    clearTimer: number | null
   }
 
   let pending: Pending | null = null
@@ -93,6 +95,7 @@ export function installKeyboardTapFix(options: Options): () => void {
 
   const TAP_MOVE_PX = 12
   const TAP_TIMEOUT_MS = 800
+  const POST_IME_GHOST_SUPPRESS_MS = 800
 
   const isTouchUi = () => {
     // Only run on touch-first layouts to avoid surprising desktop/tablet behaviors.
@@ -131,7 +134,9 @@ export function installKeyboardTapFix(options: Options): () => void {
       startY: Number.isFinite(e.clientY) ? e.clientY : 0,
       startedAt: Date.now(),
       waitingForNativeClick: false,
+      syntheticClickFired: false,
       fallbackTimer: null,
+      clearTimer: null,
     }
 
     if (mode === 'keep') {
@@ -160,6 +165,13 @@ export function installKeyboardTapFix(options: Options): () => void {
     if (pending && pending.fallbackTimer !== null) {
       try {
         window.clearTimeout(pending.fallbackTimer)
+      } catch {
+        // ignore
+      }
+    }
+    if (pending && pending.clearTimer !== null) {
+      try {
+        window.clearTimeout(pending.clearTimer)
       } catch {
         // ignore
       }
@@ -235,7 +247,13 @@ export function installKeyboardTapFix(options: Options): () => void {
         // ignore
       }
 
-      clearPending()
+      // Keep `pending` around briefly: some browsers deliver a delayed post-IME *trusted* click
+      // after our fallback fires, and that click can be retargeted to a different control
+      // (e.g. sessions menu, bottom nav).
+      pending.syntheticClickFired = true
+      pending.clearTimer = window.setTimeout(() => {
+        clearPending()
+      }, POST_IME_GHOST_SUPPRESS_MS)
     }, 0)
   }
 
@@ -250,6 +268,11 @@ export function installKeyboardTapFix(options: Options): () => void {
     if (pending && pending.waitingForNativeClick && e.isTrusted) {
       const t = e.target instanceof Node ? e.target : null
       if (t && pending.target.contains(t)) {
+        // If a fallback synthetic click already fired, this trusted click is a duplicate.
+        if (pending.syntheticClickFired) {
+          e.preventDefault()
+          e.stopImmediatePropagation()
+        }
         clearPending()
         return
       }
@@ -260,6 +283,9 @@ export function installKeyboardTapFix(options: Options): () => void {
       if (t) {
         e.preventDefault()
         e.stopImmediatePropagation()
+        if (pending.syntheticClickFired) {
+          clearPending()
+        }
       }
       return
     }

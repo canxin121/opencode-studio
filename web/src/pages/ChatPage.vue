@@ -28,6 +28,7 @@ import { useChatSessionActions } from './chat/useChatSessionActions'
 import { useChatRunUi } from './chat/useChatRunUi'
 import { useChatRenderBlocks } from './chat/useChatRenderBlocks'
 import { useChatMessageActions } from './chat/useChatMessageActions'
+import { deriveSendRunConfig } from './chat/modelSendDefaults'
 import type { OptionMenuGroup, OptionMenuItem } from '@/components/ui/OptionMenu.vue'
 import type { MessageEntry } from '@/types/chat'
 import type { JsonObject, JsonValue } from '@/types/json'
@@ -1084,13 +1085,15 @@ async function send() {
       }
     }
 
-    await chat.sendMessage(sid, {
-      providerID: modelSelection.selectedProviderId.value || undefined,
-      modelID: modelSelection.selectedModelId.value || undefined,
-      agent: modelSelection.selectedAgent.value || undefined,
-      variant: modelSelection.selectedVariant.value || undefined,
-      parts,
+    const runCfg = deriveSendRunConfig({
+      selectedProviderId: modelSelection.selectedProviderId.value,
+      selectedModelId: modelSelection.selectedModelId.value,
+      selectedAgent: modelSelection.selectedAgent.value,
+      selectedVariant: modelSelection.selectedVariant.value,
+      effectiveDefaults: modelSelection.effectiveDefaults.value,
     })
+
+    await chat.sendMessage(sid, { ...runCfg, parts })
 
     // Mark the optimistic message as sent (generation may still be running).
     markOptimisticSent(sid)

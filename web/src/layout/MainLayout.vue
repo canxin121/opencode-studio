@@ -4,7 +4,7 @@ import McpDialog from '@/components/McpDialog.vue'
 import AppHeader from '@/layout/AppHeader.vue'
 import ChatSidebar from '@/layout/ChatSidebar.vue'
 import BottomNav from '@/layout/BottomNav.vue'
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 
 import { useUiStore } from '@/stores/ui'
@@ -26,6 +26,18 @@ const usesChatShellSidebar = computed(() => {
     .toLowerCase()
     .startsWith('/chat')
 })
+
+// Mobile UX: navigating should switch focus to main content.
+// The same store flag is used as a "sidebar" across mobile panels (sessions, terminal, etc).
+watch(
+  () => route.fullPath,
+  (next, prev) => {
+    if (!ui.isMobile) return
+    if (!ui.isSessionSwitcherOpen) return
+    if (next === prev) return
+    ui.setSessionSwitcherOpen(false)
+  },
+)
 
 const mobileBottomNavInset =
   'calc(var(--oc-bottom-nav-height, 56px) + var(--oc-safe-area-bottom, 0px) - clamp(0px, var(--oc-keyboard-inset, 0px), var(--oc-bottom-nav-height, 56px)))'

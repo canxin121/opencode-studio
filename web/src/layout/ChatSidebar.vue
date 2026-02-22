@@ -1313,6 +1313,9 @@ async function createSessionInDirectory(directoryId: string, directoryPath: stri
       } else {
         await router.push({ path: '/chat', query: nextQuery })
       }
+
+      // Mobile UX: switch focus to the main chat pane after creating.
+      if (props.mobileVariant) ui.setSessionSwitcherOpen(false)
     }
   } catch (err) {
     toasts.push('error', err instanceof Error ? err.message : String(err))
@@ -1332,6 +1335,9 @@ async function selectSession(sessionId: string) {
     await router.push({ path: '/chat', query: nextQuery })
   }
   await chat.selectSession(sessionId)
+
+  // Mobile UX: selecting a session should immediately close the switcher.
+  if (props.mobileVariant) ui.setSessionSwitcherOpen(false)
 }
 
 async function deleteSession(sessionId: string) {
