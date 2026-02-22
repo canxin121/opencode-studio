@@ -21,6 +21,7 @@ jobs:
     timeout-minutes: 2
     outputs:
       has_cef: ${{ steps.probe.outputs.has_cef }}
+      cef_ref: ${{ steps.probe.outputs.cef_ref }}
     steps:
       - id: probe
         env:
@@ -33,10 +34,12 @@ jobs:
           url="https://api.github.com/repos/${GITHUB_REPOSITORY}/branches/${enc}"
           if curl -sfL -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" "$url" >/dev/null; then
             echo "has_cef=true" >> "$GITHUB_OUTPUT"
+            echo "cef_ref=${CEF_BRANCH}" >> "$GITHUB_OUTPUT"
             echo "Found branch: ${CEF_BRANCH}"
           else
             echo "has_cef=false" >> "$GITHUB_OUTPUT"
-            echo "Branch missing; skipping CEF builds: ${CEF_BRANCH}"
+            echo "cef_ref=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+            echo "Branch missing; building CEF variants from current ref: ${GITHUB_SHA}" >&2
           fi
 
   service-scripts:
@@ -397,7 +400,6 @@ jobs:
   desktop-cef:
     name: Desktop (cef, ${{ matrix.flavor }}, ${{ matrix.target }})
     needs: [probe-cef, web, backend]
-    if: needs.probe-cef.outputs.has_cef == 'true'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     strategy:
@@ -406,56 +408,54 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            ref: feat/cef
             tauri: cef
             suffix: "-cef"
             flavor: frontend
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            ref: feat/cef
             tauri: cef
             suffix: "-cef"
             flavor: full
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            ref: feat/cef
             tauri: cef
             suffix: "-cef"
             flavor: frontend
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            ref: feat/cef
             tauri: cef
             suffix: "-cef"
             flavor: full
           - os: macos-14
             target: aarch64-apple-darwin
-            ref: feat/cef
             tauri: cef
             suffix: "-cef"
             flavor: frontend
           - os: macos-14
             target: aarch64-apple-darwin
-            ref: feat/cef
             tauri: cef
             suffix: "-cef"
             flavor: full
           - os: macos-15-intel
             target: x86_64-apple-darwin
-            ref: feat/cef
             tauri: cef
             suffix: "-cef"
             flavor: frontend
           - os: macos-15-intel
             target: x86_64-apple-darwin
-            ref: feat/cef
             tauri: cef
             suffix: "-cef"
             flavor: full
     steps:
+      - name: Select CEF desktop ref
+        shell: bash
+        run: |
+          echo "has_cef=${{ needs.probe-cef.outputs.has_cef }}"
+          echo "cef_ref=${{ needs.probe-cef.outputs.cef_ref }}"
+
       - uses: actions/checkout@v4
         with:
-          ref: ${{ matrix.ref }}
+          ref: ${{ needs.probe-cef.outputs.cef_ref }}
 
       - name: Install Linux deps (Tauri)
         if: matrix.os == 'ubuntu-latest'
