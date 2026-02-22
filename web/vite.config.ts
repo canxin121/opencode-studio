@@ -7,9 +7,7 @@ export default defineConfig(({ mode }) => {
   const isRustDebugBuild = mode === 'rust-debug'
 
   return {
-    plugins: [
-      vue(),
-    ],
+    plugins: [vue()],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),
