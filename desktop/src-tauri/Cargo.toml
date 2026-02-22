@@ -1,0 +1,40 @@
+[package]
+name = "opencode-studio-desktop"
+version = "0.1.0"
+description = "OpenCode Studio Desktop (Tauri wrapper)"
+authors = ["OpenCode Studio Contributors"]
+edition = "2024"
+license = "MIT"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "opencode-studio-desktop"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+tokio = { version = "1", features = ["sync", "time"] }
+reqwest = { version = "0.12", default-features = true, features = ["json"] }
+
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-shell = "2"
+tauri-plugin-opener = "2"
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+strip = true
+
+# This repository has a top-level Cargo workspace that only includes `server/`.
+# The desktop packaging lives outside that workspace so regular CI doesn't need
+# to compile Tauri and its system dependencies.
+[workspace]

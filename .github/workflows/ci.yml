@@ -67,3 +67,9 @@ jobs:
 
       - name: Rust tests
         run: cargo test -q --locked --manifest-path server/Cargo.toml
+
+      - name: Validate desktop config JSON
+        run: |
+          python3 -m json.tool desktop/src-tauri/tauri.conf.frontend.json >/dev/null
+          python3 -m json.tool desktop/src-tauri/tauri.conf.full.json >/dev/null
+          python3 -m json.tool desktop/src-tauri/capabilities/default.json >/dev/null

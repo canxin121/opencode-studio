@@ -1,0 +1,6 @@
+This project uses multiple config files:
+
+- tauri.conf.frontend.json: frontend-only build (no backend sidecar)
+- tauri.conf.full.json: full build (bundles the server binary as a sidecar)
+
+In CI and local builds, pick one with `cargo tauri build --config <file>`.

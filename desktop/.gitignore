@@ -1,0 +1,5 @@
+# Tauri / Cargo
+src-tauri/target/
+
+# Local build artifacts
+release-assets/

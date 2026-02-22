@@ -22,6 +22,7 @@ env:
   RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
   RELEASE_REF: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.tag) || github.ref }}
   BUN_VERSION: 1.3.9
+  TAURI_CLI_VERSION: 2.10.0
 
 jobs:
   create-release:
@@ -41,6 +42,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_REF }}
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v1
@@ -93,7 +96,9 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-          - os: macos-latest
+          - os: macos-14
+            target: aarch64-apple-darwin
+          - os: macos-13
             target: x86_64-apple-darwin
           - os: windows-latest
             target: x86_64-pc-windows-msvc
@@ -101,6 +106,8 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_REF }}
 
       - name: Build + upload Rust binary
         uses: taiki-e/upload-rust-binary-action@v1
@@ -115,3 +122,293 @@ jobs:
           zip: windows
           include: LICENSE,README.md
           token: ${{ github.token }}
+
+  service:
+    needs: create-release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_REF }}
+
+      - name: Prepare service installer assets
+        run: |
+          mkdir -p release-assets
+          cp scripts/install-service.sh "release-assets/opencode-studio-install-service-${{ env.RELEASE_TAG }}.sh"
+          cp scripts/uninstall-service.sh "release-assets/opencode-studio-uninstall-service-${{ env.RELEASE_TAG }}.sh"
+          cp scripts/install-service.ps1 "release-assets/opencode-studio-install-service-${{ env.RELEASE_TAG }}.ps1"
+          cp scripts/uninstall-service.ps1 "release-assets/opencode-studio-uninstall-service-${{ env.RELEASE_TAG }}.ps1"
+
+      - name: Upload service assets to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          files: |
+            release-assets/opencode-studio-install-service-${{ env.RELEASE_TAG }}.sh
+            release-assets/opencode-studio-uninstall-service-${{ env.RELEASE_TAG }}.sh
+            release-assets/opencode-studio-install-service-${{ env.RELEASE_TAG }}.ps1
+            release-assets/opencode-studio-uninstall-service-${{ env.RELEASE_TAG }}.ps1
+
+  desktop:
+    needs: create-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Release ref (tag)
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            ref: ${{ env.RELEASE_REF }}
+            suffix: ""
+            flavor: frontend
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            ref: ${{ env.RELEASE_REF }}
+            suffix: ""
+            flavor: full
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            ref: ${{ env.RELEASE_REF }}
+            suffix: ""
+            flavor: frontend
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            ref: ${{ env.RELEASE_REF }}
+            suffix: ""
+            flavor: full
+          - os: macos-14
+            target: aarch64-apple-darwin
+            ref: ${{ env.RELEASE_REF }}
+            suffix: ""
+            flavor: frontend
+          - os: macos-14
+            target: aarch64-apple-darwin
+            ref: ${{ env.RELEASE_REF }}
+            suffix: ""
+            flavor: full
+          - os: macos-13
+            target: x86_64-apple-darwin
+            ref: ${{ env.RELEASE_REF }}
+            suffix: ""
+            flavor: frontend
+          - os: macos-13
+            target: x86_64-apple-darwin
+            ref: ${{ env.RELEASE_REF }}
+            suffix: ""
+            flavor: full
+
+          # Extra builds from feat/cef
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            ref: feat/cef
+            suffix: "-cef"
+            flavor: frontend
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            ref: feat/cef
+            suffix: "-cef"
+            flavor: full
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            ref: feat/cef
+            suffix: "-cef"
+            flavor: frontend
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            ref: feat/cef
+            suffix: "-cef"
+            flavor: full
+          - os: macos-14
+            target: aarch64-apple-darwin
+            ref: feat/cef
+            suffix: "-cef"
+            flavor: frontend
+          - os: macos-14
+            target: aarch64-apple-darwin
+            ref: feat/cef
+            suffix: "-cef"
+            flavor: full
+          - os: macos-13
+            target: x86_64-apple-darwin
+            ref: feat/cef
+            suffix: "-cef"
+            flavor: frontend
+          - os: macos-13
+            target: x86_64-apple-darwin
+            ref: feat/cef
+            suffix: "-cef"
+            flavor: full
+
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - name: Checkout release source (web/backend)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_REF }}
+          path: src-main
+
+      - name: Checkout desktop source (Tauri variant)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.ref }}
+          path: src-tauri
+
+      - name: Install Linux deps (Tauri)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf rpm fakeroot dpkg-dev
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+          no-cache: true
+
+      - name: Cache Bun downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('src-main/web/bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Build web dist
+        run: |
+          bun install --cwd src-main/web --frozen-lockfile
+          bun run --cwd src-main/web build
+
+      - name: Copy web dist into desktop source (Unix)
+        if: matrix.os != 'windows-latest'
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf src-tauri/web/dist
+          mkdir -p src-tauri/web
+          cp -a src-main/web/dist src-tauri/web/dist
+          test -f src-tauri/web/dist/index.html
+
+      - name: Copy web dist into desktop source (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          if (Test-Path 'src-tauri/web/dist') { Remove-Item -Recurse -Force 'src-tauri/web/dist' }
+          New-Item -ItemType Directory -Force -Path 'src-tauri/web' | Out-Null
+          Copy-Item -Recurse -Force 'src-main/web/dist' 'src-tauri/web/dist'
+          if (-not (Test-Path 'src-tauri/web/dist/index.html')) { throw 'src-tauri/web/dist/index.html missing' }
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache Rust builds
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            src-tauri/desktop/src-tauri -> src-tauri/desktop/src-tauri/target
+            src-main/server -> src-main/server/target
+          save-if: false
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --locked --version ${{ env.TAURI_CLI_VERSION }}
+
+      - name: Build + install backend sidecar (full only, Unix)
+        if: matrix.flavor == 'full' && matrix.os != 'windows-latest'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --manifest-path src-main/server/Cargo.toml --release --target ${{ matrix.target }} --locked
+          BIN="src-main/server/target/${{ matrix.target }}/release/opencode-studio"
+          test -f "$BIN"
+          mkdir -p src-tauri/desktop/src-tauri/binaries
+          cp "$BIN" "src-tauri/desktop/src-tauri/binaries/opencode-studio-${{ matrix.target }}"
+          chmod +x "src-tauri/desktop/src-tauri/binaries/opencode-studio-${{ matrix.target }}"
+
+      - name: Build + install backend sidecar (full only, Windows)
+        if: matrix.flavor == 'full' && matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          & cargo build --manifest-path src-main/server/Cargo.toml --release --target ${{ matrix.target }} --locked
+          $bin = "src-main/server/target/${{ matrix.target }}/release/opencode-studio.exe"
+          if (-not (Test-Path $bin)) { throw "Missing backend binary: $bin" }
+          New-Item -ItemType Directory -Force -Path 'src-tauri/desktop/src-tauri/binaries' | Out-Null
+          Copy-Item -Force $bin "src-tauri/desktop/src-tauri/binaries/opencode-studio-${{ matrix.target }}.exe"
+
+      - name: Tauri build
+        working-directory: src-tauri/desktop/src-tauri
+        shell: bash
+        run: |
+          if [ "${{ matrix.flavor }}" = "full" ]; then
+            cargo tauri build --config tauri.conf.full.json --target ${{ matrix.target }}
+          else
+            cargo tauri build --config tauri.conf.frontend.json --target ${{ matrix.target }}
+          fi
+
+      - name: Stage desktop installers (Unix)
+        if: matrix.os != 'windows-latest'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+
+          BUNDLE_DIR="src-tauri/desktop/src-tauri/target/${{ matrix.target }}/release/bundle"
+          if [ ! -d "$BUNDLE_DIR" ]; then
+            BUNDLE_DIR="src-tauri/desktop/src-tauri/target/release/bundle"
+          fi
+
+          FLAVOR="${{ matrix.flavor }}"
+          TARGET="${{ matrix.target }}"
+          SUFFIX="${{ matrix.suffix }}"
+          TAG="${{ env.RELEASE_TAG }}"
+
+          if [[ "${RUNNER_OS}" == "macOS" ]]; then
+            SRC="$(ls -1 "$BUNDLE_DIR"/dmg/*.dmg 2>/dev/null | head -n 1 || true)"
+            test -n "$SRC"
+            cp "$SRC" "release-assets/opencode-studio-desktop-${FLAVOR}-${TARGET}${SUFFIX}-${TAG}.dmg"
+          else
+            SRC_APPIMAGE="$(ls -1 "$BUNDLE_DIR"/appimage/*.AppImage 2>/dev/null | head -n 1 || true)"
+            test -n "$SRC_APPIMAGE"
+            cp "$SRC_APPIMAGE" "release-assets/opencode-studio-desktop-${FLAVOR}-${TARGET}${SUFFIX}-${TAG}.AppImage"
+
+            SRC_DEB="$(ls -1 "$BUNDLE_DIR"/deb/*.deb 2>/dev/null | head -n 1 || true)"
+            test -n "$SRC_DEB"
+            cp "$SRC_DEB" "release-assets/opencode-studio-desktop-${FLAVOR}-${TARGET}${SUFFIX}-${TAG}.deb"
+            SRC_RPM="$(ls -1 "$BUNDLE_DIR"/rpm/*.rpm 2>/dev/null | head -n 1 || true)"
+            test -n "$SRC_RPM"
+            cp "$SRC_RPM" "release-assets/opencode-studio-desktop-${FLAVOR}-${TARGET}${SUFFIX}-${TAG}.rpm"
+          fi
+
+      - name: Stage desktop installers (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release-assets | Out-Null
+          $bundleDir = "src-tauri/desktop/src-tauri/target/${{ matrix.target }}/release/bundle"
+          if (-not (Test-Path $bundleDir)) { $bundleDir = "src-tauri/desktop/src-tauri/target/release/bundle" }
+
+          $flavor = "${{ matrix.flavor }}"
+          $target = "${{ matrix.target }}"
+          $suffix = "${{ matrix.suffix }}"
+          $tag = "${{ env.RELEASE_TAG }}"
+
+          $msi = Get-ChildItem -Path (Join-Path $bundleDir 'msi') -Filter '*.msi' -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($msi) {
+            Copy-Item -Force $msi.FullName (Join-Path 'release-assets' ("opencode-studio-desktop-$flavor-$target$suffix-$tag.msi"))
+          }
+          $exe = Get-ChildItem -Path (Join-Path $bundleDir 'nsis') -Filter '*.exe' -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($exe) {
+            Copy-Item -Force $exe.FullName (Join-Path 'release-assets' ("opencode-studio-desktop-$flavor-$target$suffix-$tag.exe"))
+          }
+          if (-not $msi -and -not $exe) {
+            throw "No Windows installer found under $bundleDir (expected msi/*.msi or nsis/*.exe)"
+          }
+
+      - name: Upload desktop assets to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          files: |
+            release-assets/*

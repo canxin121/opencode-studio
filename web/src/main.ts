@@ -1,6 +1,5 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
-import { registerSW } from 'virtual:pwa-register'
 
 import '@fontsource/ibm-plex-sans/400.css'
 import '@fontsource/ibm-plex-sans/500.css'
@@ -104,21 +103,3 @@ if (stored && stored.at > 0 && Date.now() - stored.at < 30_000) {
 }
 
 app.mount('#app')
-
-// PWA: keep SW updated in the background.
-
-let updateToastShown = false
-const updateSW = registerSW({
-  immediate: true,
-  onNeedRefresh() {
-    if (updateToastShown) return
-    updateToastShown = true
-    toasts.push('info', 'Update available.', 0, {
-      label: 'Reload',
-      onClick: () => void updateSW(true),
-    })
-  },
-  onOfflineReady() {
-    toasts.push('success', 'App ready for offline use', 3500)
-  },
-})

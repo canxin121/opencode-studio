@@ -1,0 +1,264 @@
+use std::fs;
+use std::io::Write;
+use std::net::TcpListener;
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::time::Duration;
+
+use serde::{Deserialize, Serialize};
+use tauri::Manager;
+use tauri_plugin_shell::process::CommandEvent;
+use tauri_plugin_shell::ShellExt;
+use tokio::sync::Mutex;
+
+use crate::config::{self, DesktopConfig};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BackendStatus {
+  pub running: bool,
+  pub url: Option<String>,
+  pub last_error: Option<String>,
+}
+
+#[derive(Clone, Default)]
+pub struct BackendManager {
+  inner: Arc<Mutex<BackendInner>>,
+}
+
+#[derive(Default)]
+struct BackendInner {
+  child: Option<tauri_plugin_shell::process::CommandChild>,
+  url: Option<String>,
+  last_error: Option<String>,
+}
+
+impl BackendManager {
+  pub fn new() -> Self {
+    Self::default()
+  }
+
+  pub async fn status(&self) -> BackendStatus {
+    let guard = self.inner.lock().await;
+    BackendStatus {
+      running: guard.child.is_some(),
+      url: guard.url.clone(),
+      last_error: guard.last_error.clone(),
+    }
+  }
+
+  pub async fn ensure_started(&self, app: &tauri::AppHandle) -> Result<BackendStatus, String> {
+    {
+      let guard = self.inner.lock().await;
+      if guard.child.is_some() {
+        return Ok(BackendStatus {
+          running: true,
+          url: guard.url.clone(),
+          last_error: guard.last_error.clone(),
+        });
+      }
+    }
+
+    let cfg = config::load_or_create(app).unwrap_or_default();
+    let (child, url) = spawn_sidecar(app, &cfg).await?;
+
+    {
+      let mut guard = self.inner.lock().await;
+      guard.child = Some(child);
+      guard.url = Some(url.clone());
+      guard.last_error = None;
+    }
+
+    Ok(self.status().await)
+  }
+
+  pub async fn stop(&self, app: &tauri::AppHandle) -> Result<(), String> {
+    let mut child = {
+      let mut guard = self.inner.lock().await;
+      guard.url = None;
+      guard.child.take()
+    };
+
+    if let Some(mut c) = child.take() {
+      // Try to kill the backend.
+      let _ = c.kill();
+    }
+
+    let _ = app; // reserved for future graceful shutdown.
+    Ok(())
+  }
+
+  pub async fn restart(&self, app: &tauri::AppHandle) -> Result<BackendStatus, String> {
+    let _ = self.stop(app).await;
+    self.ensure_started(app).await
+  }
+}
+
+pub fn open_logs_dir(app: &tauri::AppHandle) -> Result<(), String> {
+  let dir = logs_dir(app).ok_or_else(|| "unable to resolve log dir".to_string())?;
+  fs::create_dir_all(&dir).map_err(|e| format!("mkdir {dir:?}: {e}"))?;
+  use tauri_plugin_opener::OpenerExt;
+  app.opener().reveal_item_in_dir(dir.to_string_lossy().as_ref());
+  Ok(())
+}
+
+fn logs_dir(app: &tauri::AppHandle) -> Option<PathBuf> {
+  app.path().app_log_dir().ok()
+}
+
+fn backend_log_path(app: &tauri::AppHandle) -> Option<PathBuf> {
+  let dir = logs_dir(app)?;
+  Some(dir.join("backend.log"))
+}
+
+async fn spawn_sidecar(
+  app: &tauri::AppHandle,
+  cfg: &DesktopConfig,
+) -> Result<(tauri_plugin_shell::process::CommandChild, String), String> {
+  // If the sidecar is not bundled, treat this as a frontend-only build.
+  let sidecar = match app.shell().sidecar("opencode-studio") {
+    Ok(cmd) => cmd,
+    Err(_) => {
+      return Err("backend sidecar not available in this build".to_string());
+    }
+  };
+
+  let ui_dir = resolve_ui_dir(app)?;
+  let port = pick_port(cfg.backend.port)?;
+  let url = format!("http://{}:{}", cfg.backend.host, port);
+
+  let data_dir = app
+    .path()
+    .app_config_dir()
+    .map_err(|e| format!("resolve app config dir: {e}"))?;
+
+  let mut cmd = sidecar
+    .args([
+      "--host",
+      cfg.backend.host.as_str(),
+      "--port",
+      &port.to_string(),
+      "--ui-dir",
+      ui_dir.to_string_lossy().as_ref(),
+    ])
+    .env("OPENCODE_STUDIO_DATA_DIR", data_dir.to_string_lossy().as_ref());
+
+  if let Some(pw) = cfg.backend.ui_password.as_deref() {
+    if !pw.trim().is_empty() {
+      cmd = cmd.args(["--ui-password", pw]);
+    }
+  }
+
+  if cfg.backend.skip_opencode_start {
+    cmd = cmd.args(["--skip-opencode-start"]);
+  }
+
+  if let Some(opencode_port) = cfg.backend.opencode_port {
+    cmd = cmd
+      .args(["--opencode-host", cfg.backend.opencode_host.as_str()])
+      .args(["--opencode-port", &opencode_port.to_string()]);
+  }
+
+  if let Some(level) = cfg.backend.opencode_log_level.as_deref() {
+    let v = level.trim();
+    if !v.is_empty() {
+      cmd = cmd.args(["--opencode-log-level", v]);
+    }
+  }
+
+  let (mut rx, child) = cmd.spawn().map_err(|e| format!("spawn backend: {e}"))?;
+
+  // Stream backend output to a log file (best-effort).
+  let log_path = backend_log_path(app);
+  let app_handle = app.clone();
+  tauri::async_runtime::spawn(async move {
+    let mut file = log_path
+      .and_then(|p| {
+        let _ = fs::create_dir_all(p.parent().unwrap_or_else(|| std::path::Path::new(".")));
+        fs::OpenOptions::new().create(true).append(true).open(p).ok()
+      });
+
+    while let Some(event) = rx.recv().await {
+      match event {
+        CommandEvent::Stdout(line) | CommandEvent::Stderr(line) => {
+          if let Some(f) = file.as_mut() {
+            let _ = f.write_all(&line);
+            let _ = f.write_all(b"\n");
+          }
+        }
+        CommandEvent::Error(err) => {
+          let _ = err;
+        }
+        CommandEvent::Terminated(payload) => {
+          // Persist crash info.
+          let _ = payload;
+          let _ = app_handle;
+          break;
+        }
+        _ => {}
+      }
+    }
+  });
+
+  // Healthcheck.
+  wait_for_health(&url).await?;
+
+  Ok((child, url))
+}
+
+fn resolve_ui_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+  // In packaged builds, resources are available.
+  if let Ok(resource_dir) = app.path().resource_dir() {
+    let candidate = resource_dir.join("dist");
+    if candidate.join("index.html").is_file() {
+      return Ok(candidate);
+    }
+  }
+
+  // Dev fallback: assume repo layout.
+  let cwd = std::env::current_dir().map_err(|e| format!("cwd: {e}"))?;
+  let candidate = cwd.join("web").join("dist");
+  if candidate.join("index.html").is_file() {
+    return Ok(candidate);
+  }
+
+  Err("unable to locate UI dist directory".to_string())
+}
+
+fn pick_port(preferred: u16) -> Result<u16, String> {
+  let port = if preferred == 0 { 3000 } else { preferred };
+
+  // In the full desktop build we default the webview URL to http://127.0.0.1:<port>,
+  // so we MUST keep the backend on the configured port. If it's already taken,
+  // tell the user to pick a new port.
+  if TcpListener::bind(("127.0.0.1", port)).is_ok() {
+    return Ok(port);
+  }
+
+  Err(format!(
+    "backend port {port} is not available. Edit desktop-config.json to change the port, or stop the other process using it."
+  ))
+}
+
+async fn wait_for_health(base_url: &str) -> Result<(), String> {
+  let client = reqwest::Client::builder()
+    .timeout(Duration::from_secs(2))
+    .build()
+    .map_err(|e| format!("reqwest client: {e}"))?;
+
+  let health_url = format!("{}/health", base_url.trim_end_matches('/'));
+  let started = std::time::Instant::now();
+  let deadline = Duration::from_secs(15);
+
+  loop {
+    if started.elapsed() > deadline {
+      return Err(format!("backend healthcheck timed out: {health_url}"));
+    }
+
+    match client.get(&health_url).send().await {
+      Ok(resp) if resp.status().is_success() => return Ok(()),
+      _ => {
+        tokio::time::sleep(Duration::from_millis(250)).await;
+      }
+    }
+  }
+}
