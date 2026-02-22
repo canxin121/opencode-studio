@@ -97,7 +97,7 @@ jobs:
             target: x86_64-unknown-linux-gnu
           - os: macos-14
             target: aarch64-apple-darwin
-          - os: macos-13
+          - os: macos-15-intel
             target: x86_64-apple-darwin
           - os: windows-latest
             target: x86_64-pc-windows-msvc
@@ -158,42 +158,42 @@ jobs:
           # Release ref (tag)
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            ref: ${{ env.RELEASE_REF }}
+            ref: release-tag
             suffix: ""
             flavor: frontend
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            ref: ${{ env.RELEASE_REF }}
+            ref: release-tag
             suffix: ""
             flavor: full
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            ref: ${{ env.RELEASE_REF }}
+            ref: release-tag
             suffix: ""
             flavor: frontend
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            ref: ${{ env.RELEASE_REF }}
+            ref: release-tag
             suffix: ""
             flavor: full
           - os: macos-14
             target: aarch64-apple-darwin
-            ref: ${{ env.RELEASE_REF }}
+            ref: release-tag
             suffix: ""
             flavor: frontend
           - os: macos-14
             target: aarch64-apple-darwin
-            ref: ${{ env.RELEASE_REF }}
+            ref: release-tag
             suffix: ""
             flavor: full
-          - os: macos-13
+          - os: macos-15-intel
             target: x86_64-apple-darwin
-            ref: ${{ env.RELEASE_REF }}
+            ref: release-tag
             suffix: ""
             flavor: frontend
-          - os: macos-13
+          - os: macos-15-intel
             target: x86_64-apple-darwin
-            ref: ${{ env.RELEASE_REF }}
+            ref: release-tag
             suffix: ""
             flavor: full
 
@@ -228,12 +228,12 @@ jobs:
             ref: feat/cef
             suffix: "-cef"
             flavor: full
-          - os: macos-13
+          - os: macos-15-intel
             target: x86_64-apple-darwin
             ref: feat/cef
             suffix: "-cef"
             flavor: frontend
-          - os: macos-13
+          - os: macos-15-intel
             target: x86_64-apple-darwin
             ref: feat/cef
             suffix: "-cef"
@@ -251,7 +251,7 @@ jobs:
       - name: Checkout desktop source (Tauri variant)
         uses: actions/checkout@v4
         with:
-          ref: ${{ matrix.ref }}
+          ref: ${{ matrix.ref == 'release-tag' && env.RELEASE_REF || matrix.ref }}
           path: src-tauri
 
       - name: Install Linux deps (Tauri)
