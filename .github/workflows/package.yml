@@ -15,6 +15,30 @@ env:
   TAURI_CLI_VERSION: 2.10.0
 
 jobs:
+  probe-cef:
+    name: Probe CEF ref
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      has_cef: ${{ steps.probe.outputs.has_cef }}
+    steps:
+      - id: probe
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CEF_BRANCH: feat/cef
+        shell: bash
+        run: |
+          set -euo pipefail
+          enc="${CEF_BRANCH//\//%2F}"
+          url="https://api.github.com/repos/${GITHUB_REPOSITORY}/branches/${enc}"
+          if curl -sfL -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" "$url" >/dev/null; then
+            echo "has_cef=true" >> "$GITHUB_OUTPUT"
+            echo "Found branch: ${CEF_BRANCH}"
+          else
+            echo "has_cef=false" >> "$GITHUB_OUTPUT"
+            echo "Branch missing; skipping CEF builds: ${CEF_BRANCH}"
+          fi
+
   service-scripts:
     name: Service scripts
     runs-on: ubuntu-latest
@@ -200,7 +224,169 @@ jobs:
             tauri: main
             suffix: ""
             flavor: full
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.ref }}
 
+      - name: Install Linux deps (Tauri)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf rpm fakeroot dpkg-dev
+
+      - name: Download web dist
+        uses: actions/download-artifact@v4
+        with:
+          name: opencode-studio-web-dist
+          path: release-assets
+
+      - name: Extract web dist (Unix)
+        if: matrix.os != 'windows-latest'
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf web/dist
+          mkdir -p web
+          tar -xzf release-assets/opencode-studio-web-dist.tar.gz -C web
+          test -f web/dist/index.html
+
+      - name: Extract web dist (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          if (Test-Path 'web/dist') { Remove-Item -Recurse -Force 'web/dist' }
+          New-Item -ItemType Directory -Force -Path web | Out-Null
+          Expand-Archive -Force -Path 'release-assets/opencode-studio-web-dist.zip' -DestinationPath 'web'
+          if (-not (Test-Path 'web/dist/index.html')) { throw 'web/dist/index.html missing after extract' }
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache Rust builds
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            desktop/src-tauri -> desktop/src-tauri/target
+          save-if: false
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --locked --version ${{ env.TAURI_CLI_VERSION }}
+
+      - name: Download backend artifact (full only)
+        if: matrix.flavor == 'full'
+        uses: actions/download-artifact@v4
+        with:
+          name: opencode-studio-backend-${{ matrix.target }}
+          path: release-assets/backend
+
+      - name: Install backend sidecar (full only, Unix)
+        if: matrix.flavor == 'full' && matrix.os != 'windows-latest'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p desktop/src-tauri/binaries
+          mkdir -p release-assets/backend-extract
+          tar -xzf "release-assets/backend/opencode-studio-${{ matrix.target }}.tar.gz" -C release-assets/backend-extract
+          test -f release-assets/backend-extract/opencode-studio
+          cp release-assets/backend-extract/opencode-studio "desktop/src-tauri/binaries/opencode-studio-${{ matrix.target }}"
+          chmod +x "desktop/src-tauri/binaries/opencode-studio-${{ matrix.target }}"
+
+      - name: Install backend sidecar (full only, Windows)
+        if: matrix.flavor == 'full' && matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path 'desktop/src-tauri/binaries' | Out-Null
+          New-Item -ItemType Directory -Force -Path 'release-assets/backend-extract' | Out-Null
+          Expand-Archive -Force -Path "release-assets/backend/opencode-studio-${{ matrix.target }}.zip" -DestinationPath 'release-assets/backend-extract'
+          if (-not (Test-Path 'release-assets/backend-extract/opencode-studio.exe')) { throw 'opencode-studio.exe missing after extract' }
+          Copy-Item -Force 'release-assets/backend-extract/opencode-studio.exe' "desktop/src-tauri/binaries/opencode-studio-${{ matrix.target }}.exe"
+
+      - name: Tauri build
+        working-directory: desktop/src-tauri
+        shell: bash
+        run: |
+          if [ "${{ matrix.flavor }}" = "full" ]; then
+            cargo tauri build --config tauri.conf.full.json --target ${{ matrix.target }}
+          else
+            cargo tauri build --config tauri.conf.frontend.json --target ${{ matrix.target }}
+          fi
+
+      - name: Pack desktop bundles (Unix)
+        if: matrix.os != 'windows-latest'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          BUNDLE_DIR="desktop/src-tauri/target/${{ matrix.target }}/release/bundle"
+          if [ ! -d "$BUNDLE_DIR" ]; then BUNDLE_DIR="desktop/src-tauri/target/release/bundle"; fi
+
+          FLAVOR="${{ matrix.flavor }}"
+          TARGET="${{ matrix.target }}"
+          SUFFIX="${{ matrix.suffix }}"
+
+          if [[ "${RUNNER_OS}" == "macOS" ]]; then
+            SRC="$(ls -1 "$BUNDLE_DIR"/dmg/*.dmg 2>/dev/null | head -n 1 || true)"
+            test -n "$SRC"
+            cp "$SRC" "release-assets/opencode-studio-desktop-${FLAVOR}-${TARGET}${SUFFIX}.dmg"
+          else
+            # linux
+            SRC_APPIMAGE="$(ls -1 "$BUNDLE_DIR"/appimage/*.AppImage 2>/dev/null | head -n 1 || true)"
+            test -n "$SRC_APPIMAGE"
+            cp "$SRC_APPIMAGE" "release-assets/opencode-studio-desktop-${FLAVOR}-${TARGET}${SUFFIX}.AppImage"
+
+            SRC_DEB="$(ls -1 "$BUNDLE_DIR"/deb/*.deb 2>/dev/null | head -n 1 || true)"
+            test -n "$SRC_DEB"
+            cp "$SRC_DEB" "release-assets/opencode-studio-desktop-${FLAVOR}-${TARGET}${SUFFIX}.deb"
+            SRC_RPM="$(ls -1 "$BUNDLE_DIR"/rpm/*.rpm 2>/dev/null | head -n 1 || true)"
+            test -n "$SRC_RPM"
+            cp "$SRC_RPM" "release-assets/opencode-studio-desktop-${FLAVOR}-${TARGET}${SUFFIX}.rpm"
+          fi
+
+      - name: Pack desktop bundles (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release-assets | Out-Null
+          $bundleDir = "desktop/src-tauri/target/${{ matrix.target }}/release/bundle"
+          if (-not (Test-Path $bundleDir)) { $bundleDir = "desktop/src-tauri/target/release/bundle" }
+          $flavor = "${{ matrix.flavor }}"
+          $target = "${{ matrix.target }}"
+          $suffix = "${{ matrix.suffix }}"
+
+          $msi = Get-ChildItem -Path (Join-Path $bundleDir 'msi') -Filter '*.msi' -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($msi) {
+            Copy-Item -Force $msi.FullName (Join-Path 'release-assets' ("opencode-studio-desktop-$flavor-$target$suffix.msi"))
+          }
+
+          $exe = Get-ChildItem -Path (Join-Path $bundleDir 'nsis') -Filter '*.exe' -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($exe) {
+            Copy-Item -Force $exe.FullName (Join-Path 'release-assets' ("opencode-studio-desktop-$flavor-$target$suffix.exe"))
+          }
+
+          if (-not $msi -and -not $exe) {
+            throw "No Windows installer found under $bundleDir (expected msi/*.msi or nsis/*.exe)"
+          }
+
+      - name: Upload desktop artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencode-studio-desktop-${{ matrix.flavor }}-${{ matrix.target }}${{ matrix.suffix }}
+          path: release-assets/opencode-studio-desktop-*
+          if-no-files-found: error
+
+  desktop-cef:
+    name: Desktop (cef, ${{ matrix.flavor }}, ${{ matrix.target }})
+    needs: [probe-cef, web, backend]
+    if: needs.probe-cef.outputs.has_cef == 'true'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             ref: feat/cef
@@ -357,7 +543,6 @@ jobs:
             test -n "$SRC"
             cp "$SRC" "release-assets/opencode-studio-desktop-${FLAVOR}-${TARGET}${SUFFIX}.dmg"
           else
-            # linux
             SRC_APPIMAGE="$(ls -1 "$BUNDLE_DIR"/appimage/*.AppImage 2>/dev/null | head -n 1 || true)"
             test -n "$SRC_APPIMAGE"
             cp "$SRC_APPIMAGE" "release-assets/opencode-studio-desktop-${FLAVOR}-${TARGET}${SUFFIX}.AppImage"
