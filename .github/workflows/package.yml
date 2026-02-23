@@ -280,22 +280,22 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p desktop/src-tauri/binaries
+          mkdir -p desktop/src-tauri-cef/binaries
           mkdir -p release-assets/backend-extract
           tar -xzf "release-assets/backend/opencode-studio-${{ matrix.target }}.tar.gz" -C release-assets/backend-extract
           test -f release-assets/backend-extract/opencode-studio
-          cp release-assets/backend-extract/opencode-studio "desktop/src-tauri/binaries/opencode-studio-${{ matrix.target }}"
-          chmod +x "desktop/src-tauri/binaries/opencode-studio-${{ matrix.target }}"
+          cp release-assets/backend-extract/opencode-studio "desktop/src-tauri-cef/binaries/opencode-studio-${{ matrix.target }}"
+          chmod +x "desktop/src-tauri-cef/binaries/opencode-studio-${{ matrix.target }}"
 
       - name: Install backend sidecar (full only, Windows)
         if: matrix.flavor == 'full' && matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path 'desktop/src-tauri/binaries' | Out-Null
+          New-Item -ItemType Directory -Force -Path 'desktop/src-tauri-cef/binaries' | Out-Null
           New-Item -ItemType Directory -Force -Path 'release-assets/backend-extract' | Out-Null
           Expand-Archive -Force -Path "release-assets/backend/opencode-studio-${{ matrix.target }}.zip" -DestinationPath 'release-assets/backend-extract'
           if (-not (Test-Path 'release-assets/backend-extract/opencode-studio.exe')) { throw 'opencode-studio.exe missing after extract' }
-          Copy-Item -Force 'release-assets/backend-extract/opencode-studio.exe' "desktop/src-tauri/binaries/opencode-studio-${{ matrix.target }}.exe"
+          Copy-Item -Force 'release-assets/backend-extract/opencode-studio.exe' "desktop/src-tauri-cef/binaries/opencode-studio-${{ matrix.target }}.exe"
 
       - name: Tauri build
         working-directory: desktop/src-tauri
@@ -508,9 +508,9 @@ jobs:
         shell: bash
         run: |
           if [ "${{ matrix.flavor }}" = "full" ]; then
-            cargo tauri build --config ../src-tauri/tauri.conf.full.json --target ${{ matrix.target }} --features cef
+            cargo tauri build --config tauri.conf.full.json --target ${{ matrix.target }} --features cef
           else
-            cargo tauri build --config ../src-tauri/tauri.conf.frontend.json --target ${{ matrix.target }} --features cef
+            cargo tauri build --config tauri.conf.frontend.json --target ${{ matrix.target }} --features cef
           fi
 
       - name: Pack desktop bundles (Unix)
