@@ -240,6 +240,10 @@ jobs:
             cef: true
 
     runs-on: ${{ matrix.os }}
+    env:
+      # Keep build output paths short (notably on Windows + CEF) and consistent
+      # across steps (staging expects installers under this target dir).
+      CARGO_TARGET_DIR: ${{ matrix.cef == true && format('{0}/t-cef', github.workspace) || format('{0}/t-main', github.workspace) }}
     timeout-minutes: 60
     steps:
       - name: Checkout release source (web/backend)
@@ -321,14 +325,52 @@ jobs:
         if: matrix.cef == true && matrix.target == 'x86_64-apple-darwin'
         run: rustup target add aarch64-apple-darwin
 
-      - name: Cache Rust builds
+      - name: Cache Rust builds (main)
+        if: matrix.cef != true
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
-            src-tauri/desktop/src-tauri -> src-tauri/desktop/src-tauri/target
-            src-tauri/desktop/src-tauri-cef -> src-tauri/desktop/src-tauri-cef/target
-            src-main/server -> src-main/server/target
-          save-if: false
+            src-tauri/desktop/src-tauri -> ${{ env.CARGO_TARGET_DIR }}
+            src-main/server -> target
+          save-if: true
+          add-job-id-key: false
+
+      - name: Cache Rust builds (cef)
+        if: matrix.cef == true
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            src-tauri/desktop/src-tauri-cef -> ${{ env.CARGO_TARGET_DIR }}
+            src-main/server -> target
+          save-if: true
+          add-job-id-key: false
+
+      - name: Cache CEF runtime (Linux)
+        if: matrix.cef == true && matrix.os == 'ubuntu-latest'
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/tauri-cef
+          key: ${{ runner.os }}-tauri-cef-${{ hashFiles('src-tauri/desktop/src-tauri-cef/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-tauri-cef-
+
+      - name: Cache CEF runtime (macOS)
+        if: matrix.cef == true && (matrix.os == 'macos-14' || matrix.os == 'macos-15-intel')
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/tauri-cef
+          key: ${{ runner.os }}-tauri-cef-${{ hashFiles('src-tauri/desktop/src-tauri-cef/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-tauri-cef-
+
+      - name: Cache CEF runtime (Windows)
+        if: matrix.cef == true && matrix.os == 'windows-latest'
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.LOCALAPPDATA }}\tauri-cef
+          key: ${{ runner.os }}-tauri-cef-${{ hashFiles('src-tauri/desktop/src-tauri-cef/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-tauri-cef-
 
       - name: Install Tauri CLI (main)
         if: matrix.cef != true
@@ -371,22 +413,66 @@ jobs:
         working-directory: src-tauri/desktop/src-tauri
         shell: bash
         run: |
+          set -euo pipefail
+          CONFIG="tauri.conf.frontend.json"
           if [ "${{ matrix.flavor }}" = "full" ]; then
-            cargo tauri build --config tauri.conf.full.json --target ${{ matrix.target }}
-          else
-            cargo tauri build --config tauri.conf.frontend.json --target ${{ matrix.target }}
+            CONFIG="tauri.conf.full.json"
           fi
+
+          rm -rf "${CARGO_TARGET_DIR}/${{ matrix.target }}/release/bundle" "${CARGO_TARGET_DIR}/release/bundle" || true
+
+          if cargo tauri build --config "$CONFIG" --target ${{ matrix.target }}; then
+            exit 0
+          fi
+
+          # Workaround: DMG bundling may fail to execute the generated script on macOS.
+          # If the `.app` exists, generate a basic DMG with `hdiutil` so releases continue.
+          if [[ "${RUNNER_OS}" != "macOS" ]]; then
+            exit 1
+          fi
+
+          BUNDLE_DIR="${CARGO_TARGET_DIR}/${{ matrix.target }}/release/bundle"
+          APP="$(ls -1 "$BUNDLE_DIR"/macos/*.app 2>/dev/null | head -n 1 || true)"
+          if [[ -z "$APP" ]]; then
+            exit 1
+          fi
+
+          mkdir -p "$BUNDLE_DIR/dmg"
+          STAGE_DIR="$(mktemp -d)"
+          cp -R "$APP" "$STAGE_DIR/"
+          hdiutil create -volname "OpenCode Studio" -srcfolder "$STAGE_DIR" -ov -format UDZO "$BUNDLE_DIR/dmg/opencode-studio-fallback.dmg"
 
       - name: Tauri build (cef)
         if: matrix.cef == true
         working-directory: src-tauri/desktop/src-tauri-cef
         shell: bash
         run: |
+          set -euo pipefail
+          CONFIG="tauri.conf.frontend.json"
           if [ "${{ matrix.flavor }}" = "full" ]; then
-            cargo tauri build --config tauri.conf.full.json --target ${{ matrix.target }} --features cef
-          else
-            cargo tauri build --config tauri.conf.frontend.json --target ${{ matrix.target }} --features cef
+            CONFIG="tauri.conf.full.json"
           fi
+
+          rm -rf "${CARGO_TARGET_DIR}/${{ matrix.target }}/release/bundle" "${CARGO_TARGET_DIR}/release/bundle" || true
+
+          if cargo tauri build --config "$CONFIG" --target ${{ matrix.target }} --features cef; then
+            exit 0
+          fi
+
+          if [[ "${RUNNER_OS}" != "macOS" ]]; then
+            exit 1
+          fi
+
+          BUNDLE_DIR="${CARGO_TARGET_DIR}/${{ matrix.target }}/release/bundle"
+          APP="$(ls -1 "$BUNDLE_DIR"/macos/*.app 2>/dev/null | head -n 1 || true)"
+          if [[ -z "$APP" ]]; then
+            exit 1
+          fi
+
+          mkdir -p "$BUNDLE_DIR/dmg"
+          STAGE_DIR="$(mktemp -d)"
+          cp -R "$APP" "$STAGE_DIR/"
+          hdiutil create -volname "OpenCode Studio" -srcfolder "$STAGE_DIR" -ov -format UDZO "$BUNDLE_DIR/dmg/opencode-studio-fallback.dmg"
 
       - name: Stage desktop installers (Unix)
         if: matrix.os != 'windows-latest'
@@ -400,9 +486,13 @@ jobs:
             TAURI_DIR="src-tauri/desktop/src-tauri-cef"
           fi
 
-          BUNDLE_DIR="$TAURI_DIR/target/${{ matrix.target }}/release/bundle"
+          TARGET_DIR="$TAURI_DIR/target"
+          if [[ -n "${CARGO_TARGET_DIR:-}" ]]; then
+            TARGET_DIR="${CARGO_TARGET_DIR}"
+          fi
+          BUNDLE_DIR="$TARGET_DIR/${{ matrix.target }}/release/bundle"
           if [ ! -d "$BUNDLE_DIR" ]; then
-            BUNDLE_DIR="$TAURI_DIR/target/release/bundle"
+            BUNDLE_DIR="$TARGET_DIR/release/bundle"
           fi
 
           FLAVOR="${{ matrix.flavor }}"
@@ -436,8 +526,10 @@ jobs:
           $tauriDir = "src-tauri/desktop/src-tauri"
           if ("${{ matrix.cef }}" -eq "true") { $tauriDir = "src-tauri/desktop/src-tauri-cef" }
 
-          $bundleDir = "$tauriDir/target/${{ matrix.target }}/release/bundle"
-          if (-not (Test-Path $bundleDir)) { $bundleDir = "$tauriDir/target/release/bundle" }
+          $targetDir = "$tauriDir/target"
+          if ($env:CARGO_TARGET_DIR) { $targetDir = $env:CARGO_TARGET_DIR }
+          $bundleDir = Join-Path $targetDir "${{ matrix.target }}/release/bundle"
+          if (-not (Test-Path $bundleDir)) { $bundleDir = Join-Path $targetDir "release/bundle" }
 
           $flavor = "${{ matrix.flavor }}"
           $target = "${{ matrix.target }}"
