@@ -88,12 +88,18 @@ jobs:
             ${{ runner.os }}-web-buildcache-${{ hashFiles('web/bun.lock', 'web/package.json', 'web/vite.config.*', 'web/tsconfig*.json') }}-
 
       - name: Web format check
+        if: github.event_name == 'pull_request'
         run: bun run --cwd web fmt:check -- --cache --cache-location .prettier-cache
 
+      - name: Web typecheck
+        if: github.event_name == 'pull_request'
+        run: bun run --cwd web vue-tsc -b
+
       - name: Web build
-        run: bun run --cwd web build
+        run: bun run --cwd web vite build
 
       - name: Web tests
+        if: github.event_name == 'pull_request'
         run: bun test --cwd web
 
   rust:
@@ -120,6 +126,7 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Rust clippy
+        if: github.event_name == 'pull_request'
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
       - name: Rust tests
