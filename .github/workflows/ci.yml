@@ -14,9 +14,13 @@ concurrency:
 
 jobs:
   web:
-    name: Web
+    name: Web (${{ matrix.task }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        task: [fmt, typecheck, build, test]
     steps:
       - uses: actions/checkout@v4
 
@@ -40,50 +44,30 @@ jobs:
       - name: Install web deps
         run: bun install --cwd web --frozen-lockfile
 
-      - name: Prepare web cache dirs
-        run: |
-          mkdir -p web/node_modules/.tmp
-          mkdir -p web/node_modules/.vite
-          mkdir -p ~/.cache/esbuild
-          mkdir -p ~/.cache/vite
-
-      - name: Cache web tool caches
-        uses: actions/cache@v4
-        continue-on-error: true
-        with:
-          path: |
-            ~/.cache/esbuild
-            ~/.cache/vite
-          key: ${{ runner.os }}-web-toolcache-${{ hashFiles('web/bun.lock', 'web/package.json', 'web/vite.config.*', 'web/tsconfig*.json') }}-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-web-toolcache-${{ hashFiles('web/bun.lock', 'web/package.json', 'web/vite.config.*', 'web/tsconfig*.json') }}-
-            ${{ runner.os }}-web-toolcache-
-
-      - name: Cache web build artifacts
-        uses: actions/cache@v4
-        continue-on-error: true
-        with:
-          path: |
-            web/node_modules/.tmp
-            web/node_modules/.vite
-            web/.prettier-cache
-          key: ${{ runner.os }}-web-buildcache-${{ hashFiles('web/bun.lock', 'web/package.json', 'web/vite.config.*', 'web/tsconfig*.json') }}-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-web-buildcache-${{ hashFiles('web/bun.lock', 'web/package.json', 'web/vite.config.*', 'web/tsconfig*.json') }}-
-
       - name: Web format check
+        if: matrix.task == 'fmt'
         run: bun run --cwd web fmt:check -- --cache --cache-location .prettier-cache
 
+      - name: Web typecheck
+        if: matrix.task == 'typecheck'
+        run: bun run --cwd web vue-tsc -b
+
       - name: Web build
-        run: bun run --cwd web build
+        if: matrix.task == 'build'
+        run: bun run --cwd web vite build
 
       - name: Web tests
+        if: matrix.task == 'test'
         run: bun test --cwd web
 
   rust:
-    name: Rust
+    name: Rust (${{ matrix.task }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        task: [fmt, clippy, test]
     steps:
       - uses: actions/checkout@v4
 
@@ -100,15 +84,19 @@ jobs:
           cache-workspace-crates: true
 
       - name: Rust format check
+        if: matrix.task == 'fmt'
         run: cargo fmt --all -- --check
 
       - name: Rust clippy
+        if: matrix.task == 'clippy'
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
       - name: Rust tests
+        if: matrix.task == 'test'
         run: cargo test -q --locked --manifest-path server/Cargo.toml
 
       - name: Validate desktop config JSON
+        if: matrix.task == 'test'
         run: |
           python3 -m json.tool desktop/src-tauri/tauri.conf.json >/dev/null
           python3 -m json.tool desktop/src-tauri/tauri.conf.frontend.json >/dev/null
