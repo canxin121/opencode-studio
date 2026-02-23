@@ -1,5 +1,14 @@
 # Tauri / Cargo
 src-tauri/target/
+src-tauri-cef/target/
+
+# Tauri generated files
+src-tauri/gen/
+src-tauri-cef/gen/
+
+# Sidecar binaries (generated locally)
+src-tauri/binaries/opencode-studio-*
+src-tauri-cef/binaries/opencode-studio-*
 
 # Local build artifacts
 release-assets/

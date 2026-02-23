@@ -7,6 +7,8 @@ type AppRuntime = tauri::Wry;
 #[cfg(feature = "cef")]
 type AppRuntime = tauri::Cef;
 
+type AppHandle = tauri::AppHandle<AppRuntime>;
+
 use tauri::{
   menu::{Menu, MenuItem},
   tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -14,8 +16,6 @@ use tauri::{
 };
 
 use backend::BackendManager;
-
-struct TrayState(tauri::tray::TrayIcon);
 
 pub fn run() {
   tauri::Builder::<AppRuntime>::new()
@@ -49,10 +49,10 @@ pub fn run() {
       let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
       let menu = Menu::with_items(app, &[&open_i, &start_i, &stop_i, &restart_i, &logs_i, &cfg_i, &quit_i])?;
 
-      let tray = TrayIconBuilder::new()
+      let tray = TrayIconBuilder::<AppRuntime>::new()
         .icon(app.default_window_icon().unwrap().clone())
         .menu(&menu)
-        .menu_on_left_click(false)
+        .show_menu_on_left_click(false)
         .on_menu_event(|app, event| {
           let app = app.clone();
           let id = event.id.as_ref().to_string();
@@ -77,7 +77,7 @@ pub fn run() {
         .build(app)?;
 
       // Keep tray handle alive.
-      app.manage(TrayState(tray));
+      app.manage(tray);
 
       // Close-to-tray behavior.
       if let Some(win) = app.get_webview_window("main") {
@@ -107,36 +107,36 @@ pub fn run() {
 }
 
 #[tauri::command]
-async fn desktop_backend_status(app: tauri::AppHandle) -> backend::BackendStatus {
+async fn desktop_backend_status(app: AppHandle) -> backend::BackendStatus {
   app.state::<BackendManager>().inner().status().await
 }
 
 #[tauri::command]
-async fn desktop_backend_start(app: tauri::AppHandle) -> Result<backend::BackendStatus, String> {
+async fn desktop_backend_start(app: AppHandle) -> Result<backend::BackendStatus, String> {
   app.state::<BackendManager>().inner().ensure_started(&app).await
 }
 
 #[tauri::command]
-async fn desktop_backend_stop(app: tauri::AppHandle) -> Result<(), String> {
+async fn desktop_backend_stop(app: AppHandle) -> Result<(), String> {
   app.state::<BackendManager>().inner().stop(&app).await
 }
 
 #[tauri::command]
-async fn desktop_backend_restart(app: tauri::AppHandle) -> Result<backend::BackendStatus, String> {
+async fn desktop_backend_restart(app: AppHandle) -> Result<backend::BackendStatus, String> {
   app.state::<BackendManager>().inner().restart(&app).await
 }
 
 #[tauri::command]
-fn desktop_open_logs_dir(app: tauri::AppHandle) -> Result<(), String> {
+fn desktop_open_logs_dir(app: AppHandle) -> Result<(), String> {
   backend::open_logs_dir(&app)
 }
 
 #[tauri::command]
-fn desktop_open_config(app: tauri::AppHandle) -> Result<(), String> {
+fn desktop_open_config(app: AppHandle) -> Result<(), String> {
   config::open_config_file(&app)
 }
 
-async fn handle_tray_menu(app: &tauri::AppHandle, id: &str) {
+async fn handle_tray_menu(app: &AppHandle, id: &str) {
   match id {
     "open" => {
       if let Some(win) = app.get_webview_window("main") {

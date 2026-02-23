@@ -3,12 +3,52 @@ set -euo pipefail
 
 # Build the Rust backend and place it where Tauri expects sidecars:
 #   desktop/src-tauri/binaries/opencode-studio-$TARGET_TRIPLE[.exe]
+#   desktop/src-tauri-cef/binaries/opencode-studio-$TARGET_TRIPLE[.exe]
+
+usage() {
+  cat <<'EOF'
+Usage: prepare-sidecar.sh [--cef] [TARGET_TRIPLE]
+
+Options:
+  --cef            Install sidecar into desktop/src-tauri-cef/binaries
+
+Arguments:
+  TARGET_TRIPLE    Rust target triple (defaults to host)
+EOF
+}
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SERVER_MANIFEST="$ROOT_DIR/server/Cargo.toml"
-TAURI_BIN_DIR="$ROOT_DIR/desktop/src-tauri/binaries"
+SERVER_TARGET_DIR="$ROOT_DIR/server/target"
 
-TARGET_TRIPLE="${1:-}"
+TAURI_VARIANT="src-tauri"
+TARGET_TRIPLE=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --cef)
+      TAURI_VARIANT="src-tauri-cef"
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      if [[ -z "$TARGET_TRIPLE" ]]; then
+        TARGET_TRIPLE="$1"
+        shift
+      else
+        echo "ERROR: unexpected argument: $1" >&2
+        usage >&2
+        exit 2
+      fi
+      ;;
+  esac
+done
+
+TAURI_BIN_DIR="$ROOT_DIR/desktop/$TAURI_VARIANT/binaries"
+
 if [[ -z "$TARGET_TRIPLE" ]]; then
   if rustc --print host-tuple >/dev/null 2>&1; then
     TARGET_TRIPLE="$(rustc --print host-tuple)"
@@ -23,7 +63,7 @@ case "${TARGET_TRIPLE}" in
 esac
 
 echo "Building server sidecar for ${TARGET_TRIPLE}..."
-cargo build --manifest-path "$SERVER_MANIFEST" --release --target "$TARGET_TRIPLE" --locked
+cargo build --manifest-path "$SERVER_MANIFEST" --release --target "$TARGET_TRIPLE" --locked --target-dir "$SERVER_TARGET_DIR"
 
 SRC_BIN="$ROOT_DIR/server/target/$TARGET_TRIPLE/release/opencode-studio$EXT"
 if [[ ! -f "$SRC_BIN" ]]; then
