@@ -78,49 +78,21 @@ jobs:
         with:
           components: rustfmt, clippy
 
-      - name: Setup sccache
-        uses: mozilla-actions/sccache-action@v0.0.8
-        continue-on-error: true
-
-      - name: Cache sccache
-        uses: actions/cache@v4
-        continue-on-error: true
-        with:
-          path: ~/.cache/sccache
-          # Include the commit SHA so the cache can be refreshed
-          # as compiler outputs change over time.
-          key: ${{ runner.os }}-sccache-${{ hashFiles('Cargo.lock', '**/Cargo.toml', '.github/workflows/ci.yml') }}-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-sccache-
-
       - name: Cache Rust builds
         uses: Swatinem/rust-cache@v2
         with:
           add-job-id-key: false
           cache-on-failure: true
+          cache-workspace-crates: true
 
       - name: Rust format check
         run: cargo fmt --all -- --check
 
       - name: Rust clippy
-        env:
-          RUSTC_WRAPPER: sccache
-          SCCACHE_DIR: ~/.cache/sccache
-          SCCACHE_GHA_ENABLED: "false"
-          SCCACHE_CACHE_SIZE: 2G
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
       - name: Rust tests
-        env:
-          RUSTC_WRAPPER: sccache
-          SCCACHE_DIR: ~/.cache/sccache
-          SCCACHE_GHA_ENABLED: "false"
-          SCCACHE_CACHE_SIZE: 2G
         run: cargo test -q --locked --manifest-path server/Cargo.toml
-
-      - name: sccache stats
-        if: always()
-        run: sccache --show-stats || true
 
       - name: Validate desktop config JSON
         run: |

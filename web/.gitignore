@@ -19,3 +19,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Tooling caches
+.prettier-cache
