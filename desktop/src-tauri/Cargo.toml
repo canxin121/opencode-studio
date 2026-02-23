@@ -22,23 +22,16 @@ serde_json = "1"
 thiserror = "2"
 
 tokio = { version = "1", features = ["sync", "time"] }
-reqwest = { version = "0.12", default-features = true, features = ["json"] }
+reqwest = { version = "0.13", default-features = true, features = ["json"] }
 
 tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-shell = "2"
 tauri-plugin-opener = "2"
 
 [features]
-cef = ["tauri/cef"]
-
-[patch.crates-io]
-tauri = { git = "https://github.com/tauri-apps/tauri", branch = "feat/cef" }
-tauri-build = { git = "https://github.com/tauri-apps/tauri", branch = "feat/cef" }
-tauri-plugin = { git = "https://github.com/tauri-apps/tauri", branch = "feat/cef" }
-tauri-utils = { git = "https://github.com/tauri-apps/tauri", branch = "feat/cef" }
-tauri-macros = { git = "https://github.com/tauri-apps/tauri", branch = "feat/cef" }
-tauri-runtime = { git = "https://github.com/tauri-apps/tauri", branch = "feat/cef" }
-tauri-runtime-wry = { git = "https://github.com/tauri-apps/tauri", branch = "feat/cef" }
+# Reserved for the experimental CEF variant (built from `desktop/src-tauri-cef/`).
+# Declared here to avoid `unexpected cfg` warnings from `#[cfg(feature = "cef")]`.
+cef = []
 
 [profile.release]
 panic = "abort"

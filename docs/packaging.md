@@ -55,7 +55,7 @@ Output: `web/dist`
 ### Build `backend-bin`
 
 ```bash
-cargo build --manifest-path server/Cargo.toml --release --locked
+cargo build --manifest-path server/Cargo.toml --release --locked --target-dir server/target
 ```
 
 Output:
@@ -69,7 +69,25 @@ Prereqs:
 
 - Rust toolchain
 - Bun
-- Linux: install Tauri deps (WebKitGTK etc)
+- Linux: install Tauri deps (GTK/WebKitGTK, tray icon, etc)
+
+Example (Debian/Ubuntu):
+
+```bash
+sudo apt update
+sudo apt install -y \
+  pkg-config \
+  libgtk-3-dev \
+  libwebkit2gtk-4.1-dev \
+  libayatana-appindicator3-dev \
+  librsvg2-dev \
+  patchelf \
+  zsync
+```
+
+If `libwebkit2gtk-4.1-dev` is not available on your distro version, try `libwebkit2gtk-4.0-dev` instead.
+
+AppImage bundling also needs `zsyncmake` (provided by the `zsync` package).
 
 Build:
 
@@ -98,6 +116,33 @@ Notes:
 - The sidecar must be named with a `-$TARGET_TRIPLE` suffix (Tauri requirement).
 - The desktop app uses a fixed backend port by default (`3000`). If it is already
   in use, edit the generated config file (see below).
+
+### Build desktop with CEF runtime (`-cef`)
+
+This repo includes an experimental desktop variant that uses Tauri's CEF runtime.
+It lives under `desktop/src-tauri-cef/` and must be built with the `cef` cargo feature.
+
+Prereqs:
+
+- Install the CEF-enabled Tauri CLI:
+
+```bash
+cargo install tauri-cli --locked --git https://github.com/tauri-apps/tauri --branch feat/cef
+```
+
+Build (frontend-only):
+
+```bash
+./desktop/scripts/build-frontend-only-cef.sh
+```
+
+On Linux, if `zsyncmake` is missing, the script will automatically skip the AppImage bundle and build only `deb` + `rpm`. You can override with `TAURI_BUNDLES=...`.
+
+Build (full / bundled backend):
+
+```bash
+./desktop/scripts/build-full-cef.sh
+```
 
 ## Runtime config (desktop)
 

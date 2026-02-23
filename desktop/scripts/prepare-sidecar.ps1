@@ -1,5 +1,6 @@
 Param(
-  [string]$TargetTriple = ""
+  [string]$TargetTriple = "",
+  [switch]$Cef
 )
 
 $ErrorActionPreference = "Stop"
@@ -23,13 +24,18 @@ if (-not $TargetTriple) {
 
 $RootDir = Resolve-Path (Join-Path $PSScriptRoot "../..")
 $ServerManifest = Join-Path $RootDir "server/Cargo.toml"
-$TauriBinDir = Join-Path $RootDir "desktop/src-tauri/binaries"
+$ServerTargetDir = Join-Path $RootDir "server/target"
+
+$tauriVariant = "src-tauri"
+if ($Cef) { $tauriVariant = "src-tauri-cef" }
+
+$TauriBinDir = Join-Path $RootDir "desktop/$tauriVariant/binaries"
 
 $Ext = ""
 if ($TargetTriple -match 'windows') { $Ext = ".exe" }
 
 Write-Host "Building server sidecar for $TargetTriple..."
-& cargo build --manifest-path "$ServerManifest" --release --target "$TargetTriple" --locked
+& cargo build --manifest-path "$ServerManifest" --release --target "$TargetTriple" --locked --target-dir "$ServerTargetDir"
 
 $SrcBin = Join-Path $RootDir "server/target/$TargetTriple/release/opencode-studio$Ext"
 if (-not (Test-Path $SrcBin)) {

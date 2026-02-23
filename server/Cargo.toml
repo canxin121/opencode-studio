@@ -9,7 +9,7 @@ axum = { version = "0.8.8", features = ["macros"] }
 axum-extra = { version = "0.12.5", features = ["cookie"] }
 clap = { version = "4.5.54", features = ["derive", "env"] }
 dashmap = "6.1.0"
-getrandom = "0.3.4"
+getrandom = "0.4.0"
 regex = "1.12.2"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
@@ -39,6 +39,6 @@ tempfile = "3.24.0"
 uuid = { version = "1.20.0", features = ["v4"] }
 url = "2.5.8"
 walkdir = "2.5.0"
-zip = { version = "7.2.0", default-features = false, features = ["deflate"] }
+zip = { version = "8.0.0", default-features = false, features = ["deflate"] }
 fs2 = "0.4.3"
 rusqlite = { version = "0.38.0", features = ["bundled"] }
