@@ -39,6 +39,6 @@ tempfile = "3.24.0"
 uuid = { version = "1.20.0", features = ["v4"] }
 url = "2.5.8"
 walkdir = "2.5.0"
-zip = { version = "7.2.0", default-features = false, features = ["deflate"] }
+zip = { version = "8.0.0", default-features = false, features = ["deflate"] }
 fs2 = "0.4.3"
 rusqlite = { version = "0.38.0", features = ["bundled"] }
