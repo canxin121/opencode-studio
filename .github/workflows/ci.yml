@@ -13,40 +13,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  changes:
-    name: Changes
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      web: ${{ steps.filter.outputs.web }}
-      rust: ${{ steps.filter.outputs.rust }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Detect changed paths
-        id: filter
-        uses: dorny/paths-filter@v3
-        with:
-          filters: |
-            web:
-              - 'web/**'
-              - '.github/workflows/**'
-            rust:
-              - 'server/**'
-              - 'Cargo.toml'
-              - 'Cargo.lock'
-              - 'desktop/src-tauri/**'
-              - 'desktop/src-tauri-cef/**'
-              - '.github/workflows/**'
-
   web:
     name: Web
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: changes
-    if: needs.changes.outputs.web == 'true'
     steps:
       - uses: actions/checkout@v4
 
@@ -88,26 +58,18 @@ jobs:
             ${{ runner.os }}-web-buildcache-${{ hashFiles('web/bun.lock', 'web/package.json', 'web/vite.config.*', 'web/tsconfig*.json') }}-
 
       - name: Web format check
-        if: github.event_name == 'pull_request'
         run: bun run --cwd web fmt:check -- --cache --cache-location .prettier-cache
 
-      - name: Web typecheck
-        if: github.event_name == 'pull_request'
-        run: bun run --cwd web vue-tsc -b
-
       - name: Web build
-        run: bun run --cwd web vite build
+        run: bun run --cwd web build
 
       - name: Web tests
-        if: github.event_name == 'pull_request'
         run: bun test --cwd web
 
   rust:
     name: Rust
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: changes
-    if: needs.changes.outputs.rust == 'true'
     steps:
       - uses: actions/checkout@v4
 
@@ -119,10 +81,8 @@ jobs:
       - name: Setup sccache
         uses: mozilla-actions/sccache-action@v0.0.8
         continue-on-error: true
-        if: github.event_name == 'pull_request'
 
       - name: Cache sccache
-        if: github.event_name == 'pull_request'
         uses: actions/cache@v4
         continue-on-error: true
         with:
@@ -143,7 +103,6 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Rust clippy
-        if: github.event_name == 'pull_request'
         env:
           RUSTC_WRAPPER: sccache
           SCCACHE_DIR: ~/.cache/sccache
@@ -151,8 +110,7 @@ jobs:
           SCCACHE_CACHE_SIZE: 2G
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
-      - name: Rust tests (PR)
-        if: github.event_name == 'pull_request'
+      - name: Rust tests
         env:
           RUSTC_WRAPPER: sccache
           SCCACHE_DIR: ~/.cache/sccache
@@ -160,12 +118,8 @@ jobs:
           SCCACHE_CACHE_SIZE: 2G
         run: cargo test -q --locked --manifest-path server/Cargo.toml
 
-      - name: Rust tests (push)
-        if: github.event_name != 'pull_request'
-        run: cargo test -q --locked --manifest-path server/Cargo.toml
-
       - name: sccache stats
-        if: github.event_name == 'pull_request'
+        if: always()
         run: sccache --show-stats || true
 
       - name: Validate desktop config JSON
