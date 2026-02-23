@@ -24,6 +24,9 @@ jobs:
         uses: oven-sh/setup-bun@v1
         with:
           bun-version: 1.3.9
+          # Disable setup-bun's internal cache to avoid failures
+          # when GitHub's cache service is degraded.
+          no-cache: true
 
       - name: Cache Bun downloads
         uses: actions/cache@v4
