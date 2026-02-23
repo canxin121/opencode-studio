@@ -127,7 +127,9 @@ jobs:
         continue-on-error: true
         with:
           path: ~/.cache/sccache
-          key: ${{ runner.os }}-sccache-${{ hashFiles('Cargo.lock', '**/Cargo.toml', '.github/workflows/ci.yml') }}
+          # Include the commit SHA so the cache can be refreshed
+          # as compiler outputs change over time.
+          key: ${{ runner.os }}-sccache-${{ hashFiles('Cargo.lock', '**/Cargo.toml', '.github/workflows/ci.yml') }}-${{ github.sha }}
           restore-keys: |
             ${{ runner.os }}-sccache-
 
