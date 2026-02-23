@@ -108,6 +108,10 @@ jobs:
     timeout-minutes: 30
     needs: changes
     if: needs.changes.outputs.rust == 'true'
+    env:
+      # Enable compiler artifact caching for Rust builds.
+      RUSTC_WRAPPER: sccache
+      SCCACHE_GHA_ENABLED: "true"
     steps:
       - uses: actions/checkout@v4
 
@@ -115,6 +119,10 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.8
+        continue-on-error: true
 
       - name: Cache Rust builds
         uses: Swatinem/rust-cache@v2
@@ -131,6 +139,10 @@ jobs:
 
       - name: Rust tests
         run: cargo test -q --locked --manifest-path server/Cargo.toml
+
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true
 
       - name: Validate desktop config JSON
         run: |
