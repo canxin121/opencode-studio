@@ -460,11 +460,15 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      - name: Add x86_64 macOS target (cef arm64)
+        if: matrix.os == 'macos-14'
+        run: rustup target add x86_64-apple-darwin
+
       - name: Cache Rust builds
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
-            desktop/src-tauri -> desktop/src-tauri/target
+            desktop/src-tauri-cef -> desktop/src-tauri-cef/target
           save-if: false
 
       - name: Install Tauri CLI
@@ -500,13 +504,13 @@ jobs:
           Copy-Item -Force 'release-assets/backend-extract/opencode-studio.exe' "desktop/src-tauri/binaries/opencode-studio-${{ matrix.target }}.exe"
 
       - name: Tauri build
-        working-directory: desktop/src-tauri
+        working-directory: desktop/src-tauri-cef
         shell: bash
         run: |
           if [ "${{ matrix.flavor }}" = "full" ]; then
-            cargo tauri build --config tauri.conf.full.json --target ${{ matrix.target }} --features cef
+            cargo tauri build --config ../src-tauri/tauri.conf.full.json --target ${{ matrix.target }} --features cef
           else
-            cargo tauri build --config tauri.conf.frontend.json --target ${{ matrix.target }} --features cef
+            cargo tauri build --config ../src-tauri/tauri.conf.frontend.json --target ${{ matrix.target }} --features cef
           fi
 
       - name: Pack desktop bundles (Unix)
@@ -515,8 +519,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p release-assets
-          BUNDLE_DIR="desktop/src-tauri/target/${{ matrix.target }}/release/bundle"
-          if [ ! -d "$BUNDLE_DIR" ]; then BUNDLE_DIR="desktop/src-tauri/target/release/bundle"; fi
+          BUNDLE_DIR="desktop/src-tauri-cef/target/${{ matrix.target }}/release/bundle"
+          if [ ! -d "$BUNDLE_DIR" ]; then BUNDLE_DIR="desktop/src-tauri-cef/target/release/bundle"; fi
 
           FLAVOR="${{ matrix.flavor }}"
           TARGET="${{ matrix.target }}"
@@ -544,8 +548,8 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path release-assets | Out-Null
-          $bundleDir = "desktop/src-tauri/target/${{ matrix.target }}/release/bundle"
-          if (-not (Test-Path $bundleDir)) { $bundleDir = "desktop/src-tauri/target/release/bundle" }
+          $bundleDir = "desktop/src-tauri-cef/target/${{ matrix.target }}/release/bundle"
+          if (-not (Test-Path $bundleDir)) { $bundleDir = "desktop/src-tauri-cef/target/release/bundle" }
           $flavor = "${{ matrix.flavor }}"
           $target = "${{ matrix.target }}"
           $suffix = "${{ matrix.suffix }}"

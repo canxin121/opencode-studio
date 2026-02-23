@@ -303,11 +303,16 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      - name: Add x86_64 macOS target (cef arm64)
+        if: matrix.cef == true && matrix.target == 'aarch64-apple-darwin'
+        run: rustup target add x86_64-apple-darwin
+
       - name: Cache Rust builds
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
             src-tauri/desktop/src-tauri -> src-tauri/desktop/src-tauri/target
+            src-tauri/desktop/src-tauri-cef -> src-tauri/desktop/src-tauri-cef/target
             src-main/server -> src-main/server/target
           save-if: false
 
@@ -341,19 +346,26 @@ jobs:
           New-Item -ItemType Directory -Force -Path 'src-tauri/desktop/src-tauri/binaries' | Out-Null
           Copy-Item -Force $bin "src-tauri/desktop/src-tauri/binaries/opencode-studio-${{ matrix.target }}.exe"
 
-      - name: Tauri build
+      - name: Tauri build (main)
+        if: matrix.cef != true
         working-directory: src-tauri/desktop/src-tauri
         shell: bash
         run: |
-          EXTRA=""
-          if [ "${{ matrix.cef }}" = "true" ]; then
-            EXTRA="--features cef"
+          if [ "${{ matrix.flavor }}" = "full" ]; then
+            cargo tauri build --config tauri.conf.full.json --target ${{ matrix.target }}
+          else
+            cargo tauri build --config tauri.conf.frontend.json --target ${{ matrix.target }}
           fi
 
+      - name: Tauri build (cef)
+        if: matrix.cef == true
+        working-directory: src-tauri/desktop/src-tauri-cef
+        shell: bash
+        run: |
           if [ "${{ matrix.flavor }}" = "full" ]; then
-            cargo tauri build --config tauri.conf.full.json --target ${{ matrix.target }} $EXTRA
+            cargo tauri build --config ../src-tauri/tauri.conf.full.json --target ${{ matrix.target }} --features cef
           else
-            cargo tauri build --config tauri.conf.frontend.json --target ${{ matrix.target }} $EXTRA
+            cargo tauri build --config ../src-tauri/tauri.conf.frontend.json --target ${{ matrix.target }} --features cef
           fi
 
       - name: Stage desktop installers (Unix)
@@ -363,9 +375,14 @@ jobs:
           set -euo pipefail
           mkdir -p release-assets
 
-          BUNDLE_DIR="src-tauri/desktop/src-tauri/target/${{ matrix.target }}/release/bundle"
+          TAURI_DIR="src-tauri/desktop/src-tauri"
+          if [ "${{ matrix.cef }}" = "true" ]; then
+            TAURI_DIR="src-tauri/desktop/src-tauri-cef"
+          fi
+
+          BUNDLE_DIR="$TAURI_DIR/target/${{ matrix.target }}/release/bundle"
           if [ ! -d "$BUNDLE_DIR" ]; then
-            BUNDLE_DIR="src-tauri/desktop/src-tauri/target/release/bundle"
+            BUNDLE_DIR="$TAURI_DIR/target/release/bundle"
           fi
 
           FLAVOR="${{ matrix.flavor }}"
@@ -395,8 +412,12 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path release-assets | Out-Null
-          $bundleDir = "src-tauri/desktop/src-tauri/target/${{ matrix.target }}/release/bundle"
-          if (-not (Test-Path $bundleDir)) { $bundleDir = "src-tauri/desktop/src-tauri/target/release/bundle" }
+
+          $tauriDir = "src-tauri/desktop/src-tauri"
+          if ("${{ matrix.cef }}" -eq "true") { $tauriDir = "src-tauri/desktop/src-tauri-cef" }
+
+          $bundleDir = "$tauriDir/target/${{ matrix.target }}/release/bundle"
+          if (-not (Test-Path $bundleDir)) { $bundleDir = "$tauriDir/target/release/bundle" }
 
           $flavor = "${{ matrix.flavor }}"
           $target = "${{ matrix.target }}"

@@ -1,0 +1,51 @@
+[package]
+name = "opencode-studio-desktop"
+version = "0.1.0"
+description = "OpenCode Studio Desktop (Tauri wrapper, CEF)"
+authors = ["OpenCode Studio Contributors"]
+edition = "2024"
+license = "MIT"
+
+[lib]
+path = "../src-tauri/src/lib.rs"
+
+[[bin]]
+name = "opencode-studio-desktop"
+path = "../src-tauri/src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+tokio = { version = "1", features = ["sync", "time"] }
+reqwest = { version = "0.12", default-features = true, features = ["json"] }
+
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-shell = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
+tauri-plugin-opener = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
+
+[features]
+cef = ["tauri/cef"]
+
+# This manifest is for building the experimental CEF variant.
+# It uses Tauri upstream `feat/cef` plus matching plugin sources.
+[patch.crates-io]
+tauri = { git = "https://github.com/tauri-apps/tauri", branch = "feat/cef" }
+tauri-build = { git = "https://github.com/tauri-apps/tauri", branch = "feat/cef" }
+tauri-plugin = { git = "https://github.com/tauri-apps/tauri", branch = "feat/cef" }
+tauri-utils = { git = "https://github.com/tauri-apps/tauri", branch = "feat/cef" }
+tauri-macros = { git = "https://github.com/tauri-apps/tauri", branch = "feat/cef" }
+tauri-runtime = { git = "https://github.com/tauri-apps/tauri", branch = "feat/cef" }
+tauri-runtime-wry = { git = "https://github.com/tauri-apps/tauri", branch = "feat/cef" }
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+strip = true
+
+[workspace]
