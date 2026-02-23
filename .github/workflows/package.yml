@@ -280,22 +280,22 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p desktop/src-tauri-cef/binaries
+          mkdir -p desktop/src-tauri/binaries
           mkdir -p release-assets/backend-extract
           tar -xzf "release-assets/backend/opencode-studio-${{ matrix.target }}.tar.gz" -C release-assets/backend-extract
           test -f release-assets/backend-extract/opencode-studio
-          cp release-assets/backend-extract/opencode-studio "desktop/src-tauri-cef/binaries/opencode-studio-${{ matrix.target }}"
-          chmod +x "desktop/src-tauri-cef/binaries/opencode-studio-${{ matrix.target }}"
+          cp release-assets/backend-extract/opencode-studio "desktop/src-tauri/binaries/opencode-studio-${{ matrix.target }}"
+          chmod +x "desktop/src-tauri/binaries/opencode-studio-${{ matrix.target }}"
 
       - name: Install backend sidecar (full only, Windows)
         if: matrix.flavor == 'full' && matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path 'desktop/src-tauri-cef/binaries' | Out-Null
+          New-Item -ItemType Directory -Force -Path 'desktop/src-tauri/binaries' | Out-Null
           New-Item -ItemType Directory -Force -Path 'release-assets/backend-extract' | Out-Null
           Expand-Archive -Force -Path "release-assets/backend/opencode-studio-${{ matrix.target }}.zip" -DestinationPath 'release-assets/backend-extract'
           if (-not (Test-Path 'release-assets/backend-extract/opencode-studio.exe')) { throw 'opencode-studio.exe missing after extract' }
-          Copy-Item -Force 'release-assets/backend-extract/opencode-studio.exe' "desktop/src-tauri-cef/binaries/opencode-studio-${{ matrix.target }}.exe"
+          Copy-Item -Force 'release-assets/backend-extract/opencode-studio.exe' "desktop/src-tauri/binaries/opencode-studio-${{ matrix.target }}.exe"
 
       - name: Tauri build
         working-directory: desktop/src-tauri
@@ -464,6 +464,10 @@ jobs:
         if: matrix.os == 'macos-14'
         run: rustup target add x86_64-apple-darwin
 
+      - name: Add aarch64 macOS target (cef intel)
+        if: matrix.os == 'macos-15-intel'
+        run: rustup target add aarch64-apple-darwin
+
       - name: Cache Rust builds
         uses: Swatinem/rust-cache@v2
         with:
@@ -486,22 +490,22 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p desktop/src-tauri/binaries
+          mkdir -p desktop/src-tauri-cef/binaries
           mkdir -p release-assets/backend-extract
           tar -xzf "release-assets/backend/opencode-studio-${{ matrix.target }}.tar.gz" -C release-assets/backend-extract
           test -f release-assets/backend-extract/opencode-studio
-          cp release-assets/backend-extract/opencode-studio "desktop/src-tauri/binaries/opencode-studio-${{ matrix.target }}"
-          chmod +x "desktop/src-tauri/binaries/opencode-studio-${{ matrix.target }}"
+          cp release-assets/backend-extract/opencode-studio "desktop/src-tauri-cef/binaries/opencode-studio-${{ matrix.target }}"
+          chmod +x "desktop/src-tauri-cef/binaries/opencode-studio-${{ matrix.target }}"
 
       - name: Install backend sidecar (full only, Windows)
         if: matrix.flavor == 'full' && matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path 'desktop/src-tauri/binaries' | Out-Null
+          New-Item -ItemType Directory -Force -Path 'desktop/src-tauri-cef/binaries' | Out-Null
           New-Item -ItemType Directory -Force -Path 'release-assets/backend-extract' | Out-Null
           Expand-Archive -Force -Path "release-assets/backend/opencode-studio-${{ matrix.target }}.zip" -DestinationPath 'release-assets/backend-extract'
           if (-not (Test-Path 'release-assets/backend-extract/opencode-studio.exe')) { throw 'opencode-studio.exe missing after extract' }
-          Copy-Item -Force 'release-assets/backend-extract/opencode-studio.exe' "desktop/src-tauri/binaries/opencode-studio-${{ matrix.target }}.exe"
+          Copy-Item -Force 'release-assets/backend-extract/opencode-studio.exe' "desktop/src-tauri-cef/binaries/opencode-studio-${{ matrix.target }}.exe"
 
       - name: Tauri build
         working-directory: desktop/src-tauri-cef
