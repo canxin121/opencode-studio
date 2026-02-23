@@ -4,6 +4,8 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use tauri::Manager;
 
+use crate::AppHandle;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DesktopConfig {
@@ -46,12 +48,12 @@ impl Default for BackendConfig {
     }
 }
 
-pub fn config_path(app: &tauri::AppHandle) -> Option<PathBuf> {
+pub fn config_path(app: &AppHandle) -> Option<PathBuf> {
     let dir = app.path().app_config_dir().ok()?;
     Some(dir.join("desktop-config.json"))
 }
 
-pub fn load_or_create(app: &tauri::AppHandle) -> Result<DesktopConfig, String> {
+pub fn load_or_create(app: &AppHandle) -> Result<DesktopConfig, String> {
     let path = config_path(app).ok_or_else(|| "unable to resolve app config dir".to_string())?;
     ensure_parent_dir(&path)?;
 
@@ -68,7 +70,7 @@ pub fn load_or_create(app: &tauri::AppHandle) -> Result<DesktopConfig, String> {
     Ok(cfg)
 }
 
-pub fn open_config_file(app: &tauri::AppHandle) -> Result<(), String> {
+pub fn open_config_file(app: &AppHandle) -> Result<(), String> {
     let path = config_path(app).ok_or_else(|| "unable to resolve app config dir".to_string())?;
     ensure_parent_dir(&path)?;
 
@@ -78,7 +80,8 @@ pub fn open_config_file(app: &tauri::AppHandle) -> Result<(), String> {
     }
 
     use tauri_plugin_opener::OpenerExt;
-    app.opener()
+    let _ = app
+        .opener()
         .open_path(path.to_string_lossy().as_ref(), None::<&str>);
     Ok(())
 }

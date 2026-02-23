@@ -11,6 +11,7 @@ use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_shell::ShellExt;
 use tokio::sync::Mutex;
 
+use crate::AppHandle;
 use crate::config::{self, DesktopConfig};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -46,7 +47,7 @@ impl BackendManager {
     }
   }
 
-  pub async fn ensure_started(&self, app: &tauri::AppHandle) -> Result<BackendStatus, String> {
+  pub async fn ensure_started(&self, app: &AppHandle) -> Result<BackendStatus, String> {
     {
       let guard = self.inner.lock().await;
       if guard.child.is_some() {
@@ -71,14 +72,14 @@ impl BackendManager {
     Ok(self.status().await)
   }
 
-  pub async fn stop(&self, app: &tauri::AppHandle) -> Result<(), String> {
+  pub async fn stop(&self, app: &AppHandle) -> Result<(), String> {
     let mut child = {
       let mut guard = self.inner.lock().await;
       guard.url = None;
       guard.child.take()
     };
 
-    if let Some(mut c) = child.take() {
+    if let Some(c) = child.take() {
       // Try to kill the backend.
       let _ = c.kill();
     }
@@ -87,31 +88,31 @@ impl BackendManager {
     Ok(())
   }
 
-  pub async fn restart(&self, app: &tauri::AppHandle) -> Result<BackendStatus, String> {
+  pub async fn restart(&self, app: &AppHandle) -> Result<BackendStatus, String> {
     let _ = self.stop(app).await;
     self.ensure_started(app).await
   }
 }
 
-pub fn open_logs_dir(app: &tauri::AppHandle) -> Result<(), String> {
+pub fn open_logs_dir(app: &AppHandle) -> Result<(), String> {
   let dir = logs_dir(app).ok_or_else(|| "unable to resolve log dir".to_string())?;
   fs::create_dir_all(&dir).map_err(|e| format!("mkdir {dir:?}: {e}"))?;
   use tauri_plugin_opener::OpenerExt;
-  app.opener().reveal_item_in_dir(dir.to_string_lossy().as_ref());
+  let _ = app.opener().reveal_item_in_dir(dir.to_string_lossy().as_ref());
   Ok(())
 }
 
-fn logs_dir(app: &tauri::AppHandle) -> Option<PathBuf> {
+fn logs_dir(app: &AppHandle) -> Option<PathBuf> {
   app.path().app_log_dir().ok()
 }
 
-fn backend_log_path(app: &tauri::AppHandle) -> Option<PathBuf> {
+fn backend_log_path(app: &AppHandle) -> Option<PathBuf> {
   let dir = logs_dir(app)?;
   Some(dir.join("backend.log"))
 }
 
 async fn spawn_sidecar(
-  app: &tauri::AppHandle,
+  app: &AppHandle,
   cfg: &DesktopConfig,
 ) -> Result<(tauri_plugin_shell::process::CommandChild, String), String> {
   // If the sidecar is not bundled, treat this as a frontend-only build.
@@ -205,7 +206,7 @@ async fn spawn_sidecar(
   Ok((child, url))
 }
 
-fn resolve_ui_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+fn resolve_ui_dir(app: &AppHandle) -> Result<PathBuf, String> {
   // In packaged builds, resources are available.
   if let Ok(resource_dir) = app.path().resource_dir() {
     let candidate = resource_dir.join("dist");

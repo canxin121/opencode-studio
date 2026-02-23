@@ -28,6 +28,11 @@ tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-shell = "2"
 tauri-plugin-opener = "2"
 
+[features]
+# Reserved for the experimental CEF variant (built from `desktop/src-tauri-cef/`).
+# Declared here to avoid `unexpected cfg` warnings from `#[cfg(feature = "cef")]`.
+cef = []
+
 [profile.release]
 panic = "abort"
 codegen-units = 1
