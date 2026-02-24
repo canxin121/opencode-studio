@@ -43,30 +43,30 @@ function onUpdateDefaultBranch(v: string | number) {
     maxWidth="max-w-md"
     @update:open="onUpdateOpen"
   >
-    <div class="space-y-3">
-      <div class="space-y-1">
+    <div class="space-y-3 min-w-0 max-w-full">
+      <div class="space-y-1 min-w-0">
         <div class="text-xs font-medium text-muted-foreground">{{ t('git.ui.dialogs.initRepo.fields.path') }}</div>
         <Input
           :model-value="path"
-          class="h-9 font-mono text-xs"
+          class="h-9 w-full max-w-full min-w-0 font-mono text-xs"
           :placeholder="t('git.ui.dialogs.initRepo.placeholders.path')"
           @update:model-value="onUpdatePath"
         />
         <div class="text-[11px] text-muted-foreground">{{ t('git.ui.dialogs.initRepo.hints.pathExamples') }}</div>
       </div>
 
-      <div class="space-y-1">
+      <div class="space-y-1 min-w-0">
         <div class="text-xs font-medium text-muted-foreground">{{ t('git.ui.dialogs.initRepo.fields.defaultBranchOptional') }}</div>
         <Input
           :model-value="defaultBranch"
-          class="h-9 font-mono text-xs"
+          class="h-9 w-full max-w-full min-w-0 font-mono text-xs"
           placeholder="main"
           @update:model-value="onUpdateDefaultBranch"
         />
         <div class="text-[11px] text-muted-foreground">{{ t('git.ui.dialogs.initRepo.hints.initialBranchFlag') }}</div>
       </div>
 
-      <div class="flex justify-end gap-2">
+      <div class="flex flex-wrap justify-end gap-2">
         <Button variant="secondary" size="sm" @click="$emit('update:open', false)" :disabled="busy">{{ t('common.cancel') }}</Button>
         <Button size="sm" @click="$emit('initialize')" :disabled="busy || !projectRoot">{{ t('git.ui.dialogs.initRepo.actions.initialize') }}</Button>
       </div>

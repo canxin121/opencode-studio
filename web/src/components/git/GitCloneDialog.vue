@@ -56,22 +56,22 @@ function onUpdateRecursive(ev: Event) {
     maxWidth="max-w-md"
     @update:open="onUpdateOpen"
   >
-    <div class="space-y-3">
-      <div class="space-y-1">
+    <div class="space-y-3 min-w-0 max-w-full">
+      <div class="space-y-1 min-w-0">
         <div class="text-xs font-medium text-muted-foreground">{{ t('git.ui.dialogs.clone.fields.repositoryUrl') }}</div>
         <Input
           :model-value="url"
-          class="h-9 font-mono text-xs"
+          class="h-9 w-full max-w-full min-w-0 font-mono text-xs"
           :placeholder="t('git.ui.dialogs.clone.placeholders.repositoryUrl')"
           @update:model-value="onUpdateUrl"
         />
       </div>
 
-      <div class="space-y-1">
+      <div class="space-y-1 min-w-0">
         <div class="text-xs font-medium text-muted-foreground">{{ t('git.ui.dialogs.clone.fields.targetPath') }}</div>
         <Input
           :model-value="path"
-          class="h-9 font-mono text-xs"
+          class="h-9 w-full max-w-full min-w-0 font-mono text-xs"
           :placeholder="t('git.ui.dialogs.clone.placeholders.targetPath')"
           @update:model-value="onUpdatePath"
         />
@@ -80,11 +80,11 @@ function onUpdateRecursive(ev: Event) {
         </div>
       </div>
 
-      <div class="space-y-1">
+      <div class="space-y-1 min-w-0">
         <div class="text-xs font-medium text-muted-foreground">{{ t('git.ui.dialogs.clone.fields.checkoutRefOptional') }}</div>
         <Input
           :model-value="cloneRef"
-          class="h-9 font-mono text-xs"
+          class="h-9 w-full max-w-full min-w-0 font-mono text-xs"
           placeholder="main"
           @update:model-value="onUpdateCloneRef"
         />
@@ -95,7 +95,7 @@ function onUpdateRecursive(ev: Event) {
         <span>{{ t('git.ui.dialogs.clone.cloneSubmodulesRecursively') }}</span>
       </label>
 
-      <div class="flex justify-end gap-2">
+      <div class="flex flex-wrap justify-end gap-2">
         <Button variant="secondary" size="sm" @click="$emit('update:open', false)" :disabled="busy">{{ t('common.cancel') }}</Button>
         <Button size="sm" @click="$emit('clone')" :disabled="busy || !projectRoot || !url.trim()">{{ t('git.ui.dialogs.clone.actions.clone') }}</Button>
       </div>
