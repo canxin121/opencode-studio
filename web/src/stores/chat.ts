@@ -10,6 +10,7 @@ import type {
   SessionErrorClassification,
   SessionErrorEvent,
   Session,
+  SessionFileDiff,
   SessionRunConfig,
   SessionStatus,
   SessionStatusEvent,
@@ -46,6 +47,7 @@ export type {
   SessionError,
   SessionErrorEvent,
   SessionRunConfig,
+  SessionFileDiff,
   SessionStatus,
   SessionStatusEvent,
 } from '../types/chat'
@@ -102,6 +104,9 @@ export const useChatStore = defineStore('chat', () => {
   const attentionBySession = ref<Record<string, AttentionEvent>>({})
   const sessionStatusBySession = ref<Record<string, SessionStatusEvent>>({})
   const sessionErrorBySession = ref<Record<string, SessionErrorEvent>>({})
+  const sessionDiffBySession = ref<Record<string, SessionFileDiff[]>>({})
+  const sessionDiffLoadingBySession = ref<Record<string, boolean>>({})
+  const sessionDiffErrorBySession = ref<Record<string, string | null>>({})
   const sessionRunConfigBySession = ref<Record<string, SessionRunConfig>>({})
 
   // Simple debounce so we can respond to high-frequency SSE updates.
@@ -382,6 +387,26 @@ export const useChatStore = defineStore('chat', () => {
     return sessionRunConfigBySession.value[sid] ?? null
   })
 
+  const selectedSessionDiff = computed<SessionFileDiff[]>(() => {
+    const sid = selectedSessionId.value
+    if (!sid) return []
+    const list = sessionDiffBySession.value[sid]
+    return Array.isArray(list) ? list : []
+  })
+
+  const selectedSessionDiffLoading = computed(() => {
+    const sid = selectedSessionId.value
+    if (!sid) return false
+    return Boolean(sessionDiffLoadingBySession.value[sid])
+  })
+
+  const selectedSessionDiffError = computed(() => {
+    const sid = selectedSessionId.value
+    if (!sid) return null
+    const message = sessionDiffErrorBySession.value[sid]
+    return typeof message === 'string' && message.trim() ? message : null
+  })
+
   // Restore persisted run config so the UI can show resolved model/agent after reload.
   sessionRunConfigBySession.value = loadSessionRunConfigMap(STORAGE_RUN_CONFIG)
 
@@ -655,6 +680,7 @@ export const useChatStore = defineStore('chat', () => {
     if (sid) {
       // Keep cached messages so switching sessions feels instant.
       ensureSessionMessages(sid)
+      void refreshSessionDiff(sid, { silent: true })
     }
 
     try {
@@ -826,6 +852,61 @@ export const useChatStore = defineStore('chat', () => {
       if (!silent && isSelected) {
         messagesLoading.value = false
       }
+    }
+  }
+
+  function clearSessionDiffCache(sessionId: string) {
+    const sid = (sessionId || '').trim()
+    if (!sid) return
+
+    if (Object.prototype.hasOwnProperty.call(sessionDiffBySession.value, sid)) {
+      const next = { ...sessionDiffBySession.value }
+      delete next[sid]
+      sessionDiffBySession.value = next
+    }
+
+    if (Object.prototype.hasOwnProperty.call(sessionDiffLoadingBySession.value, sid)) {
+      const next = { ...sessionDiffLoadingBySession.value }
+      delete next[sid]
+      sessionDiffLoadingBySession.value = next
+    }
+
+    if (Object.prototype.hasOwnProperty.call(sessionDiffErrorBySession.value, sid)) {
+      const next = { ...sessionDiffErrorBySession.value }
+      delete next[sid]
+      sessionDiffErrorBySession.value = next
+    }
+  }
+
+  async function refreshSessionDiff(sessionId: string, opts?: { silent?: boolean; messageID?: string }) {
+    const sid = (sessionId || '').trim()
+    if (!sid) return
+
+    const selected = selectedSessionId.value === sid
+    const silent = Boolean(opts?.silent)
+
+    if (!silent || !sessionDiffBySession.value[sid]) {
+      sessionDiffLoadingBySession.value = { ...sessionDiffLoadingBySession.value, [sid]: true }
+    }
+    sessionDiffErrorBySession.value = { ...sessionDiffErrorBySession.value, [sid]: null }
+
+    try {
+      const list = await chatApi.getSessionDiff(sid, getDirectoryForSession(sid), {
+        ...(typeof opts?.messageID === 'string' && opts.messageID.trim() ? { messageID: opts.messageID.trim() } : {}),
+      })
+      const sorted = [...list].sort((a, b) => a.file.localeCompare(b.file))
+      sessionDiffBySession.value = { ...sessionDiffBySession.value, [sid]: sorted }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      sessionDiffErrorBySession.value = {
+        ...sessionDiffErrorBySession.value,
+        [sid]: msg || 'Failed to load session file changes',
+      }
+      if (selected && !silent) {
+        pushErrorToastWithDedupe(`session-diff:${sid}`, msg || 'Failed to load session file changes', 4500, 5000)
+      }
+    } finally {
+      sessionDiffLoadingBySession.value = { ...sessionDiffLoadingBySession.value, [sid]: false }
     }
   }
 
@@ -1023,6 +1104,7 @@ export const useChatStore = defineStore('chat', () => {
     // Drop cached timeline + drafts.
     clearMessagesHydrated(sid)
     clearComposerDraft(sid)
+    clearSessionDiffCache(sid)
     {
       const next = { ...messagesBySession.value }
       delete next[sid]
@@ -1257,6 +1339,7 @@ export const useChatStore = defineStore('chat', () => {
       clearAttention(sid)
       clearMessagesHydrated(sid)
       clearComposerDraft(sid)
+      clearSessionDiffCache(sid)
       if (selectedSessionId.value === sid) {
         selectedSessionId.value = null
       }
@@ -1368,6 +1451,12 @@ export const useChatStore = defineStore('chat', () => {
           void refreshMessages(sid, { silent: true })
         }, 120)
       }
+
+      void refreshSessionDiff(sid, { silent: true })
+    }
+
+    if (sid && t === 'session.diff') {
+      void refreshSessionDiff(sid, { silent: true })
     }
 
     if (sid && t === 'session.error') {
@@ -1615,6 +1704,9 @@ export const useChatStore = defineStore('chat', () => {
     selectedAttention,
     selectedSessionStatus,
     selectedSessionError,
+    selectedSessionDiff,
+    selectedSessionDiffLoading,
+    selectedSessionDiffError,
     selectedSessionRunConfig,
     sessionStatusBySession,
     sessionErrorBySession,
@@ -1624,6 +1716,7 @@ export const useChatStore = defineStore('chat', () => {
     refreshSessionsForDirectory,
     selectSession,
     refreshMessages,
+    refreshSessionDiff,
     ensureMessagePartDetail,
     loadOlderMessages,
     selectedHistory,

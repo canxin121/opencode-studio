@@ -1669,6 +1669,14 @@ export default {
       },
     },
 
+    sessionDiff: {
+      toggleAria: 'Toggle session file changes',
+      panelTitle: 'Session File Changes',
+      close: 'Close',
+      loading: 'Loading file changes...',
+      empty: 'No file changes in this session yet.',
+    },
+
     attachments: {
       title: 'Attachments',
       attaching: 'Attaching…',

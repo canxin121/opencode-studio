@@ -12,6 +12,14 @@ export type Session = {
   [k: string]: JsonLike
 }
 
+export type SessionFileDiff = {
+  file: string
+  before: string
+  after: string
+  additions: number
+  deletions: number
+}
+
 export type MessageInfo = {
   id: string
   sessionID: string
