@@ -76,6 +76,37 @@ fn should_sanitize_chat_session_response(path: &str) -> bool {
     !normalized.ends_with("/message")
 }
 
+fn extract_session_id_from_delete_path(path: &str) -> Option<String> {
+    let normalized = path.trim().trim_matches('/');
+    if normalized.is_empty() {
+        return None;
+    }
+
+    let mut parts = normalized.split('/');
+    let resource = parts.next()?;
+    let raw_id = parts.next()?;
+    if parts.next().is_some() {
+        return None;
+    }
+    if resource != "session" {
+        return None;
+    }
+
+    // Guard known non-session resources under /session/*.
+    if raw_id.eq_ignore_ascii_case("status") {
+        return None;
+    }
+
+    let decoded = urlencoding::decode(raw_id)
+        .map(|v| v.into_owned())
+        .unwrap_or_else(|_| raw_id.to_string());
+    let session_id = decoded.trim();
+    if session_id.is_empty() {
+        return None;
+    }
+    Some(session_id.to_string())
+}
+
 fn prune_session_list_value(list: &mut Vec<serde_json::Value>) {
     let mut out = Vec::new();
     for mut item in std::mem::take(list) {
@@ -713,6 +744,15 @@ pub(crate) async fn proxy_opencode_rest_inner(
         .map_err(|_| AppError::bad_gateway("OpenCode request failed"))?;
 
     let status = StatusCode::from_u16(resp.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
+
+    if method == Method::DELETE
+        && status.is_success()
+        && let Some(session_id) = extract_session_id_from_delete_path(&path)
+    {
+        // Keep sidebar aggregates consistent even when upstream session.deleted SSE
+        // is delayed or dropped.
+        state.directory_session_index.remove_summary(&session_id);
+    }
 
     let mut builder = axum::http::Response::builder().status(status);
     if let Some(headers_out) = builder.headers_mut() {
@@ -2609,7 +2649,22 @@ fn sanitize_session_created_updated_event_properties(
 fn sanitize_session_deleted_event_properties(
     props: &mut serde_json::Map<String, serde_json::Value>,
 ) -> bool {
-    let session_id = read_trimmed_from_map(props, &["sessionID", "sessionId", "session_id"]);
+    let session_id = read_trimmed_from_map(props, &["sessionID", "sessionId", "session_id", "id"])
+        .or_else(|| {
+            props
+                .get("session")
+                .and_then(|value| read_trimmed_from_value(value, &["id"]))
+        })
+        .or_else(|| {
+            props
+                .get("value")
+                .and_then(|value| read_trimmed_from_value(value, &["id"]))
+        })
+        .or_else(|| {
+            props
+                .get("data")
+                .and_then(|value| read_trimmed_from_value(value, &["id"]))
+        });
     let Some(session_id) = session_id else {
         return false;
     };
@@ -3590,6 +3645,41 @@ mod tests {
     fn prompt_async_url_rewrite_ignores_non_message_paths() {
         let input = "http://127.0.0.1:3030/session/s_123/status";
         assert!(rewrite_opencode_prompt_async_url(input).is_none());
+    }
+
+    #[test]
+    fn extract_session_id_from_delete_path_matches_only_session_resource() {
+        assert_eq!(
+            extract_session_id_from_delete_path("session/ses_123").as_deref(),
+            Some("ses_123")
+        );
+        assert_eq!(
+            extract_session_id_from_delete_path("/session/ses_abc%2Fdef/").as_deref(),
+            Some("ses_abc/def")
+        );
+
+        assert!(extract_session_id_from_delete_path("session/status").is_none());
+        assert!(extract_session_id_from_delete_path("session/ses_123/share").is_none());
+        assert!(extract_session_id_from_delete_path("permission/ses_123").is_none());
+    }
+
+    #[test]
+    fn sanitize_session_deleted_event_accepts_legacy_id_fields() {
+        let mut props = serde_json::Map::new();
+        props.insert("id".to_string(), json!("ses_from_id"));
+        assert!(sanitize_session_deleted_event_properties(&mut props));
+        assert_eq!(
+            props.get("sessionID").and_then(|v| v.as_str()),
+            Some("ses_from_id")
+        );
+
+        let mut nested = serde_json::Map::new();
+        nested.insert("session".to_string(), json!({ "id": "ses_nested" }));
+        assert!(sanitize_session_deleted_event_properties(&mut nested));
+        assert_eq!(
+            nested.get("sessionID").and_then(|v| v.as_str()),
+            Some("ses_nested")
+        );
     }
 
     #[test]

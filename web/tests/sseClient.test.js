@@ -5,11 +5,13 @@ import { connectSse } from '../src/lib/sse.ts'
 
 function installDomLikeGlobals() {
   if (!globalThis.window) globalThis.window = globalThis
-  if (!globalThis.document) {
+  if (!globalThis.document || typeof globalThis.document.createElement !== 'function') {
     globalThis.document = {
       visibilityState: 'visible',
       addEventListener: () => {},
       removeEventListener: () => {},
+      createElement: () => ({ style: {} }),
+      createElementNS: () => ({}),
     }
   }
 }

@@ -1,3 +1,4 @@
 /target
 .VSCodeCounter
 .ruff_cache
+.workbench

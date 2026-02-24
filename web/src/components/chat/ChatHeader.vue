@@ -50,7 +50,7 @@ const mobileTitle = computed(() => {
       <div
         class="absolute inset-0 px-2 pt-[calc(var(--oc-safe-area-top,0px)+8px)] pb-[calc(var(--oc-safe-area-bottom,0px)+8px)]"
       >
-        <div class="h-full rounded-xl border border-input bg-background shadow-2xl overflow-hidden flex flex-col">
+        <div class="max-h-full rounded-xl border border-input bg-background shadow-2xl overflow-hidden flex flex-col">
           <div class="shrink-0 border-b border-border/60 px-4 py-3">
             <div class="text-sm font-semibold">{{ mobileTitle }}</div>
             <div class="mt-0.5 text-[11px] text-muted-foreground">
@@ -58,7 +58,7 @@ const mobileTitle = computed(() => {
             </div>
           </div>
 
-          <div class="flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
+          <div class="min-h-0 flex-1 overflow-y-auto p-3 space-y-3">
             <div v-if="hasRetry" class="rounded-lg border border-input bg-background px-3 py-2">
               <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0">

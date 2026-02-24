@@ -11,6 +11,7 @@ export type ChatMount = {
   surface: ChatMountSurface
   entry: string
   title: string
+  titleI18n?: Record<string, string>
   mode: PluginMountMode
   // Optional UI hints for the host renderer.
   height?: number
@@ -44,6 +45,42 @@ function normalizeSurface(value: string): ChatMountSurface | null {
 
 function normalizeEntry(value: JsonLike): string {
   return typeof value === 'string' ? value.trim() : ''
+}
+
+type LocalizedText = {
+  text: string
+  i18n?: Record<string, string>
+}
+
+function parseI18nMap(value: JsonLike): Record<string, string> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  const out: Record<string, string> = {}
+  for (const [key, raw] of Object.entries(value as Record<string, JsonLike>)) {
+    const mapKey = String(key || '').trim()
+    if (!mapKey) continue
+    const mapValue = typeof raw === 'string' ? raw.trim() : ''
+    if (!mapValue) continue
+    out[mapKey] = mapValue
+  }
+  return out
+}
+
+function normalizeLocalizedText(primary: JsonLike, i18n?: JsonLike): LocalizedText {
+  const fromPrimaryMap = parseI18nMap(primary)
+  const fromI18n = parseI18nMap(i18n ?? null)
+  const mergedMap: Record<string, string> = {
+    ...fromPrimaryMap,
+    ...fromI18n,
+  }
+
+  const fromPrimaryText = typeof primary === 'string' ? primary.trim() : ''
+  const fallback = mergedMap['en-US'] || mergedMap['zh-CN'] || Object.values(mergedMap)[0] || ''
+  const text = fromPrimaryText || fallback
+
+  return {
+    text,
+    i18n: Object.keys(mergedMap).length > 0 ? mergedMap : undefined,
+  }
 }
 
 function normalizeMode(value: JsonLike, fallback: PluginMountMode): PluginMountMode {
@@ -97,19 +134,23 @@ function pushMount(
   pluginTitle: string,
   surface: string,
   entry: string,
-  title?: string,
+  title?: JsonLike,
   mode: PluginMountMode = 'iframe',
   height?: number,
   pluginVersion?: string,
+  titleI18n?: JsonLike,
 ) {
   const normalizedSurface = normalizeSurface(surface)
   const normalizedEntry = normalizeEntry(entry)
   if (!normalizedSurface || !normalizedEntry) return
+  const localizedTitle = normalizeLocalizedText(title ?? null, titleI18n)
+  const normalizedTitle = localizedTitle.text || String(pluginTitle || pluginId).trim() || pluginId
   out.push({
     pluginId,
     surface: normalizedSurface,
     entry: normalizedEntry,
-    title: String(title || pluginTitle || pluginId).trim() || pluginId,
+    title: normalizedTitle,
+    ...(localizedTitle.i18n ? { titleI18n: localizedTitle.i18n } : {}),
     mode,
     height,
     pluginVersion,
@@ -134,11 +175,12 @@ function mountsFromManifest(manifest: PluginManifestResponse): ChatMount[] {
       const obj = asObject(item)
       const surface = String(obj.surface || '').trim()
       const entry = normalizeEntry(obj.entry) || defaultEntry
-      const title = typeof obj.title === 'string' ? obj.title : undefined
+      const title = (obj.title ?? null) as JsonLike
+      const titleI18n = (obj.titleI18n ?? null) as JsonLike
 
       const mode = normalizeMode(obj.mode as JsonLike, defaultMode)
       const height = normalizeHeight((obj.height ?? obj.frameHeight ?? obj.heightPx) as JsonLike)
-      pushMount(out, manifest.id, pluginTitle, surface, entry, title, mode, height, pluginVersion)
+      pushMount(out, manifest.id, pluginTitle, surface, entry, title, mode, height, pluginVersion, titleI18n)
     }
     return out
   }
@@ -169,11 +211,12 @@ function mountsFromManifest(manifest: PluginManifestResponse): ChatMount[] {
       const obj = asObject(raw)
       if (!Object.keys(obj).length) continue
       const entry = normalizeEntry(obj.entry) || defaultEntry
-      const title = typeof obj.title === 'string' ? obj.title : undefined
+      const title = (obj.title ?? null) as JsonLike
+      const titleI18n = (obj.titleI18n ?? null) as JsonLike
 
       const mode = normalizeMode(obj.mode as JsonLike, defaultMode)
       const height = normalizeHeight((obj.height ?? obj.frameHeight ?? obj.heightPx) as JsonLike)
-      pushMount(out, manifest.id, pluginTitle, surface, entry, title, mode, height, pluginVersion)
+      pushMount(out, manifest.id, pluginTitle, surface, entry, title, mode, height, pluginVersion, titleI18n)
     }
     return out
   }

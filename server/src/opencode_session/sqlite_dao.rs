@@ -1,9 +1,28 @@
 use serde_json::{Value, json};
+use std::sync::LazyLock;
 use tokio::fs;
+use tokio::sync::Semaphore;
 
 use super::{ResponseConsistency, SessionRecord, opencode_db_path};
 
-const SQLITE_BUSY_TIMEOUT_MS: u64 = 5000;
+const SQLITE_BUSY_TIMEOUT_MS: u64 = 15000;
+const SQLITE_READ_CONCURRENCY: usize = 2;
+
+static SQLITE_READ_SEMAPHORE: LazyLock<Semaphore> =
+    LazyLock::new(|| Semaphore::new(SQLITE_READ_CONCURRENCY));
+
+fn open_sqlite_readonly_connection(
+    db_path: &std::path::Path,
+) -> rusqlite::Result<rusqlite::Connection> {
+    let conn = rusqlite::Connection::open_with_flags(
+        db_path,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_URI,
+    )?;
+    let _ = conn.pragma_update(None, "query_only", "ON");
+    let _ = conn.pragma_update(None, "read_uncommitted", "ON");
+    let _ = conn.busy_timeout(std::time::Duration::from_millis(SQLITE_BUSY_TIMEOUT_MS));
+    Ok(conn)
+}
 
 #[derive(Debug)]
 pub(super) struct SqliteMessagePage {
@@ -89,18 +108,13 @@ pub(super) async fn load_session_records_from_sqlite(
         .filter(|v| !v.is_empty())
         .map(|v| v.to_string());
 
+    let _permit = SQLITE_READ_SEMAPHORE.acquire().await.ok()?;
+
     tokio::task::spawn_blocking(move || {
-        let conn = match rusqlite::Connection::open_with_flags(
-            db_path,
-            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY
-                | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX
-                | rusqlite::OpenFlags::SQLITE_OPEN_URI,
-        ) {
+        let conn = match open_sqlite_readonly_connection(&db_path) {
             Ok(conn) => conn,
             Err(_) => return None,
         };
-        let _ = conn.pragma_update(None, "query_only", "ON");
-        let _ = conn.busy_timeout(std::time::Duration::from_millis(SQLITE_BUSY_TIMEOUT_MS));
 
         let sql = if project_id.is_some() {
             "SELECT id, parent_id, directory, title, slug, share_url, revert, time_created, time_updated FROM session WHERE project_id = ?1"
@@ -155,18 +169,13 @@ pub(super) async fn load_session_message_page_from_sqlite(
     }
 
     let session_id = session_id.trim().to_string();
+    let _permit = SQLITE_READ_SEMAPHORE.acquire().await.ok()?;
+
     tokio::task::spawn_blocking(move || {
-        let conn = match rusqlite::Connection::open_with_flags(
-            db_path,
-            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY
-                | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX
-                | rusqlite::OpenFlags::SQLITE_OPEN_URI,
-        ) {
+        let conn = match open_sqlite_readonly_connection(&db_path) {
             Ok(conn) => conn,
             Err(_) => return None,
         };
-        let _ = conn.pragma_update(None, "query_only", "ON");
-        let _ = conn.busy_timeout(std::time::Duration::from_millis(SQLITE_BUSY_TIMEOUT_MS));
 
         let mut consistency = ResponseConsistency::default();
         let mut total = 0usize;
@@ -399,16 +408,10 @@ pub(super) async fn load_session_message_part_from_sqlite(
     let message_id = message_id.trim().to_string();
     let part_id = part_id.trim().to_string();
 
+    let _permit = SQLITE_READ_SEMAPHORE.acquire().await.ok()?;
+
     tokio::task::spawn_blocking(move || {
-        let conn = rusqlite::Connection::open_with_flags(
-            db_path,
-            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY
-                | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX
-                | rusqlite::OpenFlags::SQLITE_OPEN_URI,
-        )
-        .ok()?;
-        let _ = conn.pragma_update(None, "query_only", "ON");
-        let _ = conn.busy_timeout(std::time::Duration::from_millis(SQLITE_BUSY_TIMEOUT_MS));
+        let conn = open_sqlite_readonly_connection(&db_path).ok()?;
 
         let info_raw = conn
             .query_row(

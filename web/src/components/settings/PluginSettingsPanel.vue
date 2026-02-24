@@ -13,6 +13,8 @@ type JsonObject = Record<string, JsonLike>
 type SchemaProperty = {
   title?: string
   description?: string
+  'x-title-i18n'?: JsonLike
+  'x-description-i18n'?: JsonLike
   type?: string
   enum?: JsonLike[]
   default?: JsonLike
@@ -43,7 +45,7 @@ const props = withDefaults(
 
 const pluginHost = usePluginHostStore()
 const toasts = useToastsStore()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 const selectedPluginId = ref('')
 const loading = ref(false)
@@ -205,7 +207,7 @@ async function loadPluginConfig() {
   try {
     const resp = await pluginHost.pluginConfigGet(selectedPluginId.value)
     if (!resp.ok) {
-      throw new Error(resp.error?.message || 'Failed to load plugin config')
+      throw new Error(resp.error?.message || String(t('settings.pluginSettings.errors.failedToLoadConfig')))
     }
     const next = normalizeConfigResponse(resp.data)
     config.value = cloneObject(next)
@@ -235,13 +237,13 @@ async function savePluginConfig() {
   if (!selectedPluginId.value || saving.value) return
 
   if (Object.keys(arrayErrorByPath.value).length > 0 || Object.keys(mapErrorByPath.value).length > 0) {
-    error.value = 'Fix invalid list fields before saving.'
+    error.value = String(t('settings.pluginSettings.errors.fixInvalidListFields'))
     toasts.push('error', error.value)
     return
   }
 
   if (!commitAllJsonDrafts()) {
-    error.value = 'Fix invalid JSON fields before saving.'
+    error.value = String(t('settings.pluginSettings.errors.fixInvalidJsonFields'))
     toasts.push('error', error.value)
     return
   }
@@ -251,13 +253,13 @@ async function savePluginConfig() {
   try {
     const resp = await pluginHost.pluginConfigSet(selectedPluginId.value, draft.value)
     if (!resp.ok) {
-      throw new Error(resp.error?.message || 'Failed to save plugin config')
+      throw new Error(resp.error?.message || String(t('settings.pluginSettings.errors.failedToSaveConfig')))
     }
     await loadPluginConfig()
     toasts.push('success', t('settings.pluginSettings.toasts.saved'))
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
-    toasts.push('error', error.value || 'Failed to save plugin config')
+    toasts.push('error', error.value || String(t('settings.pluginSettings.errors.failedToSaveConfig')))
   } finally {
     saving.value = false
   }
@@ -299,7 +301,9 @@ watch(
 
 function getLabel(key: string, prop: SchemaProperty): string {
   const fallback = humanizeKey(key) || key
-  return (prop.title || fallback).trim()
+  const fromI18n = localizedSchemaText(prop['x-title-i18n'])
+  const fromTitle = localizedSchemaText(prop.title)
+  return (fromI18n || fromTitle || fallback).trim()
 }
 
 function humanizeKey(key: string): string {
@@ -315,7 +319,43 @@ function humanizeKey(key: string): string {
 }
 
 function getDescription(prop: SchemaProperty): string {
-  return String(prop.description || '').trim()
+  const fromI18n = localizedSchemaText(prop['x-description-i18n'])
+  const fromDescription = localizedSchemaText(prop.description)
+  return (fromI18n || fromDescription || '').trim()
+}
+
+function localizedSchemaText(value: unknown): string {
+  if (typeof value === 'string') return value.trim()
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return ''
+
+  const map = value as Record<string, unknown>
+  const currentLocale = String(locale.value || '').trim()
+  const language = currentLocale.split('-')[0]?.toLowerCase() || ''
+
+  const candidates: string[] = []
+  if (currentLocale) candidates.push(currentLocale)
+  if (language) candidates.push(language)
+  candidates.push('en-US', 'zh-CN', 'en', 'zh')
+
+  for (const candidate of candidates) {
+    if (!candidate) continue
+    const direct = map[candidate]
+    if (typeof direct === 'string' && direct.trim()) return direct.trim()
+
+    if (candidate.length === 2) {
+      const byLang = Object.entries(map).find(([key, raw]) => {
+        if (typeof raw !== 'string' || !raw.trim()) return false
+        return key.toLowerCase() === candidate.toLowerCase()
+      })
+      if (byLang && typeof byLang[1] === 'string') return byLang[1].trim()
+    }
+  }
+
+  for (const raw of Object.values(map)) {
+    if (typeof raw === 'string' && raw.trim()) return raw.trim()
+  }
+
+  return ''
 }
 
 function pathKey(path: string[]): string {
@@ -385,7 +425,7 @@ function commitJsonText(path: string[], prop?: SchemaProperty): boolean {
     jsonErrorByPath.value = nextErr
     return true
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Invalid JSON'
+    const message = err instanceof Error ? err.message : String(t('settings.pluginSettings.errors.invalidJson'))
     jsonErrorByPath.value = { ...jsonErrorByPath.value, [key]: message }
     return false
   }
@@ -567,7 +607,12 @@ function parsePrimitiveMapRows(
     const trimmed = raw.trim()
     if (!k) continue
     if (!trimmed) continue
-    if (seen.has(k)) return { ok: false, error: `Row ${idx + 1}: duplicate key '${k}'.` }
+    if (seen.has(k)) {
+      return {
+        ok: false,
+        error: String(t('settings.pluginSettings.errors.row.duplicateKey', { row: idx + 1, key: k })),
+      }
+    }
     seen.add(k)
 
     if (Array.isArray(ap.enum) && ap.enum.length > 0) {
@@ -575,7 +620,7 @@ function parsePrimitiveMapRows(
         out[k] = JSON.parse(trimmed) as JsonLike
         continue
       } catch {
-        return { ok: false, error: `Row ${idx + 1}: invalid enum value.` }
+        return { ok: false, error: String(t('settings.pluginSettings.errors.row.invalidEnum', { row: idx + 1 })) }
       }
     }
 
@@ -586,7 +631,9 @@ function parsePrimitiveMapRows(
 
     if (ap.type === 'number') {
       const num = Number(trimmed)
-      if (!Number.isFinite(num)) return { ok: false, error: `Row ${idx + 1}: invalid number.` }
+      if (!Number.isFinite(num)) {
+        return { ok: false, error: String(t('settings.pluginSettings.errors.row.invalidNumber', { row: idx + 1 })) }
+      }
       out[k] = num
       continue
     }
@@ -594,7 +641,7 @@ function parsePrimitiveMapRows(
     if (ap.type === 'integer') {
       const num = Number(trimmed)
       if (!Number.isFinite(num) || !Number.isInteger(num)) {
-        return { ok: false, error: `Row ${idx + 1}: invalid integer.` }
+        return { ok: false, error: String(t('settings.pluginSettings.errors.row.invalidInteger', { row: idx + 1 })) }
       }
       out[k] = num
       continue
@@ -609,7 +656,7 @@ function parsePrimitiveMapRows(
         out[k] = false
         continue
       }
-      return { ok: false, error: `Row ${idx + 1}: use true or false.` }
+      return { ok: false, error: String(t('settings.pluginSettings.errors.row.useTrueFalse', { row: idx + 1 })) }
     }
   }
 
@@ -715,7 +762,7 @@ function parsePrimitiveArrayRows(
         out.push(JSON.parse(trimmed) as JsonLike)
         continue
       } catch {
-        return { ok: false, error: `Row ${idx + 1}: invalid enum value.` }
+        return { ok: false, error: String(t('settings.pluginSettings.errors.row.invalidEnum', { row: idx + 1 })) }
       }
     }
 
@@ -726,7 +773,9 @@ function parsePrimitiveArrayRows(
 
     if (item.type === 'number') {
       const num = Number(trimmed)
-      if (!Number.isFinite(num)) return { ok: false, error: `Row ${idx + 1}: invalid number.` }
+      if (!Number.isFinite(num)) {
+        return { ok: false, error: String(t('settings.pluginSettings.errors.row.invalidNumber', { row: idx + 1 })) }
+      }
       out.push(num)
       continue
     }
@@ -734,7 +783,7 @@ function parsePrimitiveArrayRows(
     if (item.type === 'integer') {
       const num = Number(trimmed)
       if (!Number.isFinite(num) || !Number.isInteger(num)) {
-        return { ok: false, error: `Row ${idx + 1}: invalid integer.` }
+        return { ok: false, error: String(t('settings.pluginSettings.errors.row.invalidInteger', { row: idx + 1 })) }
       }
       out.push(num)
       continue
@@ -749,7 +798,7 @@ function parsePrimitiveArrayRows(
         out.push(false)
         continue
       }
-      return { ok: false, error: `Row ${idx + 1}: use true or false.` }
+      return { ok: false, error: String(t('settings.pluginSettings.errors.row.useTrueFalse', { row: idx + 1 })) }
     }
   }
 
@@ -1102,7 +1151,7 @@ function clearArrayRows(path: string[], prop: SchemaProperty) {
               v-else-if="entry.prop.type === 'object' || entry.prop.type === 'array'"
               class="text-xs text-muted-foreground"
             >
-              Edit as JSON.
+              {{ t('settings.pluginSettings.editAsJson') }}
             </div>
           </template>
         </div>
