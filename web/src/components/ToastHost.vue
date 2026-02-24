@@ -22,7 +22,7 @@ watch(
       if (shown.has(t.id)) continue
       shown.add(t.id)
 
-      const duration = t.timeoutMs || 4000
+      const duration = t.timeoutMs > 0 ? t.timeoutMs : Number.POSITIVE_INFINITY
       const opts: {
         duration: number
         action?: {

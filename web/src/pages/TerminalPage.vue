@@ -1563,6 +1563,12 @@ const streamReconnectAttemptsById = new Map<string, number>()
 const streamGenerationById = new Map<string, number>()
 const streamManuallyDisconnected = new Set<string>()
 const streamOutputById = new Map<string, SessionOutputBuffer>()
+let sessionSwitchToken = 0
+
+function nextSessionSwitchToken(): number {
+  sessionSwitchToken += 1
+  return sessionSwitchToken
+}
 
 function setError(msg: string | null) {
   errorMsg.value = msg
@@ -2035,6 +2041,7 @@ async function closeSession() {
 async function openSessionFromSidebar(id: string) {
   const sid = normalizeSessionId(id)
   if (!sid) return
+  const switchToken = nextSessionSwitchToken()
   cancelSessionRename()
   cancelSessionCreate()
   cancelFolderRename()
@@ -2048,17 +2055,28 @@ async function openSessionFromSidebar(id: string) {
     return
   }
 
+  setActiveSession(sid)
+  setError(null)
+  renderSessionOutput(sid)
+  if (!hasSessionStreamSource(sid) || streamStatusForSession(sid) === 'disconnected') {
+    connectSessionStream(sid)
+  }
+  ensureTrackedSessionStreams()
+
+  const initialStatus = streamStatusForSession(sid)
+  status.value = initialStatus === 'disconnected' ? 'connecting' : initialStatus
+
   try {
     const exists = await getSessionInfo(sid)
+    if (switchToken !== sessionSwitchToken) return
     if (!exists) {
       removeTrackedSession(sid)
       setError(String(t('terminal.errors.sessionNoLongerExists')))
       return
     }
-    setActiveSession(sid)
-    setError(null)
-    renderSessionOutput(sid)
-    connectSessionStream(sid)
+    if (!hasSessionStreamSource(sid) || streamStatusForSession(sid) === 'disconnected') {
+      connectSessionStream(sid)
+    }
     ensureTrackedSessionStreams()
     if (streamStatusForSession(sid) === 'connected') {
       status.value = 'connected'
@@ -2067,6 +2085,7 @@ async function openSessionFromSidebar(id: string) {
       status.value = streamStatusForSession(sid)
     }
   } catch (err) {
+    if (switchToken !== sessionSwitchToken) return
     const msg = err instanceof Error ? err.message : String(err)
     setError(msg)
   }

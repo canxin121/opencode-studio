@@ -1,6 +1,7 @@
 import { ApiError } from '@/lib/api'
 import type { JsonObject, JsonValue } from '@/types/json'
 import { i18n } from '@/i18n'
+import type { ToastAction } from '@/stores/toasts'
 
 type ToastKind = 'info' | 'success' | 'error'
 type QueryValue = string | number | boolean | null | undefined
@@ -12,7 +13,7 @@ type GitJson = <T = JsonValue>(
   init?: RequestInit | undefined,
 ) => Promise<T>
 
-type Toasts = { push: (kind: ToastKind, message: string, timeoutMs?: number) => void }
+type Toasts = { push: (kind: ToastKind, message: string, timeoutMs?: number, action?: ToastAction) => void }
 
 type PendingRemoteAction = 'fetch' | 'pull' | 'push'
 type GitError = unknown
@@ -34,6 +35,19 @@ type GitRemoteBody = GitAuthBody &
     force?: '' | 'force' | 'force-with-lease'
     followTags?: boolean
   }
+
+type GitCreateGithubRepoAndPushBody = {
+  name?: string
+  remote?: string
+  private?: boolean
+}
+
+type GitCreateGithubRepoAndPushResult = {
+  success: boolean
+  remote: string
+  branch: string
+  fullName: string
+}
 
 export function useGitRemoteOps(opts: {
   repoRoot: { value: string | null }
@@ -90,6 +104,45 @@ export function useGitRemoteOps(opts: {
     return baseBody
   }
 
+  function isNoRemoteOrUpstreamError(err: GitError): err is ApiError {
+    if (!(err instanceof ApiError)) return false
+    const code = (err.code || '').trim()
+    return code === 'git_no_upstream' || code === 'git_remote_not_found'
+  }
+
+  async function createGithubRepoAndPush(body: GitCreateGithubRepoAndPushBody = {}): Promise<boolean> {
+    const dir = repoRoot.value
+    if (!dir) return false
+
+    let succeeded = false
+    await withRepoBusy('Create GitHub repo + push', async () => {
+      try {
+        const created = await gitJson<GitCreateGithubRepoAndPushResult>('create-github-repo-and-push', dir, undefined, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ private: true, remote: preferredRemote(), ...body }),
+        })
+        toasts.push('success', i18n.global.t('git.toasts.createdGithubRepoAndPushed', { fullName: created.fullName }))
+        await load()
+        succeeded = true
+      } catch (err) {
+        toasts.push('error', err instanceof Error ? err.message : String(err))
+      }
+    })
+    return succeeded
+  }
+
+  function maybeOfferCreateGithubRepo(err: GitError): boolean {
+    if (!isNoRemoteOrUpstreamError(err)) return false
+    toasts.push('error', i18n.global.t('git.toasts.pushNeedsRemoteSetup'), 9000, {
+      label: i18n.global.t('git.toasts.createGithubRepoAction'),
+      onClick: () => {
+        void createGithubRepoAndPush()
+      },
+    })
+    return true
+  }
+
   async function fetchRemote(opts: { silent?: boolean } = {}) {
     const dir = repoRoot.value
     if (!dir) return
@@ -108,12 +161,16 @@ export function useGitRemoteOps(opts: {
         if (handleGitBusy(err, 'Fetch', () => fetchRemote(opts))) return
         if (handleGitSso(err, 'fetch', () => fetchRemote(opts))) return
         if (isGitAuthError(err)) {
+          if (!silent)
+            toasts.push('error', i18n.global.t('git.toasts.authenticationRequiredForAction', { action: 'fetch' }))
           if (!silent) openCredentialsDialog('fetch', baseBody, err.message)
           return
         }
         if (err instanceof ApiError && (err.code || '').trim() === 'git_ssh_auth_failed') {
-          if (!silent)
+          if (!silent) {
+            toasts.push('error', i18n.global.t('git.toasts.sshAuthenticationRequiredForAction', { action: 'fetch' }))
             openTerminalHelp('SSH authentication required', err.message, terminalCommandForRemoteAction('fetch'))
+          }
           return
         }
         if (!silent) toasts.push('error', err instanceof Error ? err.message : String(err))
@@ -189,10 +246,12 @@ export function useGitRemoteOps(opts: {
         if (handleGitBusy(err, 'Pull', pull)) return
         if (handleGitSso(err, 'pull', pull)) return
         if (isGitAuthError(err)) {
+          toasts.push('error', i18n.global.t('git.toasts.authenticationRequiredForAction', { action: 'pull' }))
           openCredentialsDialog('pull', baseBody, err.message)
           return
         }
         if (err instanceof ApiError && (err.code || '').trim() === 'git_ssh_auth_failed') {
+          toasts.push('error', i18n.global.t('git.toasts.sshAuthenticationRequiredForAction', { action: 'pull' }))
           openTerminalHelp('SSH authentication required', err.message, terminalCommandForRemoteAction('pull'))
           return
         }
@@ -244,11 +303,14 @@ export function useGitRemoteOps(opts: {
         if (handleGitBusy(err, 'Push', push)) return
         if (handleGitSso(err, 'push', push)) return
         if (isGitAuthError(err)) {
+          toasts.push('error', i18n.global.t('git.toasts.authenticationRequiredForAction', { action: 'push' }))
           openCredentialsDialog('push', baseBody, err.message)
           return
         }
+        if (maybeOfferCreateGithubRepo(err)) return
         if (handleProtectedBranchError(err)) return
         if (err instanceof ApiError && (err.code || '').trim() === 'git_ssh_auth_failed') {
+          toasts.push('error', i18n.global.t('git.toasts.sshAuthenticationRequiredForAction', { action: 'push' }))
           openTerminalHelp('SSH authentication required', err.message, terminalCommandForRemoteAction('push'))
           return
         }
@@ -397,13 +459,18 @@ export function useGitRemoteOps(opts: {
         if (handleGitBusy(err, 'Sync', () => sync(opts))) return
         if (handleGitSso(err, 'pull', () => sync(opts))) return
         if (isGitAuthError(err)) {
+          toasts.push('error', i18n.global.t('git.toasts.authenticationRequiredForAction', { action: 'sync' }))
           // First failing step requires credentials. After that, user can hit Sync again.
           if (!silent) openCredentialsDialog('pull', baseBody, err.message)
           return
         }
+        if (!silent && maybeOfferCreateGithubRepo(err)) return
         if (handleProtectedBranchError(err)) return
         if (err instanceof ApiError && (err.code || '').trim() === 'git_ssh_auth_failed') {
-          if (!silent) openTerminalHelp('SSH authentication required', err.message, 'git pull && git push')
+          if (!silent) {
+            toasts.push('error', i18n.global.t('git.toasts.sshAuthenticationRequiredForAction', { action: 'sync' }))
+            openTerminalHelp('SSH authentication required', err.message, 'git pull && git push')
+          }
           return
         }
         if (!silent) toasts.push('error', err instanceof Error ? err.message : String(err))
@@ -436,12 +503,17 @@ export function useGitRemoteOps(opts: {
         if (handleGitBusy(err, 'Sync (rebase)', () => syncRebase(opts))) return
         if (handleGitSso(err, 'pull', () => syncRebase(opts))) return
         if (isGitAuthError(err)) {
+          toasts.push('error', i18n.global.t('git.toasts.authenticationRequiredForAction', { action: 'sync' }))
           if (!silent) openCredentialsDialog('pull', pullBody, err.message)
           return
         }
+        if (!silent && maybeOfferCreateGithubRepo(err)) return
         if (handleProtectedBranchError(err)) return
         if (err instanceof ApiError && (err.code || '').trim() === 'git_ssh_auth_failed') {
-          if (!silent) openTerminalHelp('SSH authentication required', err.message, 'git pull --rebase && git push')
+          if (!silent) {
+            toasts.push('error', i18n.global.t('git.toasts.sshAuthenticationRequiredForAction', { action: 'sync' }))
+            openTerminalHelp('SSH authentication required', err.message, 'git pull --rebase && git push')
+          }
           return
         }
         if (!silent) toasts.push('error', err instanceof Error ? err.message : String(err))

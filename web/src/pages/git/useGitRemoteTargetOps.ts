@@ -114,6 +114,7 @@ export function useGitRemoteTargetOps(opts: {
         if (handleGitBusy(err, 'Push to', pushToTarget)) return
         if (handleGitSso(err, 'push', pushToTarget)) return
         if (isGitAuthError(err)) {
+          toasts.push('error', i18n.global.t('git.toasts.authenticationRequiredForAction', { action: 'push' }))
           openCredentialsDialog('push', payload as Record<string, JsonValue>, err.message)
           return
         }
@@ -122,6 +123,7 @@ export function useGitRemoteTargetOps(opts: {
           return
         }
         if (err instanceof ApiError && (err.code || '').trim() === 'git_ssh_auth_failed') {
+          toasts.push('error', i18n.global.t('git.toasts.sshAuthenticationRequiredForAction', { action: 'push' }))
           openTerminalHelp('SSH authentication required', err.message, `git push ${remote} ${targetLabel}`)
           return
         }
@@ -176,10 +178,12 @@ export function useGitRemoteTargetOps(opts: {
         if (handleGitBusy(err, 'Fetch from', fetchFromTarget)) return
         if (handleGitSso(err, 'fetch', fetchFromTarget)) return
         if (isGitAuthError(err)) {
+          toasts.push('error', i18n.global.t('git.toasts.authenticationRequiredForAction', { action: 'fetch' }))
           openCredentialsDialog('fetch', payload as Record<string, JsonValue>, err.message)
           return
         }
         if (err instanceof ApiError && (err.code || '').trim() === 'git_ssh_auth_failed') {
+          toasts.push('error', i18n.global.t('git.toasts.sshAuthenticationRequiredForAction', { action: 'fetch' }))
           openTerminalHelp('SSH authentication required', err.message, `git fetch ${remote} ${targetLabel}`)
           return
         }
@@ -214,10 +218,12 @@ export function useGitRemoteTargetOps(opts: {
         if (handleGitBusy(err, 'Pull from', pullFromTarget)) return
         if (handleGitSso(err, 'pull', pullFromTarget)) return
         if (isGitAuthError(err)) {
+          toasts.push('error', i18n.global.t('git.toasts.authenticationRequiredForAction', { action: 'pull' }))
           openCredentialsDialog('pull', payload as Record<string, JsonValue>, err.message)
           return
         }
         if (err instanceof ApiError && (err.code || '').trim() === 'git_ssh_auth_failed') {
+          toasts.push('error', i18n.global.t('git.toasts.sshAuthenticationRequiredForAction', { action: 'pull' }))
           openTerminalHelp('SSH authentication required', err.message, `git pull ${remote} ${targetLabel}`)
           return
         }
