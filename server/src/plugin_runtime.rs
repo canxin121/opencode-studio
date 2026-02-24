@@ -1253,12 +1253,16 @@ fn normalize_specs(specs: Vec<String>) -> Vec<String> {
     let mut out = Vec::<String>::new();
     let mut seen = HashSet::<String>::new();
     for raw in specs {
-        let spec = raw.trim();
-        if spec.is_empty() {
-            continue;
-        }
-        if seen.insert(spec.to_string()) {
-            out.push(spec.to_string());
+        // Be forgiving: allow users/UIs to accidentally paste multiple entries
+        // into a single list item separated by newlines/commas/tabs.
+        for part in raw.split(|ch| ch == '\n' || ch == '\r' || ch == ',' || ch == '\t') {
+            let spec = part.trim();
+            if spec.is_empty() {
+                continue;
+            }
+            if seen.insert(spec.to_string()) {
+                out.push(spec.to_string());
+            }
         }
     }
     out
@@ -1452,14 +1456,20 @@ fn resolve_plugin_root(spec: &str) -> Result<PathBuf, String> {
         return Err("empty plugin spec".to_string());
     }
 
-    if spec.starts_with("file://") {
-        let url = url::Url::parse(spec).map_err(|err| format!("invalid file URL: {err}"))?;
-        if url.scheme() != "file" {
-            return Err(format!("unsupported URL scheme '{}': {spec}", url.scheme()));
+    if spec.starts_with("file:") {
+        let path = resolve_file_spec_path(spec)?;
+        return resolve_local_path_root(&path);
+    }
+
+    if spec.starts_with("link:") {
+        let rest = spec
+            .strip_prefix("link:")
+            .unwrap_or(spec)
+            .trim();
+        if rest.is_empty() {
+            return Err("empty link: plugin spec".to_string());
         }
-        let path = url
-            .to_file_path()
-            .map_err(|_| format!("failed to convert file URL to path: {spec}"))?;
+        let path = resolve_spec_path(rest);
         return resolve_local_path_root(&path);
     }
 
@@ -1468,7 +1478,97 @@ fn resolve_plugin_root(spec: &str) -> Result<PathBuf, String> {
         return resolve_local_path_root(&path);
     }
 
+    // Support npm-style specifiers like:
+    // - name@version
+    // - @scope/name@version
+    // - name@file:./local/path
+    // - name@./local/path
+    // Resolve the name part from node_modules, and treat file/path references as local plugins.
+    if let Some((name, reference)) = split_npm_name_and_reference(spec) {
+        if reference.starts_with("file:") {
+            let path = resolve_file_spec_path(reference)?;
+            return resolve_local_path_root(&path);
+        }
+
+        if reference.starts_with("link:") {
+            let rest = reference
+                .strip_prefix("link:")
+                .unwrap_or(reference)
+                .trim();
+            if rest.is_empty() {
+                return Err("empty link: plugin spec".to_string());
+            }
+            let path = resolve_spec_path(rest);
+            return resolve_local_path_root(&path);
+        }
+
+        if looks_like_path(reference) {
+            let path = resolve_spec_path(reference);
+            return resolve_local_path_root(&path);
+        }
+
+        return resolve_package_spec_root(name);
+    }
+
     resolve_package_spec_root(spec)
+}
+
+fn split_npm_name_and_reference(spec: &str) -> Option<(&str, &str)> {
+    let spec = spec.trim();
+    if spec.is_empty() {
+        return None;
+    }
+
+    // Scoped packages look like: @scope/name[@ref]
+    if spec.starts_with('@') {
+        let slash_idx = spec.find('/')?;
+        let after_slash = &spec[slash_idx + 1..];
+        let at_rel = after_slash.find('@')?;
+        let at_idx = slash_idx + 1 + at_rel;
+        let name = spec[..at_idx].trim();
+        let reference = spec[at_idx + 1..].trim();
+        if name.is_empty() || reference.is_empty() {
+            return None;
+        }
+        return Some((name, reference));
+    }
+
+    // Unscoped: name[@ref]
+    let at_idx = spec.find('@')?;
+    let name = spec[..at_idx].trim();
+    let reference = spec[at_idx + 1..].trim();
+    if name.is_empty() || reference.is_empty() {
+        return None;
+    }
+    Some((name, reference))
+}
+
+fn resolve_file_spec_path(spec: &str) -> Result<PathBuf, String> {
+    let spec = spec.trim();
+    if !spec.starts_with("file:") {
+        return Err(format!("not a file: spec: {spec}"));
+    }
+
+    // file://... (URL form)
+    if spec.starts_with("file://") {
+        let url = url::Url::parse(spec).map_err(|err| format!("invalid file URL: {err}"))?;
+        if url.scheme() != "file" {
+            return Err(format!("unsupported URL scheme '{}': {spec}", url.scheme()));
+        }
+        return url
+            .to_file_path()
+            .map_err(|_| format!("failed to convert file URL to path: {spec}"));
+    }
+
+    // npm-style file: specifier (not necessarily a valid file:// URL)
+    let rest = spec
+        .strip_prefix("file:")
+        .unwrap_or("")
+        .trim();
+    if rest.is_empty() {
+        return Err("empty file: plugin spec".to_string());
+    }
+    Ok(resolve_spec_path(rest))
 }
 
 fn looks_like_path(spec: &str) -> bool {
@@ -1596,16 +1696,33 @@ fn resolve_manifest_path(root: &Path, package_json: Option<&Value>) -> Option<Pa
 }
 
 fn derive_plugin_id_from_spec(spec: &str) -> String {
-    let raw = if spec.starts_with("file://") {
-        url::Url::parse(spec)
+    let spec = spec.trim();
+    if spec.is_empty() {
+        return "plugin".to_string();
+    }
+
+    // Prefer the package name for npm-style specifiers like name@version.
+    if let Some((name, _reference)) = split_npm_name_and_reference(spec) {
+        return sanitize_plugin_id(name);
+    }
+
+    let raw = if spec.starts_with("file:") {
+        resolve_file_spec_path(spec)
             .ok()
-            .and_then(|url| url.to_file_path().ok())
             .as_ref()
             .and_then(|path| {
                 path.file_stem()
                     .or_else(|| path.file_name())
                     .and_then(|value| value.to_str())
             })
+            .unwrap_or("plugin")
+            .to_string()
+    } else if spec.starts_with("link:") {
+        let rest = spec.strip_prefix("link:").unwrap_or("").trim();
+        Path::new(rest)
+            .file_stem()
+            .or_else(|| Path::new(rest).file_name())
+            .and_then(|value| value.to_str())
             .unwrap_or("plugin")
             .to_string()
     } else if looks_like_path(spec) {
@@ -1669,6 +1786,21 @@ mod tests {
     }
 
     #[test]
+    fn normalize_specs_splits_commas_newlines_and_tabs() {
+        let specs = vec!["a, b\nc\t d".to_string(), "c".to_string()];
+        let normalized = normalize_specs(specs);
+        assert_eq!(
+            normalized,
+            vec![
+                "a".to_string(),
+                "b".to_string(),
+                "c".to_string(),
+                "d".to_string()
+            ]
+        );
+    }
+
+    #[test]
     fn sanitize_plugin_id_replaces_route_unsafe_chars() {
         assert_eq!(sanitize_plugin_id("@scope/pkg"), "scope-pkg");
         assert_eq!(
@@ -1729,6 +1861,109 @@ mod tests {
         assert_eq!(plugins[0].id, "opencode-planpilot");
         assert!(plugins[0].manifest.is_some());
         assert_eq!(plugins[0].capabilities.len(), 2);
+    }
+
+    #[test]
+    fn discover_plugins_reads_manifest_for_file_colon_spec() {
+        let dir = tempdir().expect("tempdir");
+        let root = dir.path();
+        let src = root.join("src");
+        std::fs::create_dir_all(&src).expect("mkdir src");
+
+        std::fs::write(
+            root.join("package.json"),
+            r#"{
+  "name": "opencode-planpilot",
+  "opencodeStudio": { "manifest": "studio.manifest.json" }
+}"#,
+        )
+        .expect("write package");
+
+        std::fs::write(
+            root.join("studio.manifest.json"),
+            r#"{
+  "id": "opencode-planpilot",
+  "version": "1.0.0",
+  "displayName": "Planpilot",
+  "capabilities": ["settings.panel"]
+}"#,
+        )
+        .expect("write manifest");
+
+        let entry_file = src.join("index.ts");
+        std::fs::write(&entry_file, "export default {}\n").expect("write entry");
+        let spec = format!("file:{}", entry_file.to_string_lossy());
+
+        let plugins = discover_plugins(&[spec]);
+        assert_eq!(plugins.len(), 1);
+        assert_eq!(plugins[0].id, "opencode-planpilot");
+        assert!(plugins[0].manifest.is_some());
+        assert_eq!(plugins[0].capabilities, vec!["settings.panel".to_string()]);
+    }
+
+    #[test]
+    fn discover_plugins_reads_manifest_for_named_file_colon_spec() {
+        let dir = tempdir().expect("tempdir");
+        let root = dir.path();
+        std::fs::write(
+            root.join("package.json"),
+            r#"{
+  "name": "opencode-planpilot",
+  "opencodeStudio": { "manifest": "studio.manifest.json" }
+}"#,
+        )
+        .expect("write package");
+
+        std::fs::write(
+            root.join("studio.manifest.json"),
+            r#"{
+  "id": "opencode-planpilot",
+  "version": "1.0.0",
+  "displayName": "Planpilot",
+  "capabilities": []
+}"#,
+        )
+        .expect("write manifest");
+
+        let spec = format!("opencode-planpilot@file:{}", root.to_string_lossy());
+        let plugins = discover_plugins(&[spec]);
+        assert_eq!(plugins.len(), 1);
+        assert_eq!(plugins[0].id, "opencode-planpilot");
+        assert!(matches!(plugins[0].status, PluginStatus::Ready));
+        assert!(plugins[0].root_path.is_some());
+        assert!(plugins[0].manifest.is_some());
+    }
+
+    #[test]
+    fn discover_plugins_reads_manifest_for_scoped_named_file_colon_spec() {
+        let dir = tempdir().expect("tempdir");
+        let root = dir.path();
+        std::fs::write(
+            root.join("package.json"),
+            r#"{
+  "name": "@scope/planpilot",
+  "opencodeStudio": { "manifest": "studio.manifest.json" }
+}"#,
+        )
+        .expect("write package");
+
+        std::fs::write(
+            root.join("studio.manifest.json"),
+            r#"{
+  "id": "@scope/planpilot",
+  "version": "1.0.0",
+  "displayName": "Planpilot",
+  "capabilities": []
+}"#,
+        )
+        .expect("write manifest");
+
+        let spec = format!("@scope/planpilot@file:{}", root.to_string_lossy());
+        let plugins = discover_plugins(&[spec]);
+        assert_eq!(plugins.len(), 1);
+        assert_eq!(plugins[0].id, "scope-planpilot");
+        assert!(matches!(plugins[0].status, PluginStatus::Ready));
+        assert!(plugins[0].manifest.is_some());
     }
 
     #[test]
