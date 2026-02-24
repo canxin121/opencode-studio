@@ -74,7 +74,11 @@ export default defineComponent({
 
     <div v-if="isSectionOpen('agents')" class="space-y-4">
       <div class="flex flex-wrap items-center gap-2">
-        <Input v-model="newAgentName" :placeholder="t('settings.opencodeConfig.sections.agents.placeholders.agentName')" class="max-w-xs" />
+        <Input
+          v-model="newAgentName"
+          :placeholder="t('settings.opencodeConfig.sections.agents.placeholders.agentName')"
+          class="max-w-xs"
+        />
         <Tooltip>
           <Button
             size="icon"
@@ -90,7 +94,11 @@ export default defineComponent({
           <template #content>{{ t('settings.opencodeConfig.sections.agents.actions.addAgent') }}</template>
         </Tooltip>
         <div class="flex-1" />
-        <Input v-model="agentFilter" :placeholder="t('settings.opencodeConfig.sections.agents.placeholders.filterAgents')" class="max-w-sm" />
+        <Input
+          v-model="agentFilter"
+          :placeholder="t('settings.opencodeConfig.sections.agents.placeholders.filterAgents')"
+          class="max-w-sm"
+        />
       </div>
 
       <div class="grid gap-4 lg:grid-cols-[320px_1fr]">

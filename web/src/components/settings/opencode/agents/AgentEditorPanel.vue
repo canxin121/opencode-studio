@@ -101,70 +101,72 @@ export default defineComponent({
 
     <div v-for="[agentId, agent] in selectedAgentRows" :key="`agent-edit:${agentId}`" class="space-y-4">
       <div class="flex items-center justify-between gap-3">
-          <div>
-            <div class="font-mono text-sm break-all">@{{ agentId }}</div>
-            <div class="text-[11px] text-muted-foreground">{{ t('settings.opencodeConfig.sections.agents.editor.help.singleEdit') }}</div>
+        <div>
+          <div class="font-mono text-sm break-all">@{{ agentId }}</div>
+          <div class="text-[11px] text-muted-foreground">
+            {{ t('settings.opencodeConfig.sections.agents.editor.help.singleEdit') }}
           </div>
+        </div>
         <div class="flex items-center gap-2">
-            <Tooltip>
-              <Button
-                size="icon"
-                variant="ghost"
-                class="h-8 w-8"
-                :title="t('settings.opencodeConfig.sections.agents.editor.actions.copyJson')"
-                :aria-label="t('settings.opencodeConfig.sections.agents.editor.actions.copyJson')"
-                @click="copyEntryJson('agent', agentId)"
-              >
-                <RiClipboardLine class="h-4 w-4" />
-              </Button>
-              <template #content>{{ t('settings.opencodeConfig.sections.agents.editor.actions.copyJson') }}</template>
-            </Tooltip>
-            <Tooltip>
-              <Button
-                size="icon"
-                variant="ghost"
-                class="h-8 w-8"
-                :title="t('settings.opencodeConfig.sections.agents.editor.actions.importJson')"
-                :aria-label="t('settings.opencodeConfig.sections.agents.editor.actions.importJson')"
-                @click="importEntryJson('agent', agentId)"
-              >
-                <RiFileUploadLine class="h-4 w-4" />
-              </Button>
-              <template #content>{{ t('settings.opencodeConfig.sections.agents.editor.actions.importJson') }}</template>
-            </Tooltip>
-            <Tooltip>
-              <Button
-                size="icon"
-                variant="ghost"
-                class="h-8 w-8"
-                :title="
-                  showAgentAdvanced[agentId]
-                    ? t('settings.opencodeConfig.sections.agents.editor.actions.hideAdvanced')
-                    : t('settings.opencodeConfig.sections.agents.editor.actions.showAdvanced')
-                "
-                :aria-label="t('settings.opencodeConfig.sections.agents.editor.actions.toggleAdvancedAria')"
-                @click="toggleAgentAdvanced(agentId)"
-              >
-                <RiSettings3Line class="h-4 w-4" />
-              </Button>
-              <template #content>{{
-                showAgentAdvanced[agentId]
-                  ? t('settings.opencodeConfig.sections.agents.editor.actions.hideAdvanced')
-                  : t('settings.opencodeConfig.sections.agents.editor.actions.showAdvanced')
-              }}</template>
-            </Tooltip>
           <Tooltip>
             <Button
               size="icon"
-                variant="ghost-destructive"
-                class="h-8 w-8"
-                :title="t('common.remove')"
-                :aria-label="t('settings.opencodeConfig.sections.agents.editor.actions.removeAgentAria')"
-                @click="
-                  () => {
-                    removeEntry('agent', agentId)
-                    selectedAgentId = null
-                  }
+              variant="ghost"
+              class="h-8 w-8"
+              :title="t('settings.opencodeConfig.sections.agents.editor.actions.copyJson')"
+              :aria-label="t('settings.opencodeConfig.sections.agents.editor.actions.copyJson')"
+              @click="copyEntryJson('agent', agentId)"
+            >
+              <RiClipboardLine class="h-4 w-4" />
+            </Button>
+            <template #content>{{ t('settings.opencodeConfig.sections.agents.editor.actions.copyJson') }}</template>
+          </Tooltip>
+          <Tooltip>
+            <Button
+              size="icon"
+              variant="ghost"
+              class="h-8 w-8"
+              :title="t('settings.opencodeConfig.sections.agents.editor.actions.importJson')"
+              :aria-label="t('settings.opencodeConfig.sections.agents.editor.actions.importJson')"
+              @click="importEntryJson('agent', agentId)"
+            >
+              <RiFileUploadLine class="h-4 w-4" />
+            </Button>
+            <template #content>{{ t('settings.opencodeConfig.sections.agents.editor.actions.importJson') }}</template>
+          </Tooltip>
+          <Tooltip>
+            <Button
+              size="icon"
+              variant="ghost"
+              class="h-8 w-8"
+              :title="
+                showAgentAdvanced[agentId]
+                  ? t('settings.opencodeConfig.sections.agents.editor.actions.hideAdvanced')
+                  : t('settings.opencodeConfig.sections.agents.editor.actions.showAdvanced')
+              "
+              :aria-label="t('settings.opencodeConfig.sections.agents.editor.actions.toggleAdvancedAria')"
+              @click="toggleAgentAdvanced(agentId)"
+            >
+              <RiSettings3Line class="h-4 w-4" />
+            </Button>
+            <template #content>{{
+              showAgentAdvanced[agentId]
+                ? t('settings.opencodeConfig.sections.agents.editor.actions.hideAdvanced')
+                : t('settings.opencodeConfig.sections.agents.editor.actions.showAdvanced')
+            }}</template>
+          </Tooltip>
+          <Tooltip>
+            <Button
+              size="icon"
+              variant="ghost-destructive"
+              class="h-8 w-8"
+              :title="t('common.remove')"
+              :aria-label="t('settings.opencodeConfig.sections.agents.editor.actions.removeAgentAria')"
+              @click="
+                () => {
+                  removeEntry('agent', agentId)
+                  selectedAgentId = null
+                }
               "
             >
               <RiDeleteBinLine class="h-4 w-4" />
@@ -228,7 +230,9 @@ export default defineComponent({
       <div v-if="agentEditorTab === 'basics'" class="space-y-4">
         <div class="grid gap-4 lg:grid-cols-3">
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.agents.editor.fields.model') }}</span>
+            <span class="text-xs text-muted-foreground">{{
+              t('settings.opencodeConfig.sections.agents.editor.fields.model')
+            }}</span>
             <OptionPicker
               :model-value="agent.model || ''"
               @update:model-value="(v) => setEntryField('agent', agentId, 'model', String(v || '').trim())"
@@ -256,7 +260,9 @@ export default defineComponent({
           </label>
 
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.agents.editor.fields.variant') }}</span>
+            <span class="text-xs text-muted-foreground">{{
+              t('settings.opencodeConfig.sections.agents.editor.fields.variant')
+            }}</span>
             <Input
               :model-value="agent.variant || ''"
               @update:model-value="(v) => setEntryField('agent', agentId, 'variant', String(v || '').trim())"
@@ -265,7 +271,9 @@ export default defineComponent({
           </label>
 
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.agents.editor.fields.temperature') }}</span>
+            <span class="text-xs text-muted-foreground">{{
+              t('settings.opencodeConfig.sections.agents.editor.fields.temperature')
+            }}</span>
             <input
               :value="agent.temperature ?? ''"
               @input="
@@ -279,7 +287,9 @@ export default defineComponent({
           </label>
 
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.agents.editor.fields.topP') }}</span>
+            <span class="text-xs text-muted-foreground">{{
+              t('settings.opencodeConfig.sections.agents.editor.fields.topP')
+            }}</span>
             <input
               :value="agent.top_p ?? ''"
               @input="
@@ -292,7 +302,9 @@ export default defineComponent({
           </label>
 
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.agents.editor.fields.description') }}</span>
+            <span class="text-xs text-muted-foreground">{{
+              t('settings.opencodeConfig.sections.agents.editor.fields.description')
+            }}</span>
             <Input
               :model-value="agent.description || ''"
               @update:model-value="(v) => setEntryField('agent', agentId, 'description', v)"
@@ -300,7 +312,9 @@ export default defineComponent({
           </label>
 
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.agents.editor.fields.mode') }}</span>
+            <span class="text-xs text-muted-foreground">{{
+              t('settings.opencodeConfig.sections.agents.editor.fields.mode')
+            }}</span>
             <OptionPicker
               :model-value="agent.mode || 'default'"
               @update:model-value="
@@ -317,7 +331,9 @@ export default defineComponent({
           </label>
 
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.agents.editor.fields.color') }}</span>
+            <span class="text-xs text-muted-foreground">{{
+              t('settings.opencodeConfig.sections.agents.editor.fields.color')
+            }}</span>
             <Input
               :model-value="agent.color || ''"
               @update:model-value="(v) => setEntryField('agent', agentId, 'color', v)"
@@ -326,7 +342,9 @@ export default defineComponent({
           </label>
 
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.agents.editor.fields.steps') }}</span>
+            <span class="text-xs text-muted-foreground">{{
+              t('settings.opencodeConfig.sections.agents.editor.fields.steps')
+            }}</span>
             <input
               :value="agent.steps ?? ''"
               @input="
@@ -361,7 +379,9 @@ export default defineComponent({
 
       <div v-else-if="agentEditorTab === 'prompt'" class="space-y-2">
         <div class="flex items-center justify-between">
-          <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.agents.editor.tabs.prompt') }}</span>
+          <span class="text-xs text-muted-foreground">{{
+            t('settings.opencodeConfig.sections.agents.editor.tabs.prompt')
+          }}</span>
           <div class="flex items-center gap-2">
             <Tooltip>
               <Button
@@ -374,7 +394,9 @@ export default defineComponent({
               >
                 <RiFileTextLine class="h-4 w-4" />
               </Button>
-              <template #content>{{ t('settings.opencodeConfig.sections.agents.editor.prompt.actions.insertSkeleton') }}</template>
+              <template #content>{{
+                t('settings.opencodeConfig.sections.agents.editor.prompt.actions.insertSkeleton')
+              }}</template>
             </Tooltip>
             <Tooltip>
               <Button
@@ -387,7 +409,9 @@ export default defineComponent({
               >
                 <RiFileTextLine class="h-4 w-4" />
               </Button>
-              <template #content>{{ t('settings.opencodeConfig.sections.agents.editor.prompt.actions.insertFrontmatter') }}</template>
+              <template #content>{{
+                t('settings.opencodeConfig.sections.agents.editor.prompt.actions.insertFrontmatter')
+              }}</template>
             </Tooltip>
           </div>
         </div>
@@ -405,8 +429,12 @@ export default defineComponent({
       <div v-else-if="agentEditorTab === 'permissions'" class="space-y-4">
         <div class="rounded-md border border-border p-3 space-y-2">
           <div class="flex items-center justify-between">
-            <div class="text-sm font-semibold">{{ t('settings.opencodeConfig.sections.agents.editor.permissions.title') }}</div>
-            <div class="text-[11px] text-muted-foreground">{{ t('settings.opencodeConfig.sections.agents.editor.permissions.help.inherit') }}</div>
+            <div class="text-sm font-semibold">
+              {{ t('settings.opencodeConfig.sections.agents.editor.permissions.title') }}
+            </div>
+            <div class="text-[11px] text-muted-foreground">
+              {{ t('settings.opencodeConfig.sections.agents.editor.permissions.help.inherit') }}
+            </div>
           </div>
 
           <div class="grid gap-3">
@@ -427,7 +455,9 @@ export default defineComponent({
                   v-model="agentPermissionNewAction[agentId]"
                   :options="permissionActionPickerOptions"
                   :title="t('settings.opencodeConfig.sections.permissions.customRules.fields.action')"
-                  :search-placeholder="t('settings.opencodeConfig.sections.permissions.customRules.search.searchActions')"
+                  :search-placeholder="
+                    t('settings.opencodeConfig.sections.permissions.customRules.search.searchActions')
+                  "
                   :include-empty="false"
                 />
               </div>
@@ -487,7 +517,9 @@ export default defineComponent({
                     >
                       <div class="flex items-center justify-between">
                         <div class="font-mono text-xs break-all">
-                          {{ t('settings.opencodeConfig.sections.permissions.rules.patternMapTitle', { key: item.key }) }}
+                          {{
+                            t('settings.opencodeConfig.sections.permissions.rules.patternMapTitle', { key: item.key })
+                          }}
                         </div>
                         <div class="flex items-center gap-2">
                           <Tooltip>
@@ -501,7 +533,9 @@ export default defineComponent({
                             >
                               <RiAddLine class="h-4 w-4" />
                             </Button>
-                            <template #content>{{ t('settings.opencodeConfig.sections.permissions.rules.actions.addPattern') }}</template>
+                            <template #content>{{
+                              t('settings.opencodeConfig.sections.permissions.rules.actions.addPattern')
+                            }}</template>
                           </Tooltip>
                           <Tooltip>
                             <Button
@@ -550,7 +584,9 @@ export default defineComponent({
                             v-model="row.action"
                             :options="permissionActionPickerOptions"
                             :title="t('settings.opencodeConfig.sections.permissions.rules.fields.action')"
-                            :search-placeholder="t('settings.opencodeConfig.sections.permissions.rules.search.searchActions')"
+                            :search-placeholder="
+                              t('settings.opencodeConfig.sections.permissions.rules.search.searchActions')
+                            "
                             :include-empty="false"
                           />
                           <div class="flex items-center gap-1">
@@ -600,7 +636,9 @@ export default defineComponent({
                           >
                             <RiCheckLine class="h-4 w-4" />
                           </Button>
-                          <template #content>{{ t('settings.opencodeConfig.sections.permissions.rules.actions.applyPatterns') }}</template>
+                          <template #content>{{
+                            t('settings.opencodeConfig.sections.permissions.rules.actions.applyPatterns')
+                          }}</template>
                         </Tooltip>
                         <span
                           v-if="agentPermissionPatternEditors[`${agentId}::${item.key}`]?.error"
@@ -623,7 +661,9 @@ export default defineComponent({
 
       <div v-else-if="agentEditorTab === 'json'" class="space-y-4">
         <div class="grid gap-2">
-          <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.agents.editor.json.optionsTitle') }}</span>
+          <span class="text-xs text-muted-foreground">{{
+            t('settings.opencodeConfig.sections.agents.editor.json.optionsTitle')
+          }}</span>
           <textarea
             v-model="
               ensureJsonBuffer(

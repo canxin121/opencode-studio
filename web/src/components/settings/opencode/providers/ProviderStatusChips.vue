@@ -45,7 +45,8 @@ const providerId = props.providerId
       isProviderSelectable(providerId).reason
     }}</span>
     <span v-if="providerRemoteInfo(providerId)?.source" class="text-muted-foreground">
-      {{ t('settings.opencodeConfig.sections.providers.statusChips.source') }}: {{ providerRemoteInfo(providerId)?.source }}
+      {{ t('settings.opencodeConfig.sections.providers.statusChips.source') }}:
+      {{ providerRemoteInfo(providerId)?.source }}
     </span>
     <span v-if="providerRequiredEnv(providerId).length" class="text-muted-foreground">
       {{
@@ -56,8 +57,8 @@ const providerId = props.providerId
       }}
     </span>
     <span v-if="providerEnvMissing(providerId).length" class="text-amber-600">
-      {{ t('settings.opencodeConfig.sections.providers.statusChips.missing') }}: {{
-        providerEnvMissing(providerId).slice(0, 3).join(', ')
+      {{ t('settings.opencodeConfig.sections.providers.statusChips.missing') }}:
+      {{ providerEnvMissing(providerId).slice(0, 3).join(', ')
       }}{{ providerEnvMissing(providerId).length > 3 ? ', …' : '' }}
     </span>
     <span v-if="providerSources[providerId]" class="text-muted-foreground">
@@ -79,8 +80,10 @@ const providerId = props.providerId
           : ''
       }}
     </span>
-    <span v-else-if="providerSourcesError[providerId]" class="text-amber-600"
-      >{{ t('settings.opencodeConfig.sections.providers.statusChips.sourcesError', { error: providerSourcesError[providerId] }) }}</span
-    >
+    <span v-else-if="providerSourcesError[providerId]" class="text-amber-600">{{
+      t('settings.opencodeConfig.sections.providers.statusChips.sourcesError', {
+        error: providerSourcesError[providerId],
+      })
+    }}</span>
   </div>
 </template>

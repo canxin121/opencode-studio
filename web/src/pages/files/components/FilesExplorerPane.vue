@@ -366,7 +366,9 @@ function rowActionMenuGroups(node: FileNode): OptionMenuGroup[] {
     variant: 'destructive',
     disabled: props.deletingPaths.has(node.path),
     confirmTitle:
-      node.type === 'directory' ? t('files.explorer.actions.deleteFolderTitle') : t('files.explorer.actions.deleteFileTitle'),
+      node.type === 'directory'
+        ? t('files.explorer.actions.deleteFolderTitle')
+        : t('files.explorer.actions.deleteFileTitle'),
     confirmDescription: t('files.explorer.actions.deleteDescription', { name: node.name }),
     confirmText: t('files.explorer.actions.delete'),
     cancelText: t('common.cancel'),
@@ -590,7 +592,11 @@ onBeforeUnmount(() => {
           <RiFolderAddLine class="h-3.5 w-3.5" />
         </SidebarIconButton>
 
-        <SidebarIconButton :title="t('files.explorer.toolbar.refreshTree')" :aria-label="t('files.explorer.toolbar.refreshTree')" @click="refreshRoot">
+        <SidebarIconButton
+          :title="t('files.explorer.toolbar.refreshTree')"
+          :aria-label="t('files.explorer.toolbar.refreshTree')"
+          @click="refreshRoot"
+        >
           <RiRefreshLine class="h-3.5 w-3.5" />
         </SidebarIconButton>
 
@@ -626,8 +632,12 @@ onBeforeUnmount(() => {
 
     <div class="border-b border-sidebar-border/60 px-1.5 py-1">
       <SegmentedControl class="grid-cols-2">
-        <SegmentedButton :active="viewMode === 'tree'" @click="viewMode = 'tree'">{{ t('files.explorer.view.tree') }}</SegmentedButton>
-        <SegmentedButton :active="viewMode === 'search'" @click="viewMode = 'search'">{{ t('files.explorer.view.search') }}</SegmentedButton>
+        <SegmentedButton :active="viewMode === 'tree'" @click="viewMode = 'tree'">{{
+          t('files.explorer.view.tree')
+        }}</SegmentedButton>
+        <SegmentedButton :active="viewMode === 'search'" @click="viewMode = 'search'">{{
+          t('files.explorer.view.search')
+        }}</SegmentedButton>
       </SegmentedControl>
     </div>
 

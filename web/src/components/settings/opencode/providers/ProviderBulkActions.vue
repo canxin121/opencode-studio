@@ -43,11 +43,15 @@ const conflictPolicyPickerOptions: OptionPickerOption[] = [
   <div class="rounded-md border border-border p-3 space-y-2">
     <div class="flex flex-wrap items-center justify-between gap-2">
       <div class="text-sm font-semibold">{{ t('settings.opencodeConfig.sections.providers.bulkActions.title') }}</div>
-      <div class="text-[11px] text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.bulkActions.help') }}</div>
+      <div class="text-[11px] text-muted-foreground">
+        {{ t('settings.opencodeConfig.sections.providers.bulkActions.help') }}
+      </div>
     </div>
     <div class="grid gap-3 lg:grid-cols-2">
       <label class="grid gap-1">
-        <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.bulkActions.fields.conflictPolicy') }}</span>
+        <span class="text-xs text-muted-foreground">{{
+          t('settings.opencodeConfig.sections.providers.bulkActions.fields.conflictPolicy')
+        }}</span>
         <OptionPicker
           v-model="providerConflictPolicy"
           :options="conflictPolicyPickerOptions"
@@ -57,7 +61,9 @@ const conflictPolicyPickerOptions: OptionPickerOption[] = [
         />
       </label>
       <div class="lg:col-span-2 grid gap-1">
-        <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.bulkActions.fields.selection') }}</span>
+        <span class="text-xs text-muted-foreground">{{
+          t('settings.opencodeConfig.sections.providers.bulkActions.fields.selection')
+        }}</span>
         <div class="flex flex-wrap gap-2">
           <span
             v-for="id in bulkProviderSelection"
@@ -124,18 +130,18 @@ const conflictPolicyPickerOptions: OptionPickerOption[] = [
     </div>
   </div>
 
-<div class="flex flex-wrap items-center gap-2">
-  <Button size="sm" variant="outline" @click="applyBulkEnableOnly" :disabled="bulkProviderSelection.length === 0">
+  <div class="flex flex-wrap items-center gap-2">
+    <Button size="sm" variant="outline" @click="applyBulkEnableOnly" :disabled="bulkProviderSelection.length === 0">
       {{ t('settings.opencodeConfig.sections.providers.bulkActions.actions.enableOnly') }}
-  </Button>
+    </Button>
     <Button
       size="sm"
       variant="outline"
       @click="applyBulkDisableAllExcept"
       :disabled="bulkProviderSelection.length === 0"
-  >
+    >
       {{ t('settings.opencodeConfig.sections.providers.bulkActions.actions.disableAllExcept') }}
-  </Button>
+    </Button>
     <span v-if="providerEnvError" class="text-xs text-amber-600 break-all">{{
       t('settings.opencodeConfig.sections.providers.bulkActions.errors.envCheck', { error: providerEnvError })
     }}</span>

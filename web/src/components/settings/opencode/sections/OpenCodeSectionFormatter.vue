@@ -82,7 +82,9 @@ export default defineComponent({
   <section id="formatter" class="scroll-mt-24 rounded-lg border border-border bg-background p-4 space-y-4">
     <div class="flex items-start justify-between gap-3">
       <div class="min-w-0">
-        <div class="text-base font-semibold leading-snug">{{ t('settings.opencodeConfig.sections.formatter.title') }}</div>
+        <div class="text-base font-semibold leading-snug">
+          {{ t('settings.opencodeConfig.sections.formatter.title') }}
+        </div>
       </div>
       <div class="flex items-center gap-2">
         <Tooltip>
@@ -181,7 +183,9 @@ export default defineComponent({
             {{ t('settings.opencodeConfig.sections.common.disabled') }}
           </label>
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.formatter.fields.command') }}</span>
+            <span class="text-xs text-muted-foreground">{{
+              t('settings.opencodeConfig.sections.formatter.fields.command')
+            }}</span>
             <StringListEditor
               :model-value="fmt.command || []"
               :suggestions="formatterCommandSuggestions"
@@ -189,12 +193,16 @@ export default defineComponent({
               :placeholder="t('settings.opencodeConfig.sections.formatter.formatters.command.placeholder')"
               split-mode="lines"
               :advanced-rows="3"
-              :advanced-placeholder="t('settings.opencodeConfig.sections.formatter.formatters.command.advancedPlaceholder')"
+              :advanced-placeholder="
+                t('settings.opencodeConfig.sections.formatter.formatters.command.advancedPlaceholder')
+              "
               @update:model-value="(v) => setEntryField('formatter', fmtId, 'command', v)"
             />
           </label>
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.formatter.fields.extensions') }}</span>
+            <span class="text-xs text-muted-foreground">{{
+              t('settings.opencodeConfig.sections.formatter.fields.extensions')
+            }}</span>
             <StringListEditor
               :model-value="fmt.extensions || []"
               :suggestions="extensionSuggestions"
@@ -202,12 +210,16 @@ export default defineComponent({
               :placeholder="t('settings.opencodeConfig.sections.formatter.formatters.extensions.placeholder')"
               split-mode="tags"
               :advanced-rows="3"
-              :advanced-placeholder="t('settings.opencodeConfig.sections.formatter.formatters.extensions.advancedPlaceholder')"
+              :advanced-placeholder="
+                t('settings.opencodeConfig.sections.formatter.formatters.extensions.advancedPlaceholder')
+              "
               @update:model-value="(v) => setEntryField('formatter', fmtId, 'extensions', v)"
             />
           </label>
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.formatter.fields.environmentJson') }}</span>
+            <span class="text-xs text-muted-foreground">{{
+              t('settings.opencodeConfig.sections.formatter.fields.environmentJson')
+            }}</span>
             <textarea
               v-model="
                 ensureJsonBuffer(
@@ -220,20 +232,20 @@ export default defineComponent({
               rows="4"
               class="w-full rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs"
             />
-              <div class="flex items-center gap-2">
-                <Tooltip>
-                  <Button
-                    size="icon"
-                    variant="outline"
-                    class="h-8 w-8"
-                    :title="t('common.apply')"
-                    :aria-label="t('settings.opencodeConfig.sections.common.applyJson')"
-                    @click="applyJsonBuffer(`formatter:${fmtId}:env`)"
-                  >
-                    <RiCheckLine class="h-4 w-4" />
-                  </Button>
-                  <template #content>{{ t('common.apply') }}</template>
-                </Tooltip>
+            <div class="flex items-center gap-2">
+              <Tooltip>
+                <Button
+                  size="icon"
+                  variant="outline"
+                  class="h-8 w-8"
+                  :title="t('common.apply')"
+                  :aria-label="t('settings.opencodeConfig.sections.common.applyJson')"
+                  @click="applyJsonBuffer(`formatter:${fmtId}:env`)"
+                >
+                  <RiCheckLine class="h-4 w-4" />
+                </Button>
+                <template #content>{{ t('common.apply') }}</template>
+              </Tooltip>
               <span
                 v-if="
                   ensureJsonBuffer(
@@ -265,7 +277,11 @@ export default defineComponent({
           {{ t('settings.opencodeConfig.sections.formatter.lsp.disableAll') }}
         </label>
         <div class="flex flex-wrap items-center gap-2" v-if="!lspDisabled">
-          <Input v-model="newLspId" :placeholder="t('settings.opencodeConfig.sections.formatter.lsp.placeholders.lspId')" class="max-w-xs" />
+          <Input
+            v-model="newLspId"
+            :placeholder="t('settings.opencodeConfig.sections.formatter.lsp.placeholders.lspId')"
+            class="max-w-xs"
+          />
           <Tooltip>
             <Button
               size="icon"
@@ -306,7 +322,9 @@ export default defineComponent({
             </Tooltip>
           </div>
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.formatter.lsp.fields.mode') }}</span>
+            <span class="text-xs text-muted-foreground">{{
+              t('settings.opencodeConfig.sections.formatter.lsp.fields.mode')
+            }}</span>
             <OptionPicker
               :model-value="lspMode(lsp)"
               @update:model-value="(v) => setLspMode(lspId, String(v || ''))"
@@ -318,7 +336,9 @@ export default defineComponent({
           </label>
           <div v-if="lspMode(lsp) === 'config'" class="grid gap-3">
             <label class="grid gap-1">
-              <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.formatter.fields.command') }}</span>
+              <span class="text-xs text-muted-foreground">{{
+                t('settings.opencodeConfig.sections.formatter.fields.command')
+              }}</span>
               <StringListEditor
                 :model-value="lsp.command || []"
                 :suggestions="lspCommandSuggestions"
@@ -331,7 +351,9 @@ export default defineComponent({
               />
             </label>
             <label class="grid gap-1">
-              <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.formatter.fields.extensions') }}</span>
+              <span class="text-xs text-muted-foreground">{{
+                t('settings.opencodeConfig.sections.formatter.fields.extensions')
+              }}</span>
               <StringListEditor
                 :model-value="lsp.extensions || []"
                 :suggestions="extensionSuggestions"
@@ -339,12 +361,16 @@ export default defineComponent({
                 :placeholder="t('settings.opencodeConfig.sections.formatter.formatters.extensions.placeholder')"
                 split-mode="tags"
                 :advanced-rows="3"
-                :advanced-placeholder="t('settings.opencodeConfig.sections.formatter.formatters.extensions.advancedPlaceholder')"
+                :advanced-placeholder="
+                  t('settings.opencodeConfig.sections.formatter.formatters.extensions.advancedPlaceholder')
+                "
                 @update:model-value="(v) => setEntryField('lsp', lspId, 'extensions', v)"
               />
             </label>
             <label class="grid gap-1">
-              <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.formatter.fields.environmentJson') }}</span>
+              <span class="text-xs text-muted-foreground">{{
+                t('settings.opencodeConfig.sections.formatter.fields.environmentJson')
+              }}</span>
               <textarea
                 v-model="
                   ensureJsonBuffer(
@@ -394,7 +420,9 @@ export default defineComponent({
               </div>
             </label>
             <label class="grid gap-1">
-              <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.formatter.lsp.fields.initializationJson') }}</span>
+              <span class="text-xs text-muted-foreground">{{
+                t('settings.opencodeConfig.sections.formatter.lsp.fields.initializationJson')
+              }}</span>
               <textarea
                 v-model="
                   ensureJsonBuffer(

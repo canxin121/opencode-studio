@@ -170,8 +170,12 @@ function onFilterRefTypeChange(value: string | number) {
     <div class="grid gap-4 lg:grid-cols-[300px_minmax(0,1fr)]">
       <div class="space-y-3">
         <div class="flex items-center justify-between">
-          <div class="text-xs font-medium text-muted-foreground">{{ t('git.ui.dialogs.history.sections.commits') }}</div>
-          <Button variant="secondary" size="sm" :disabled="loading" @click="$emit('refresh')">{{ t('common.refresh') }}</Button>
+          <div class="text-xs font-medium text-muted-foreground">
+            {{ t('git.ui.dialogs.history.sections.commits') }}
+          </div>
+          <Button variant="secondary" size="sm" :disabled="loading" @click="$emit('refresh')">{{
+            t('common.refresh')
+          }}</Button>
         </div>
 
         <div
@@ -224,7 +228,9 @@ function onFilterRefTypeChange(value: string | number) {
             :options="refPickerOptions"
             :title="t('git.ui.dialogs.history.fields.ref')"
             :search-placeholder="t('git.ui.dialogs.history.search.refs')"
-            :empty-label="filterRefType === 'tag' ? t('git.ui.dialogs.history.allTags') : t('git.ui.dialogs.history.allBranches')"
+            :empty-label="
+              filterRefType === 'tag' ? t('git.ui.dialogs.history.allTags') : t('git.ui.dialogs.history.allBranches')
+            "
             trigger-class="h-8 rounded border border-input bg-background text-xs px-2"
             size="sm"
             monospace
@@ -243,15 +249,21 @@ function onFilterRefTypeChange(value: string | number) {
           />
           <div class="flex items-center gap-2">
             <Button size="sm" class="h-7" @click="$emit('applyFilters')">{{ t('common.search') }}</Button>
-            <Button variant="secondary" size="sm" class="h-7" @click="$emit('clearFilters')">{{ t('common.clear') }}</Button>
+            <Button variant="secondary" size="sm" class="h-7" @click="$emit('clearFilters')">{{
+              t('common.clear')
+            }}</Button>
           </div>
         </div>
 
         <div class="rounded-md border border-border/50 overflow-hidden">
           <div v-if="error" class="p-3 text-xs text-red-500">{{ error }}</div>
-          <div v-else-if="loading && !commits.length" class="p-3 text-xs text-muted-foreground">{{ t('common.loading') }}</div>
+          <div v-else-if="loading && !commits.length" class="p-3 text-xs text-muted-foreground">
+            {{ t('common.loading') }}
+          </div>
           <ScrollArea v-else class="h-72">
-            <div v-if="!commits.length" class="p-3 text-xs text-muted-foreground">{{ t('git.ui.dialogs.history.emptyCommits') }}</div>
+            <div v-if="!commits.length" class="p-3 text-xs text-muted-foreground">
+              {{ t('git.ui.dialogs.history.emptyCommits') }}
+            </div>
             <div v-else class="divide-y divide-border/40">
               <button
                 v-for="c in commits"
@@ -295,10 +307,14 @@ function onFilterRefTypeChange(value: string | number) {
       </div>
 
       <div class="rounded-md border border-border/50 bg-background/40 p-3 min-h-[20rem]">
-        <div v-if="!selected" class="text-xs text-muted-foreground">{{ t('git.ui.dialogs.history.selectCommitToViewDiff') }}</div>
+        <div v-if="!selected" class="text-xs text-muted-foreground">
+          {{ t('git.ui.dialogs.history.selectCommitToViewDiff') }}
+        </div>
         <div v-else class="space-y-3">
           <div class="space-y-1">
-            <div class="text-sm font-semibold text-foreground">{{ selected.subject || t('git.ui.dialogs.history.noMessage') }}</div>
+            <div class="text-sm font-semibold text-foreground">
+              {{ selected.subject || t('git.ui.dialogs.history.noMessage') }}
+            </div>
             <div class="text-[11px] text-muted-foreground">{{ selectedMeta }}</div>
             <div class="text-[11px] text-muted-foreground font-mono">{{ selected.hash }}</div>
             <div v-if="selected.body" class="text-[11px] text-muted-foreground whitespace-pre-wrap">
@@ -314,9 +330,15 @@ function onFilterRefTypeChange(value: string | number) {
               </span>
             </div>
             <div class="flex flex-wrap gap-2 pt-1">
-              <Button variant="secondary" size="sm" @click="$emit('copyHash', selected.hash)">{{ t('git.ui.dialogs.history.actions.copyHash') }}</Button>
-              <Button variant="secondary" size="sm" @click="$emit('checkout', selected)">{{ t('git.ui.dialogs.history.actions.checkout') }}</Button>
-              <Button variant="secondary" size="sm" @click="$emit('createBranch', selected)">{{ t('git.ui.dialogs.history.actions.createBranch') }}</Button>
+              <Button variant="secondary" size="sm" @click="$emit('copyHash', selected.hash)">{{
+                t('git.ui.dialogs.history.actions.copyHash')
+              }}</Button>
+              <Button variant="secondary" size="sm" @click="$emit('checkout', selected)">{{
+                t('git.ui.dialogs.history.actions.checkout')
+              }}</Button>
+              <Button variant="secondary" size="sm" @click="$emit('createBranch', selected)">{{
+                t('git.ui.dialogs.history.actions.createBranch')
+              }}</Button>
               <Button
                 variant="secondary"
                 size="sm"
@@ -365,7 +387,9 @@ function onFilterRefTypeChange(value: string | number) {
                   variant="destructive"
                   @confirm="requestReset(selected)"
                 >
-                  <Button variant="secondary" size="sm" @click="() => {}">{{ t('git.ui.dialogs.history.actions.reset') }}</Button>
+                  <Button variant="secondary" size="sm" @click="() => {}">{{
+                    t('git.ui.dialogs.history.actions.reset')
+                  }}</Button>
                 </ConfirmPopover>
               </div>
               <ConfirmPopover
@@ -376,7 +400,9 @@ function onFilterRefTypeChange(value: string | number) {
                 variant="destructive"
                 @confirm="$emit('cherryPick', selected)"
               >
-                <Button variant="secondary" size="sm" @click="() => {}">{{ t('git.ui.dialogs.history.actions.cherryPick') }}</Button>
+                <Button variant="secondary" size="sm" @click="() => {}">{{
+                  t('git.ui.dialogs.history.actions.cherryPick')
+                }}</Button>
               </ConfirmPopover>
               <ConfirmPopover
                 :title="t('git.ui.dialogs.history.confirmRevert.title')"
@@ -386,23 +412,31 @@ function onFilterRefTypeChange(value: string | number) {
                 variant="destructive"
                 @confirm="$emit('revert', selected)"
               >
-                <Button variant="secondary" size="sm" @click="() => {}">{{ t('git.ui.dialogs.history.actions.revert') }}</Button>
+                <Button variant="secondary" size="sm" @click="() => {}">{{
+                  t('git.ui.dialogs.history.actions.revert')
+                }}</Button>
               </ConfirmPopover>
             </div>
           </div>
 
           <div class="border-t border-border/60 pt-3 space-y-2">
             <div class="flex items-center justify-between">
-              <div class="text-xs font-medium text-muted-foreground">{{ t('git.ui.dialogs.history.sections.files') }}</div>
+              <div class="text-xs font-medium text-muted-foreground">
+                {{ t('git.ui.dialogs.history.sections.files') }}
+              </div>
               <Button variant="ghost" size="sm" class="h-6" :disabled="!selectedFile" @click="$emit('clearFile')">
                 {{ t('git.ui.dialogs.history.actions.allFiles') }}
               </Button>
             </div>
             <div class="rounded-md border border-border/40 overflow-hidden">
               <div v-if="filesError" class="p-2 text-xs text-red-500">{{ filesError }}</div>
-              <div v-else-if="filesLoading" class="p-2 text-xs text-muted-foreground">{{ t('git.ui.dialogs.history.loadingFiles') }}</div>
+              <div v-else-if="filesLoading" class="p-2 text-xs text-muted-foreground">
+                {{ t('git.ui.dialogs.history.loadingFiles') }}
+              </div>
               <ScrollArea v-else class="h-36">
-                <div v-if="!files.length" class="p-2 text-xs text-muted-foreground">{{ t('git.ui.dialogs.history.emptyFiles') }}</div>
+                <div v-if="!files.length" class="p-2 text-xs text-muted-foreground">
+                  {{ t('git.ui.dialogs.history.emptyFiles') }}
+                </div>
                 <div v-else class="divide-y divide-border/40">
                   <button
                     v-for="f in files"
@@ -436,16 +470,24 @@ function onFilterRefTypeChange(value: string | number) {
               </div>
               <div v-if="selectedFileLabel">
                 <div v-if="fileDiffError" class="text-xs text-red-500">{{ fileDiffError }}</div>
-                <div v-else-if="fileDiffLoading" class="text-xs text-muted-foreground">{{ t('git.ui.dialogs.history.loadingDiff') }}</div>
-                <div v-else-if="!fileDiff" class="text-xs text-muted-foreground">{{ t('git.ui.dialogs.history.emptyDiff') }}</div>
+                <div v-else-if="fileDiffLoading" class="text-xs text-muted-foreground">
+                  {{ t('git.ui.dialogs.history.loadingDiff') }}
+                </div>
+                <div v-else-if="!fileDiff" class="text-xs text-muted-foreground">
+                  {{ t('git.ui.dialogs.history.emptyDiff') }}
+                </div>
                 <div v-else class="h-[320px] min-h-0">
                   <DiffViewer :diff="fileDiff" :output-format="'side-by-side'" :draw-file-list="false" />
                 </div>
               </div>
               <div v-else>
                 <div v-if="diffError" class="text-xs text-red-500">{{ diffError }}</div>
-                <div v-else-if="diffLoading" class="text-xs text-muted-foreground">{{ t('git.ui.dialogs.history.loadingDiff') }}</div>
-                <div v-else-if="!diff" class="text-xs text-muted-foreground">{{ t('git.ui.dialogs.history.emptyDiff') }}</div>
+                <div v-else-if="diffLoading" class="text-xs text-muted-foreground">
+                  {{ t('git.ui.dialogs.history.loadingDiff') }}
+                </div>
+                <div v-else-if="!diff" class="text-xs text-muted-foreground">
+                  {{ t('git.ui.dialogs.history.emptyDiff') }}
+                </div>
                 <div v-else class="h-[320px] min-h-0">
                   <DiffViewer :diff="diff" :output-format="'side-by-side'" :draw-file-list="false" />
                 </div>

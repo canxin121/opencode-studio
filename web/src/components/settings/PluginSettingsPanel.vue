@@ -836,7 +836,9 @@ function clearArrayRows(path: string[], prop: SchemaProperty) {
           <span class="truncate">{{ selectedPluginLabel }}</span>
         </div>
 
-        <Button variant="outline" size="sm" :disabled="loading || saving" @click="loadPluginConfig">{{ t('common.reload') }}</Button>
+        <Button variant="outline" size="sm" :disabled="loading || saving" @click="loadPluginConfig">{{
+          t('common.reload')
+        }}</Button>
         <Button size="sm" :disabled="loading || saving || !dirty" @click="savePluginConfig">
           {{ saving ? t('common.saving') : t('common.save') }}
         </Button>
@@ -979,7 +981,9 @@ function clearArrayRows(path: string[], prop: SchemaProperty) {
                 </div>
 
                 <div class="flex flex-wrap items-center gap-2">
-                  <Button variant="outline" size="sm" @click="addArrayRow(entry.path, entry.prop)">{{ t('common.add') }}</Button>
+                  <Button variant="outline" size="sm" @click="addArrayRow(entry.path, entry.prop)">{{
+                    t('common.add')
+                  }}</Button>
                   <Button
                     variant="outline"
                     size="sm"
@@ -1067,7 +1071,9 @@ function clearArrayRows(path: string[], prop: SchemaProperty) {
                 </div>
 
                 <div class="flex flex-wrap items-center gap-2">
-                  <Button variant="outline" size="sm" @click="addMapRow(entry.path, entry.prop)">{{ t('common.add') }}</Button>
+                  <Button variant="outline" size="sm" @click="addMapRow(entry.path, entry.prop)">{{
+                    t('common.add')
+                  }}</Button>
                   <Button
                     variant="outline"
                     size="sm"

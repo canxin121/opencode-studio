@@ -74,7 +74,9 @@ export default defineComponent({
 
 <template>
   <div class="grid gap-2">
-    <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.permissions.customRules.title') }}</span>
+    <span class="text-xs text-muted-foreground">{{
+      t('settings.opencodeConfig.sections.permissions.customRules.title')
+    }}</span>
     <div class="flex flex-wrap items-center gap-2">
       <div class="min-w-[220px] flex-1 max-w-[520px]">
         <OptionPicker
@@ -107,7 +109,9 @@ export default defineComponent({
         >
           <RiAddLine class="h-4 w-4" />
         </Button>
-        <template #content>{{ t('settings.opencodeConfig.sections.permissions.customRules.actions.addRule') }}</template>
+        <template #content>{{
+          t('settings.opencodeConfig.sections.permissions.customRules.actions.addRule')
+        }}</template>
       </Tooltip>
     </div>
 
@@ -144,9 +148,9 @@ export default defineComponent({
           >
             {{ t('settings.opencodeConfig.sections.permissions.rules.actions.editPatterns') }}
           </Button>
-          <span v-if="permissionRuleValue(key) === 'pattern'" class="text-[11px] text-muted-foreground"
-            >{{ t('settings.opencodeConfig.sections.permissions.rules.rulesCount', { count: permissionPatternCount(key) }) }}</span
-          >
+          <span v-if="permissionRuleValue(key) === 'pattern'" class="text-[11px] text-muted-foreground">{{
+            t('settings.opencodeConfig.sections.permissions.rules.rulesCount', { count: permissionPatternCount(key) })
+          }}</span>
           <Tooltip>
             <Button
               size="icon"
@@ -162,51 +166,55 @@ export default defineComponent({
           </Tooltip>
         </div>
 
-          <div v-if="permissionPatternEditors[key]?.open" class="grid gap-2">
-            <div class="flex items-center justify-between">
-              <div class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.permissions.rules.patternMapLabel') }}</div>
-              <div class="flex items-center gap-2">
-                <Tooltip>
-                  <Button
+        <div v-if="permissionPatternEditors[key]?.open" class="grid gap-2">
+          <div class="flex items-center justify-between">
+            <div class="text-xs text-muted-foreground">
+              {{ t('settings.opencodeConfig.sections.permissions.rules.patternMapLabel') }}
+            </div>
+            <div class="flex items-center gap-2">
+              <Tooltip>
+                <Button
                   size="icon"
                   variant="outline"
                   class="h-8 w-8"
-                    :title="t('settings.opencodeConfig.sections.permissions.rules.actions.addPattern')"
-                    :aria-label="t('settings.opencodeConfig.sections.permissions.rules.actions.addPattern')"
-                    @click="addPatternRow(key)"
-                  >
+                  :title="t('settings.opencodeConfig.sections.permissions.rules.actions.addPattern')"
+                  :aria-label="t('settings.opencodeConfig.sections.permissions.rules.actions.addPattern')"
+                  @click="addPatternRow(key)"
+                >
                   <RiAddLine class="h-4 w-4" />
                 </Button>
-                  <template #content>{{ t('settings.opencodeConfig.sections.permissions.rules.actions.addPattern') }}</template>
-                </Tooltip>
-                <Tooltip>
-                  <Button
+                <template #content>{{
+                  t('settings.opencodeConfig.sections.permissions.rules.actions.addPattern')
+                }}</template>
+              </Tooltip>
+              <Tooltip>
+                <Button
                   size="icon"
                   variant="ghost"
                   class="h-8 w-8"
-                    :title="t('common.reset')"
-                    :aria-label="t('common.reset')"
-                    @click="resetPermissionPatternEditor(key)"
-                  >
+                  :title="t('common.reset')"
+                  :aria-label="t('common.reset')"
+                  @click="resetPermissionPatternEditor(key)"
+                >
                   <RiRestartLine class="h-4 w-4" />
                 </Button>
-                  <template #content>{{ t('common.reset') }}</template>
-                </Tooltip>
-                <Tooltip>
-                  <Button
+                <template #content>{{ t('common.reset') }}</template>
+              </Tooltip>
+              <Tooltip>
+                <Button
                   size="icon"
                   variant="ghost"
                   class="h-8 w-8"
-                    :title="t('common.close')"
-                    :aria-label="t('common.close')"
-                    @click="togglePermissionPatternEditor(key)"
-                  >
+                  :title="t('common.close')"
+                  :aria-label="t('common.close')"
+                  @click="togglePermissionPatternEditor(key)"
+                >
                   <RiCloseLine class="h-4 w-4" />
                 </Button>
-                  <template #content>{{ t('common.close') }}</template>
-                </Tooltip>
-              </div>
+                <template #content>{{ t('common.close') }}</template>
+              </Tooltip>
             </div>
+          </div>
 
           <div class="grid gap-2">
             <div
@@ -274,7 +282,9 @@ export default defineComponent({
               >
                 <RiCheckLine class="h-4 w-4" />
               </Button>
-              <template #content>{{ t('settings.opencodeConfig.sections.permissions.rules.actions.applyPatterns') }}</template>
+              <template #content>{{
+                t('settings.opencodeConfig.sections.permissions.rules.actions.applyPatterns')
+              }}</template>
             </Tooltip>
             <span v-if="permissionPatternEditors[key]?.error" class="text-xs text-destructive">{{
               permissionPatternEditors[key]?.error

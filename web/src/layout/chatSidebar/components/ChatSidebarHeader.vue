@@ -28,7 +28,9 @@ const emit = defineEmits<{
   <div class="h-9 pt-1 select-none pl-3.5 pr-2 flex-shrink-0">
     <div class="flex h-full items-center justify-between gap-2">
       <div class="min-w-0 flex items-center gap-2">
-        <p class="typography-ui-label font-medium text-muted-foreground">{{ t('chat.sidebar.header.directoriesTitle') }}</p>
+        <p class="typography-ui-label font-medium text-muted-foreground">
+          {{ t('chat.sidebar.header.directoriesTitle') }}
+        </p>
       </div>
 
       <div class="flex items-center gap-1">

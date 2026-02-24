@@ -43,7 +43,9 @@ export default defineComponent({
   <section id="compaction" class="scroll-mt-24 rounded-lg border border-border bg-background p-4 space-y-4">
     <div class="flex items-start justify-between gap-3">
       <div class="min-w-0">
-        <div class="text-base font-semibold leading-snug">{{ t('settings.opencodeConfig.sections.compaction.title') }}</div>
+        <div class="text-base font-semibold leading-snug">
+          {{ t('settings.opencodeConfig.sections.compaction.title') }}
+        </div>
       </div>
       <div class="flex items-center gap-2">
         <Tooltip>
@@ -84,7 +86,9 @@ export default defineComponent({
 
     <div v-if="isSectionOpen('compaction')" class="grid gap-4 lg:grid-cols-2">
       <label class="grid gap-1">
-        <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.compaction.fields.autoCompact') }}</span>
+        <span class="text-xs text-muted-foreground">{{
+          t('settings.opencodeConfig.sections.compaction.fields.autoCompact')
+        }}</span>
         <OptionPicker
           v-model="compactionAuto"
           :options="triStatePickerOptions"
@@ -94,7 +98,9 @@ export default defineComponent({
         />
       </label>
       <label class="grid gap-1">
-        <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.compaction.fields.pruneToolOutput') }}</span>
+        <span class="text-xs text-muted-foreground">{{
+          t('settings.opencodeConfig.sections.compaction.fields.pruneToolOutput')
+        }}</span>
         <OptionPicker
           v-model="compactionPrune"
           :options="triStatePickerOptions"

@@ -60,7 +60,10 @@ export function useOpenCodeConfigPanelPersistence(opts: {
     try {
       const resp = asRecord(await opts.reloadOpenCodeConfig())
       const message = typeof resp.message === 'string' && resp.message.trim() ? resp.message : 'OpenCode reloaded'
-      opts.toasts.push('success', message === 'OpenCode reloaded' ? i18n.global.t('settings.opencodeConfig.toasts.openCodeReloaded') : message)
+      opts.toasts.push(
+        'success',
+        message === 'OpenCode reloaded' ? i18n.global.t('settings.opencodeConfig.toasts.openCodeReloaded') : message,
+      )
     } catch (err) {
       opts.toasts.push('error', err instanceof Error ? err.message : String(err))
     } finally {
@@ -79,7 +82,9 @@ export function useOpenCodeConfigPanelPersistence(opts: {
     if (hardErrors.length > 0) {
       opts.toasts.push(
         'error',
-        i18n.global.t('settings.opencodeConfig.errors.fixValidationErrorsBeforeSavingCount', { count: hardErrors.length }),
+        i18n.global.t('settings.opencodeConfig.errors.fixValidationErrorsBeforeSavingCount', {
+          count: hardErrors.length,
+        }),
       )
       return false
     }

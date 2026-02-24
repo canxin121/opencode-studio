@@ -31,7 +31,9 @@ export default defineComponent({
   <section id="keybinds" class="scroll-mt-24 rounded-lg border border-border bg-background p-4 space-y-4">
     <div class="flex items-start justify-between gap-3">
       <div class="min-w-0">
-        <div class="text-base font-semibold leading-snug">{{ t('settings.opencodeConfig.sections.keybinds.title') }}</div>
+        <div class="text-base font-semibold leading-snug">
+          {{ t('settings.opencodeConfig.sections.keybinds.title') }}
+        </div>
       </div>
       <div class="flex items-center gap-2">
         <Tooltip>

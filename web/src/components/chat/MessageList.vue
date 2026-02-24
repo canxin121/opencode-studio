@@ -419,12 +419,14 @@ function sessionErrorAtLabel(): string {
       </div>
     </TransitionGroup>
 
-      <div v-if="sessionError" class="group mt-4">
-        <div class="flex">
-          <div class="w-full min-w-0">
-            <div class="flex items-center gap-2 px-1 mb-1 text-[11px] text-muted-foreground/70">
-              <span class="font-semibold uppercase tracking-wider text-rose-700 dark:text-rose-300">{{ t('chat.roles.system') }}</span>
-            </div>
+    <div v-if="sessionError" class="group mt-4">
+      <div class="flex">
+        <div class="w-full min-w-0">
+          <div class="flex items-center gap-2 px-1 mb-1 text-[11px] text-muted-foreground/70">
+            <span class="font-semibold uppercase tracking-wider text-rose-700 dark:text-rose-300">{{
+              t('chat.roles.system')
+            }}</span>
+          </div>
 
           <div
             class="rounded-lg border border-rose-300/70 bg-rose-50/70 px-4 py-3 text-sm leading-relaxed text-rose-950 dark:border-rose-500/45 dark:bg-rose-950/25 dark:text-rose-100 relative"
@@ -443,8 +445,12 @@ function sessionErrorAtLabel(): string {
             <div class="mt-1 break-words">{{ sessionErrorBody() }}</div>
 
             <div class="mt-2 flex flex-wrap items-center gap-2">
-              <Button size="sm" variant="outline" class="h-7" @click="$emit('copySessionError')">{{ t('chat.sessionError.actions.copyDetails') }}</Button>
-              <Button size="sm" variant="outline" class="h-7" @click="$emit('clearSessionError')">{{ t('chat.sessionError.actions.dismiss') }}</Button>
+              <Button size="sm" variant="outline" class="h-7" @click="$emit('copySessionError')">{{
+                t('chat.sessionError.actions.copyDetails')
+              }}</Button>
+              <Button size="sm" variant="outline" class="h-7" @click="$emit('clearSessionError')">{{
+                t('chat.sessionError.actions.dismiss')
+              }}</Button>
             </div>
           </div>
         </div>
