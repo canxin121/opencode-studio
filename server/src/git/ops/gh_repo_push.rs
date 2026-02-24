@@ -196,7 +196,7 @@ pub async fn git_create_github_repo_and_push(
     };
 
     match run_gh(&dir, &["--version"]).await {
-        Ok((code, _, _)) if code == 0 => {}
+        Ok((0, _, _)) => {}
         Ok(_) => return gh_cli_missing_response(),
         Err(GhRunError::Spawn(err)) if err.kind() == std::io::ErrorKind::NotFound => {
             return gh_cli_missing_response();

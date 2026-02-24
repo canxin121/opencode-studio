@@ -161,7 +161,8 @@ export function useGitRemoteOps(opts: {
         if (handleGitBusy(err, 'Fetch', () => fetchRemote(opts))) return
         if (handleGitSso(err, 'fetch', () => fetchRemote(opts))) return
         if (isGitAuthError(err)) {
-          if (!silent) toasts.push('error', i18n.global.t('git.toasts.authenticationRequiredForAction', { action: 'fetch' }))
+          if (!silent)
+            toasts.push('error', i18n.global.t('git.toasts.authenticationRequiredForAction', { action: 'fetch' }))
           if (!silent) openCredentialsDialog('fetch', baseBody, err.message)
           return
         }
