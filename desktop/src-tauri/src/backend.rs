@@ -228,7 +228,7 @@ fn resolve_ui_dir(app: &AppHandle) -> Result<PathBuf, String> {
 fn pick_port(preferred: u16) -> Result<u16, String> {
   let port = if preferred == 0 { 3000 } else { preferred };
 
-  // In the full desktop build we default the webview URL to http://127.0.0.1:<port>,
+  // In the full desktop build the runtime navigates the webview to this backend URL,
   // so we MUST keep the backend on the configured port. If it's already taken,
   // tell the user to pick a new port.
   if TcpListener::bind(("127.0.0.1", port)).is_ok() {

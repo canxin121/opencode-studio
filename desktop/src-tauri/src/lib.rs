@@ -92,11 +92,20 @@ pub fn run() {
 
       // Attempt autostart backend (only works on full build where sidecar exists).
       let manager = app_handle.state::<BackendManager>().inner().clone();
+      let startup_handle = app_handle.clone();
       tauri::async_runtime::spawn(async move {
-        let _ = manager.ensure_started(&app_handle).await;
-        // If the main window is configured to load the backend URL, force a reload once ready.
-        if let Some(win) = app_handle.get_webview_window("main") {
-          let _ = win.eval("try { window.location.reload(); } catch {}");
+        match manager.ensure_started(&startup_handle).await {
+          Ok(status) => {
+            if let Some(win) = startup_handle.get_webview_window("main") {
+              navigate_main_window_to_backend(&win, status.url.as_deref());
+            }
+          }
+          Err(_) if cfg!(debug_assertions) => {
+            if let Some(win) = startup_handle.get_webview_window("main") {
+              navigate_main_window_to_backend(&win, Some("http://localhost:5173"));
+            }
+          }
+          Err(_) => {}
         }
       });
 
@@ -146,9 +155,9 @@ async fn handle_tray_menu(app: &AppHandle, id: &str) {
     }
     "backend_start" => {
       let manager = app.state::<BackendManager>().inner().clone();
-      let _ = manager.ensure_started(app).await;
+      let status = manager.ensure_started(app).await.ok();
       if let Some(win) = app.get_webview_window("main") {
-        let _ = win.eval("try { window.location.reload(); } catch {}");
+        navigate_main_window_to_backend(&win, status.as_ref().and_then(|s| s.url.as_deref()));
       }
     }
     "backend_stop" => {
@@ -157,9 +166,9 @@ async fn handle_tray_menu(app: &AppHandle, id: &str) {
     }
     "backend_restart" => {
       let manager = app.state::<BackendManager>().inner().clone();
-      let _ = manager.restart(app).await;
+      let status = manager.restart(app).await.ok();
       if let Some(win) = app.get_webview_window("main") {
-        let _ = win.eval("try { window.location.reload(); } catch {}");
+        navigate_main_window_to_backend(&win, status.as_ref().and_then(|s| s.url.as_deref()));
       }
     }
     "open_logs" => {
@@ -175,4 +184,18 @@ async fn handle_tray_menu(app: &AppHandle, id: &str) {
     }
     _ => {}
   }
+}
+
+fn navigate_main_window_to_backend(win: &tauri::WebviewWindow<AppRuntime>, url: Option<&str>) {
+  let Some(raw) = url else {
+    return;
+  };
+  let trimmed = raw.trim();
+  if trimmed.is_empty() {
+    return;
+  }
+  let Ok(parsed) = trimmed.parse() else {
+    return;
+  };
+  let _ = win.navigate(parsed);
 }
