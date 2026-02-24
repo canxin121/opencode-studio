@@ -116,6 +116,13 @@ export default {
         iframeLoadFailed: 'Failed to load plugin UI iframe',
       },
     },
+    overlayLauncher: {
+      button: 'Plugin Tools',
+      openMenuAria: 'Open plugin panel menu',
+      closeMenuAria: 'Close plugin panel menu',
+      menuTitle: 'Plugin Panels',
+      hidePanel: 'Hide current panel',
+    },
   },
   help: {
     dialog: {
@@ -324,6 +331,21 @@ export default {
       searchPlugins: 'Search plugins',
       loadingConfig: 'Loading plugin config...',
       noFieldsDeclared: 'This plugin did not declare any settings fields.',
+      editAsJson: 'Edit as JSON.',
+      errors: {
+        failedToLoadConfig: 'Failed to load plugin config',
+        failedToSaveConfig: 'Failed to save plugin config',
+        fixInvalidListFields: 'Fix invalid list fields before saving.',
+        fixInvalidJsonFields: 'Fix invalid JSON fields before saving.',
+        invalidJson: 'Invalid JSON',
+        row: {
+          duplicateKey: 'Row {row}: duplicate key "{key}".',
+          invalidEnum: 'Row {row}: invalid enum value.',
+          invalidNumber: 'Row {row}: invalid number.',
+          invalidInteger: 'Row {row}: invalid integer.',
+          useTrueFalse: 'Row {row}: use true or false.',
+        },
+      },
       toasts: {
         saved: 'Plugin config saved',
       },

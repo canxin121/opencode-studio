@@ -393,9 +393,14 @@ void sessionActionsMenuRef
           class="pointer-events-none absolute inset-x-0 bottom-2 z-30"
         >
           <div class="chat-column">
-            <PluginChatOverlayMounts :mounts="chatOverlayBottomPluginMounts" @reserve-change="handleOverlayReserve" />
+            <PluginChatOverlayMounts
+              :mounts="chatOverlayBottomPluginMounts"
+              :is-mobile-pointer="ui.isMobilePointer"
+              @reserve-change="handleOverlayReserve"
+            />
           </div>
         </div>
+
       </template>
 
       <template #bottom>

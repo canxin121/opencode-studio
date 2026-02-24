@@ -1,28 +1,147 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { RiPlugLine } from '@remixicon/vue'
 
 import PluginMountHost from '@/components/plugins/PluginMountHost.vue'
+import OptionMenu, { type OptionMenuGroup, type OptionMenuItem } from '@/components/ui/OptionMenu.vue'
 import type { ChatMount } from '@/plugins/host/mounts'
 
-const props = defineProps<{
-  mounts: ChatMount[]
-}>()
+const props = withDefaults(
+  defineProps<{
+    mounts: ChatMount[]
+    placement?: 'overlay' | 'composer'
+    isMobilePointer?: boolean
+  }>(),
+  {
+    placement: 'overlay',
+    isMobilePointer: false,
+  },
+)
 
 const emit = defineEmits<{
   (event: 'reserve-change', px: number): void
 }>()
 
+const { t } = useI18n()
+
 type ReserveMap = Record<string, number>
+
+const rootEl = ref<HTMLElement | null>(null)
+const launcherBtnEl = ref<HTMLElement | null>(null)
+const launcherAnchorEl = ref<HTMLElement | null>(null)
 const reserveByKey = ref<ReserveMap>({})
+const menuOpen = ref(false)
+const activeMountKey = ref('')
+const menuQuery = ref('')
+
+let reserveObserver: ResizeObserver | null = null
+let reserveRaf = 0
 
 function mountKey(mount: ChatMount): string {
   return `${mount.pluginId}:${mount.surface}:${mount.entry}:${mount.mode}`
 }
 
+function normalizedPluginLabel(pluginId: string): string {
+  const raw = String(pluginId || '').trim()
+  const lower = raw.toLowerCase()
+
+  if (lower.includes('planpilot')) return 'planpilot'
+  if (lower.includes('workbench')) return 'workbench'
+
+  const tail = raw.split('/').pop() || raw
+  const cleaned = tail.replace(/^opencode[-_]?/i, '').trim().toLowerCase()
+  return cleaned || lower || 'plugin'
+}
+
+function pickLocalizedLabel(mount: ChatMount): string {
+  return normalizedPluginLabel(mount.pluginId)
+}
+
+const mountRows = computed(() =>
+  props.mounts.map((mount) => {
+    const key = mountKey(mount)
+    return {
+      key,
+      mount,
+      label: pickLocalizedLabel(mount),
+    }
+  }),
+)
+
+const hasMounts = computed(() => mountRows.value.length > 0)
+const isComposerPlacement = computed(() => props.placement === 'composer')
+
+const activeMount = computed(() => {
+  const key = activeMountKey.value
+  if (!key) return null
+  return mountRows.value.find((row) => row.key === key) || null
+})
+
+const activeMountWithHostMode = computed<ChatMount | null>(() => {
+  const selected = activeMount.value
+  if (!selected) return null
+  return {
+    ...selected.mount,
+    context: {
+      ...(selected.mount.context || {}),
+      studioOverlayMode: 'host-menu',
+    },
+  }
+})
+
+const launcherAria = computed(() =>
+  menuOpen.value ? String(t('plugins.overlayLauncher.closeMenuAria')) : String(t('plugins.overlayLauncher.openMenuAria')),
+)
+
+const launcherHidden = computed(() => menuOpen.value || Boolean(activeMountWithHostMode.value))
+const optionMenuAnchorEl = computed(() => launcherBtnEl.value || launcherAnchorEl.value)
+
+const menuGroups = computed<OptionMenuGroup[]>(() => {
+  const items: OptionMenuItem[] = mountRows.value.map((row) => ({
+    id: row.key,
+    label: row.label,
+    checked: activeMountKey.value === row.key,
+    keywords: `${row.label} ${row.mount.pluginId}`,
+  }))
+
+  return [
+    {
+      id: 'plugin-mounts',
+      items,
+    },
+  ]
+})
+
+function computeMeasuredReserve(): number {
+  const root = rootEl.value
+  if (!root) return 0
+  const rect = root.getBoundingClientRect()
+  if (!Number.isFinite(rect.height) || rect.height <= 0) return 0
+  const bottomGap = 8
+  return Math.max(0, Math.ceil(rect.height + bottomGap))
+}
+
+function activeMountReserve(): number {
+  const key = activeMountKey.value
+  if (!key) return 0
+  return reserveByKey.value[key] || 0
+}
+
 function recomputeReserve() {
-  const values = Object.values(reserveByKey.value)
-  const max = values.length ? Math.max(0, ...values) : 0
-  emit('reserve-change', max)
+  if (!hasMounts.value || isComposerPlacement.value) {
+    emit('reserve-change', 0)
+    return
+  }
+  emit('reserve-change', Math.max(computeMeasuredReserve(), activeMountReserve()))
+}
+
+function scheduleReserveUpdate() {
+  if (reserveRaf) return
+  reserveRaf = window.requestAnimationFrame(() => {
+    reserveRaf = 0
+    recomputeReserve()
+  })
 }
 
 function setReserve(key: string, px: number) {
@@ -32,35 +151,167 @@ function setReserve(key: string, px: number) {
     ...reserveByKey.value,
     [key]: nextPx,
   }
-  recomputeReserve()
+  scheduleReserveUpdate()
+}
+
+function closeMenu() {
+  if (!menuOpen.value) return
+  menuOpen.value = false
+  menuQuery.value = ''
+  scheduleReserveUpdate()
+}
+
+function toggleMenu() {
+  if (!hasMounts.value) return
+  menuOpen.value = !menuOpen.value
+  if (!menuOpen.value) menuQuery.value = ''
+  scheduleReserveUpdate()
+}
+
+function selectMount(key: string) {
+  activeMountKey.value = activeMountKey.value === key ? '' : key
+  closeMenu()
+  scheduleReserveUpdate()
+}
+
+function clearActiveMount() {
+  activeMountKey.value = ''
+  closeMenu()
+  scheduleReserveUpdate()
+}
+
+function handleMenuOpenChange(open: boolean) {
+  menuOpen.value = Boolean(open)
+  if (!open) menuQuery.value = ''
+  scheduleReserveUpdate()
+}
+
+function handleMenuQueryChange(value: string) {
+  menuQuery.value = String(value || '')
+}
+
+function handleMenuSelect(item: OptionMenuItem) {
+  selectMount(item.id)
 }
 
 watch(
-  () => props.mounts.map(mountKey).join('|'),
+  () => mountRows.value.map((row) => row.key).join('|'),
   () => {
-    const keep = new Set(props.mounts.map(mountKey))
+    const keep = new Set(mountRows.value.map((row) => row.key))
     const next: ReserveMap = {}
     for (const [key, value] of Object.entries(reserveByKey.value)) {
       if (keep.has(key)) next[key] = value
     }
     reserveByKey.value = next
-    recomputeReserve()
+
+    if (!keep.has(activeMountKey.value)) {
+      activeMountKey.value = ''
+      menuOpen.value = false
+      menuQuery.value = ''
+    }
+
+    scheduleReserveUpdate()
   },
   { immediate: true },
 )
 
-const hasMounts = computed(() => props.mounts.length > 0)
+watch(
+  () => [menuOpen.value, activeMountKey.value, hasMounts.value, isComposerPlacement.value],
+  () => {
+    scheduleReserveUpdate()
+  },
+)
+
+watch(rootEl, (next, prev) => {
+  if (!reserveObserver) return
+  if (prev) reserveObserver.unobserve(prev)
+  if (next) reserveObserver.observe(next)
+  scheduleReserveUpdate()
+})
+
+onMounted(() => {
+  if (typeof ResizeObserver !== 'undefined' && !isComposerPlacement.value) {
+    reserveObserver = new ResizeObserver(() => {
+      scheduleReserveUpdate()
+    })
+    if (rootEl.value) reserveObserver.observe(rootEl.value)
+  }
+
+  scheduleReserveUpdate()
+})
+
+onBeforeUnmount(() => {
+  reserveObserver?.disconnect()
+  reserveObserver = null
+
+  if (reserveRaf) {
+    window.cancelAnimationFrame(reserveRaf)
+    reserveRaf = 0
+  }
+
+  emit('reserve-change', 0)
+})
 </script>
 
 <template>
-  <div v-if="hasMounts" class="pointer-events-none w-full flex flex-col items-stretch gap-2">
-    <div v-for="mount in mounts" :key="mountKey(mount)" class="pointer-events-none w-full">
-      <div class="pointer-events-auto w-full min-w-0">
-        <PluginMountHost
-          class="w-full min-w-0"
-          :mount="mount"
-          @reserve-change="(px) => setReserve(mountKey(mount), px)"
-        />
+  <div
+    v-if="hasMounts"
+    ref="rootEl"
+    :class="isComposerPlacement ? 'w-full flex flex-col items-stretch gap-1' : 'pointer-events-none w-full flex justify-end'"
+  >
+    <div
+      :class="
+        isComposerPlacement
+          ? 'pointer-events-auto w-full flex flex-col items-stretch gap-1'
+          : 'pointer-events-none w-full flex flex-col items-stretch gap-2'
+      "
+    >
+      <PluginMountHost
+        v-if="activeMountWithHostMode && !menuOpen"
+        :key="activeMountKey"
+        class="pointer-events-auto w-full min-w-0"
+        :mount="activeMountWithHostMode"
+        @reserve-change="(px) => (activeMountKey ? setReserve(activeMountKey, px) : undefined)"
+        @request-close="clearActiveMount"
+      />
+
+      <OptionMenu
+        :open="menuOpen"
+        :query="menuQuery"
+        :groups="menuGroups"
+        :title="t('plugins.overlayLauncher.menuTitle')"
+        :mobile-title="t('plugins.overlayLauncher.menuTitle')"
+        :is-mobile-pointer="isMobilePointer"
+        :desktop-fixed="true"
+        :desktop-anchor-el="optionMenuAnchorEl"
+        desktop-placement="top-end"
+        desktop-class="w-[min(420px,calc(100%-1rem))]"
+        @update:open="handleMenuOpenChange"
+        @update:query="handleMenuQueryChange"
+        @select="handleMenuSelect"
+      />
+
+      <div
+        v-if="!launcherHidden"
+        :class="isComposerPlacement ? 'pointer-events-none w-full flex justify-end pb-1' : 'pointer-events-none w-full flex justify-end'"
+      >
+        <button
+          ref="launcherBtnEl"
+          type="button"
+          class="pointer-events-auto h-7 sm:h-8 w-7 sm:w-8 inline-flex items-center justify-center rounded-md border border-border/60 bg-background/80 shadow-sm backdrop-blur transition-colors"
+          :class="'text-muted-foreground hover:text-foreground hover:bg-background'"
+          :title="launcherAria"
+          :aria-label="launcherAria"
+          :aria-expanded="menuOpen"
+          @mousedown.prevent.stop
+          @click.stop="toggleMenu"
+        >
+          <RiPlugLine class="h-4 w-4" />
+        </button>
+      </div>
+
+      <div v-else-if="menuOpen" class="pointer-events-none w-full relative h-0">
+        <span ref="launcherAnchorEl" class="absolute top-0 right-0 h-0 w-0 pointer-events-none" aria-hidden="true" />
       </div>
     </div>
   </div>

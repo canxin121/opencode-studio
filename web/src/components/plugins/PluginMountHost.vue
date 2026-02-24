@@ -32,6 +32,7 @@ type PluginUiModule = {
       context: MountContext
       host: MountHostApi
       layout?: MountLayoutApi
+      close?: () => void
     },
   ) => unknown
   default?: unknown
@@ -49,6 +50,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   (e: 'reserve-change', px: number): void
+  (e: 'request-close'): void
 }>()
 
 const { t } = useI18n()
@@ -169,6 +171,7 @@ async function ensureModuleMounted() {
       context: ctx,
       host,
       layout,
+      close: () => emit('request-close'),
     })
 
     if (typeof result === 'function') {

@@ -103,7 +103,7 @@ async function syncDesktopPosition() {
   await nextTick()
 
   const panel = panelEl.value
-  const anchor = props.desktopAnchorEl
+  const anchor = resolveDesktopAnchorEl()
   if (!panel || !anchor) return
 
   const panelRect = panel.getBoundingClientRect()
@@ -139,6 +139,16 @@ async function syncDesktopPosition() {
   }
 }
 
+function resolveDesktopAnchorEl(): HTMLElement | null {
+  const raw = props.desktopAnchorEl as unknown
+  if (raw instanceof HTMLElement) return raw
+  if (!raw || typeof raw !== 'object') return null
+
+  const hostEl = (raw as { $el?: unknown }).$el
+  if (hostEl instanceof HTMLElement) return hostEl
+  return null
+}
+
 function onDesktopViewportChange() {
   void syncDesktopPosition()
 }
@@ -148,7 +158,8 @@ function onDocumentClick(event: MouseEvent) {
   const target = event.target as Node | null
   if (!target) return
   if (panelEl.value?.contains(target)) return
-  if (props.desktopAnchorEl?.contains(target as Node)) return
+  const anchor = resolveDesktopAnchorEl()
+  if (anchor?.contains(target)) return
   close()
 }
 

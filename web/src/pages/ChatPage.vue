@@ -69,7 +69,7 @@ const activity = useSessionActivityStore()
 const settings = useSettingsStore()
 const ui = useUiStore()
 const toasts = useToastsStore()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 const orphanDraft = ref('')
 const draft = computed<string>({
@@ -698,8 +698,10 @@ function withChatMountContext(mounts: ChatMount[]): ChatMount[] {
   const ctx: Record<string, string> = {}
   const sid = String(chat.selectedSessionId || '').trim()
   const cwd = String(sessionDirectory.value || '').trim()
+  const appLocale = String(locale.value || '').trim()
   if (sid) ctx.sessionId = sid
   if (cwd) ctx.cwd = cwd
+  if (appLocale) ctx.locale = appLocale
 
   // Always return fresh mount objects so UI loaders can react to context changes.
   return mounts.map((mount) => ({

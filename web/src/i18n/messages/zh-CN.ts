@@ -116,6 +116,13 @@ export default {
         iframeLoadFailed: '插件界面 iframe 加载失败',
       },
     },
+    overlayLauncher: {
+      button: '插件工具',
+      openMenuAria: '打开插件面板菜单',
+      closeMenuAria: '关闭插件面板菜单',
+      menuTitle: '插件面板',
+      hidePanel: '隐藏当前面板',
+    },
   },
   help: {
     dialog: {
@@ -324,6 +331,21 @@ export default {
       searchPlugins: '搜索插件',
       loadingConfig: '插件配置加载中...',
       noFieldsDeclared: '该插件未声明任何设置字段。',
+      editAsJson: '以 JSON 方式编辑。',
+      errors: {
+        failedToLoadConfig: '加载插件配置失败',
+        failedToSaveConfig: '保存插件配置失败',
+        fixInvalidListFields: '保存前请修复无效的列表字段。',
+        fixInvalidJsonFields: '保存前请修复无效的 JSON 字段。',
+        invalidJson: 'JSON 无效',
+        row: {
+          duplicateKey: '第 {row} 行：键 "{key}" 重复。',
+          invalidEnum: '第 {row} 行：枚举值无效。',
+          invalidNumber: '第 {row} 行：数字无效。',
+          invalidInteger: '第 {row} 行：整数无效。',
+          useTrueFalse: '第 {row} 行：请使用 true 或 false。',
+        },
+      },
       toasts: {
         saved: '插件配置已保存',
       },
