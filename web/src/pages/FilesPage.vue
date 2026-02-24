@@ -2171,7 +2171,10 @@ function applyDeletionState(target: string) {
     selectedPaths.value = next
   }
 
-  if (selectionAnchorPath.value && (selectionAnchorPath.value === target || selectionAnchorPath.value.startsWith(`${target}/`))) {
+  if (
+    selectionAnchorPath.value &&
+    (selectionAnchorPath.value === target || selectionAnchorPath.value.startsWith(`${target}/`))
+  ) {
     selectionAnchorPath.value = ''
   }
 }

@@ -610,7 +610,9 @@ onBeforeUnmount(() => {
       <div class="oc-vscode-pane-title">{{ t('files.explorer.title') }}</div>
       <div class="flex items-center gap-1">
         <div v-if="selectedCount > 0" class="mr-1 flex items-center gap-1">
-          <span class="rounded-sm border border-sidebar-border/70 bg-sidebar-accent/50 px-1.5 py-[1px] text-[10px] font-medium">
+          <span
+            class="rounded-sm border border-sidebar-border/70 bg-sidebar-accent/50 px-1.5 py-[1px] text-[10px] font-medium"
+          >
             {{ t('files.explorer.selection.selectedCount', { count: selectedCount }) }}
           </span>
           <ConfirmPopover
