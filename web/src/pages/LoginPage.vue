@@ -6,10 +6,13 @@ import { useAuthStore } from '../stores/auth'
 import { useBackendsStore } from '@/stores/backends'
 import { useHealthStore } from '@/stores/health'
 import { clearUiAuthTokenForBaseUrl } from '@/lib/uiAuthToken'
+import { i18n, setAppLocale } from '@/i18n'
+import type { AppLocale } from '@/i18n/locale'
 import Button from '@/components/ui/Button.vue'
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import Input from '@/components/ui/Input.vue'
 import OptionPicker from '@/components/ui/OptionPicker.vue'
+import { buildLoginLocalePickerOptions } from '@/pages/loginLocaleOptions'
 
 const NEW_BACKEND_ID = '__new__'
 
@@ -67,6 +70,17 @@ const effectiveBackendBaseUrl = computed(() => {
 const canManageSelectedBackend = computed(() => {
   return Boolean(selectedBackend.value && !isNewBackend.value)
 })
+
+const uiLocale = computed<AppLocale>({
+  get() {
+    return i18n.global.locale.value as AppLocale
+  },
+  set(value) {
+    setAppLocale(value)
+  },
+})
+
+const localePickerOptions = computed(() => buildLoginLocalePickerOptions((key) => String(t(key))))
 
 function openEditSelectedBackend() {
   const b = selectedBackend.value
@@ -245,6 +259,19 @@ async function submit() {
       </div>
 
       <div class="grid gap-4">
+        <div class="grid gap-2">
+          <label class="text-xs font-medium text-muted-foreground">{{ t('settings.appearance.language.label') }}</label>
+          <div class="w-40 max-w-full">
+            <OptionPicker
+              v-model="uiLocale"
+              :options="localePickerOptions"
+              :title="String(t('settings.appearance.language.label'))"
+              :search-placeholder="String(t('settings.appearance.language.label'))"
+              :include-empty="false"
+            />
+          </div>
+        </div>
+
         <div class="grid gap-2">
           <label class="text-xs font-medium text-muted-foreground">{{ t('login.backendLabel') }}</label>
           <div class="flex items-center gap-2">

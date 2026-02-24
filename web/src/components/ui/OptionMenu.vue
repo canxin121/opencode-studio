@@ -780,12 +780,19 @@ defineExpose({ containsTarget, focusSearch })
       </div>
     </Teleport>
 
-    <div v-if="open && isMobileSheet" class="fixed inset-0 z-50" @click="closeMenu">
+    <div
+      v-if="open && isMobileSheet"
+      class="fixed inset-0 z-50"
+      data-oc-keyboard-tap="keep"
+      @pointerdown.stop
+      @click="closeMenu"
+    >
       <div class="absolute inset-0 bg-black/55 backdrop-blur-sm" />
       <div
         ref="panelEl"
         class="absolute left-1/2 w-[calc(100%-1rem)] max-w-[21rem] -translate-x-1/2 rounded-xl border border-border/70 bg-background/95 shadow-xl backdrop-blur overflow-hidden flex flex-col"
         :style="mobileSheetStyle"
+        @pointerdown.stop
         @click.stop
       >
         <div class="flex items-center justify-between gap-3 px-3 py-2 border-b border-border/40">

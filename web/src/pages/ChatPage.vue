@@ -1019,9 +1019,11 @@ const {
   aborting,
   canAbort,
   abortRun,
-  composerPrimaryAction,
+  showComposerStopAction,
+  composerStopDisabled,
   composerPrimaryDisabled,
   handleComposerPrimaryAction,
+  handleComposerStopAction,
 } = runUi
 
 function handleSessionActionRequest(actionId: string) {
@@ -1408,9 +1410,11 @@ const viewCtx = {
   // Send/stop.
   sessionUsage,
   formatCompactNumber,
-  composerPrimaryAction,
+  showComposerStopAction,
+  composerStopDisabled,
   composerPrimaryDisabled,
   handleComposerPrimaryAction,
+  handleComposerStopAction,
   aborting,
   sending,
 
