@@ -4,7 +4,7 @@ import McpDialog from '@/components/McpDialog.vue'
 import AppHeader from '@/layout/AppHeader.vue'
 import ChatSidebar from '@/layout/ChatSidebar.vue'
 import BottomNav from '@/layout/BottomNav.vue'
-import { computed, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 
 import { useUiStore } from '@/stores/ui'
@@ -25,6 +25,50 @@ const usesChatShellSidebar = computed(() => {
   return String(route.path || '')
     .toLowerCase()
     .startsWith('/chat')
+})
+
+const mobileSidebarPointerReady = ref(false)
+let mobileSidebarPointerRafA: number | null = null
+let mobileSidebarPointerRafB: number | null = null
+
+function clearMobileSidebarPointerRafs() {
+  if (mobileSidebarPointerRafA !== null) {
+    window.cancelAnimationFrame(mobileSidebarPointerRafA)
+    mobileSidebarPointerRafA = null
+  }
+  if (mobileSidebarPointerRafB !== null) {
+    window.cancelAnimationFrame(mobileSidebarPointerRafB)
+    mobileSidebarPointerRafB = null
+  }
+}
+
+watch(
+  () => ({
+    isMobile: ui.isMobile,
+    switcherOpen: ui.isSessionSwitcherOpen,
+    usesChatShellSidebar: usesChatShellSidebar.value,
+  }),
+  ({ isMobile, switcherOpen, usesChatShellSidebar: usesSidebar }) => {
+    clearMobileSidebarPointerRafs()
+    if (!isMobile || !usesSidebar || !switcherOpen) {
+      mobileSidebarPointerReady.value = false
+      return
+    }
+
+    mobileSidebarPointerReady.value = false
+    mobileSidebarPointerRafA = window.requestAnimationFrame(() => {
+      mobileSidebarPointerRafA = null
+      mobileSidebarPointerRafB = window.requestAnimationFrame(() => {
+        mobileSidebarPointerRafB = null
+        mobileSidebarPointerReady.value = true
+      })
+    })
+  },
+  { immediate: true },
+)
+
+onBeforeUnmount(() => {
+  clearMobileSidebarPointerRafs()
 })
 
 // Mobile UX: navigating should switch focus to main content.
@@ -71,7 +115,13 @@ const mobileBottomNavInset =
           <div
             v-if="ui.isMobile && usesChatShellSidebar"
             class="absolute inset-x-0 top-0 z-40 bg-sidebar"
-            :class="ui.isSessionSwitcherOpen ? '' : 'pointer-events-none opacity-0'"
+            :class="
+              ui.isSessionSwitcherOpen
+                ? mobileSidebarPointerReady
+                  ? ''
+                  : 'pointer-events-none'
+                : 'pointer-events-none opacity-0'
+            "
             :style="{ bottom: mobileBottomNavInset }"
             :aria-hidden="!ui.isSessionSwitcherOpen"
           >

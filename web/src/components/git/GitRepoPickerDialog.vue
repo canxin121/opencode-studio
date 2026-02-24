@@ -42,22 +42,37 @@ function onUpdateOpen(v: boolean) {
     :open="open"
     :title="t('git.ui.dialogs.repoPicker.title')"
     :description="t('git.ui.dialogs.repoPicker.description')"
-    maxWidth="max-w-xl"
+    maxWidth="max-w-[calc(100vw-1rem)] sm:max-w-xl"
     @update:open="onUpdateOpen"
   >
-    <div class="space-y-3">
-      <div class="flex flex-wrap items-center gap-2">
-        <Button variant="secondary" size="sm" @click="$emit('refresh')" :disabled="reposLoading">{{
-          t('common.refresh')
-        }}</Button>
-        <Button size="sm" @click="$emit('openInit')">{{
-          t('git.ui.dialogs.repoPicker.actions.initializeRepo')
-        }}</Button>
-        <Button size="sm" variant="secondary" @click="$emit('openClone')">{{
-          t('git.ui.dialogs.repoPicker.actions.cloneRepo')
-        }}</Button>
+    <div class="space-y-3 min-w-0 max-w-full overflow-x-hidden">
+      <div class="flex flex-wrap items-center gap-2 min-w-0 max-w-full">
+        <Button
+          variant="secondary"
+          size="sm"
+          class="max-w-full whitespace-normal break-words text-left h-auto py-1.5"
+          @click="$emit('refresh')"
+          :disabled="reposLoading"
+        >
+          {{ t('common.refresh') }}
+        </Button>
+        <Button
+          size="sm"
+          class="max-w-full whitespace-normal break-words text-left h-auto py-1.5"
+          @click="$emit('openInit')"
+        >
+          {{ t('git.ui.dialogs.repoPicker.actions.initializeRepo') }}
+        </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          class="max-w-full whitespace-normal break-words text-left h-auto py-1.5"
+          @click="$emit('openClone')"
+        >
+          {{ t('git.ui.dialogs.repoPicker.actions.cloneRepo') }}
+        </Button>
         <div
-          class="order-last basis-full min-w-0 text-xs text-muted-foreground font-mono truncate sm:order-none sm:basis-auto sm:ml-auto"
+          class="order-last basis-full min-w-0 max-w-full text-xs text-muted-foreground font-mono break-all whitespace-normal sm:order-none sm:basis-auto sm:ml-auto sm:truncate"
           :title="projectRoot || ''"
         >
           {{ projectRoot || '' }}
@@ -86,7 +101,7 @@ function onUpdateOpen(v: boolean) {
             v-for="r in repos"
             :key="r.root"
             type="button"
-            class="w-full flex items-start justify-between gap-3 px-3 py-2 rounded-md hover:bg-muted/40 transition text-left min-w-0 overflow-hidden"
+            class="w-full flex flex-col items-stretch justify-between gap-2 px-3 py-2 rounded-md hover:bg-muted/40 transition text-left min-w-0 overflow-hidden sm:flex-row sm:items-start sm:gap-3"
             :class="{ 'bg-primary/10': (r.relative || '.').trim() === (selectedRepoRelative || '').trim() }"
             @click="$emit('select', r.relative || '.')"
           >
@@ -96,7 +111,7 @@ function onUpdateOpen(v: boolean) {
                 {{ r.root }}
               </div>
             </div>
-            <div class="shrink-0 flex flex-wrap items-center justify-end gap-1">
+            <div class="shrink-0 flex flex-wrap items-center justify-start gap-1 sm:justify-end">
               <div class="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground uppercase tracking-wide">
                 {{ r.kind }}
               </div>
@@ -122,7 +137,7 @@ function onUpdateOpen(v: boolean) {
           <div
             v-for="r in closedRepos"
             :key="`closed-${r.root}`"
-            class="flex items-start justify-between gap-2 rounded-md border border-border/60 bg-background/50 px-3 py-2 sm:items-center"
+            class="flex flex-col items-stretch justify-between gap-2 rounded-md border border-border/60 bg-background/50 px-3 py-2 sm:flex-row sm:items-center"
           >
             <div class="min-w-0 overflow-hidden">
               <div class="text-xs font-mono truncate" :title="r.relative">{{ r.relative }}</div>
@@ -130,7 +145,12 @@ function onUpdateOpen(v: boolean) {
                 {{ r.root }}
               </div>
             </div>
-            <Button variant="secondary" size="sm" class="h-7 shrink-0" @click="$emit('reopenRepo', r.relative || '.')">
+            <Button
+              variant="secondary"
+              size="sm"
+              class="h-7 shrink-0 max-w-full whitespace-normal break-words"
+              @click="$emit('reopenRepo', r.relative || '.')"
+            >
               {{ t('git.ui.dialogs.repoPicker.actions.reopenRepo') }}
             </Button>
           </div>
