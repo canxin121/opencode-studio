@@ -62,6 +62,7 @@ import {
   upsertRuntimeOnlyRunningIndexEntry,
   upsertSessionInPageState,
 } from '@/stores/directorySessions/pageState'
+import { matchDirectoryEntryForPath } from '@/stores/directorySessions/pathMatch'
 import { extractSessionId, readParentId, readUpdatedAt } from '@/stores/directorySessions/runtime'
 import type { JsonObject as UnknownRecord, JsonValue } from '@/types/json'
 import {
@@ -693,10 +694,7 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
   }
 
   function directoryEntryByPath(path: string): DirectoryEntry | null {
-    const normalized = normalizeDirForCompare(path)
-    if (!normalized) return null
-    const matched = visibleDirectories.value.find((entry) => normalizeDirForCompare(entry.path) === normalized)
-    return matched || null
+    return matchDirectoryEntryForPath(visibleDirectories.value, path)
   }
 
   function upsertRecentIndexEntry(entry: RecentIndexEntry) {
