@@ -22,6 +22,7 @@ import type { DirectoryEntry } from '@/features/sessions/model/types'
 import type { SessionActionItem } from '@/layout/chatSidebar/useSessionActionMenu'
 import SidebarListItem from '@/components/ui/SidebarListItem.vue'
 import SidebarSessionActionMenu from '@/layout/chatSidebar/components/SidebarSessionActionMenu.vue'
+import { shouldAcceptSessionActionTap } from '@/layout/chatSidebar/sessionActionTapGuard'
 
 type SessionLike = {
   id?: string | number | null
@@ -128,6 +129,7 @@ const isInlineRename = computed(() => props.renaming && !props.uiIsMobile && has
 const actionsAlwaysVisible = computed(() => isInlineRename.value || (props.uiIsMobile && canShowActions.value))
 const renameDraftText = computed(() => String(props.renameDraft || ''))
 const canSaveRename = computed(() => !props.renameBusy && renameDraftText.value.trim().length > 0)
+const actionPointerDownAtMs = ref(0)
 
 const shouldRenderSessionActionMenu = computed(() => {
   if (isInlineRename.value) return false
@@ -181,6 +183,20 @@ function onActionMenuSelect(item: SessionActionItem) {
 function setMenuRef(el: Element | ComponentPublicInstance | null) {
   if (!props.setSessionActionMenuRef) return
   props.setSessionActionMenuRef(el)
+}
+
+function markActionPointerDown() {
+  actionPointerDownAtMs.value = Date.now()
+}
+
+function handleMobileOpenActionsClick(event: MouseEvent) {
+  if (!shouldAcceptSessionActionTap(event, actionPointerDownAtMs.value)) return
+  emit('open-actions')
+}
+
+function handleDesktopOpenActionMenu(event: MouseEvent) {
+  if (!shouldAcceptSessionActionTap(event, actionPointerDownAtMs.value)) return
+  emit('open-action-menu', event)
 }
 </script>
 
@@ -325,7 +341,8 @@ function setMenuRef(el: Element | ComponentPublicInstance | null) {
             class="text-muted-foreground hover:text-foreground hover:dark:bg-accent/40 hover:bg-primary/6"
             :title="String(t('chat.sidebar.sessionActions.menuTitle'))"
             :aria-label="String(t('chat.sidebar.sessionActions.menuTitle'))"
-            @click.stop="emit('open-actions')"
+            @pointerdown="markActionPointerDown"
+            @click.stop="handleMobileOpenActionsClick"
           >
             <RiMore2Line class="h-4 w-4" />
           </IconButton>
@@ -337,7 +354,8 @@ function setMenuRef(el: Element | ComponentPublicInstance | null) {
             class="text-muted-foreground hover:text-foreground hover:dark:bg-accent/40 hover:bg-primary/6"
             :title="String(t('chat.sidebar.sessionActions.menuTitle'))"
             :aria-label="String(t('chat.sidebar.sessionActions.menuTitle'))"
-            @click.stop="emit('open-action-menu', $event)"
+            @pointerdown="markActionPointerDown"
+            @click.stop="handleDesktopOpenActionMenu"
           >
             <RiMore2Line class="h-4 w-4" />
           </IconButton>

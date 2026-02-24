@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, unref } from 'vue'
+import { useWindowSize } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
 import {
   RiArrowDownLine,
@@ -31,6 +32,7 @@ import ToolbarChipButton from '@/components/ui/ToolbarChipButton.vue'
 import Tooltip from '@/components/ui/Tooltip.vue'
 import type { ChatPageViewContext } from './chatPageViewContext'
 import { hasDisplayableAssistantError } from './assistantError'
+import { shouldWrapComposerToolbar } from './composerToolbarLayout'
 
 // This view is template-only: it takes a context bag from ChatPage.
 // Keep it "dumb" so we can aggressively split ChatPage logic into composables.
@@ -165,9 +167,11 @@ const {
   // Usage + primary action.
   sessionUsage,
   formatCompactNumber,
-  composerPrimaryAction,
+  showComposerStopAction,
+  composerStopDisabled,
   composerPrimaryDisabled,
   handleComposerPrimaryAction,
+  handleComposerStopAction,
   aborting,
   sending,
 
@@ -192,6 +196,9 @@ const {
 } = ctx
 
 const attachmentsTriggerRef = ref<HTMLElement | null>(null)
+const { width: viewportWidth } = useWindowSize()
+
+const wrapComposerToolbar = computed(() => shouldWrapComposerToolbar(ui.isMobilePointer, viewportWidth.value))
 
 const attachmentsCount = computed(() => {
   const list = unref(attachedFiles)
@@ -458,7 +465,12 @@ void sessionActionsMenuRef
                       :class="ui.isMobilePointer ? 'px-2 py-1.5' : 'px-2.5 py-2'"
                     >
                       <div
-                        class="min-w-0 flex-1 flex items-center gap-1.5 flex-nowrap overflow-x-auto oc-scrollbar-hidden sm:flex-wrap sm:overflow-visible"
+                        class="min-w-0 flex-1 flex items-center gap-1.5 oc-scrollbar-hidden"
+                        :class="
+                          wrapComposerToolbar
+                            ? 'flex-wrap overflow-visible'
+                            : 'flex-nowrap overflow-x-auto sm:flex-wrap sm:overflow-visible'
+                        "
                         data-oc-keyboard-tap="blur"
                       >
                         <Tooltip v-if="!ui.isMobilePointer">
@@ -645,7 +657,10 @@ void sessionActionsMenuRef
                         </ToolbarChipButton>
                       </div>
 
-                      <div class="flex items-center gap-1.5 flex-shrink-0">
+                      <div
+                        class="flex items-center gap-1.5"
+                        :class="wrapComposerToolbar ? 'w-full justify-end pt-1' : 'flex-shrink-0'"
+                      >
                         <div
                           v-if="sessionUsage"
                           class="hidden sm:flex items-center gap-2 mr-2 text-[10px] text-muted-foreground font-mono select-none"
@@ -670,36 +685,35 @@ void sessionActionsMenuRef
                           >
                         </div>
 
+                        <Tooltip v-if="showComposerStopAction">
+                          <Button
+                            size="icon"
+                            variant="outline"
+                            class="h-8 w-8 text-destructive hover:text-destructive"
+                            data-oc-keyboard-tap="blur"
+                            :aria-label="t('chat.page.primary.stopRun')"
+                            :disabled="composerStopDisabled"
+                            @click="handleComposerStopAction"
+                          >
+                            <RiLoader4Line v-if="aborting" class="h-4 w-4 animate-spin" />
+                            <RiStopCircleLine v-else class="h-4 w-4" />
+                          </Button>
+                          <template #content>{{ t('chat.page.primary.stopRun') }}</template>
+                        </Tooltip>
+
                         <Tooltip>
                           <Button
                             size="icon"
                             class="h-8 w-8"
                             data-oc-keyboard-tap="blur"
-                            :variant="composerPrimaryAction === 'stop' ? 'outline' : undefined"
-                            :class="composerPrimaryAction === 'stop' ? 'text-destructive hover:text-destructive' : ''"
-                            :aria-label="
-                              composerPrimaryAction === 'stop'
-                                ? t('chat.page.primary.stopRun')
-                                : t('chat.page.primary.sendMessage')
-                            "
+                            :aria-label="t('chat.page.primary.sendMessage')"
                             :disabled="composerPrimaryDisabled"
                             @click="handleComposerPrimaryAction"
                           >
-                            <RiLoader4Line
-                              v-if="
-                                (composerPrimaryAction === 'stop' && aborting) ||
-                                (composerPrimaryAction === 'send' && sending)
-                              "
-                              class="h-4 w-4 animate-spin"
-                            />
-                            <RiStopCircleLine v-else-if="composerPrimaryAction === 'stop'" class="h-4 w-4" />
+                            <RiLoader4Line v-if="sending" class="h-4 w-4 animate-spin" />
                             <RiSendPlane2Line v-else class="h-4 w-4" />
                           </Button>
-                          <template #content>{{
-                            composerPrimaryAction === 'stop'
-                              ? t('chat.page.primary.stopRun')
-                              : t('chat.page.primary.send')
-                          }}</template>
+                          <template #content>{{ t('chat.page.primary.send') }}</template>
                         </Tooltip>
                       </div>
                     </div>

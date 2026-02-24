@@ -3,6 +3,7 @@ import type { AttachedFile } from './useChatAttachments'
 import type { RenderBlock } from './useChatRenderBlocks'
 import { i18n } from '@/i18n'
 import { formatCompactNumber, formatCurrencyUSD, formatNumber, formatTimeHMS } from '@/i18n/intl'
+import { resolveComposerPrimaryActions } from './composerPrimaryActions'
 
 type ToastsStore = { push: (kind: 'success' | 'error', message: string) => void }
 
@@ -411,25 +412,27 @@ export function useChatRunUi(opts: {
     return Boolean(String(draft.value || '').trim() || attachedFiles.value.length > 0)
   })
 
-  const composerPrimaryAction = computed<'stop' | 'send'>(() => {
-    // Treat an in-flight abort as still being in "stop" mode, so the UI doesn't flip back to send.
-    return aborting.value || canAbort.value ? 'stop' : 'send'
-  })
+  const composerActions = computed(() =>
+    resolveComposerPrimaryActions({
+      canAbort: canAbort.value,
+      aborting: aborting.value,
+      canSend: canSend.value,
+      sending: sending.value,
+    }),
+  )
 
-  const composerPrimaryDisabled = computed(() => {
-    if (composerPrimaryAction.value === 'stop') {
-      return !canAbort.value || aborting.value
-    }
-    return !canSend.value
-  })
+  const showComposerStopAction = computed(() => composerActions.value.showStop)
+  const composerStopDisabled = computed(() => composerActions.value.stopDisabled)
+  const composerPrimaryDisabled = computed(() => composerActions.value.sendDisabled)
 
   async function handleComposerPrimaryAction() {
     if (composerPrimaryDisabled.value) return
-    if (composerPrimaryAction.value === 'stop') {
-      await abortRun()
-      return
-    }
     await onSend()
+  }
+
+  async function handleComposerStopAction() {
+    if (composerStopDisabled.value) return
+    await abortRun()
   }
 
   return {
@@ -445,8 +448,10 @@ export function useChatRunUi(opts: {
     aborting,
     canAbort,
     abortRun,
-    composerPrimaryAction,
+    showComposerStopAction,
+    composerStopDisabled,
     composerPrimaryDisabled,
     handleComposerPrimaryAction,
+    handleComposerStopAction,
   }
 }
