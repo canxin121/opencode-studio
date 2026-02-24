@@ -5,8 +5,8 @@ import { nextTick } from 'vue'
 
 import { createTestHarness } from './testRuntime'
 
-test('useChatModelSelection: restores per-session manual model after session switch', () => {
-  const { chat, selection } = createTestHarness({ selectedSessionId: 'session-1' })
+test('useChatModelSelection: restores per-session manual model after session switch', async () => {
+  const { chat, selection } = await createTestHarness({ selectedSessionId: 'session-1' })
 
   selection.chooseModelSlug('manual-provider/manual-model')
   assert.equal(selection.selectedProviderId.value, 'manual-provider')
@@ -34,8 +34,8 @@ test('useChatModelSelection: restores per-session manual model after session swi
   assert.equal(selection.selectedModelId.value, 'manual-model')
 })
 
-test('useChatModelSelection: manual model overrides newer session run-config', () => {
-  const { chat, selection } = createTestHarness({
+test('useChatModelSelection: manual model overrides newer session run-config', async () => {
+  const { chat, selection } = await createTestHarness({
     selectedSessionId: 'session-1',
     selectedSessionRunConfig: {
       providerID: 'session-provider',
@@ -60,8 +60,8 @@ test('useChatModelSelection: manual model overrides newer session run-config', (
   assert.equal(selection.selectedModelId.value, 'manual-model')
 })
 
-test('useChatModelSelection: chooseModelDefault clears manual history and falls back to defaults', () => {
-  const { chat, selection } = createTestHarness({ selectedSessionId: 'session-1' })
+test('useChatModelSelection: chooseModelDefault clears manual history and falls back to defaults', async () => {
+  const { chat, selection } = await createTestHarness({ selectedSessionId: 'session-1' })
 
   selection.providers.value = [
     {
@@ -89,7 +89,7 @@ test('useChatModelSelection: chooseModelDefault clears manual history and falls 
 })
 
 test('useChatModelSelection: watch selectedSessionRunConfig.at triggers session apply', async () => {
-  const { chat, selection } = createTestHarness({
+  const { chat, selection } = await createTestHarness({
     selectedSessionId: 'session-watch-run-config',
     selectedSessionRunConfig: {
       providerID: 'run-provider-1',
@@ -114,7 +114,7 @@ test('useChatModelSelection: watch selectedSessionRunConfig.at triggers session 
 })
 
 test('useChatModelSelection: watch messages.length triggers derived session apply', async () => {
-  const { chat, selection } = createTestHarness({
+  const { chat, selection } = await createTestHarness({
     selectedSessionId: 'session-watch-messages',
     selectedSessionRunConfig: { at: 1 },
   })

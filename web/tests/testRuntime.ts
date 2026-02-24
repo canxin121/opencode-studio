@@ -1,6 +1,5 @@
 import { reactive, ref } from 'vue'
 
-import { useChatModelSelection } from '../src/pages/chat/useChatModelSelection'
 import type { SessionRunConfig } from '../src/types/chat'
 
 function createMemoryStorage(): Storage {
@@ -41,6 +40,17 @@ export function ensureBrowserTestRuntime(): Storage {
   windowRecord.localStorage = storage
   windowRecord.setTimeout = globalThis.setTimeout.bind(globalThis)
   windowRecord.clearTimeout = globalThis.clearTimeout.bind(globalThis)
+
+  const currentDocument = globalRecord.document as Record<string, unknown> | undefined
+  if (!currentDocument || typeof currentDocument.createElement !== 'function') {
+    const doc = {
+      createElement: () => ({ style: {} }),
+      createElementNS: () => ({}),
+    }
+    globalRecord.document = doc
+    windowRecord.document = doc
+  }
+
   return storage
 }
 
@@ -57,7 +67,19 @@ type ChatState = {
   messages: Array<{ info?: Record<string, unknown> }>
 }
 
-export function createTestHarness(
+let useChatModelSelectionCached:
+  | (typeof import('../src/pages/chat/useChatModelSelection'))['useChatModelSelection']
+  | null = null
+
+async function getUseChatModelSelection() {
+  if (useChatModelSelectionCached) return useChatModelSelectionCached
+  ensureBrowserTestRuntime()
+  const mod = await import('../src/pages/chat/useChatModelSelection')
+  useChatModelSelectionCached = mod.useChatModelSelection
+  return useChatModelSelectionCached
+}
+
+export async function createTestHarness(
   initial: {
     selectedSessionId?: string | null
     selectedSessionRunConfig?: SessionRunConfig | null
@@ -65,6 +87,7 @@ export function createTestHarness(
   } = {},
 ) {
   clearLocalStorageKeys(['oc2.chat.modelVariantByKey', 'oc2.chat.sessionManualModelBySession'])
+  const useChatModelSelection = await getUseChatModelSelection()
 
   const chat = reactive<ChatState>({
     selectedSessionId: initial.selectedSessionId ?? 'session-1',
