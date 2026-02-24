@@ -306,23 +306,23 @@ const localePickerOptions = computed(() => [
   { value: 'en-US', label: String(t('settings.appearance.language.options.enUS')) },
 ])
 
-const themeVariantPickerOptions = [
-  { value: 'light', label: 'light' },
-  { value: 'dark', label: 'dark' },
-]
+const themeVariantPickerOptions = computed(() => [
+  { value: 'light', label: String(t('settings.appearance.theme.options.light')) },
+  { value: 'dark', label: String(t('settings.appearance.theme.options.dark')) },
+])
 
-const uiFontPickerOptions = [
-  { value: 'system', label: 'system' },
-  { value: 'ibm-plex-sans', label: 'IBM Plex Sans' },
-  { value: 'atkinson', label: 'Atkinson Hyperlegible' },
-  { value: 'serif', label: 'serif' },
-]
+const uiFontPickerOptions = computed(() => [
+  { value: 'system', label: String(t('settings.appearance.fonts.options.system')) },
+  { value: 'ibm-plex-sans', label: String(t('settings.appearance.fonts.options.ibmPlexSans')) },
+  { value: 'atkinson', label: String(t('settings.appearance.fonts.options.atkinson')) },
+  { value: 'serif', label: String(t('settings.appearance.fonts.options.serif')) },
+])
 
-const monoFontPickerOptions = [
-  { value: 'system', label: 'system' },
-  { value: 'ibm-plex-mono', label: 'IBM Plex Mono' },
-  { value: 'jetbrains-mono', label: 'JetBrains Mono' },
-]
+const monoFontPickerOptions = computed(() => [
+  { value: 'system', label: String(t('settings.appearance.fonts.options.system')) },
+  { value: 'ibm-plex-mono', label: String(t('settings.appearance.fonts.options.ibmPlexMono')) },
+  { value: 'jetbrains-mono', label: String(t('settings.appearance.fonts.options.jetbrainsMono')) },
+])
 
 const showChatTimestamps = makeSetting('showChatTimestamps', true)
 const showReasoningTraces = makeSetting('showReasoningTraces', false)
@@ -493,33 +493,33 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
                 <RiRefreshLine class="h-4 w-4" :class="settings.loading ? 'animate-spin' : ''" />
               </Button>
             </div>
-            <div v-for="t in tabs" :key="t.id" class="space-y-1">
+            <div v-for="tab in tabs" :key="tab.id" class="space-y-1">
               <SidebarTextButton
-                @click="goToTab(t.id)"
+                @click="goToTab(tab.id)"
                 class="flex w-full items-center rounded-md border border-transparent px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/60 hover:text-foreground active:scale-95"
                 :class="
-                  activeTab === t.id
+                  activeTab === tab.id
                     ? 'bg-primary/12 dark:bg-accent/80 text-foreground border-border/60'
                     : 'text-muted-foreground'
                 "
               >
                 <span class="inline-flex items-center gap-2">
                   <RiArrowDownSLine
-                    v-if="t.id === 'opencode' || t.id === 'plugins'"
+                    v-if="tab.id === 'opencode' || tab.id === 'plugins'"
                     class="h-3.5 w-3.5 transition-transform"
                     :class="
-                      (t.id === 'opencode' && opencodeExpanded && activeTab === 'opencode') ||
-                      (t.id === 'plugins' && pluginsExpanded && activeTab === 'plugins')
+                      (tab.id === 'opencode' && opencodeExpanded && activeTab === 'opencode') ||
+                      (tab.id === 'plugins' && pluginsExpanded && activeTab === 'plugins')
                         ? 'rotate-180'
                         : ''
                     "
                   />
-                  {{ t.label }}
+                  {{ tab.label }}
                 </span>
               </SidebarTextButton>
 
               <div
-                v-if="t.id === 'opencode' && activeTab === 'opencode' && opencodeExpanded"
+                v-if="tab.id === 'opencode' && activeTab === 'opencode' && opencodeExpanded"
                 class="border-l border-border/60 pl-3 pt-2 space-y-1"
               >
                 <SidebarTextButton
@@ -533,12 +533,12 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
                       : 'text-muted-foreground'
                   "
                 >
-                  {{ section.label }}
+                  {{ t(section.labelKey) }}
                 </SidebarTextButton>
               </div>
 
               <div
-                v-if="t.id === 'plugins' && activeTab === 'plugins' && pluginsExpanded"
+                v-if="tab.id === 'plugins' && activeTab === 'plugins' && pluginsExpanded"
                 class="border-l border-border/60 pl-3 pt-2 space-y-1"
               >
                 <SidebarTextButton

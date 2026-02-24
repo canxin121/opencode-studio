@@ -63,6 +63,8 @@ export default {
     ignore: 'Ignore',
     yes: 'Yes',
     no: 'No',
+    true: 'true',
+    false: 'false',
     copyFailed: 'Copy failed',
     failedToCopyToClipboard: 'Failed to copy to clipboard',
     downloadFailed: 'Download failed',
@@ -351,6 +353,24 @@ export default {
       },
     },
     opencodeConfig: {
+      navigation: {
+        sections: {
+          general: 'General',
+          instructions: 'Instructions, Skills & Plugins',
+          providers: 'Providers',
+          tui: 'TUI',
+          server: 'Server & Watcher',
+          commands: 'Commands',
+          agents: 'Agents',
+          permissions: 'Permissions',
+          mcp: 'MCP',
+          formatter: 'Formatter & LSP',
+          keybinds: 'Keybinds',
+          compaction: 'Compaction',
+          experimental: 'Experimental',
+          enterprise: 'Enterprise',
+        },
+      },
       scope: {
         title: 'Config scope',
         searchPlaceholder: 'Search scopes',
@@ -484,6 +504,12 @@ export default {
             },
             search: {
               searchPolicies: 'Search policies',
+            },
+            options: {
+              lastChangeWins: 'last-change-wins',
+              enabledWins: 'enabled-wins',
+              disabledWins: 'disabled-wins',
+              keepConflict: 'keep-conflict',
             },
             picker: {
               panelTitle: 'Providers',
@@ -1330,12 +1356,24 @@ export default {
         useSystem: 'Use system theme',
         pickerTitle: 'Theme',
         pickerSearch: 'Search themes',
+        options: {
+          light: 'Light',
+          dark: 'Dark',
+        },
       },
       fonts: {
         label: 'Fonts',
         ui: 'UI font',
         mono: 'Mono font',
         search: 'Search fonts',
+        options: {
+          system: 'System',
+          ibmPlexSans: 'IBM Plex Sans',
+          atkinson: 'Atkinson Hyperlegible',
+          serif: 'Serif',
+          ibmPlexMono: 'IBM Plex Mono',
+          jetbrainsMono: 'JetBrains Mono',
+        },
       },
       sizing: {
         label: 'Sizing',

@@ -988,8 +988,8 @@ function clearArrayRows(path: string[], prop: SchemaProperty) {
                       :model-value="row"
                       @update:model-value="(v) => onArrayRowSelect(entry.path, entry.prop, rowIdx, String(v || ''))"
                       :options="[
-                        { value: 'true', label: 'true' },
-                        { value: 'false', label: 'false' },
+                        { value: 'true', label: t('common.true') },
+                        { value: 'false', label: t('common.false') },
                       ]"
                       :title="t('common.select')"
                       :search-placeholder="t('common.searchOptions')"
@@ -1078,8 +1078,8 @@ function clearArrayRows(path: string[], prop: SchemaProperty) {
                       :model-value="row.value"
                       @update:model-value="(v) => onMapValueSelect(entry.path, entry.prop, rowIdx, String(v || ''))"
                       :options="[
-                        { value: 'true', label: 'true' },
-                        { value: 'false', label: 'false' },
+                        { value: 'true', label: t('common.true') },
+                        { value: 'false', label: t('common.false') },
                       ]"
                       :title="t('common.select')"
                       :search-placeholder="t('common.searchOptions')"
