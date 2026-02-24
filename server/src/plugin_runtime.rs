@@ -1255,7 +1255,7 @@ fn normalize_specs(specs: Vec<String>) -> Vec<String> {
     for raw in specs {
         // Be forgiving: allow users/UIs to accidentally paste multiple entries
         // into a single list item separated by newlines/commas/tabs.
-        for part in raw.split(|ch| ch == '\n' || ch == '\r' || ch == ',' || ch == '\t') {
+        for part in raw.split(['\n', '\r', ',', '\t']) {
             let spec = part.trim();
             if spec.is_empty() {
                 continue;
@@ -1462,10 +1462,7 @@ fn resolve_plugin_root(spec: &str) -> Result<PathBuf, String> {
     }
 
     if spec.starts_with("link:") {
-        let rest = spec
-            .strip_prefix("link:")
-            .unwrap_or(spec)
-            .trim();
+        let rest = spec.strip_prefix("link:").unwrap_or(spec).trim();
         if rest.is_empty() {
             return Err("empty link: plugin spec".to_string());
         }
@@ -1491,10 +1488,7 @@ fn resolve_plugin_root(spec: &str) -> Result<PathBuf, String> {
         }
 
         if reference.starts_with("link:") {
-            let rest = reference
-                .strip_prefix("link:")
-                .unwrap_or(reference)
-                .trim();
+            let rest = reference.strip_prefix("link:").unwrap_or(reference).trim();
             if rest.is_empty() {
                 return Err("empty link: plugin spec".to_string());
             }
@@ -1561,10 +1555,7 @@ fn resolve_file_spec_path(spec: &str) -> Result<PathBuf, String> {
     }
 
     // npm-style file: specifier (not necessarily a valid file:// URL)
-    let rest = spec
-        .strip_prefix("file:")
-        .unwrap_or("")
-        .trim();
+    let rest = spec.strip_prefix("file:").unwrap_or("").trim();
     if rest.is_empty() {
         return Err("empty file: plugin spec".to_string());
     }
