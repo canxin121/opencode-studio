@@ -50,7 +50,10 @@ function normalizedPluginLabel(pluginId: string): string {
   if (lower.includes('workbench')) return 'workbench'
 
   const tail = raw.split('/').pop() || raw
-  const cleaned = tail.replace(/^opencode[-_]?/i, '').trim().toLowerCase()
+  const cleaned = tail
+    .replace(/^opencode[-_]?/i, '')
+    .trim()
+    .toLowerCase()
   return cleaned || lower || 'plugin'
 }
 
@@ -91,7 +94,9 @@ const activeMountWithHostMode = computed<ChatMount | null>(() => {
 })
 
 const launcherAria = computed(() =>
-  menuOpen.value ? String(t('plugins.overlayLauncher.closeMenuAria')) : String(t('plugins.overlayLauncher.openMenuAria')),
+  menuOpen.value
+    ? String(t('plugins.overlayLauncher.closeMenuAria'))
+    : String(t('plugins.overlayLauncher.openMenuAria')),
 )
 
 const launcherHidden = computed(() => menuOpen.value || Boolean(activeMountWithHostMode.value))
@@ -257,7 +262,9 @@ onBeforeUnmount(() => {
   <div
     v-if="hasMounts"
     ref="rootEl"
-    :class="isComposerPlacement ? 'w-full flex flex-col items-stretch gap-1' : 'pointer-events-none w-full flex justify-end'"
+    :class="
+      isComposerPlacement ? 'w-full flex flex-col items-stretch gap-1' : 'pointer-events-none w-full flex justify-end'
+    "
   >
     <div
       :class="
@@ -293,7 +300,11 @@ onBeforeUnmount(() => {
 
       <div
         v-if="!launcherHidden"
-        :class="isComposerPlacement ? 'pointer-events-none w-full flex justify-end pb-1' : 'pointer-events-none w-full flex justify-end'"
+        :class="
+          isComposerPlacement
+            ? 'pointer-events-none w-full flex justify-end pb-1'
+            : 'pointer-events-none w-full flex justify-end'
+        "
       >
         <button
           ref="launcherBtnEl"
