@@ -394,6 +394,12 @@ export const useChatStore = defineStore('chat', () => {
     return Array.isArray(list) ? list : []
   })
 
+  const selectedSessionDiffLoaded = computed(() => {
+    const sid = selectedSessionId.value
+    if (!sid) return false
+    return Object.prototype.hasOwnProperty.call(sessionDiffBySession.value, sid)
+  })
+
   const selectedSessionDiffLoading = computed(() => {
     const sid = selectedSessionId.value
     if (!sid) return false
@@ -1705,6 +1711,7 @@ export const useChatStore = defineStore('chat', () => {
     selectedSessionStatus,
     selectedSessionError,
     selectedSessionDiff,
+    selectedSessionDiffLoaded,
     selectedSessionDiffLoading,
     selectedSessionDiffError,
     selectedSessionRunConfig,

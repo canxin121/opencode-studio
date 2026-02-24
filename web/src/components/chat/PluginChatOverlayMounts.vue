@@ -9,6 +9,7 @@ import OptionMenu, { type OptionMenuGroup, type OptionMenuItem } from '@/compone
 import type { ChatMount } from '@/plugins/host/mounts'
 import { useChatStore } from '@/stores/chat'
 import type { SessionFileDiff } from '@/types/chat'
+import { resolveSessionDiffPanelView } from './sessionDiffPanelState'
 
 const props = withDefaults(
   defineProps<{
@@ -85,6 +86,20 @@ const sessionDiff = computed<SessionFileDiff[]>(() => {
   return Array.isArray(list) ? list : []
 })
 const sessionDiffCount = computed(() => sessionDiff.value.length)
+const sessionSummaryFileCount = computed(() => {
+  const raw = chat.selectedSession?.summary?.files
+  return typeof raw === 'number' && Number.isFinite(raw) ? Math.max(0, Math.floor(raw)) : 0
+})
+const hasSummarySessionChanges = computed(() => sessionSummaryFileCount.value > 0)
+const sessionDiffPanelView = computed(() =>
+  resolveSessionDiffPanelView({
+    loading: chat.selectedSessionDiffLoading,
+    error: chat.selectedSessionDiffError,
+    diffCount: sessionDiffCount.value,
+    diffLoaded: chat.selectedSessionDiffLoaded,
+    hasSummaryChanges: hasSummarySessionChanges.value,
+  }),
+)
 const sessionDiffBadge = computed(() => {
   const count = sessionDiffCount.value
   if (count <= 0) return ''
@@ -392,13 +407,13 @@ onBeforeUnmount(() => {
           </button>
         </div>
 
-        <div v-if="chat.selectedSessionDiffLoading" class="px-3 py-6 text-xs text-muted-foreground">
+        <div v-if="sessionDiffPanelView === 'loading'" class="px-3 py-6 text-xs text-muted-foreground">
           {{ t('chat.sessionDiff.loading') }}
         </div>
-        <div v-else-if="chat.selectedSessionDiffError" class="px-3 py-6 text-xs text-destructive">
+        <div v-else-if="sessionDiffPanelView === 'error'" class="px-3 py-6 text-xs text-destructive">
           {{ chat.selectedSessionDiffError }}
         </div>
-        <div v-else-if="sessionDiffCount <= 0" class="px-3 py-6 text-xs text-muted-foreground">
+        <div v-else-if="sessionDiffPanelView === 'empty'" class="px-3 py-6 text-xs text-muted-foreground">
           {{ t('chat.sessionDiff.empty') }}
         </div>
         <div v-else class="flex flex-col sm:flex-row h-[56vh] max-h-[520px] min-h-[320px]">
