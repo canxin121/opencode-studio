@@ -465,7 +465,8 @@ onBeforeUnmount(() => {
             :title="t('chat.sessionDiff.toggleAria')"
             :aria-label="t('chat.sessionDiff.toggleAria')"
             :aria-expanded="diffPanelOpen"
-            @mousedown.prevent.stop
+            data-oc-keyboard-tap="keep"
+            @pointerdown.prevent.stop
             @click.stop="toggleDiffPanel"
           >
             <RiFileList2Line class="h-4 w-4" />
@@ -487,7 +488,8 @@ onBeforeUnmount(() => {
             :title="launcherAria"
             :aria-label="launcherAria"
             :aria-expanded="menuOpen"
-            @mousedown.prevent.stop
+            data-oc-keyboard-tap="keep"
+            @pointerdown.prevent.stop
             @click.stop="toggleMenu"
           >
             <RiPlugLine class="h-4 w-4" />

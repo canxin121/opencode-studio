@@ -192,9 +192,11 @@ export type ChatPageViewContext = {
 
   sessionUsage: MaybeRef<SessionUsageLike | null>
   formatCompactNumber: (value: number) => string
-  composerPrimaryAction: MaybeRef<'send' | 'stop'>
+  showComposerStopAction: MaybeRef<boolean>
+  composerStopDisabled: MaybeRef<boolean>
   composerPrimaryDisabled: MaybeRef<boolean>
   handleComposerPrimaryAction: () => void
+  handleComposerStopAction: () => void
   aborting: MaybeRef<boolean>
   sending: MaybeRef<boolean>
 
