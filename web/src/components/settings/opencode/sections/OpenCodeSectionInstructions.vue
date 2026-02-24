@@ -33,7 +33,9 @@ export default defineComponent({
   <section id="instructions" class="scroll-mt-24 rounded-lg border border-border bg-background p-4 space-y-4">
     <div class="flex items-start justify-between gap-3">
       <div class="min-w-0">
-        <div class="text-base font-semibold leading-snug">{{ t('settings.opencodeConfig.sections.instructions.title') }}</div>
+        <div class="text-base font-semibold leading-snug">
+          {{ t('settings.opencodeConfig.sections.instructions.title') }}
+        </div>
       </div>
       <div class="flex items-center gap-2">
         <Tooltip>
@@ -75,7 +77,9 @@ export default defineComponent({
     <div v-if="isSectionOpen('instructions')" class="grid gap-4 lg:grid-cols-3">
       <div class="rounded-md border border-border p-3 space-y-2">
         <div class="flex items-center justify-between">
-          <div class="text-sm font-semibold">{{ t('settings.opencodeConfig.sections.instructions.panels.instructionsTitle') }}</div>
+          <div class="text-sm font-semibold">
+            {{ t('settings.opencodeConfig.sections.instructions.panels.instructionsTitle') }}
+          </div>
           <div class="flex items-center gap-2">
             <Tooltip>
               <Button
@@ -92,7 +96,9 @@ export default defineComponent({
             </Tooltip>
           </div>
         </div>
-        <div class="text-[11px] text-muted-foreground">{{ t('settings.opencodeConfig.sections.instructions.panels.instructionsHelp') }}</div>
+        <div class="text-[11px] text-muted-foreground">
+          {{ t('settings.opencodeConfig.sections.instructions.panels.instructionsHelp') }}
+        </div>
 
         <div class="flex flex-wrap gap-2">
           <span
@@ -155,22 +161,26 @@ export default defineComponent({
 
       <div class="rounded-md border border-border p-3 space-y-2">
         <div class="flex items-center justify-between">
-          <div class="text-sm font-semibold">{{ t('settings.opencodeConfig.sections.instructions.panels.skillsPathsTitle') }}</div>
+          <div class="text-sm font-semibold">
+            {{ t('settings.opencodeConfig.sections.instructions.panels.skillsPathsTitle') }}
+          </div>
           <Tooltip>
-              <Button
-                size="icon"
-                variant="ghost"
-                class="h-8 w-8"
-                :title="t('common.clear')"
-                :aria-label="t('settings.opencodeConfig.sections.instructions.actions.clearSkillsPathsAria')"
-                @click="skillsPathsArr = []"
-              >
+            <Button
+              size="icon"
+              variant="ghost"
+              class="h-8 w-8"
+              :title="t('common.clear')"
+              :aria-label="t('settings.opencodeConfig.sections.instructions.actions.clearSkillsPathsAria')"
+              @click="skillsPathsArr = []"
+            >
               <RiCloseLine class="h-4 w-4" />
             </Button>
             <template #content>{{ t('common.clear') }}</template>
           </Tooltip>
         </div>
-        <div class="text-[11px] text-muted-foreground">{{ t('settings.opencodeConfig.sections.instructions.panels.skillsPathsHelp') }}</div>
+        <div class="text-[11px] text-muted-foreground">
+          {{ t('settings.opencodeConfig.sections.instructions.panels.skillsPathsHelp') }}
+        </div>
 
         <div class="flex flex-wrap gap-2">
           <span
@@ -233,22 +243,26 @@ export default defineComponent({
 
       <div class="rounded-md border border-border p-3 space-y-2">
         <div class="flex items-center justify-between">
-          <div class="text-sm font-semibold">{{ t('settings.opencodeConfig.sections.instructions.panels.pluginsTitle') }}</div>
+          <div class="text-sm font-semibold">
+            {{ t('settings.opencodeConfig.sections.instructions.panels.pluginsTitle') }}
+          </div>
           <Tooltip>
-              <Button
-                size="icon"
-                variant="ghost"
-                class="h-8 w-8"
-                :title="t('common.clear')"
-                :aria-label="t('settings.opencodeConfig.sections.instructions.actions.clearPluginsAria')"
-                @click="pluginsArr = []"
-              >
+            <Button
+              size="icon"
+              variant="ghost"
+              class="h-8 w-8"
+              :title="t('common.clear')"
+              :aria-label="t('settings.opencodeConfig.sections.instructions.actions.clearPluginsAria')"
+              @click="pluginsArr = []"
+            >
               <RiCloseLine class="h-4 w-4" />
             </Button>
             <template #content>{{ t('common.clear') }}</template>
           </Tooltip>
         </div>
-        <div class="text-[11px] text-muted-foreground">{{ t('settings.opencodeConfig.sections.instructions.panels.pluginsHelp') }}</div>
+        <div class="text-[11px] text-muted-foreground">
+          {{ t('settings.opencodeConfig.sections.instructions.panels.pluginsHelp') }}
+        </div>
 
         <div class="flex flex-wrap gap-2">
           <span

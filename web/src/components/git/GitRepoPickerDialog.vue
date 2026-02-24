@@ -47,9 +47,15 @@ function onUpdateOpen(v: boolean) {
   >
     <div class="space-y-3">
       <div class="flex flex-wrap items-center gap-2">
-        <Button variant="secondary" size="sm" @click="$emit('refresh')" :disabled="reposLoading">{{ t('common.refresh') }}</Button>
-        <Button size="sm" @click="$emit('openInit')">{{ t('git.ui.dialogs.repoPicker.actions.initializeRepo') }}</Button>
-        <Button size="sm" variant="secondary" @click="$emit('openClone')">{{ t('git.ui.dialogs.repoPicker.actions.cloneRepo') }}</Button>
+        <Button variant="secondary" size="sm" @click="$emit('refresh')" :disabled="reposLoading">{{
+          t('common.refresh')
+        }}</Button>
+        <Button size="sm" @click="$emit('openInit')">{{
+          t('git.ui.dialogs.repoPicker.actions.initializeRepo')
+        }}</Button>
+        <Button size="sm" variant="secondary" @click="$emit('openClone')">{{
+          t('git.ui.dialogs.repoPicker.actions.cloneRepo')
+        }}</Button>
         <div
           class="order-last basis-full min-w-0 text-xs text-muted-foreground font-mono truncate sm:order-none sm:basis-auto sm:ml-auto"
           :title="projectRoot || ''"
@@ -109,7 +115,9 @@ function onUpdateOpen(v: boolean) {
       </ScrollArea>
 
       <div v-if="closedRepos.length" class="space-y-2 rounded-md border border-border/60 bg-muted/10 p-3">
-        <div class="text-xs font-medium text-muted-foreground">{{ t('git.ui.dialogs.repoPicker.sections.closedRepos') }}</div>
+        <div class="text-xs font-medium text-muted-foreground">
+          {{ t('git.ui.dialogs.repoPicker.sections.closedRepos') }}
+        </div>
         <div class="space-y-1">
           <div
             v-for="r in closedRepos"
@@ -130,7 +138,9 @@ function onUpdateOpen(v: boolean) {
       </div>
 
       <div v-if="parentRepos.length" class="space-y-2 rounded-md border border-border/60 bg-muted/10 p-3">
-        <div class="text-xs font-medium text-muted-foreground">{{ t('git.ui.dialogs.repoPicker.sections.parentRepos') }}</div>
+        <div class="text-xs font-medium text-muted-foreground">
+          {{ t('git.ui.dialogs.repoPicker.sections.parentRepos') }}
+        </div>
         <div class="space-y-1">
           <button
             v-for="root in parentRepos"

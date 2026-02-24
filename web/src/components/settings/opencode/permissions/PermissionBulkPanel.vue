@@ -66,7 +66,9 @@ export default defineComponent({
     <div class="text-sm font-semibold">{{ t('settings.opencodeConfig.sections.permissions.bulk.title') }}</div>
     <div class="grid gap-3 lg:grid-cols-3">
       <label class="grid gap-1">
-        <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.permissions.bulk.fields.action') }}</span>
+        <span class="text-xs text-muted-foreground">{{
+          t('settings.opencodeConfig.sections.permissions.bulk.fields.action')
+        }}</span>
         <OptionPicker
           v-model="permissionBulkAction"
           :options="permissionBulkActionPickerOptions"
@@ -76,7 +78,9 @@ export default defineComponent({
         />
       </label>
       <label class="grid gap-1">
-        <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.permissions.bulk.fields.target') }}</span>
+        <span class="text-xs text-muted-foreground">{{
+          t('settings.opencodeConfig.sections.permissions.bulk.fields.target')
+        }}</span>
         <OptionPicker
           v-model="permissionBulkTarget"
           :options="permissionBulkTargetPickerOptions"
@@ -86,7 +90,9 @@ export default defineComponent({
         />
       </label>
       <label v-if="permissionBulkTarget === 'tag'" class="grid gap-1">
-        <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.permissions.bulk.fields.tag') }}</span>
+        <span class="text-xs text-muted-foreground">{{
+          t('settings.opencodeConfig.sections.permissions.bulk.fields.tag')
+        }}</span>
         <OptionPicker
           v-model="permissionBulkTag"
           :options="permissionBulkTagPickerOptions"
@@ -96,7 +102,9 @@ export default defineComponent({
         />
       </label>
       <label v-else class="grid gap-1">
-        <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.permissions.bulk.fields.clearOthers') }}</span>
+        <span class="text-xs text-muted-foreground">{{
+          t('settings.opencodeConfig.sections.permissions.bulk.fields.clearOthers')
+        }}</span>
         <label class="inline-flex items-center gap-2 text-sm">
           <input type="checkbox" v-model="permissionBulkClearOthers" />
           {{ t('settings.opencodeConfig.sections.permissions.bulk.fields.clearNonTargetKeys') }}
@@ -105,7 +113,9 @@ export default defineComponent({
     </div>
 
     <div v-if="permissionBulkTarget === 'selection'" class="grid gap-2">
-      <div class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.permissions.bulk.fields.selection') }}</div>
+      <div class="text-xs text-muted-foreground">
+        {{ t('settings.opencodeConfig.sections.permissions.bulk.fields.selection') }}
+      </div>
       <StringListEditor
         :model-value="permissionBulkSelection"
         :suggestions="toolPickerOptions"
@@ -131,17 +141,21 @@ export default defineComponent({
           <template #content>{{ t('common.all') }}</template>
         </Tooltip>
         <span class="text-[11px] text-muted-foreground">{{
-          t('settings.opencodeConfig.sections.permissions.bulk.selectionCount', { count: permissionBulkSelection.length })
+          t('settings.opencodeConfig.sections.permissions.bulk.selectionCount', {
+            count: permissionBulkSelection.length,
+          })
         }}</span>
       </div>
     </div>
 
     <div v-if="permissionBulkTarget === 'tag'" class="flex items-center gap-2 text-xs">
-      <Button size="sm" variant="outline" @click="selectPermissionBulkByTag(permissionBulkTag)"
-        >{{ t('settings.opencodeConfig.sections.permissions.bulk.actions.selectByTag') }}</Button
-      >
+      <Button size="sm" variant="outline" @click="selectPermissionBulkByTag(permissionBulkTag)">{{
+        t('settings.opencodeConfig.sections.permissions.bulk.actions.selectByTag')
+      }}</Button>
       <span class="text-muted-foreground">{{
-        t('settings.opencodeConfig.sections.permissions.bulk.toolsCount', { count: toolIdsByTag[permissionBulkTag].length })
+        t('settings.opencodeConfig.sections.permissions.bulk.toolsCount', {
+          count: toolIdsByTag[permissionBulkTag].length,
+        })
       }}</span>
     </div>
 
@@ -159,7 +173,9 @@ export default defineComponent({
         </Button>
         <template #content>{{ t('settings.opencodeConfig.sections.permissions.bulk.actions.applyBulk') }}</template>
       </Tooltip>
-      <span class="text-[11px] text-muted-foreground">{{ t('settings.opencodeConfig.sections.permissions.bulk.help') }}</span>
+      <span class="text-[11px] text-muted-foreground">{{
+        t('settings.opencodeConfig.sections.permissions.bulk.help')
+      }}</span>
     </div>
   </div>
 </template>

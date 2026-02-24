@@ -90,7 +90,9 @@ export default defineComponent({
 
     <div v-if="isSectionOpen('tui')" class="grid gap-4 lg:grid-cols-3">
       <label class="grid gap-1">
-        <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.tui.fields.scrollSpeed') }}</span>
+        <span class="text-xs text-muted-foreground">{{
+          t('settings.opencodeConfig.sections.tui.fields.scrollSpeed')
+        }}</span>
         <input
           v-model="tuiScrollSpeed"
           type="number"
@@ -100,7 +102,9 @@ export default defineComponent({
         />
       </label>
       <label class="grid gap-1">
-        <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.tui.fields.scrollAcceleration') }}</span>
+        <span class="text-xs text-muted-foreground">{{
+          t('settings.opencodeConfig.sections.tui.fields.scrollAcceleration')
+        }}</span>
         <OptionPicker
           v-model="tuiScrollAcceleration"
           :options="triStatePickerOptions"
@@ -110,7 +114,9 @@ export default defineComponent({
         />
       </label>
       <label class="grid gap-1">
-        <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.tui.fields.diffStyle') }}</span>
+        <span class="text-xs text-muted-foreground">{{
+          t('settings.opencodeConfig.sections.tui.fields.diffStyle')
+        }}</span>
         <OptionPicker
           v-model="tuiDiffStyle"
           :options="diffStylePickerOptions"

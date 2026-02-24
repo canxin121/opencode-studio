@@ -74,7 +74,9 @@ const branchList = computed(() => {
       </div>
 
       <div v-if="branchesLoading" class="py-3">
-        <div class="px-2 pb-2 text-xs text-muted-foreground uppercase tracking-wide">{{ t('git.ui.dialogs.branches.sections.branches') }}</div>
+        <div class="px-2 pb-2 text-xs text-muted-foreground uppercase tracking-wide">
+          {{ t('git.ui.dialogs.branches.sections.branches') }}
+        </div>
         <div class="space-y-2 px-2">
           <div v-for="i in 7" :key="i" class="flex items-center justify-between gap-3">
             <div class="flex items-center gap-2 min-w-0 flex-1">
@@ -136,7 +138,7 @@ const branchList = computed(() => {
                   class="h-6 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto text-destructive"
                   @click.stop
                 >
-                {{ t('git.ui.dialogs.branches.actions.deleteBranch') }}
+                  {{ t('git.ui.dialogs.branches.actions.deleteBranch') }}
                 </Button>
               </ConfirmPopover>
               <ConfirmPopover

@@ -77,7 +77,9 @@ export default defineComponent({
   <section id="providers" class="scroll-mt-24 rounded-lg border border-border bg-background p-4 space-y-4">
     <div class="flex items-start justify-between gap-3">
       <div class="min-w-0">
-        <div class="text-base font-semibold leading-snug">{{ t('settings.opencodeConfig.sections.providers.title') }}</div>
+        <div class="text-base font-semibold leading-snug">
+          {{ t('settings.opencodeConfig.sections.providers.title') }}
+        </div>
       </div>
       <div class="flex items-center gap-2">
         <Tooltip>
@@ -136,37 +138,37 @@ export default defineComponent({
 
     <ProviderAllowDenyLists />
 
-      <div class="grid gap-3">
-        <div class="flex flex-wrap items-center gap-2">
-          <Input
-            v-model="newProviderId"
-            :placeholder="t('settings.opencodeConfig.sections.providers.placeholders.newProviderId')"
-            class="max-w-xs"
-            type="text"
-          />
-          <Tooltip>
-            <Button
-              size="icon"
-              variant="outline"
-              class="h-9 w-9"
-              :title="t('settings.opencodeConfig.sections.providers.actions.addProvider')"
-              :aria-label="t('settings.opencodeConfig.sections.providers.actions.addProviderAria')"
-              @click="addProvider"
-            >
-              <RiAddLine class="h-4 w-4" />
-            </Button>
-            <template #content>{{ t('settings.opencodeConfig.sections.providers.actions.addProvider') }}</template>
-          </Tooltip>
-        </div>
-        <div v-if="providersList.length === 0" class="text-xs text-muted-foreground">
-          {{ t('settings.opencodeConfig.sections.providers.empty') }}
-        </div>
-        <ProviderCard
-          v-for="[providerId, provider] in providersList"
-          :key="providerId"
-          :provider-id="providerId"
-          :provider="provider"
+    <div class="grid gap-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <Input
+          v-model="newProviderId"
+          :placeholder="t('settings.opencodeConfig.sections.providers.placeholders.newProviderId')"
+          class="max-w-xs"
+          type="text"
         />
+        <Tooltip>
+          <Button
+            size="icon"
+            variant="outline"
+            class="h-9 w-9"
+            :title="t('settings.opencodeConfig.sections.providers.actions.addProvider')"
+            :aria-label="t('settings.opencodeConfig.sections.providers.actions.addProviderAria')"
+            @click="addProvider"
+          >
+            <RiAddLine class="h-4 w-4" />
+          </Button>
+          <template #content>{{ t('settings.opencodeConfig.sections.providers.actions.addProvider') }}</template>
+        </Tooltip>
       </div>
+      <div v-if="providersList.length === 0" class="text-xs text-muted-foreground">
+        {{ t('settings.opencodeConfig.sections.providers.empty') }}
+      </div>
+      <ProviderCard
+        v-for="[providerId, provider] in providersList"
+        :key="providerId"
+        :provider-id="providerId"
+        :provider="provider"
+      />
+    </div>
   </section>
 </template>
