@@ -664,7 +664,11 @@ void sessionActionsMenuRef
 
                       <div
                         class="flex items-center gap-1.5"
-                        :class="composerToolbarLayout.stackActionsRow ? 'w-full flex-none justify-end pt-0.5' : 'flex-shrink-0'"
+                        :class="
+                          composerToolbarLayout.stackActionsRow
+                            ? 'w-full flex-none justify-end pt-0.5'
+                            : 'flex-shrink-0'
+                        "
                       >
                         <div
                           v-if="sessionUsage"

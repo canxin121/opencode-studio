@@ -24,9 +24,6 @@ export function shouldWrapComposerToolbar(isMobilePointer: boolean, viewportWidt
   return Math.floor(viewportWidth) <= COMPOSER_TOOLBAR_WRAP_MAX_WIDTH
 }
 
-export function resolveComposerToolbarLayout(
-  isMobilePointer: boolean,
-  viewportWidth: number,
-): ComposerToolbarLayout {
+export function resolveComposerToolbarLayout(isMobilePointer: boolean, viewportWidth: number): ComposerToolbarLayout {
   return shouldWrapComposerToolbar(isMobilePointer, viewportWidth) ? TWO_ROW_LAYOUT : SINGLE_ROW_LAYOUT
 }
