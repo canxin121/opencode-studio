@@ -70,7 +70,8 @@ function ensureAuthRefreshSoon() {
 
 function handleAuthRequired(detail?: AuthRequiredDetail) {
   const msg =
-    String(detail?.message || i18n.global.t('auth.uiAuthRequired')).trim() || String(i18n.global.t('auth.uiAuthRequired'))
+    String(detail?.message || i18n.global.t('auth.uiAuthRequired')).trim() ||
+    String(i18n.global.t('auth.uiAuthRequired'))
 
   const now = Date.now()
   if (msg !== lastAuthToastMsg || now - lastAuthToastAt > 4000) {

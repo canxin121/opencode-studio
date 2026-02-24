@@ -81,7 +81,11 @@ function pickProviderModelPair(...candidates: ProviderModelPair[]): { provider: 
   return { provider: '', model: '' }
 }
 
-export function resolveEffectiveDefaults(input: ResolveDefaultsInput): { agent: string; provider: string; model: string } {
+export function resolveEffectiveDefaults(input: ResolveDefaultsInput): {
+  agent: string
+  provider: string
+  model: string
+} {
   const project = extractConfigDefaults(input.projectConfig)
   const user = extractConfigDefaults(input.userConfig)
   const opencodeSelection = input.opencodeSelection || {}

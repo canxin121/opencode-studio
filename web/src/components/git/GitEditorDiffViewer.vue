@@ -95,7 +95,9 @@ const displayModified = computed(() => (loading.value ? modified.value || staleM
 
 const isImageDiff = computed(() => isDataImageUrl(displayOriginal.value) || isDataImageUrl(displayModified.value))
 const leftLabel = computed(() => (props.staged ? 'HEAD' : t('git.ui.diffViewer.labels.index')))
-const rightLabel = computed(() => (props.staged ? t('git.ui.diffViewer.labels.index') : t('git.ui.diffViewer.labels.workingTree')))
+const rightLabel = computed(() =>
+  props.staged ? t('git.ui.diffViewer.labels.index') : t('git.ui.diffViewer.labels.workingTree'),
+)
 const canOpenFile = computed(() => Boolean(props.onOpenFile) && Boolean(normalizedPath.value))
 const canRevealFile = computed(() => Boolean(props.onRevealFile) && Boolean(normalizedPath.value))
 const canStageHunk = computed(() => !props.staged && Boolean(props.onStageHunk))
@@ -310,29 +312,31 @@ watch(
   <div class="git-editor-diff" :aria-busy="loading ? 'true' : 'false'">
     <div v-if="error" class="error">{{ error }}</div>
 
-      <div v-else-if="isImageDiff" class="images">
-        <div class="image-panel">
-          <div class="image-title">{{ leftLabel }}</div>
-          <img v-if="displayOriginal" :src="displayOriginal" class="preview" />
-          <div v-else class="hint">{{ t('git.ui.diffViewer.noOriginal') }}</div>
-        </div>
-        <div class="image-panel">
-          <div class="image-title">{{ rightLabel }}</div>
-          <img v-if="displayModified" :src="displayModified" class="preview" />
-          <div v-else class="hint">{{ t('git.ui.diffViewer.noModified') }}</div>
-        </div>
+    <div v-else-if="isImageDiff" class="images">
+      <div class="image-panel">
+        <div class="image-title">{{ leftLabel }}</div>
+        <img v-if="displayOriginal" :src="displayOriginal" class="preview" />
+        <div v-else class="hint">{{ t('git.ui.diffViewer.noOriginal') }}</div>
       </div>
+      <div class="image-panel">
+        <div class="image-title">{{ rightLabel }}</div>
+        <img v-if="displayModified" :src="displayModified" class="preview" />
+        <div v-else class="hint">{{ t('git.ui.diffViewer.noModified') }}</div>
+      </div>
+    </div>
 
     <div v-else class="editor-shell">
-        <div v-if="canOpenFile || canRevealFile" class="toolbar">
-          <div v-if="path" class="path">{{ path }}</div>
-          <div class="toolbar-actions">
-            <Button v-if="canOpenFile" variant="secondary" size="sm" class="h-7" @click="openFile">{{ t('git.ui.diffViewer.actions.openFile') }}</Button>
-            <Button v-if="canRevealFile" variant="secondary" size="sm" class="h-7" @click="revealFile"
-              >{{ t('git.ui.diffViewer.actions.revealInFiles') }}</Button
-            >
-          </div>
+      <div v-if="canOpenFile || canRevealFile" class="toolbar">
+        <div v-if="path" class="path">{{ path }}</div>
+        <div class="toolbar-actions">
+          <Button v-if="canOpenFile" variant="secondary" size="sm" class="h-7" @click="openFile">{{
+            t('git.ui.diffViewer.actions.openFile')
+          }}</Button>
+          <Button v-if="canRevealFile" variant="secondary" size="sm" class="h-7" @click="revealFile">{{
+            t('git.ui.diffViewer.actions.revealInFiles')
+          }}</Button>
         </div>
+      </div>
 
       <div class="editor-container">
         <MonacoDiffEditor

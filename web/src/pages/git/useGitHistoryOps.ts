@@ -136,10 +136,7 @@ export function useGitHistoryOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ commit: hash, mode }),
         })
-        toasts.push(
-          'success',
-          i18n.global.t('git.toasts.resetToShortHashWithMode', { hash: hash.slice(0, 7), mode }),
-        )
+        toasts.push('success', i18n.global.t('git.toasts.resetToShortHashWithMode', { hash: hash.slice(0, 7), mode }))
         await load()
       } catch (err) {
         if (handleGitBusy(err, 'Reset', () => resetCommit(hash, mode))) return

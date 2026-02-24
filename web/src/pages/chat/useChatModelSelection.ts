@@ -746,7 +746,11 @@ export function useChatModelSelection(opts: {
     // Do not inject built-in agents here.
     // The chat agent picker should reflect the upstream OpenCode registry; if OpenCode
     // is unavailable, we prefer showing only explicitly configured agents.
-    const defaultAgent = (projectConfigDefaults.value.defaultAgent || userConfigDefaults.value.defaultAgent || '').trim()
+    const defaultAgent = (
+      projectConfigDefaults.value.defaultAgent ||
+      userConfigDefaults.value.defaultAgent ||
+      ''
+    ).trim()
     if (defaultAgent && !entries.some((a) => a.name === defaultAgent)) {
       entries.push({ name: defaultAgent })
     }

@@ -1806,8 +1806,7 @@ export default {
 
       signing: {
         sshMayFailTitle: 'SSH 提交签名可能失败',
-        sshMayFailDescription:
-          'SSH agent 不可用或没有密钥。可使用终端加载密钥（ssh-agent/ssh-add）后重试。',
+        sshMayFailDescription: 'SSH agent 不可用或没有密钥。可使用终端加载密钥（ssh-agent/ssh-add）后重试。',
       },
 
       sequencer: {
@@ -2368,8 +2367,7 @@ export default {
         title: '启用 GPG 口令预设？',
         description: '这会更新你的 gpg-agent 配置',
         confirmEnableRetry: '启用并重试',
-        body:
-          '你的 gpg-agent 不允许预设口令。为了让 OpenCode Studio 在你在界面中输入口令后也能对提交进行签名，我们可以把 `allow-preset-passphrase` 写入 `~/.gnupg/gpg-agent.conf` 并重启 gpg-agent。',
+        body: '你的 gpg-agent 不允许预设口令。为了让 OpenCode Studio 在你在界面中输入口令后也能对提交进行签名，我们可以把 `allow-preset-passphrase` 写入 `~/.gnupg/gpg-agent.conf` 并重启 gpg-agent。',
       },
       gpgMissingKey: {
         title: '缺少 GPG 签名密钥',

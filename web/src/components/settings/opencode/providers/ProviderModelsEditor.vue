@@ -18,7 +18,10 @@ const modelStatusPickerOptions = computed<PickerOption[]>(() => [
   { value: 'default', label: t('settings.opencodeConfig.sections.providers.modelsEditor.options.status.default') },
   { value: 'alpha', label: t('settings.opencodeConfig.sections.providers.modelsEditor.options.status.alpha') },
   { value: 'beta', label: t('settings.opencodeConfig.sections.providers.modelsEditor.options.status.beta') },
-  { value: 'deprecated', label: t('settings.opencodeConfig.sections.providers.modelsEditor.options.status.deprecated') },
+  {
+    value: 'deprecated',
+    label: t('settings.opencodeConfig.sections.providers.modelsEditor.options.status.deprecated'),
+  },
 ])
 
 const modelInterleavedPickerOptions = computed<PickerOption[]>(() => [
@@ -162,7 +165,9 @@ const providerId = props.providerId
           >
             <RiAddLine class="h-4 w-4" />
           </Button>
-          <template #content>{{ t('settings.opencodeConfig.sections.providers.modelsEditor.actions.addModel') }}</template>
+          <template #content>{{
+            t('settings.opencodeConfig.sections.providers.modelsEditor.actions.addModel')
+          }}</template>
         </Tooltip>
       </div>
     </div>
@@ -223,35 +228,45 @@ const providerId = props.providerId
       <div v-if="isModelExpanded(providerId, modelId as string)" class="space-y-4">
         <div class="grid gap-4 lg:grid-cols-3">
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.modelsEditor.fields.modelIdOverride') }}</span>
+            <span class="text-xs text-muted-foreground">{{
+              t('settings.opencodeConfig.sections.providers.modelsEditor.fields.modelIdOverride')
+            }}</span>
             <Input
               :model-value="modelConfig.id || ''"
               @update:model-value="(v) => setModelField(providerId, modelId as string, 'id', v)"
             />
           </label>
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.modelsEditor.fields.displayName') }}</span>
+            <span class="text-xs text-muted-foreground">{{
+              t('settings.opencodeConfig.sections.providers.modelsEditor.fields.displayName')
+            }}</span>
             <Input
               :model-value="modelConfig.name || ''"
               @update:model-value="(v) => setModelField(providerId, modelId as string, 'name', v)"
             />
           </label>
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.modelsEditor.fields.family') }}</span>
+            <span class="text-xs text-muted-foreground">{{
+              t('settings.opencodeConfig.sections.providers.modelsEditor.fields.family')
+            }}</span>
             <Input
               :model-value="modelConfig.family || ''"
               @update:model-value="(v) => setModelField(providerId, modelId as string, 'family', v)"
             />
           </label>
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.modelsEditor.fields.releaseDate') }}</span>
+            <span class="text-xs text-muted-foreground">{{
+              t('settings.opencodeConfig.sections.providers.modelsEditor.fields.releaseDate')
+            }}</span>
             <Input
               :model-value="modelConfig.release_date || ''"
               @update:model-value="(v) => setModelField(providerId, modelId as string, 'release_date', v)"
             />
           </label>
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.modelsEditor.fields.status') }}</span>
+            <span class="text-xs text-muted-foreground">{{
+              t('settings.opencodeConfig.sections.providers.modelsEditor.fields.status')
+            }}</span>
             <OptionPicker
               :model-value="modelConfig.status || 'default'"
               @update:model-value="
@@ -270,7 +285,9 @@ const providerId = props.providerId
             />
           </label>
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.modelsEditor.fields.interleaved') }}</span>
+            <span class="text-xs text-muted-foreground">{{
+              t('settings.opencodeConfig.sections.providers.modelsEditor.fields.interleaved')
+            }}</span>
             <OptionPicker
               :model-value="getModelInterleaved(providerId, modelId as string)"
               @update:model-value="(v) => setModelInterleaved(providerId, modelId as string, String(v || ''))"
@@ -344,7 +361,9 @@ const providerId = props.providerId
 
         <div class="grid gap-4 lg:grid-cols-2">
           <div class="grid gap-2">
-            <div class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.modelsEditor.cost.title') }}</div>
+            <div class="text-xs text-muted-foreground">
+              {{ t('settings.opencodeConfig.sections.providers.modelsEditor.cost.title') }}
+            </div>
             <div class="grid gap-2 lg:grid-cols-2">
               <input
                 :value="modelConfig.cost?.input ?? ''"
@@ -390,7 +409,9 @@ const providerId = props.providerId
               />
             </div>
             <div class="grid gap-2 pt-2">
-              <div class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.modelsEditor.cost.over200k') }}</div>
+              <div class="text-xs text-muted-foreground">
+                {{ t('settings.opencodeConfig.sections.providers.modelsEditor.cost.over200k') }}
+              </div>
               <div class="grid gap-2 lg:grid-cols-2">
                 <input
                   :value="modelConfig.cost?.context_over_200k?.input ?? ''"
@@ -450,7 +471,9 @@ const providerId = props.providerId
             </div>
           </div>
           <div class="grid gap-2">
-            <div class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.modelsEditor.limits.title') }}</div>
+            <div class="text-xs text-muted-foreground">
+              {{ t('settings.opencodeConfig.sections.providers.modelsEditor.limits.title') }}
+            </div>
             <div class="grid gap-2 lg:grid-cols-3">
               <input
                 :value="modelConfig.limit?.context ?? ''"
@@ -488,10 +511,14 @@ const providerId = props.providerId
         </div>
 
         <div class="grid gap-2">
-          <div class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.modelsEditor.modalities.title') }}</div>
+          <div class="text-xs text-muted-foreground">
+            {{ t('settings.opencodeConfig.sections.providers.modelsEditor.modalities.title') }}
+          </div>
           <div class="grid gap-3 lg:grid-cols-2">
             <div class="grid gap-2">
-              <div class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.modelsEditor.modalities.input') }}</div>
+              <div class="text-xs text-muted-foreground">
+                {{ t('settings.opencodeConfig.sections.providers.modelsEditor.modalities.input') }}
+              </div>
               <div class="flex flex-wrap gap-3">
                 <label
                   v-for="modality in modalities"
@@ -508,7 +535,9 @@ const providerId = props.providerId
               </div>
             </div>
             <div class="grid gap-2">
-              <div class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.modelsEditor.modalities.output') }}</div>
+              <div class="text-xs text-muted-foreground">
+                {{ t('settings.opencodeConfig.sections.providers.modelsEditor.modalities.output') }}
+              </div>
               <div class="flex flex-wrap gap-3">
                 <label
                   v-for="modality in modalities"
@@ -529,7 +558,9 @@ const providerId = props.providerId
 
         <div class="grid gap-4 lg:grid-cols-2">
           <div class="grid gap-2">
-            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.modelsEditor.json.modelOptions') }}</span>
+            <span class="text-xs text-muted-foreground">{{
+              t('settings.opencodeConfig.sections.providers.modelsEditor.json.modelOptions')
+            }}</span>
             <textarea
               v-model="
                 ensureJsonBuffer(
@@ -579,7 +610,9 @@ const providerId = props.providerId
             </div>
           </div>
           <div class="grid gap-2">
-            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.modelsEditor.json.modelHeaders') }}</span>
+            <span class="text-xs text-muted-foreground">{{
+              t('settings.opencodeConfig.sections.providers.modelsEditor.json.modelHeaders')
+            }}</span>
             <textarea
               v-model="
                 ensureJsonBuffer(
@@ -631,7 +664,9 @@ const providerId = props.providerId
         </div>
 
         <div class="grid gap-2">
-          <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.modelsEditor.fields.providerOverrideNpm') }}</span>
+          <span class="text-xs text-muted-foreground">{{
+            t('settings.opencodeConfig.sections.providers.modelsEditor.fields.providerOverrideNpm')
+          }}</span>
           <Input
             :model-value="modelConfig.provider?.npm || ''"
             @update:model-value="(v) => setModelField(providerId, modelId as string, 'provider', v ? { npm: v } : null)"
@@ -640,12 +675,16 @@ const providerId = props.providerId
 
         <div class="grid gap-3">
           <div class="flex items-center justify-between">
-            <div class="text-sm font-semibold">{{ t('settings.opencodeConfig.sections.providers.modelsEditor.variants.title') }}</div>
+            <div class="text-sm font-semibold">
+              {{ t('settings.opencodeConfig.sections.providers.modelsEditor.variants.title') }}
+            </div>
             <div class="flex items-center gap-2">
               <Input
                 :model-value="getNewVariantName(providerId, modelId as string)"
                 @update:model-value="(v) => setNewVariantName(providerId, modelId as string, String(v))"
-                :placeholder="t('settings.opencodeConfig.sections.providers.modelsEditor.variants.placeholders.variantId')"
+                :placeholder="
+                  t('settings.opencodeConfig.sections.providers.modelsEditor.variants.placeholders.variantId')
+                "
                 class="max-w-xs"
               />
               <Tooltip>
@@ -659,7 +698,9 @@ const providerId = props.providerId
                 >
                   <RiAddLine class="h-4 w-4" />
                 </Button>
-                <template #content>{{ t('settings.opencodeConfig.sections.providers.modelsEditor.variants.actions.addVariant') }}</template>
+                <template #content>{{
+                  t('settings.opencodeConfig.sections.providers.modelsEditor.variants.actions.addVariant')
+                }}</template>
               </Tooltip>
             </div>
           </div>
@@ -682,7 +723,9 @@ const providerId = props.providerId
                   variant="ghost-destructive"
                   class="h-8 w-8"
                   :title="t('common.remove')"
-                  :aria-label="t('settings.opencodeConfig.sections.providers.modelsEditor.variants.actions.removeVariantAria')"
+                  :aria-label="
+                    t('settings.opencodeConfig.sections.providers.modelsEditor.variants.actions.removeVariantAria')
+                  "
                   @click="removeVariant(providerId, modelId as string, variantId as string)"
                 >
                   <RiDeleteBinLine class="h-4 w-4" />
@@ -708,7 +751,9 @@ const providerId = props.providerId
               {{ t('settings.opencodeConfig.sections.common.disabled') }}
             </label>
             <div class="grid gap-2">
-              <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.modelsEditor.json.variantExtra') }}</span>
+              <span class="text-xs text-muted-foreground">{{
+                t('settings.opencodeConfig.sections.providers.modelsEditor.json.variantExtra')
+              }}</span>
               <textarea
                 v-model="
                   ensureJsonBuffer(

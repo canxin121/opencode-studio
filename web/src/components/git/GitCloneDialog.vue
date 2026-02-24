@@ -58,7 +58,9 @@ function onUpdateRecursive(ev: Event) {
   >
     <div class="space-y-3">
       <div class="space-y-1">
-        <div class="text-xs font-medium text-muted-foreground">{{ t('git.ui.dialogs.clone.fields.repositoryUrl') }}</div>
+        <div class="text-xs font-medium text-muted-foreground">
+          {{ t('git.ui.dialogs.clone.fields.repositoryUrl') }}
+        </div>
         <Input
           :model-value="url"
           class="h-9 font-mono text-xs"
@@ -81,7 +83,9 @@ function onUpdateRecursive(ev: Event) {
       </div>
 
       <div class="space-y-1">
-        <div class="text-xs font-medium text-muted-foreground">{{ t('git.ui.dialogs.clone.fields.checkoutRefOptional') }}</div>
+        <div class="text-xs font-medium text-muted-foreground">
+          {{ t('git.ui.dialogs.clone.fields.checkoutRefOptional') }}
+        </div>
         <Input
           :model-value="cloneRef"
           class="h-9 font-mono text-xs"
@@ -96,8 +100,12 @@ function onUpdateRecursive(ev: Event) {
       </label>
 
       <div class="flex justify-end gap-2">
-        <Button variant="secondary" size="sm" @click="$emit('update:open', false)" :disabled="busy">{{ t('common.cancel') }}</Button>
-        <Button size="sm" @click="$emit('clone')" :disabled="busy || !projectRoot || !url.trim()">{{ t('git.ui.dialogs.clone.actions.clone') }}</Button>
+        <Button variant="secondary" size="sm" @click="$emit('update:open', false)" :disabled="busy">{{
+          t('common.cancel')
+        }}</Button>
+        <Button size="sm" @click="$emit('clone')" :disabled="busy || !projectRoot || !url.trim()">{{
+          t('git.ui.dialogs.clone.actions.clone')
+        }}</Button>
       </div>
     </div>
   </FormDialog>

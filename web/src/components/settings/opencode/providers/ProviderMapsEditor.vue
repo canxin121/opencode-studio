@@ -108,7 +108,9 @@ const providerId = props.providerId
     </div>
 
     <div class="grid gap-2">
-      <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.mapsEditor.headers.title') }}</span>
+      <span class="text-xs text-muted-foreground">{{
+        t('settings.opencodeConfig.sections.providers.mapsEditor.headers.title')
+      }}</span>
       <div
         v-if="getProviderOption(providerId, 'headers') && !isPlainObject(getProviderOption(providerId, 'headers'))"
         class="text-xs text-amber-600"
@@ -176,7 +178,9 @@ const providerId = props.providerId
     </div>
 
     <div class="grid gap-2">
-      <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.mapsEditor.featureFlags.title') }}</span>
+      <span class="text-xs text-muted-foreground">{{
+        t('settings.opencodeConfig.sections.providers.mapsEditor.featureFlags.title')
+      }}</span>
       <div
         v-if="
           getProviderOption(providerId, 'featureFlags') && !isPlainObject(getProviderOption(providerId, 'featureFlags'))
@@ -209,7 +213,9 @@ const providerId = props.providerId
               variant="ghost-destructive"
               class="h-8 w-8"
               :title="t('common.remove')"
-              :aria-label="t('settings.opencodeConfig.sections.providers.mapsEditor.featureFlags.actions.removeFlagAria')"
+              :aria-label="
+                t('settings.opencodeConfig.sections.providers.mapsEditor.featureFlags.actions.removeFlagAria')
+              "
               @click="removeProviderFlag(providerId, row.k)"
             >
               <RiDeleteBinLine class="h-4 w-4" />
@@ -242,7 +248,9 @@ const providerId = props.providerId
     </div>
 
     <div class="grid gap-2">
-      <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.mapsEditor.optionsExtra.title') }}</span>
+      <span class="text-xs text-muted-foreground">{{
+        t('settings.opencodeConfig.sections.providers.mapsEditor.optionsExtra.title')
+      }}</span>
       <div class="text-[11px] text-muted-foreground">
         {{ t('settings.opencodeConfig.sections.providers.mapsEditor.optionsExtra.help') }}
       </div>
@@ -261,7 +269,9 @@ const providerId = props.providerId
           <Input
             :model-value="JSON.stringify(row.v)"
             @update:model-value="(v) => updateProviderExtraValue(providerId, row.k, String(v))"
-            :placeholder="t('settings.opencodeConfig.sections.providers.mapsEditor.optionsExtra.placeholders.jsonValue')"
+            :placeholder="
+              t('settings.opencodeConfig.sections.providers.mapsEditor.optionsExtra.placeholders.jsonValue')
+            "
             class="font-mono"
           />
           <Tooltip>
@@ -270,7 +280,9 @@ const providerId = props.providerId
               variant="ghost-destructive"
               class="h-8 w-8"
               :title="t('common.remove')"
-              :aria-label="t('settings.opencodeConfig.sections.providers.mapsEditor.optionsExtra.actions.removeEntryAria')"
+              :aria-label="
+                t('settings.opencodeConfig.sections.providers.mapsEditor.optionsExtra.actions.removeEntryAria')
+              "
               @click="removeProviderExtra(providerId, row.k)"
             >
               <RiDeleteBinLine class="h-4 w-4" />
@@ -286,7 +298,9 @@ const providerId = props.providerId
           />
           <Input
             v-model="providerExtraNewVal[providerId]"
-            :placeholder="t('settings.opencodeConfig.sections.providers.mapsEditor.optionsExtra.placeholders.jsonValue')"
+            :placeholder="
+              t('settings.opencodeConfig.sections.providers.mapsEditor.optionsExtra.placeholders.jsonValue')
+            "
             class="font-mono"
           />
           <Tooltip>
@@ -308,7 +322,9 @@ const providerId = props.providerId
 
     <div v-if="showProviderOptionsJson[providerId]" class="grid gap-4">
       <div class="grid gap-2">
-        <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.mapsEditor.json.headers') }}</span>
+        <span class="text-xs text-muted-foreground">{{
+          t('settings.opencodeConfig.sections.providers.mapsEditor.json.headers')
+        }}</span>
         <textarea
           v-model="
             ensureJsonBuffer(
@@ -359,7 +375,9 @@ const providerId = props.providerId
       </div>
 
       <div class="grid gap-2">
-        <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.mapsEditor.json.featureFlags') }}</span>
+        <span class="text-xs text-muted-foreground">{{
+          t('settings.opencodeConfig.sections.providers.mapsEditor.json.featureFlags')
+        }}</span>
         <textarea
           v-model="
             ensureJsonBuffer(
@@ -410,7 +428,9 @@ const providerId = props.providerId
       </div>
 
       <div class="grid gap-2">
-        <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.mapsEditor.json.optionsExtra') }}</span>
+        <span class="text-xs text-muted-foreground">{{
+          t('settings.opencodeConfig.sections.providers.mapsEditor.json.optionsExtra')
+        }}</span>
         <textarea
           v-model="
             ensureJsonBuffer(
