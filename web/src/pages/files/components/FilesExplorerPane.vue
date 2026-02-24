@@ -38,6 +38,7 @@ import type { DialogKind, FileNode, FlatRow } from '../types'
 type ExplorerViewMode = 'tree' | 'search'
 type InlineCreateKind = 'createFile' | 'createFolder'
 type FileActionId = 'download' | 'copy-path'
+type NodeClickModifiers = { toggle: boolean; range: boolean }
 type ExplorerTreeRow =
   | { kind: 'node'; key: string; row: FlatRow }
   | { kind: 'inline-create'; key: '__inline-create__'; depth: number; createKind: InlineCreateKind }
@@ -54,8 +55,9 @@ const props = defineProps<{
   hasRootChildren: boolean
   flattenedTree: FlatRow[]
   deletingPaths: Set<string>
+  selectedPaths: Set<string>
   uploading: boolean
-  handleNodeClick: (node: FileNode) => void | Promise<void>
+  handleNodeClick: (node: FileNode, modifiers: NodeClickModifiers) => void | Promise<void>
   refreshRoot: () => void | Promise<void>
   collapseAll: () => void
   expandDirectory: (dirPath: string) => void | Promise<void>
@@ -64,7 +66,9 @@ const props = defineProps<{
   runFileAction: (action: FileActionId, node: FileNode) => void | Promise<void>
   openDialog: (kind: Exclude<DialogKind, null>, node?: FileNode) => void
   deleteNode: (node: FileNode) => void | Promise<void>
-  uploadFiles: (files: FileList, targetDir?: string) => void | Promise<void>
+  deleteSelectedNodes: (paths: string[]) => void | Promise<void>
+  clearSelectedPaths: () => void
+  uploadFiles: (files: readonly File[], targetDir?: string) => void | Promise<void>
 }>()
 
 const uploadInputRef = ref<HTMLInputElement | null>(null)
@@ -92,6 +96,15 @@ const selectedDirectoryNode = computed<FileNode | null>(() => {
   const fromTree = props.flattenedTree.find((row) => row.node.path === selectedPath)?.node
   return fromTree?.type === 'directory' ? fromTree : null
 })
+
+const selectedCount = computed(() => props.selectedPaths.size)
+const hasDeletingSelected = computed(() =>
+  Array.from(props.selectedPaths).some((path) => props.deletingPaths.has(path)),
+)
+
+function isNodeSelected(path: string): boolean {
+  return props.selectedPaths.has(path)
+}
 
 const inlineCreateDepth = computed(() => {
   const kind = inlineCreateKind.value
@@ -280,7 +293,7 @@ async function submitInlineRename(node: FileNode) {
   }
 }
 
-async function handleTreeNodeClick(node: FileNode) {
+async function handleTreeNodeClick(ev: MouseEvent, node: FileNode) {
   if (inlineCreateKind.value && !inlineCreateBusy.value) {
     resetInlineCreate()
   }
@@ -290,7 +303,16 @@ async function handleTreeNodeClick(node: FileNode) {
   if (fileActionMenuPath.value) {
     fileActionMenuPath.value = ''
   }
-  await props.handleNodeClick(node)
+  await props.handleNodeClick(node, {
+    toggle: ev.metaKey || ev.ctrlKey,
+    range: ev.shiftKey,
+  })
+}
+
+async function runDeleteSelected() {
+  const targets = Array.from(props.selectedPaths)
+  if (!targets.length) return
+  await props.deleteSelectedNodes(targets)
 }
 
 const explorerActionGroups = computed<OptionMenuGroup[]>(() => [
@@ -392,10 +414,10 @@ function triggerUpload() {
 
 async function onUploadChange(ev: Event) {
   const input = ev.target as HTMLInputElement | null
-  const files = input?.files
-  if (!files || files.length === 0) return
-  await props.uploadFiles(files)
+  const list = Array.from(input?.files || [])
   if (input) input.value = ''
+  if (!list.length) return
+  await props.uploadFiles(list)
 }
 
 function hasDroppedFiles(ev: DragEvent): boolean {
@@ -483,8 +505,9 @@ async function onExplorerDrop(ev: DragEvent) {
   if (dropTargetDir.value) return
 
   const files = ev.dataTransfer?.files
-  if (!files || files.length === 0) return
-  await props.uploadFiles(files, props.root)
+  const list = Array.from(files || [])
+  if (!list.length) return
+  await props.uploadFiles(list, props.root)
 }
 
 function onRowDragOver(ev: DragEvent, row: FlatRow) {
@@ -516,8 +539,9 @@ async function onRowDrop(ev: DragEvent, row: FlatRow) {
   dropTargetDir.value = ''
 
   const files = ev.dataTransfer?.files
-  if (!files || files.length === 0) return
-  await props.uploadFiles(files, row.node.path)
+  const list = Array.from(files || [])
+  if (!list.length) return
+  await props.uploadFiles(list, row.node.path)
 }
 
 function handleGlobalPointerDown(ev: PointerEvent) {
@@ -585,6 +609,36 @@ onBeforeUnmount(() => {
     <div class="oc-vscode-pane-header">
       <div class="oc-vscode-pane-title">{{ t('files.explorer.title') }}</div>
       <div class="flex items-center gap-1">
+        <div v-if="selectedCount > 0" class="mr-1 flex items-center gap-1">
+          <span class="rounded-sm border border-sidebar-border/70 bg-sidebar-accent/50 px-1.5 py-[1px] text-[10px] font-medium">
+            {{ t('files.explorer.selection.selectedCount', { count: selectedCount }) }}
+          </span>
+          <ConfirmPopover
+            :title="t('files.explorer.selection.bulkDeleteTitle')"
+            :description="t('files.explorer.selection.bulkDeleteDescription', { count: selectedCount })"
+            :confirm-text="t('files.explorer.selection.bulkDelete')"
+            :cancel-text="t('common.cancel')"
+            variant="destructive"
+            @confirm="runDeleteSelected"
+          >
+            <SidebarIconButton
+              destructive
+              :title="t('files.explorer.selection.bulkDelete')"
+              :disabled="hasDeletingSelected"
+              @click.stop
+            >
+              <RiLoader4Line v-if="hasDeletingSelected" class="h-3.5 w-3.5 animate-spin" />
+              <RiDeleteBinLine v-else class="h-3.5 w-3.5" />
+            </SidebarIconButton>
+          </ConfirmPopover>
+          <SidebarIconButton
+            :title="t('files.explorer.selection.clearSelection')"
+            :aria-label="t('files.explorer.selection.clearSelection')"
+            @click="clearSelectedPaths"
+          >
+            <RiCloseLine class="h-3.5 w-3.5" />
+          </SidebarIconButton>
+        </div>
         <SidebarIconButton :title="t('files.explorer.toolbar.newFile')" @click="startCreate('createFile')">
           <RiFileAddLine class="h-3.5 w-3.5" />
         </SidebarIconButton>
@@ -660,13 +714,14 @@ onBeforeUnmount(() => {
                 <SidebarListItem
                   v-if="inlineRenamePath === entry.row.node.path"
                   as="div"
-                  :active="selectedFilePath === entry.row.node.path"
+                  :active="isNodeSelected(entry.row.node.path) || selectedFilePath === entry.row.node.path"
                   :indent="8 + entry.row.depth * 14"
                   :actions-always-visible="true"
                   data-inline-rename-root="true"
                   class="h-[22px] rounded-sm border border-sidebar-border/60 bg-sidebar-accent/40 !py-0 !pr-1 !text-[12px]"
                   :class="[
                     selectedFilePath === entry.row.node.path ? '!border-sidebar-border/70' : '',
+                    isNodeSelected(entry.row.node.path) ? '!border-primary/60 !bg-primary/18 !text-foreground' : '',
                     dropTargetDir === entry.row.node.path ? '!border-primary/60 !bg-primary/12 !text-foreground' : '',
                   ]"
                 >
@@ -720,15 +775,16 @@ onBeforeUnmount(() => {
 
                 <SidebarListItem
                   v-else
-                  :active="selectedFilePath === entry.row.node.path"
+                  :active="isNodeSelected(entry.row.node.path) || selectedFilePath === entry.row.node.path"
                   :indent="8 + entry.row.depth * 14"
                   :actions-always-visible="isMobile"
                   class="h-[22px] rounded-sm border border-transparent !py-0 !pr-1 !text-[12px]"
                   :class="[
                     selectedFilePath === entry.row.node.path ? '!border-sidebar-border/70' : '',
+                    isNodeSelected(entry.row.node.path) ? '!border-primary/60 !bg-primary/18 !text-foreground' : '',
                     dropTargetDir === entry.row.node.path ? '!border-primary/60 !bg-primary/12 !text-foreground' : '',
                   ]"
-                  @click="handleTreeNodeClick(entry.row.node)"
+                  @click="handleTreeNodeClick($event, entry.row.node)"
                   @dragover="onRowDragOver($event, entry.row)"
                   @dragleave="onRowDragLeave($event, entry.row)"
                   @drop="onRowDrop($event, entry.row)"

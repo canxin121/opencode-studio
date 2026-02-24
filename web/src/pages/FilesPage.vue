@@ -49,6 +49,7 @@ type CreateKind = 'createFile' | 'createFolder'
 type ExplorerSidebarMode = 'tree' | 'search'
 type ExplorerSearchMode = 'files' | 'content'
 type ContentSearchScopeMode = 'workspace' | 'selected' | 'active-file'
+type ExplorerNodeClickOptions = { toggle: boolean; range: boolean }
 
 import { ApiError, apiBlob } from '@/lib/api'
 import { copyTextToClipboard } from '@/lib/clipboard'
@@ -412,6 +413,8 @@ const dialogInput = ref('')
 const dialogSubmitting = ref(false)
 
 const deletingPaths = ref<Set<string>>(new Set())
+const selectedPaths = ref<Set<string>>(new Set())
+const selectionAnchorPath = ref('')
 
 const confirmDiscardOpen = ref(false)
 const pendingSelect = ref<FileNode | null>(null)
@@ -590,6 +593,36 @@ const hasRootChildren = computed(() => {
   if (!rootPath) return false
   return Array.isArray(childrenByDir.value[rootPath])
 })
+
+function visibleTreePaths(): string[] {
+  return flattenedTree.value.map((row) => row.node.path)
+}
+
+function clearSelectedPaths() {
+  selectedPaths.value = new Set()
+  selectionAnchorPath.value = ''
+}
+
+function selectOnlyPath(path: string) {
+  const normalized = normalizePath(String(path || '').trim())
+  if (!normalized) {
+    clearSelectedPaths()
+    return
+  }
+  selectedPaths.value = new Set([normalized])
+  selectionAnchorPath.value = normalized
+}
+
+function rangeSelectionPaths(anchorPath: string, targetPath: string): string[] {
+  const visible = visibleTreePaths()
+  const anchorIndex = visible.indexOf(anchorPath)
+  const targetIndex = visible.indexOf(targetPath)
+  if (targetIndex < 0) return []
+  if (anchorIndex < 0) return [targetPath]
+  const start = Math.min(anchorIndex, targetIndex)
+  const end = Math.max(anchorIndex, targetIndex)
+  return visible.slice(start, end + 1)
+}
 
 const activeCreateDir = computed(() => {
   const rootPath = root.value
@@ -1751,6 +1784,7 @@ async function openFile(node: FileNode) {
     return
   }
   const seq = ++openFileSeq
+  selectOnlyPath(node.path)
   highlightedPath.value = ''
   selectedDirectoryPath.value = ''
   clearBlame()
@@ -1815,14 +1849,42 @@ async function requestFileSelect(node: FileNode) {
   await openFile(node)
 }
 
-async function handleNodeClick(node: FileNode) {
+async function handleNodeClick(node: FileNode, options: ExplorerNodeClickOptions) {
+  const path = normalizePath(String(node.path || '').trim())
+  if (!path) return
+
+  if (options.range) {
+    const anchor =
+      normalizePath(String(selectionAnchorPath.value || '').trim()) ||
+      normalizePath(String(selectedDirectoryPath.value || '').trim()) ||
+      normalizePath(String(selectedFile.value?.path || '').trim()) ||
+      path
+    const range = rangeSelectionPaths(anchor, path)
+    selectedPaths.value = new Set(range.length ? range : [path])
+    selectionAnchorPath.value = path
+    return
+  }
+
+  if (options.toggle) {
+    const next = new Set(selectedPaths.value)
+    if (next.has(path)) {
+      next.delete(path)
+    } else {
+      next.add(path)
+    }
+    selectedPaths.value = next
+    selectionAnchorPath.value = path
+    return
+  }
+
+  selectOnlyPath(path)
   highlightedPath.value = ''
   clearBlame()
   clearGitDiff()
   closeFileTimeline()
   if (node.type === 'directory') {
-    selectedDirectoryPath.value = normalizePath(node.path)
-    await toggleDirectory(node.path)
+    selectedDirectoryPath.value = path
+    await toggleDirectory(path)
     return
   }
   await requestFileSelect(node)
@@ -1859,11 +1921,17 @@ async function save(opts?: { silent?: boolean }): Promise<boolean> {
   }
 }
 
-async function uploadFilesToDirectory(files: FileList, targetDir?: string) {
+function snapshotUploadFiles(files: readonly File[] | FileList | null | undefined): File[] {
+  if (!files) return []
+  return Array.from(files)
+}
+
+async function uploadFilesToDirectory(files: readonly File[] | FileList, targetDir?: string) {
   const rootPath = root.value
   if (!rootPath) return
+  if (uploading.value) return
 
-  const list = Array.from(files || [])
+  const list = snapshotUploadFiles(files)
   if (!list.length) return
 
   const normalizedTarget = normalizePath(String(targetDir || '').trim())
@@ -1871,22 +1939,44 @@ async function uploadFilesToDirectory(files: FileList, targetDir?: string) {
     normalizedTarget && withinWorkspace(normalizedTarget) ? normalizedTarget : activeUploadDir.value || rootPath
 
   uploading.value = true
+  let uploadedCount = 0
+  let failedCount = 0
+  let firstError = ''
   try {
     for (const file of list) {
-      const target = joinPath(destination, file.name)
-      await uploadFile({ directory: rootPath, path: target, file })
+      try {
+        const target = joinPath(destination, file.name)
+        await uploadFile({ directory: rootPath, path: target, file })
+        uploadedCount += 1
+      } catch (err) {
+        failedCount += 1
+        if (!firstError) {
+          firstError =
+            err instanceof ApiError
+              ? err.message || err.bodyText || ''
+              : err instanceof Error
+                ? err.message
+                : String(err)
+        }
+      }
     }
-    toasts.push(
-      'success',
-      list.length === 1
-        ? t('files.toasts.uploadedFile', { count: list.length })
-        : t('files.toasts.uploadedFiles', { count: list.length }),
-    )
-    await refreshRoot()
-  } catch (err) {
-    const msg =
-      err instanceof ApiError ? err.message || err.bodyText || '' : err instanceof Error ? err.message : String(err)
-    toasts.push('error', msg)
+
+    if (uploadedCount > 0 && failedCount === 0) {
+      toasts.push(
+        'success',
+        uploadedCount === 1
+          ? t('files.toasts.uploadedFile', { count: uploadedCount })
+          : t('files.toasts.uploadedFiles', { count: uploadedCount }),
+      )
+    } else if (uploadedCount > 0 && failedCount > 0) {
+      toasts.push('info', t('files.toasts.uploadPartial', { success: uploadedCount, failed: failedCount }))
+    } else if (failedCount > 0) {
+      toasts.push('error', firstError || t('files.toasts.uploadFailed', { count: failedCount }))
+    }
+
+    if (uploadedCount > 0) {
+      await refreshRoot()
+    }
   } finally {
     uploading.value = false
   }
@@ -2052,44 +2142,119 @@ async function handleDialogSubmit() {
   }
 }
 
-async function deleteNode(node: FileNode) {
+function resetViewerSelectionState() {
+  selectedFile.value = null
+  viewerMode.value = 'none'
+  fileContent.value = ''
+  draftContent.value = ''
+  fileError.value = null
+  clearBlame()
+  clearGitDiff()
+  closeFileTimeline()
+}
+
+function applyDeletionState(target: string) {
+  const selectedDir = normalizePath(String(selectedDirectoryPath.value || '').trim())
+  if (selectedDir === target || selectedDir.startsWith(`${target}/`)) {
+    selectedDirectoryPath.value = ''
+  }
+
+  const selectedFilePath = normalizePath(String(selectedFile.value?.path || '').trim())
+  if (selectedFilePath && (selectedFilePath === target || selectedFilePath.startsWith(`${target}/`))) {
+    resetViewerSelectionState()
+  }
+
+  if (selectedPaths.value.size > 0) {
+    const next = new Set(
+      Array.from(selectedPaths.value).filter((path) => !(path === target || path.startsWith(`${target}/`))),
+    )
+    selectedPaths.value = next
+  }
+
+  if (selectionAnchorPath.value && (selectionAnchorPath.value === target || selectionAnchorPath.value.startsWith(`${target}/`))) {
+    selectionAnchorPath.value = ''
+  }
+}
+
+async function deletePaths(targets: string[], opts?: { batch?: boolean }) {
   const rootPath = root.value
   if (!rootPath) return
-  const target = String(node?.path || '').trim()
-  if (!target) return
 
-  // Prevent rapid double-deletes from issuing multiple requests.
-  if (deletingPaths.value.has(target)) return
-  deletingPaths.value = new Set(deletingPaths.value).add(target)
+  const uniqueTargets = Array.from(
+    new Set(
+      targets
+        .map((path) => normalizePath(String(path || '').trim()))
+        .filter((path) => path && withinWorkspace(path, rootPath)),
+    ),
+  )
+  if (!uniqueTargets.length) return
 
+  const pending = new Set(deletingPaths.value)
+  for (const target of uniqueTargets) pending.add(target)
+  deletingPaths.value = pending
+
+  let successCount = 0
+  let failedCount = 0
+  let firstError = ''
   try {
-    await deletePathApi({ directory: rootPath, path: target })
-
-    const selectedDir = normalizePath(String(selectedDirectoryPath.value || '').trim())
-    if (selectedDir === target || selectedDir.startsWith(`${target}/`)) {
-      selectedDirectoryPath.value = ''
+    for (const target of uniqueTargets) {
+      try {
+        await deletePathApi({ directory: rootPath, path: target })
+        successCount += 1
+        applyDeletionState(target)
+      } catch (err) {
+        failedCount += 1
+        if (!firstError) {
+          firstError = err instanceof Error ? err.message : String(err)
+        }
+      } finally {
+        const next = new Set(deletingPaths.value)
+        next.delete(target)
+        deletingPaths.value = next
+      }
     }
 
-    if (selectedFile.value?.path === target || selectedFile.value?.path.startsWith(`${target}/`)) {
-      selectedFile.value = null
-      viewerMode.value = 'none'
-      fileContent.value = ''
-      draftContent.value = ''
-      fileError.value = null
-      clearBlame()
-      clearGitDiff()
-      closeFileTimeline()
+    if (successCount > 0) {
+      await refreshRoot()
     }
-    toasts.push('success', t('files.toasts.deleted'))
-    await refreshRoot()
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    toasts.push('error', msg)
+
+    if (opts?.batch) {
+      if (successCount > 0 && failedCount === 0) {
+        toasts.push(
+          'success',
+          successCount === 1
+            ? t('files.toasts.batchDeletedSingle')
+            : t('files.toasts.batchDeletedMultiple', { count: successCount }),
+        )
+      } else if (successCount > 0 && failedCount > 0) {
+        toasts.push('info', t('files.toasts.batchDeletedPartial', { success: successCount, failed: failedCount }))
+      } else if (failedCount > 0) {
+        toasts.push('error', firstError || t('files.toasts.batchDeleteFailed', { count: failedCount }))
+      }
+      return
+    }
+
+    if (successCount > 0) {
+      toasts.push('success', t('files.toasts.deleted'))
+      return
+    }
+    toasts.push('error', firstError || t('files.toasts.deleteFailed'))
   } finally {
     const next = new Set(deletingPaths.value)
-    next.delete(target)
+    for (const target of uniqueTargets) next.delete(target)
     deletingPaths.value = next
   }
+}
+
+async function deleteNode(node: FileNode) {
+  const target = normalizePath(String(node?.path || '').trim())
+  if (!target) return
+  if (deletingPaths.value.has(target)) return
+  await deletePaths([target])
+}
+
+async function deleteSelectedNodes(paths: string[]) {
+  await deletePaths(paths, { batch: true })
 }
 
 async function insertSelectionIntoChatComposer() {
@@ -2149,6 +2314,7 @@ async function restoreForRoot(next: string) {
   closeFileTimeline()
 
   selectedFile.value = null
+  clearSelectedPaths()
   selectedDirectoryPath.value = ''
   viewerMode.value = 'none'
   fileContent.value = ''
@@ -2210,6 +2376,20 @@ watch([showHidden, respectGitignore], () => {
     void refreshRoot()
   }
 })
+
+watch(
+  () => flattenedTree.value,
+  (rows) => {
+    const visible = new Set(rows.map((row) => row.node.path))
+    const next = Array.from(selectedPaths.value).filter((path) => visible.has(path))
+    if (next.length !== selectedPaths.value.size) {
+      selectedPaths.value = new Set(next)
+    }
+    if (selectionAnchorPath.value && !visible.has(selectionAnchorPath.value)) {
+      selectionAnchorPath.value = next[next.length - 1] || ''
+    }
+  },
+)
 
 watch(
   () => searchQuery.value,
@@ -2324,6 +2504,7 @@ onMounted(async () => {
                 :has-root-children="hasRootChildren"
                 :flattened-tree="flattenedTree"
                 :deleting-paths="deletingPaths"
+                :selected-paths="selectedPaths"
                 :uploading="uploading"
                 :handle-node-click="handleNodeClick"
                 :refresh-root="refreshRoot"
@@ -2335,6 +2516,8 @@ onMounted(async () => {
                 :run-file-action="runExplorerFileAction"
                 :open-dialog="openDialog"
                 :delete-node="deleteNode"
+                :delete-selected-nodes="deleteSelectedNodes"
+                :clear-selected-paths="clearSelectedPaths"
                 :upload-files="uploadFilesToDirectory"
               >
                 <template #search>
