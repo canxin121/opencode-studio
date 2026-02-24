@@ -527,9 +527,6 @@ export default {
           },
           modelsEditor: {
             title: '模型',
-            placeholders: {
-              modelId: '模型 id',
-            },
             actions: {
               addModel: '添加模型',
               expandModelAria: '展开模型',
@@ -538,6 +535,19 @@ export default {
             },
             empty: {
               noModels: '未配置模型。',
+            },
+            fields: {
+              modelIdOverride: '模型 ID 覆盖值',
+              displayName: '显示名称',
+              family: '系列',
+              releaseDate: '发布日期',
+              status: '状态',
+              interleaved: '交错',
+              providerOverrideNpm: 'Provider 覆盖（npm）',
+            },
+            search: {
+              searchStatuses: '搜索状态',
+              searchModes: '搜索模式',
             },
             options: {
               status: {
@@ -553,6 +563,64 @@ export default {
                 reasoningDetails: 'reasoning_details',
               },
             },
+            capabilities: {
+              attachment: '附件',
+              reasoning: '推理',
+              temperature: '温度',
+              toolCall: '工具调用',
+              experimental: '实验性',
+            },
+            cost: {
+              title: '成本',
+              over200k: '超过 200k',
+            },
+            limits: {
+              title: '限制',
+            },
+            modalities: {
+              title: '模态',
+              input: '输入',
+              output: '输出',
+            },
+            json: {
+              modelOptions: '模型选项（JSON）',
+              modelHeaders: '模型 Headers（JSON）',
+              variantExtra: '变体额外参数（JSON）',
+            },
+            variants: {
+              title: '变体',
+              placeholders: {
+                variantId: '变体 id',
+              },
+              actions: {
+                addVariant: '添加变体',
+                removeVariantAria: '移除变体',
+              },
+              empty: '未配置变体。',
+            },
+            placeholders: {
+              modelId: '模型 id',
+              input: 'input',
+              output: 'output',
+              cacheRead: 'cache read',
+              cacheWrite: 'cache write',
+              context: 'context',
+            },
+          },
+          statusChips: {
+            selectable: '可选',
+            excluded: '已排除',
+            source: '来源',
+            envSet: '环境变量: {set}/{total} 已设置',
+            missing: '缺失',
+            cfg: 'cfg',
+            cfgSources: {
+              user: '用户',
+              project: '项目',
+              custom: '自定义',
+              auth: '认证',
+            },
+            sourcesError: '来源: {error}',
           },
           mapsEditor: {
             title: '映射',
@@ -1411,6 +1479,19 @@ export default {
       answerSent: '答案已发送',
       questionRejected: '问题已拒绝',
     },
+    headerOverlay: {
+      title: {
+        permissionRequired: '需要授权',
+        question: '问题',
+        retrying: '重试中',
+        actionRequired: '需要操作',
+      },
+      subtitle: {
+        respondToContinue: '回复以继续该会话。',
+      },
+      retryingIn: '{countdown} 后重试',
+      retryMeta: '第 {attempt} 次 • 下次 {next}',
+    },
     attention: {
       title: {
         permissionRequired: '需要授权',
@@ -1749,6 +1830,11 @@ export default {
       sessionRow: {
         status: {
           idle: '空闲',
+          needsPermission: '需要授权',
+          needsReply: '需要回复',
+          retrying: '重试中',
+          running: '运行中',
+          coolingDown: '冷却中',
         },
         threadToggle: {
           expand: '展开线程',
@@ -1806,8 +1892,7 @@ export default {
 
       signing: {
         sshMayFailTitle: 'SSH 提交签名可能失败',
-        sshMayFailDescription:
-          'SSH agent 不可用或没有密钥。可使用终端加载密钥（ssh-agent/ssh-add）后重试。',
+        sshMayFailDescription: 'SSH agent 不可用或没有密钥。可使用终端加载密钥（ssh-agent/ssh-add）后重试。',
       },
 
       sequencer: {
@@ -2368,8 +2453,7 @@ export default {
         title: '启用 GPG 口令预设？',
         description: '这会更新你的 gpg-agent 配置',
         confirmEnableRetry: '启用并重试',
-        body:
-          '你的 gpg-agent 不允许预设口令。为了让 OpenCode Studio 在你在界面中输入口令后也能对提交进行签名，我们可以把 `allow-preset-passphrase` 写入 `~/.gnupg/gpg-agent.conf` 并重启 gpg-agent。',
+        body: '你的 gpg-agent 不允许预设口令。为了让 OpenCode Studio 在你在界面中输入口令后也能对提交进行签名，我们可以把 `allow-preset-passphrase` 写入 `~/.gnupg/gpg-agent.conf` 并重启 gpg-agent。',
       },
       gpgMissingKey: {
         title: '缺少 GPG 签名密钥',

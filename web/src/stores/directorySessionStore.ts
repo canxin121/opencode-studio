@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
+import { i18n } from '@/i18n'
 
 import * as chatApi from '@/stores/chat/api'
 import { apiJson } from '@/lib/api'
@@ -1796,14 +1797,38 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
   function statusLabelForSessionId(sessionId: string): { label: string; dotClass: string } {
     const sid = (sessionId || '').trim()
     const runtime = runtimeBySessionId.value[sid]
-    if (!runtime) return { label: 'Idle', dotClass: '' }
-    if (runtime.attention === 'permission') return { label: 'Needs permission', dotClass: 'bg-amber-500' }
-    if (runtime.attention === 'question') return { label: 'Needs reply', dotClass: 'bg-sky-500' }
-    if (runtime.statusType === 'retry') return { label: 'Retrying', dotClass: 'bg-primary animate-pulse' }
-    if (runtime.statusType === 'busy') return { label: 'Running', dotClass: 'bg-primary animate-pulse' }
-    if (runtime.phase === 'cooldown') return { label: 'Cooling down', dotClass: 'bg-primary/70' }
-    if (runtime.phase === 'busy') return { label: 'Running', dotClass: 'bg-primary animate-pulse' }
-    return { label: 'Idle', dotClass: '' }
+    if (!runtime) return { label: String(i18n.global.t('chat.sidebar.sessionRow.status.idle')), dotClass: '' }
+    if (runtime.attention === 'permission') {
+      return {
+        label: String(i18n.global.t('chat.sidebar.sessionRow.status.needsPermission')),
+        dotClass: 'bg-amber-500',
+      }
+    }
+    if (runtime.attention === 'question') {
+      return { label: String(i18n.global.t('chat.sidebar.sessionRow.status.needsReply')), dotClass: 'bg-sky-500' }
+    }
+    if (runtime.statusType === 'retry') {
+      return {
+        label: String(i18n.global.t('chat.sidebar.sessionRow.status.retrying')),
+        dotClass: 'bg-primary animate-pulse',
+      }
+    }
+    if (runtime.statusType === 'busy') {
+      return {
+        label: String(i18n.global.t('chat.sidebar.sessionRow.status.running')),
+        dotClass: 'bg-primary animate-pulse',
+      }
+    }
+    if (runtime.phase === 'cooldown') {
+      return { label: String(i18n.global.t('chat.sidebar.sessionRow.status.coolingDown')), dotClass: 'bg-primary/70' }
+    }
+    if (runtime.phase === 'busy') {
+      return {
+        label: String(i18n.global.t('chat.sidebar.sessionRow.status.running')),
+        dotClass: 'bg-primary animate-pulse',
+      }
+    }
+    return { label: String(i18n.global.t('chat.sidebar.sessionRow.status.idle')), dotClass: '' }
   }
 
   function isSessionRuntimeActive(sessionId: string, opts?: { includeCooldown?: boolean }): boolean {

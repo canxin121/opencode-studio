@@ -1,3 +1,5 @@
+import { formatMonthDay } from '@/i18n/intl'
+
 export function normalizeDirForCompare(p: string): string {
   // Keep comparisons stable across trailing slashes and Windows-style separators.
   return (p || '').trim().replace(/\\/g, '/').replace(/\/+$/g, '')
@@ -9,8 +11,7 @@ export function includesQuery(haystack: string | null | undefined, q: string): b
 }
 
 export function formatTime(ms?: number): string {
-  if (!ms) return ''
-  return new Date(ms).toLocaleString(undefined, { month: 'short', day: 'numeric' })
+  return formatMonthDay(ms)
 }
 
 type DirectoryLike = { label?: string | null; path?: string | null } | null | undefined

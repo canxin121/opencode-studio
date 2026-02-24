@@ -27,6 +27,7 @@ import { useChatModelSelection } from './chat/useChatModelSelection'
 import { useChatCommands } from './chat/useChatCommands'
 import { useChatSessionActions } from './chat/useChatSessionActions'
 import { useChatRunUi } from './chat/useChatRunUi'
+import { formatTimeHM } from '@/i18n/intl'
 import { useChatRenderBlocks } from './chat/useChatRenderBlocks'
 import { useChatMessageActions } from './chat/useChatMessageActions'
 import { deriveSendRunConfig } from './chat/modelSendDefaults'
@@ -911,8 +912,7 @@ function isStreamingAssistantMessage(
 let commandPointerHandler: ((event: MouseEvent | TouchEvent) => void) | null = null
 
 function formatTime(ms?: number): string {
-  if (!ms) return ''
-  return new Date(ms).toLocaleString(undefined, { hour: '2-digit', minute: '2-digit' })
+  return formatTimeHM(ms)
 }
 
 const runUi = useChatRunUi({

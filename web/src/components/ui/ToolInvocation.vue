@@ -23,6 +23,7 @@ import ActivityDisclosureButton from '@/components/ui/ActivityDisclosureButton.v
 import CodeBlock from './CodeBlock.vue'
 import DiffViewer from '@/components/DiffViewer.vue'
 import { useChatStore } from '@/stores/chat'
+import { formatTimeHM } from '@/i18n/intl'
 
 type ToolValue = unknown
 type UnknownRecord = Record<string, ToolValue>
@@ -277,11 +278,7 @@ const durationLabel = computed(() => {
 })
 
 function formatTimeShort(ms: number): string {
-  try {
-    return new Date(ms).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
-  } catch {
-    return ''
-  }
+  return formatTimeHM(ms)
 }
 
 const timeLabel = computed(() => {

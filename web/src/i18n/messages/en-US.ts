@@ -1480,6 +1480,19 @@ export default {
       answerSent: 'Answer sent',
       questionRejected: 'Question rejected',
     },
+    headerOverlay: {
+      title: {
+        permissionRequired: 'Permission required',
+        question: 'Question',
+        retrying: 'Retrying',
+        actionRequired: 'Action required',
+      },
+      subtitle: {
+        respondToContinue: 'Respond to continue this session.',
+      },
+      retryingIn: 'Retrying in {countdown}',
+      retryMeta: 'attempt {attempt} • next {next}',
+    },
     attention: {
       title: {
         permissionRequired: 'Permission required',
@@ -1818,6 +1831,11 @@ export default {
       sessionRow: {
         status: {
           idle: 'Idle',
+          needsPermission: 'Needs permission',
+          needsReply: 'Needs reply',
+          retrying: 'Retrying',
+          running: 'Running',
+          coolingDown: 'Cooling down',
         },
         threadToggle: {
           expand: 'Expand thread',
@@ -2438,8 +2456,7 @@ export default {
         title: 'Enable GPG Passphrase Preset?',
         description: 'This updates your gpg-agent configuration',
         confirmEnableRetry: 'Enable & Retry',
-        body:
-          'Your gpg-agent is not allowing passphrase presetting. To let OpenCode Studio sign commits after you enter the passphrase in the UI, we can add `allow-preset-passphrase` to `~/.gnupg/gpg-agent.conf` and restart gpg-agent.',
+        body: 'Your gpg-agent is not allowing passphrase presetting. To let OpenCode Studio sign commits after you enter the passphrase in the UI, we can add `allow-preset-passphrase` to `~/.gnupg/gpg-agent.conf` and restart gpg-agent.',
       },
       gpgMissingKey: {
         title: 'No GPG Signing Key',
