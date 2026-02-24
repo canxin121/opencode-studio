@@ -140,7 +140,7 @@ function statusMeta(sessionId: string) {
 </script>
 
 <template>
-  <div class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+  <div class="min-h-0 overflow-x-hidden" :class="uiIsMobile ? 'overflow-visible' : 'flex-1 overflow-y-auto'">
     <div class="space-y-1 pb-1 pl-2.5 pr-1">
       <div v-if="directories.length === 0" class="px-2 py-6 text-center text-muted-foreground">
         <div class="typography-ui-label font-semibold">{{ t('chat.sidebar.directoriesList.empty.title') }}</div>
