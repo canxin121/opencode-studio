@@ -196,7 +196,11 @@ function setMenuRef(el: Element | ComponentPublicInstance | null) {
             class="h-3.5 w-3.5 flex-shrink-0 inline-flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:dark:bg-accent/40 hover:bg-primary/6 cursor-pointer active:scale-95 transition"
             :aria-label="
               String(
-                t(isExpanded ? 'chat.sidebar.sessionRow.threadToggle.collapse' : 'chat.sidebar.sessionRow.threadToggle.expand'),
+                t(
+                  isExpanded
+                    ? 'chat.sidebar.sessionRow.threadToggle.collapse'
+                    : 'chat.sidebar.sessionRow.threadToggle.expand',
+                ),
               )
             "
             @click.stop="emit('toggle-thread')"
@@ -292,8 +296,12 @@ function setMenuRef(el: Element | ComponentPublicInstance | null) {
           <IconButton
             size="xs"
             class="text-primary hover:bg-primary/12"
-            :title="String(t(renameBusy ? 'chat.sidebar.sessionRow.rename.saving' : 'chat.sidebar.sessionRow.rename.save'))"
-            :aria-label="String(t(renameBusy ? 'chat.sidebar.sessionRow.rename.saving' : 'chat.sidebar.sessionRow.rename.save'))"
+            :title="
+              String(t(renameBusy ? 'chat.sidebar.sessionRow.rename.saving' : 'chat.sidebar.sessionRow.rename.save'))
+            "
+            :aria-label="
+              String(t(renameBusy ? 'chat.sidebar.sessionRow.rename.saving' : 'chat.sidebar.sessionRow.rename.save'))
+            "
             :disabled="!canSaveRename"
             @click.stop="emit('rename-save')"
           >
@@ -330,8 +338,12 @@ function setMenuRef(el: Element | ComponentPublicInstance | null) {
             size="xs"
             class="hover:dark:bg-accent/40 hover:bg-primary/6"
             :class="pinned ? 'text-amber-500' : 'text-muted-foreground hover:text-amber-500'"
-            :title="String(t(pinned ? 'chat.sidebar.sessionActions.unpin.label' : 'chat.sidebar.sessionActions.pin.label'))"
-            :aria-label="String(t(pinned ? 'chat.sidebar.sessionActions.unpin.label' : 'chat.sidebar.sessionActions.pin.label'))"
+            :title="
+              String(t(pinned ? 'chat.sidebar.sessionActions.unpin.label' : 'chat.sidebar.sessionActions.pin.label'))
+            "
+            :aria-label="
+              String(t(pinned ? 'chat.sidebar.sessionActions.unpin.label' : 'chat.sidebar.sessionActions.pin.label'))
+            "
             @click.stop="emit('toggle-pin')"
           >
             <component :is="pinned ? RiStarFill : RiStarLine" class="h-4 w-4" />

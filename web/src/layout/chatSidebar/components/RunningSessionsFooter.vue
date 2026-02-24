@@ -97,7 +97,9 @@ function statusMeta(sessionId: string) {
         @click="emit('update:open', !open)"
       >
         <component :is="open ? RiArrowDownSLine : RiArrowRightSLine" class="h-4 w-4 text-muted-foreground" />
-        <span class="typography-ui-label font-medium text-muted-foreground">{{ t('chat.sidebar.footers.running.title') }}</span>
+        <span class="typography-ui-label font-medium text-muted-foreground">{{
+          t('chat.sidebar.footers.running.title')
+        }}</span>
       </button>
       <div class="flex items-center gap-2 flex-shrink-0">
         <span class="text-[11px] font-mono text-muted-foreground/70">{{ count }}</span>
@@ -114,7 +116,9 @@ function statusMeta(sessionId: string) {
     </div>
 
     <div v-if="open" class="px-2 pb-2">
-      <div v-if="count === 0" class="px-2 py-2 text-xs text-muted-foreground">{{ t('chat.sidebar.footers.running.empty') }}</div>
+      <div v-if="count === 0" class="px-2 py-2 text-xs text-muted-foreground">
+        {{ t('chat.sidebar.footers.running.empty') }}
+      </div>
       <div v-else class="space-y-1">
         <SessionRow
           v-for="item in runningSessionRows"

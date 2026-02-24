@@ -52,11 +52,13 @@ function toggle() {
           variant="destructive"
           @confirm="$emit('dropAll')"
         >
-          <MiniActionButton :disabled="loading || !stashes.length" @click="() => {}">{{ t('git.ui.stashPanel.actions.dropAll') }}</MiniActionButton>
+          <MiniActionButton :disabled="loading || !stashes.length" @click="() => {}">{{
+            t('git.ui.stashPanel.actions.dropAll')
+          }}</MiniActionButton>
         </ConfirmPopover>
-        <MiniActionButton variant="default" :disabled="!canOperate" @click="$emit('openCreate')"
-          >{{ t('git.ui.stashPanel.actions.stashEllipsis') }}</MiniActionButton
-        >
+        <MiniActionButton variant="default" :disabled="!canOperate" @click="$emit('openCreate')">{{
+          t('git.ui.stashPanel.actions.stashEllipsis')
+        }}</MiniActionButton>
       </div>
 
       <div v-if="!stashes.length" class="oc-vscode-empty">{{ t('git.ui.stashPanel.empty') }}</div>
@@ -73,7 +75,9 @@ function toggle() {
             <MiniActionButton @click="$emit('apply', s.ref)">{{ t('common.apply') }}</MiniActionButton>
             <MiniActionButton @click="$emit('pop', s.ref)">{{ t('git.ui.stashPanel.actions.pop') }}</MiniActionButton>
             <MiniActionButton @click="$emit('branch', s.ref)">{{ t('git.fields.branch') }}</MiniActionButton>
-            <MiniActionButton variant="destructive" @click="$emit('drop', s.ref)">{{ t('git.ui.stashPanel.actions.drop') }}</MiniActionButton>
+            <MiniActionButton variant="destructive" @click="$emit('drop', s.ref)">{{
+              t('git.ui.stashPanel.actions.drop')
+            }}</MiniActionButton>
           </div>
         </div>
       </div>

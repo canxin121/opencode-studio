@@ -102,7 +102,9 @@ export default defineComponent({
     <div v-if="isSectionOpen('server')" class="space-y-4">
       <div class="grid gap-4 lg:grid-cols-3">
         <label class="grid gap-1">
-          <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.server.fields.port') }}</span>
+          <span class="text-xs text-muted-foreground">{{
+            t('settings.opencodeConfig.sections.server.fields.port')
+          }}</span>
           <input
             v-model="serverPort"
             type="number"
@@ -111,11 +113,18 @@ export default defineComponent({
           />
         </label>
         <label class="grid gap-1">
-          <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.server.fields.hostname') }}</span>
-          <Input v-model="serverHostname" :placeholder="t('settings.opencodeConfig.sections.server.placeholders.hostname')" />
+          <span class="text-xs text-muted-foreground">{{
+            t('settings.opencodeConfig.sections.server.fields.hostname')
+          }}</span>
+          <Input
+            v-model="serverHostname"
+            :placeholder="t('settings.opencodeConfig.sections.server.placeholders.hostname')"
+          />
         </label>
         <label class="grid gap-1">
-          <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.server.fields.mdns') }}</span>
+          <span class="text-xs text-muted-foreground">{{
+            t('settings.opencodeConfig.sections.server.fields.mdns')
+          }}</span>
           <OptionPicker
             v-model="serverMdns"
             :options="triStatePickerOptions"
@@ -125,8 +134,13 @@ export default defineComponent({
           />
         </label>
         <label class="grid gap-1 lg:col-span-3">
-          <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.server.fields.mdnsDomain') }}</span>
-          <Input v-model="serverMdnsDomain" :placeholder="t('settings.opencodeConfig.sections.server.placeholders.mdnsDomain')" />
+          <span class="text-xs text-muted-foreground">{{
+            t('settings.opencodeConfig.sections.server.fields.mdnsDomain')
+          }}</span>
+          <Input
+            v-model="serverMdnsDomain"
+            :placeholder="t('settings.opencodeConfig.sections.server.placeholders.mdnsDomain')"
+          />
         </label>
       </div>
 
@@ -163,7 +177,9 @@ export default defineComponent({
               <template #content>{{ t('common.clear') }}</template>
             </Tooltip>
           </div>
-          <div class="text-[11px] text-muted-foreground">{{ t('settings.opencodeConfig.sections.server.cors.help') }}</div>
+          <div class="text-[11px] text-muted-foreground">
+            {{ t('settings.opencodeConfig.sections.server.cors.help') }}
+          </div>
           <div class="flex flex-wrap gap-2">
             <span
               v-for="it in serverCorsArr"
@@ -200,7 +216,9 @@ export default defineComponent({
             />
           </div>
           <div v-if="showAdvancedServerLists" class="grid gap-1">
-            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.server.cors.advancedLabel') }}</span>
+            <span class="text-xs text-muted-foreground">{{
+              t('settings.opencodeConfig.sections.server.cors.advancedLabel')
+            }}</span>
             <textarea
               v-model="serverCors"
               rows="4"
@@ -212,7 +230,9 @@ export default defineComponent({
 
         <div class="rounded-md border border-border p-3 space-y-2">
           <div class="flex items-center justify-between">
-            <div class="text-sm font-semibold">{{ t('settings.opencodeConfig.sections.server.watcherIgnore.title') }}</div>
+            <div class="text-sm font-semibold">
+              {{ t('settings.opencodeConfig.sections.server.watcherIgnore.title') }}
+            </div>
             <Tooltip>
               <Button
                 size="icon"
@@ -227,7 +247,9 @@ export default defineComponent({
               <template #content>{{ t('common.clear') }}</template>
             </Tooltip>
           </div>
-          <div class="text-[11px] text-muted-foreground">{{ t('settings.opencodeConfig.sections.server.watcherIgnore.help') }}</div>
+          <div class="text-[11px] text-muted-foreground">
+            {{ t('settings.opencodeConfig.sections.server.watcherIgnore.help') }}
+          </div>
           <div class="flex flex-wrap gap-2">
             <span
               v-for="it in watcherIgnoreArr"
