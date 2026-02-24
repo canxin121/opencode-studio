@@ -624,16 +624,19 @@ defineExpose({ containsTarget, focusSearch })
       <div
         v-if="open && !isMobileSheet"
         ref="panelEl"
+        data-oc-keyboard-tap="keep"
         :class="
           cn(
             desktopFixed
-              ? 'fixed z-[60] rounded-xl border border-border/70 bg-background/95 shadow-xl backdrop-blur overflow-hidden'
-              : 'absolute z-[60] rounded-xl border border-border/70 bg-background/95 shadow-xl backdrop-blur overflow-hidden',
+              ? 'pointer-events-auto fixed z-[60] rounded-xl border border-border/70 bg-background/95 shadow-xl backdrop-blur overflow-hidden'
+              : 'pointer-events-auto absolute z-[60] rounded-xl border border-border/70 bg-background/95 shadow-xl backdrop-blur overflow-hidden',
             desktopFixed ? '' : desktopPlacementClass,
             desktopClass,
           )
         "
         :style="desktopPanelStyle"
+        @pointerdown.stop
+        @click.stop
       >
         <div v-if="title" class="px-3 py-2 border-b border-border/40 text-xs font-semibold text-foreground">
           {{ title }}
