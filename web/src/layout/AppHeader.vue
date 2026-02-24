@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch, type Component } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import {
   RiArrowLeftSLine,
   RiArrowDownSLine,
@@ -38,6 +39,7 @@ const settings = useSettingsStore()
 const chat = useChatStore()
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 
 // -- Layout & Resizing --
 const headerRef = ref<HTMLElement | null>(null)
@@ -136,8 +138,9 @@ const TAB_ICONS: Record<MainTabId, Component> = {
 }
 
 const tabs = computed<Tab[]>(() => {
-  return MAIN_TABS.map((tab) => ({
+  return MAIN_TABS.map(({ labelKey, ...tab }) => ({
     ...tab,
+    label: String(t(labelKey)),
     icon: TAB_ICONS[tab.id],
     badge: tab.id === 'git' && !ui.isMobile && diffFileCount.value > 0 ? diffFileCount.value : undefined,
     showDot: tab.id === 'git' && ui.isMobile && diffFileCount.value > 0,
@@ -163,11 +166,11 @@ watch(
 
 const mobileTitle = computed(() => {
   const panelMap: Record<string, string> = {
-    settings: 'Settings',
-    sessions: 'Chat',
-    files: 'Files',
-    terminal: 'Terminal',
-    git: 'Git',
+    settings: String(t('nav.settings')),
+    sessions: String(t('nav.chat')),
+    files: String(t('nav.files')),
+    terminal: String(t('nav.terminal')),
+    git: String(t('nav.git')),
   }
   const panel = String(route.meta?.mobilePanel || '')
     .trim()
@@ -175,25 +178,25 @@ const mobileTitle = computed(() => {
   if (panelMap[panel]) return panelMap[panel]
 
   const tabMap: Record<string, string> = {
-    chat: 'Chat',
-    diff: 'Diff',
-    files: 'Files',
-    terminal: 'Terminal',
-    git: 'Git',
+    chat: String(t('nav.chat')),
+    diff: String(t('nav.diff')),
+    files: String(t('nav.files')),
+    terminal: String(t('nav.terminal')),
+    git: String(t('nav.git')),
   }
-  return tabMap[String(ui.activeMainTab || '')] || 'OpenCode Studio'
+  return tabMap[String(ui.activeMainTab || '')] || String(t('app.title'))
 })
 
 const mobilePanelToggleLabel = computed(() => {
-  if (ui.isSessionSwitcherOpen) return 'Back'
+  if (ui.isSessionSwitcherOpen) return String(t('nav.back'))
   const panel = String(route.meta?.mobilePanel || '')
     .trim()
     .toLowerCase()
-  if (panel === 'files') return 'Open files panel'
-  if (panel === 'terminal') return 'Open terminal panel'
-  if (panel === 'git') return 'Open source control panel'
-  if (panel === 'settings') return 'Open settings panel'
-  return 'Open sessions'
+  if (panel === 'files') return String(t('header.openFilesPanel'))
+  if (panel === 'terminal') return String(t('header.openTerminalPanel'))
+  if (panel === 'git') return String(t('header.openSourceControlPanel'))
+  if (panel === 'settings') return String(t('header.openSettingsPanel'))
+  return String(t('header.openSessions'))
 })
 
 // -- Keyboard Shortcuts (Cmd+1..4) --
@@ -281,7 +284,7 @@ function openHelpDialog() {
       <!-- Sidebar Toggle / Mobile Back -->
       <IconButton
         size="lg"
-        :aria-label="ui.isMobile ? mobilePanelToggleLabel : 'Toggle sidebar'"
+        :aria-label="ui.isMobile ? mobilePanelToggleLabel : String(t('header.toggleSidebar'))"
         @click="handleOpenSessionSwitcher"
       >
         <component
@@ -291,7 +294,12 @@ function openHelpDialog() {
       </IconButton>
 
       <!-- Desktop Navigation Tabs -->
-      <nav v-if="!ui.isMobile" class="flex items-center gap-1" role="tablist" aria-label="Main navigation">
+      <nav
+        v-if="!ui.isMobile"
+        class="flex items-center gap-1"
+        role="tablist"
+        :aria-label="String(t('aria.mainNavigation'))"
+      >
         <RouterLink
           v-for="tab in tabs"
           :key="tab.id"
@@ -312,7 +320,7 @@ function openHelpDialog() {
           <span
             v-if="tab.showDot"
             class="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-primary"
-            aria-label="Changes available"
+            :aria-label="String(t('header.changesAvailable'))"
           />
         </RouterLink>
       </nav>
@@ -327,12 +335,12 @@ function openHelpDialog() {
         v-else
         type="button"
         class="flex items-center gap-2 px-2.5 h-9 rounded-md text-[11px] font-medium hover:bg-secondary/40 transition-colors select-none max-w-[36vw]"
-        :title="projectPath || 'No project selected'"
-        aria-label="Change project"
+        :title="projectPath || String(t('header.noProjectSelected'))"
+        :aria-label="String(t('header.changeProject'))"
         @click="projectPickerOpen = true"
       >
         <RiFolder6Line class="h-4 w-4 text-muted-foreground" />
-        <span class="font-mono truncate">{{ projectDisplay || 'No project selected' }}</span>
+        <span class="font-mono truncate">{{ projectDisplay || String(t('header.noProjectSelected')) }}</span>
         <RiArrowDownSLine class="h-4 w-4 text-muted-foreground flex-shrink-0" />
       </button>
 
@@ -343,8 +351,8 @@ function openHelpDialog() {
         <!-- Connection Status -->
         <span
           class="mr-2 inline-flex h-6 w-6 items-center justify-center rounded-full"
-          :title="health.openCodeConnected ? 'Online' : 'Offline'"
-          aria-label="Status"
+          :title="health.openCodeConnected ? String(t('header.status.online')) : String(t('header.status.offline'))"
+          :aria-label="String(t('header.connectionStatus'))"
         >
           <span
             :class="cn('inline-flex h-2 w-2 rounded-full', health.openCodeConnected ? 'bg-emerald-500' : 'bg-rose-500')"
@@ -352,15 +360,20 @@ function openHelpDialog() {
         </span>
 
         <div class="flex items-center gap-1">
-          <IconButton size="lg" aria-label="Help" title="Help" @click="openHelpDialog">
+          <IconButton
+            size="lg"
+            :aria-label="String(t('header.help'))"
+            :title="String(t('header.help'))"
+            @click="openHelpDialog"
+          >
             <RiQuestionLine class="h-5 w-5" />
           </IconButton>
 
           <IconButton
             v-if="chat.selectedSessionId"
             size="lg"
-            aria-label="Locate current session in sidebar"
-            title="Locate session"
+            :aria-label="String(t('header.locateCurrentSession'))"
+            :title="String(t('header.locateSession'))"
             @click="locateCurrentSessionInSidebar"
           >
             <RiMapPin2Line class="h-5 w-5" />
@@ -369,14 +382,14 @@ function openHelpDialog() {
           <IconButton
             v-if="ui.isMobile"
             size="lg"
-            aria-label="Change project"
-            :title="projectPath || 'No project selected'"
+            :aria-label="String(t('header.changeProject'))"
+            :title="projectPath || String(t('header.noProjectSelected'))"
             @click="projectPickerOpen = true"
           >
             <RiFolder6Line class="h-5 w-5" />
           </IconButton>
 
-          <IconButton size="lg" aria-label="Settings" @click="openSettings">
+          <IconButton size="lg" :aria-label="String(t('nav.settings'))" @click="openSettings">
             <RiSettings3Line class="h-5 w-5" />
           </IconButton>
         </div>
@@ -386,14 +399,14 @@ function openHelpDialog() {
 
   <FormDialog
     :open="projectPickerOpen"
-    title="Select Project"
-    description="Choose a directory to set as the current project"
+    :title="String(t('header.selectProject.title'))"
+    :description="String(t('header.selectProject.description'))"
     @update:open="(v) => (projectPickerOpen = v)"
   >
     <div class="flex min-h-0 flex-col gap-3">
       <PathPicker
         v-model="projectPickerDraft"
-        placeholder="/path/to/project"
+        :placeholder="String(t('header.selectProject.placeholder'))"
         view="browser"
         mode="directory"
         :resolve-to-absolute="true"
@@ -404,8 +417,8 @@ function openHelpDialog() {
         browser-class="flex max-h-[52vh] min-h-[14rem] flex-col"
       />
       <div class="flex items-center justify-end gap-2 flex-none">
-        <Button variant="ghost" @click="projectPickerOpen = false">Cancel</Button>
-        <Button @click="applyProjectPicker" :disabled="projectPickerDisabled">Use project</Button>
+        <Button variant="ghost" @click="projectPickerOpen = false">{{ t('common.cancel') }}</Button>
+        <Button @click="applyProjectPicker" :disabled="projectPickerDisabled">{{ t('common.useProject') }}</Button>
       </div>
     </div>
   </FormDialog>

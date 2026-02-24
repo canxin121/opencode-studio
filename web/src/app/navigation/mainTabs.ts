@@ -3,14 +3,14 @@ export type MainTabId = 'chat' | 'files' | 'terminal' | 'git'
 export type MainTabDef = {
   id: MainTabId
   path: string
-  label: string
+  labelKey: string
 }
 
 export const MAIN_TABS: MainTabDef[] = [
-  { id: 'chat', path: '/chat', label: 'Chat' },
-  { id: 'files', path: '/files', label: 'Files' },
-  { id: 'terminal', path: '/terminal', label: 'Terminal' },
-  { id: 'git', path: '/git', label: 'Git' },
+  { id: 'chat', path: '/chat', labelKey: 'nav.chat' },
+  { id: 'files', path: '/files', labelKey: 'nav.files' },
+  { id: 'terminal', path: '/terminal', labelKey: 'nav.terminal' },
+  { id: 'git', path: '/git', labelKey: 'nav.git' },
 ]
 
 const MAIN_TAB_IDS = new Set<MainTabId>(MAIN_TABS.map((tab) => tab.id))

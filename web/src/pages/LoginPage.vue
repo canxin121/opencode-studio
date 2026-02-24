@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 import { useAuthStore } from '../stores/auth'
 import { useBackendsStore } from '@/stores/backends'
@@ -15,6 +16,7 @@ const NEW_BACKEND_ID = '__new__'
 const auth = useAuthStore()
 const health = useHealthStore()
 const backends = useBackendsStore()
+const { t } = useI18n()
 
 const password = ref('')
 const busy = ref(false)
@@ -39,7 +41,14 @@ const backendOptions = computed(() => {
     description: b.baseUrl,
   }))
 
-  return [{ value: NEW_BACKEND_ID, label: 'New backend…', description: 'Add a Studio backend URL' }, ...opts]
+  return [
+    {
+      value: NEW_BACKEND_ID,
+      label: String(t('login.newBackend')),
+      description: String(t('login.newBackendHelp')),
+    },
+    ...opts,
+  ]
 })
 
 const isNewBackend = computed(() => selectedBackendId.value === NEW_BACKEND_ID)
@@ -91,7 +100,7 @@ async function submitEditSelectedBackend() {
     const nextBaseUrl = String(editBaseUrl.value || '').trim()
     const res = backends.updateBackend({ id, label: editLabel.value, baseUrl: nextBaseUrl })
     if (!res.ok) {
-      editError.value = res.error || 'Failed to update backend'
+      editError.value = res.error || String(t('login.failedToUpdateBackend'))
       return
     }
 
@@ -112,7 +121,7 @@ function removeSelectedBackend() {
   if (!b) return
   const res = backends.removeBackend(b.id)
   if (!res.ok) {
-    formError.value = res.error || 'Failed to remove backend'
+    formError.value = res.error || String(t('login.failedToRemoveBackend'))
     return
   }
   clearUiAuthTokenForBaseUrl(b.baseUrl)
@@ -175,7 +184,7 @@ async function submit() {
         setActive: true,
       })
       if (!res.ok) {
-        formError.value = res.error || 'Failed to add backend'
+        formError.value = res.error || String(t('login.failedToAddBackend'))
         return
       }
       backendChanged = true
@@ -188,13 +197,13 @@ async function submit() {
     await Promise.all([auth.refresh().catch(() => {}), health.refresh().catch(() => {})])
 
     if (health.data === null) {
-      formError.value = health.error || 'Backend not reachable'
+      formError.value = health.error || String(t('login.backendNotReachable'))
       return
     }
 
     if (auth.needsLogin) {
       if (password.value.trim().length === 0) {
-        formError.value = 'Password required'
+        formError.value = String(t('login.passwordRequired'))
         return
       }
       await auth.login(password.value)
@@ -228,23 +237,23 @@ async function submit() {
           <img src="/favicon.svg" alt="OpenCode Studio" class="h-10 w-10 opacity-90" />
         </div>
         <div class="space-y-1">
-          <h1 class="text-2xl font-semibold tracking-tight text-foreground">OpenCode Studio</h1>
+          <h1 class="text-2xl font-semibold tracking-tight text-foreground">{{ t('login.title') }}</h1>
           <p class="text-sm text-muted-foreground">
-            Choose a backend. If it’s locked, enter your password to continue.
+            {{ t('login.subtitle') }}
           </p>
         </div>
       </div>
 
       <div class="grid gap-4">
         <div class="grid gap-2">
-          <label class="text-xs font-medium text-muted-foreground">Backend</label>
+          <label class="text-xs font-medium text-muted-foreground">{{ t('login.backendLabel') }}</label>
           <div class="flex items-center gap-2">
             <div class="flex-1 min-w-0">
               <OptionPicker
                 v-model="selectedBackendId"
                 :options="backendOptions"
-                title="Backend"
-                search-placeholder="Search backends"
+                :title="String(t('login.selectBackendTitle'))"
+                :search-placeholder="String(t('login.searchBackends'))"
                 :include-empty="false"
               />
             </div>
@@ -257,15 +266,15 @@ async function submit() {
               :disabled="busy"
               @click="openEditSelectedBackend"
             >
-              Edit
+              {{ t('common.edit') }}
             </Button>
 
             <ConfirmPopover
               v-if="canManageSelectedBackend"
-              title="Remove backend?"
+              :title="String(t('login.removeBackendTitle'))"
               :description="selectedBackend?.baseUrl"
-              confirmText="Remove"
-              cancelText="Cancel"
+              :confirmText="String(t('common.remove'))"
+              :cancelText="String(t('common.cancel'))"
               variant="destructive"
               :confirmDisabled="busy || backends.backends.length <= 1"
               @confirm="removeSelectedBackend"
@@ -276,7 +285,7 @@ async function submit() {
                 class="shrink-0 text-destructive border-destructive/30 hover:bg-destructive/10"
                 :disabled="busy || backends.backends.length <= 1"
               >
-                Remove
+                {{ t('common.remove') }}
               </Button>
             </ConfirmPopover>
           </div>
@@ -287,11 +296,16 @@ async function submit() {
 
         <div v-if="isNewBackend" class="grid gap-3 rounded-lg border border-border bg-muted/10 p-3">
           <div class="grid gap-2">
-            <label class="text-xs font-medium text-muted-foreground">Label</label>
-            <Input v-model="newBackendLabel" placeholder="e.g. Home Server" :disabled="busy" class="h-10" />
+            <label class="text-xs font-medium text-muted-foreground">{{ t('login.label') }}</label>
+            <Input
+              v-model="newBackendLabel"
+              :placeholder="String(t('login.newBackendLabelPlaceholder'))"
+              :disabled="busy"
+              class="h-10"
+            />
           </div>
           <div class="grid gap-2">
-            <label class="text-xs font-medium text-muted-foreground">Base URL</label>
+            <label class="text-xs font-medium text-muted-foreground">{{ t('login.baseUrl') }}</label>
             <Input
               v-model="newBackendUrl"
               placeholder="http://127.0.0.1:3000"
@@ -315,11 +329,16 @@ async function submit() {
           </div>
 
           <div class="grid gap-2">
-            <label class="text-xs font-medium text-muted-foreground">Label</label>
-            <Input v-model="editLabel" placeholder="Backend" :disabled="busy || editBusy" class="h-10" />
+            <label class="text-xs font-medium text-muted-foreground">{{ t('login.label') }}</label>
+            <Input
+              v-model="editLabel"
+              :placeholder="String(t('login.label'))"
+              :disabled="busy || editBusy"
+              class="h-10"
+            />
           </div>
           <div class="grid gap-2">
-            <label class="text-xs font-medium text-muted-foreground">Base URL</label>
+            <label class="text-xs font-medium text-muted-foreground">{{ t('login.baseUrl') }}</label>
             <Input
               v-model="editBaseUrl"
               placeholder="https://studio.cxits.cn"
@@ -331,11 +350,11 @@ async function submit() {
           </div>
 
           <div class="flex items-center justify-end gap-2">
-            <Button variant="secondary" size="sm" :disabled="busy || editBusy" @click="cancelEditSelectedBackend"
-              >Cancel</Button
-            >
+            <Button variant="secondary" size="sm" :disabled="busy || editBusy" @click="cancelEditSelectedBackend">
+              {{ t('common.cancel') }}
+            </Button>
             <Button size="sm" :disabled="busy || editBusy" @click="submitEditSelectedBackend">
-              {{ editBusy ? 'Saving…' : 'Save' }}
+              {{ editBusy ? t('common.saving') : t('common.save') }}
             </Button>
           </div>
         </div>
@@ -345,7 +364,7 @@ async function submit() {
             id="password"
             v-model="password"
             type="password"
-            placeholder="Password"
+            :placeholder="String(t('login.passwordPlaceholder'))"
             autocomplete="current-password"
             @keydown.enter="submit"
             :disabled="busy"
@@ -359,7 +378,7 @@ async function submit() {
           class="h-11 w-full text-base font-medium shadow-lg shadow-primary/20 transition-all hover:shadow-primary/30"
           size="lg"
         >
-          {{ busy ? 'Connecting…' : auth.needsLogin ? 'Unlock' : 'Continue' }}
+          {{ busy ? t('common.connecting') : auth.needsLogin ? t('common.unlock') : t('common.continue') }}
         </Button>
       </div>
 

@@ -12,6 +12,7 @@ import 'katex/dist/katex.min.css'
 import './style.css'
 import App from './App.vue'
 import { router } from './router'
+import { i18n, ensureDefaultLocale, setAppLocale } from './i18n'
 import { readSessionIdFromQuery } from './app/navigation/sessionQuery'
 import { useToastsStore } from './stores/toasts'
 import { useAuthStore } from './stores/auth'
@@ -43,7 +44,12 @@ try {
 const app = createApp(App)
 const pinia = createPinia()
 app.use(pinia)
+app.use(i18n)
 app.use(router)
+
+// Keep <html lang> in sync with i18n locale.
+ensureDefaultLocale()
+setAppLocale(i18n.global.locale.value as 'zh-CN' | 'en-US')
 const toasts = useToastsStore(pinia)
 const auth = useAuthStore(pinia)
 
@@ -63,7 +69,8 @@ function ensureAuthRefreshSoon() {
 }
 
 function handleAuthRequired(detail?: AuthRequiredDetail) {
-  const msg = String(detail?.message || 'UI authentication required').trim() || 'UI authentication required'
+  const msg =
+    String(detail?.message || i18n.global.t('auth.uiAuthRequired')).trim() || String(i18n.global.t('auth.uiAuthRequired'))
 
   const now = Date.now()
   if (msg !== lastAuthToastMsg || now - lastAuthToastAt > 4000) {

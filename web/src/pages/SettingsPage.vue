@@ -2,12 +2,15 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { RiArrowDownSLine, RiRefreshLine } from '@remixicon/vue'
+import { useI18n } from 'vue-i18n'
 
 import { useSettingsStore, type Settings } from '../stores/settings'
 import { useChatStore } from '@/stores/chat'
 import { usePluginHostStore } from '@/stores/pluginHost'
 import { useToastsStore } from '@/stores/toasts'
 import { useUiStore } from '@/stores/ui'
+import { i18n, setAppLocale } from '@/i18n'
+import type { AppLocale } from '@/i18n/locale'
 
 import Button from '@/components/ui/Button.vue'
 import OptionPicker from '@/components/ui/OptionPicker.vue'
@@ -43,6 +46,7 @@ const ui = useUiStore()
 const route = useRoute()
 const router = useRouter()
 const { startDesktopSidebarResize } = useDesktopSidebarResize()
+const { t } = useI18n()
 
 const useShellSidebar = computed(() => (ui.isMobile ? ui.isSessionSwitcherOpen : ui.isSidebarOpen))
 const SETTINGS_LAST_ROUTE_KEY = 'oc2.settings.lastRoute'
@@ -68,24 +72,24 @@ async function clearSessionCache() {
   clearingBackendCache.value = true
   try {
     await clearBackendSessionCache()
-    toasts.push('success', 'Backend cache cleared')
+    toasts.push('success', String(t('settings.troubleshooting.cacheCleared')))
     // Best-effort refresh so session lists pick up new data immediately.
     await chat.refreshSessions().catch(() => {})
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    toasts.push('error', msg || 'Failed to clear cache')
+    toasts.push('error', msg || String(t('settings.troubleshooting.cacheClearFailed')))
   } finally {
     clearingBackendCache.value = false
   }
 }
 
-const tabs: Array<{ id: SettingsTab; label: string }> = [
-  { id: 'opencode', label: 'OpenCode' },
-  { id: 'plugins', label: 'Plugins' },
-  { id: 'backends', label: 'Backends' },
-  { id: 'troubleshooting', label: 'Troubleshooting' },
-  { id: 'appearance', label: 'Appearance' },
-]
+const tabs = computed<Array<{ id: SettingsTab; label: string }>>(() => [
+  { id: 'opencode', label: String(t('settings.tabs.opencode')) },
+  { id: 'plugins', label: String(t('settings.tabs.plugins')) },
+  { id: 'backends', label: String(t('settings.tabs.backends')) },
+  { id: 'troubleshooting', label: String(t('settings.tabs.troubleshooting')) },
+  { id: 'appearance', label: String(t('settings.tabs.appearance')) },
+])
 
 function normalizeOpencodeSection(raw?: string): string {
   const val = (raw || '').trim().toLowerCase()
@@ -123,7 +127,7 @@ function normalizePluginsSection(raw?: string): string {
 
 const activeTab = computed<SettingsTab>(() => {
   const raw = String(route.params.tab || '').toLowerCase()
-  const match = tabs.find((t) => t.id === raw)
+  const match = tabs.value.find((t) => t.id === raw)
   return match?.id || 'opencode'
 })
 
@@ -287,6 +291,20 @@ const fontSize = makeSetting('fontSize', 90)
 const padding = makeSetting('padding', 100)
 const cornerRadius = makeSetting('cornerRadius', 10)
 const inputBarOffset = makeSetting('inputBarOffset', 0)
+
+const uiLocale = computed<AppLocale>({
+  get() {
+    return i18n.global.locale.value as AppLocale
+  },
+  set(value) {
+    setAppLocale(value)
+  },
+})
+
+const localePickerOptions = computed(() => [
+  { value: 'zh-CN', label: String(t('settings.appearance.language.options.zhCN')) },
+  { value: 'en-US', label: String(t('settings.appearance.language.options.enUS')) },
+])
 
 const themeVariantPickerOptions = [
   { value: 'light', label: 'light' },
@@ -561,7 +579,7 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
               v-if="pluginsTabPlugins.length === 0"
               class="rounded-lg border border-border bg-muted/10 p-4 text-sm text-muted-foreground"
             >
-              No plugins expose settings.
+              {{ t('settings.emptyPlugins') }}
             </div>
 
             <PluginSettingsPanel v-else :plugin-id="activePluginsSection" :hide-plugin-selector="true" />
@@ -575,14 +593,13 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
           <!-- Troubleshooting Tab -->
           <div v-else-if="activeTab === 'troubleshooting'" class="space-y-6">
             <div class="rounded-lg border border-border bg-muted/10 p-4">
-              <div class="text-sm font-medium">Troubleshooting</div>
+              <div class="text-sm font-medium">{{ t('settings.troubleshooting.title') }}</div>
               <div class="mt-1 text-xs text-muted-foreground">
-                Clear OpenCode Studio's in-memory cache used for reading OpenCode session storage. Use this when session
-                lists look stale.
+                {{ t('settings.troubleshooting.description') }}
               </div>
               <div class="mt-3 flex items-center gap-2">
                 <Button variant="outline" :disabled="clearingBackendCache" @click="clearSessionCache">
-                  {{ clearingBackendCache ? 'Clearing…' : 'Clear session cache' }}
+                  {{ clearingBackendCache ? t('settings.troubleshooting.clearing') : t('settings.troubleshooting.clearSessionCache') }}
                 </Button>
               </div>
             </div>
@@ -590,22 +607,36 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
 
           <!-- Appearance Tab -->
           <div v-else-if="activeTab === 'appearance'" class="space-y-6">
-            <div class="text-lg font-medium">Theme and typography settings.</div>
+            <div class="text-lg font-medium">{{ t('settings.appearance.intro') }}</div>
 
             <div class="grid gap-6">
               <div class="grid gap-2">
-                <label class="text-sm font-medium leading-none">Theme</label>
+                <label class="text-sm font-medium leading-none">{{ t('settings.appearance.language.label') }}</label>
+                <div class="text-xs text-muted-foreground">{{ t('settings.appearance.language.help') }}</div>
+                <div class="w-56 max-w-full">
+                  <OptionPicker
+                    v-model="uiLocale"
+                    :options="localePickerOptions"
+                    :title="String(t('settings.appearance.language.label'))"
+                    :search-placeholder="String(t('settings.appearance.language.label'))"
+                    :include-empty="false"
+                  />
+                </div>
+              </div>
+
+              <div class="grid gap-2">
+                <label class="text-sm font-medium leading-none">{{ t('settings.appearance.theme.label') }}</label>
                 <div class="flex items-center gap-3 flex-wrap">
                   <label class="inline-flex items-center gap-2 text-sm">
                     <input type="checkbox" v-model="useSystemTheme" />
-                    Use system theme
+                    {{ t('settings.appearance.theme.useSystem') }}
                   </label>
                   <div class="w-28 min-w-[7rem]">
                     <OptionPicker
                       v-model="themeVariant"
                       :options="themeVariantPickerOptions"
-                      title="Theme"
-                      search-placeholder="Search themes"
+                      :title="String(t('settings.appearance.theme.pickerTitle'))"
+                      :search-placeholder="String(t('settings.appearance.theme.pickerSearch'))"
                       :include-empty="false"
                       :disabled="useSystemTheme"
                     />
@@ -614,25 +645,25 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
               </div>
 
               <div class="grid gap-2">
-                <label class="text-sm font-medium leading-none">Fonts</label>
+                <label class="text-sm font-medium leading-none">{{ t('settings.appearance.fonts.label') }}</label>
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
                   <div class="grid gap-1">
-                    <div class="text-xs text-muted-foreground">UI font</div>
+                    <div class="text-xs text-muted-foreground">{{ t('settings.appearance.fonts.ui') }}</div>
                     <OptionPicker
                       v-model="uiFont"
                       :options="uiFontPickerOptions"
-                      title="UI font"
-                      search-placeholder="Search fonts"
+                      :title="String(t('settings.appearance.fonts.ui'))"
+                      :search-placeholder="String(t('settings.appearance.fonts.search'))"
                       :include-empty="false"
                     />
                   </div>
                   <div class="grid gap-1">
-                    <div class="text-xs text-muted-foreground">Mono font</div>
+                    <div class="text-xs text-muted-foreground">{{ t('settings.appearance.fonts.mono') }}</div>
                     <OptionPicker
                       v-model="monoFont"
                       :options="monoFontPickerOptions"
-                      title="Mono font"
-                      search-placeholder="Search fonts"
+                      :title="String(t('settings.appearance.fonts.mono'))"
+                      :search-placeholder="String(t('settings.appearance.fonts.search'))"
                       :include-empty="false"
                     />
                   </div>
@@ -640,10 +671,10 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
               </div>
 
               <div class="grid gap-2">
-                <label class="text-sm font-medium leading-none">Sizing</label>
+                <label class="text-sm font-medium leading-none">{{ t('settings.appearance.sizing.label') }}</label>
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
                   <label class="grid gap-1">
-                    <span class="text-xs text-muted-foreground">Font size (%)</span>
+                    <span class="text-xs text-muted-foreground">{{ t('settings.appearance.sizing.fontSize') }}</span>
                     <input
                       type="number"
                       min="70"
@@ -653,7 +684,7 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
                     />
                   </label>
                   <label class="grid gap-1">
-                    <span class="text-xs text-muted-foreground">Padding (%)</span>
+                    <span class="text-xs text-muted-foreground">{{ t('settings.appearance.sizing.padding') }}</span>
                     <input
                       type="number"
                       min="70"
@@ -663,7 +694,7 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
                     />
                   </label>
                   <label class="grid gap-1">
-                    <span class="text-xs text-muted-foreground">Corner radius (px)</span>
+                    <span class="text-xs text-muted-foreground">{{ t('settings.appearance.sizing.cornerRadius') }}</span>
                     <input
                       type="number"
                       min="0"
@@ -673,7 +704,7 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
                     />
                   </label>
                   <label class="grid gap-1">
-                    <span class="text-xs text-muted-foreground">Input bar offset (px)</span>
+                    <span class="text-xs text-muted-foreground">{{ t('settings.appearance.sizing.inputBarOffset') }}</span>
                     <input
                       type="number"
                       min="-40"
@@ -686,25 +717,33 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
               </div>
 
               <div class="grid gap-2">
-                <label class="text-sm font-medium leading-none">Chat</label>
+                <label class="text-sm font-medium leading-none">{{ t('settings.appearance.chat.label') }}</label>
                 <div class="grid gap-3">
                   <label class="inline-flex items-center gap-2 text-sm">
                     <input type="checkbox" v-model="showChatTimestamps" />
-                    Show timestamps
+                    {{ t('settings.appearance.chat.showTimestamps') }}
                   </label>
                   <label class="inline-flex items-center gap-2 text-sm">
                     <input type="checkbox" v-model="chatActivityAutoCollapseOnIdle" />
-                    Auto-collapse activity after assistant finishes
+                    {{ t('settings.appearance.chat.autoCollapseActivity') }}
                   </label>
                   <div class="mt-1">
-                    <div class="text-xs font-medium text-muted-foreground">Activity details</div>
+                    <div class="text-xs font-medium text-muted-foreground">
+                      {{ t('settings.appearance.chat.activityDetails') }}
+                    </div>
                     <div class="mt-2 overflow-x-auto rounded-md border border-border/60">
                       <table class="min-w-full text-sm">
                         <thead class="bg-muted/30 text-xs text-muted-foreground">
                           <tr>
-                            <th class="px-3 py-2 text-left font-medium">Type</th>
-                            <th class="px-3 py-2 text-center font-medium">Transport</th>
-                            <th class="px-3 py-2 text-center font-medium">Expand</th>
+                            <th class="px-3 py-2 text-left font-medium">
+                              {{ t('settings.appearance.chat.activityTable.type') }}
+                            </th>
+                            <th class="px-3 py-2 text-center font-medium">
+                              {{ t('settings.appearance.chat.activityTable.transport') }}
+                            </th>
+                            <th class="px-3 py-2 text-center font-medium">
+                              {{ t('settings.appearance.chat.activityTable.expand') }}
+                            </th>
                           </tr>
                         </thead>
                         <tbody>
