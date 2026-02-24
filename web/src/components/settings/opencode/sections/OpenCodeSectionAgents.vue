@@ -33,50 +33,64 @@ export default defineComponent({
   <section id="agents" class="scroll-mt-24 rounded-lg border border-border bg-background p-4 space-y-4">
     <div class="flex items-start justify-between gap-3">
       <div class="min-w-0">
-        <div class="text-base font-semibold leading-snug">Agent defaults and overrides.</div>
+        <div class="text-base font-semibold leading-snug">{{ t('settings.opencodeConfig.sections.agents.title') }}</div>
       </div>
       <div class="flex items-center gap-2">
         <Tooltip>
-          <Button size="icon" variant="ghost" class="h-8 w-8" title="Reset section" @click="resetSection('agents')">
+          <Button
+            size="icon"
+            variant="ghost"
+            class="h-8 w-8"
+            :title="t('settings.opencodeConfig.sections.common.resetSection')"
+            @click="resetSection('agents')"
+          >
             <RiRestartLine class="h-4 w-4" />
           </Button>
-          <template #content>Reset section</template>
+          <template #content>{{ t('settings.opencodeConfig.sections.common.resetSection') }}</template>
         </Tooltip>
         <Tooltip>
           <Button
             size="icon"
             variant="outline"
             class="h-8 w-8"
-            :title="isSectionOpen('agents') ? 'Collapse' : 'Expand'"
+            :title="
+              isSectionOpen('agents')
+                ? t('settings.opencodeConfig.sections.common.collapse')
+                : t('settings.opencodeConfig.sections.common.expand')
+            "
             @click="toggleSection('agents')"
           >
             <RiArrowUpSLine v-if="isSectionOpen('agents')" class="h-4 w-4" />
             <RiArrowDownSLine v-else class="h-4 w-4" />
           </Button>
-          <template #content>{{ isSectionOpen('agents') ? 'Collapse' : 'Expand' }}</template>
+          <template #content>{{
+            isSectionOpen('agents')
+              ? t('settings.opencodeConfig.sections.common.collapse')
+              : t('settings.opencodeConfig.sections.common.expand')
+          }}</template>
         </Tooltip>
       </div>
     </div>
 
     <div v-if="isSectionOpen('agents')" class="space-y-4">
       <div class="flex flex-wrap items-center gap-2">
-        <Input v-model="newAgentName" placeholder="Agent name" class="max-w-xs" />
+        <Input v-model="newAgentName" :placeholder="t('settings.opencodeConfig.sections.agents.placeholders.agentName')" class="max-w-xs" />
         <Tooltip>
           <Button
             size="icon"
             variant="outline"
             class="h-9 w-9"
-            title="Add agent"
-            aria-label="Add agent"
+            :title="t('settings.opencodeConfig.sections.agents.actions.addAgent')"
+            :aria-label="t('settings.opencodeConfig.sections.agents.actions.addAgentAria')"
             @click="addAgent"
             :disabled="!newAgentName.trim()"
           >
             <RiAddLine class="h-4 w-4" />
           </Button>
-          <template #content>Add agent</template>
+          <template #content>{{ t('settings.opencodeConfig.sections.agents.actions.addAgent') }}</template>
         </Tooltip>
         <div class="flex-1" />
-        <Input v-model="agentFilter" placeholder="Filter agents" class="max-w-sm" />
+        <Input v-model="agentFilter" :placeholder="t('settings.opencodeConfig.sections.agents.placeholders.filterAgents')" class="max-w-sm" />
       </div>
 
       <div class="grid gap-4 lg:grid-cols-[320px_1fr]">

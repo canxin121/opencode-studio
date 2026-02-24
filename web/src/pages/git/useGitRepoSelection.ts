@@ -1,4 +1,5 @@
 import { ref, type Ref } from 'vue'
+import { i18n } from '@/i18n'
 
 import type { GitRepoEntry } from '@/types/git'
 import type { JsonValue } from '@/types/json'
@@ -102,7 +103,7 @@ export function useGitRepoSelection(opts: {
         gitRepos.setSelectedRelative(dir, (resp.relative || rel).trim() || '.')
         initRepoOpen.value = false
         initRepoDefaultBranch.value = ''
-        toasts.push('success', 'Initialized git repository')
+        toasts.push('success', i18n.global.t('git.toasts.initializedGitRepository'))
         await loadRepos()
         await load()
       }
@@ -141,7 +142,7 @@ export function useGitRepoSelection(opts: {
         cloneRepoPath.value = ''
         cloneRepoRef.value = ''
         cloneRepoRecursive.value = false
-        toasts.push('success', 'Cloned repository')
+        toasts.push('success', i18n.global.t('git.toasts.clonedRepository'))
         await loadRepos()
         await load()
       }
@@ -177,7 +178,7 @@ export function useGitRepoSelection(opts: {
       gitRepos.setSelectedRelative(base, fallback)
       void load()
     }
-    toasts.push('info', `Closed repository ${rel}`)
+    toasts.push('info', i18n.global.t('git.toasts.closedRepository', { relative: rel }))
   }
 
   function reopenRepo(relative: string) {
@@ -186,7 +187,7 @@ export function useGitRepoSelection(opts: {
     const rel = (relative || '.').trim() || '.'
     gitRepos.reopenRepo(base, rel)
     void loadRepos()
-    toasts.push('success', `Reopened repository ${rel}`)
+    toasts.push('success', i18n.global.t('git.toasts.reopenedRepository', { relative: rel }))
   }
 
   return {

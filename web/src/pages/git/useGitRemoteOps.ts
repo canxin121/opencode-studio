@@ -1,5 +1,6 @@
 import { ApiError } from '@/lib/api'
 import type { JsonObject, JsonValue } from '@/types/json'
+import { i18n } from '@/i18n'
 
 type ToastKind = 'info' | 'success' | 'error'
 type QueryValue = string | number | boolean | null | undefined
@@ -101,7 +102,7 @@ export function useGitRemoteOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(baseBody),
         })
-        if (!silent) toasts.push('success', 'Fetched')
+        if (!silent) toasts.push('success', i18n.global.t('git.toasts.fetched'))
         await load()
       } catch (err) {
         if (handleGitBusy(err, 'Fetch', () => fetchRemote(opts))) return
@@ -131,7 +132,7 @@ export function useGitRemoteOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(baseBody),
         })
-        toasts.push('success', 'Fetched (prune)')
+        toasts.push('success', i18n.global.t('git.toasts.fetchedPrune'))
         await load()
       } catch (err) {
         if (handleGitBusy(err, 'Fetch prune', fetchPrune)) return
@@ -156,7 +157,7 @@ export function useGitRemoteOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(baseBody),
         })
-        toasts.push('success', 'Fetched (all)')
+        toasts.push('success', i18n.global.t('git.toasts.fetchedAll'))
         await load()
       } catch (err) {
         if (handleGitBusy(err, 'Fetch all', fetchAll)) return
@@ -182,7 +183,7 @@ export function useGitRemoteOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(baseBody),
         })
-        toasts.push('success', 'Pulled')
+        toasts.push('success', i18n.global.t('git.toasts.pulled'))
         await load()
       } catch (err) {
         if (handleGitBusy(err, 'Pull', pull)) return
@@ -211,7 +212,7 @@ export function useGitRemoteOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(baseBody),
         })
-        toasts.push('success', 'Pulled (rebase)')
+        toasts.push('success', i18n.global.t('git.toasts.pulledRebase'))
         await load()
       } catch (err) {
         if (handleGitBusy(err, 'Pull (rebase)', pullRebase)) return
@@ -237,7 +238,7 @@ export function useGitRemoteOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(baseBody),
         })
-        toasts.push('success', 'Pushed')
+        toasts.push('success', i18n.global.t('git.toasts.pushed'))
         await load()
       } catch (err) {
         if (handleGitBusy(err, 'Push', push)) return
@@ -260,7 +261,7 @@ export function useGitRemoteOps(opts: {
     const dir = repoRoot.value
     if (!dir) return
     if (forceMode && !allowForcePush.value) {
-      toasts.push('error', 'Force push is disabled by policy')
+      toasts.push('error', i18n.global.t('git.errors.forcePushDisabledByPolicy'))
       return
     }
     const baseBody: GitRemoteBody = { tags: true, force: forceMode || '', ...githubAuthBody() }
@@ -271,7 +272,7 @@ export function useGitRemoteOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(baseBody),
         })
-        toasts.push('success', 'Pushed tags')
+        toasts.push('success', i18n.global.t('git.toasts.pushedTags'))
         await load()
       } catch (err) {
         if (handleGitBusy(err, 'Push tags', () => pushTags(forceMode))) return
@@ -297,7 +298,7 @@ export function useGitRemoteOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(baseBody),
         })
-        toasts.push('success', 'Pushed (follow tags)')
+        toasts.push('success', i18n.global.t('git.toasts.pushedFollowTags'))
         await load()
       } catch (err) {
         if (handleGitBusy(err, 'Push (follow tags)', pushFollowTags)) return
@@ -316,7 +317,7 @@ export function useGitRemoteOps(opts: {
     const dir = repoRoot.value
     if (!dir) return
     if (!allowForcePush.value) {
-      toasts.push('error', 'Force push is disabled by policy')
+      toasts.push('error', i18n.global.t('git.errors.forcePushDisabledByPolicy'))
       return
     }
     const baseBody: GitRemoteBody = { force: 'force', ...githubAuthBody() }
@@ -327,7 +328,7 @@ export function useGitRemoteOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(baseBody),
         })
-        toasts.push('success', 'Pushed (force)')
+        toasts.push('success', i18n.global.t('git.toasts.pushedForce'))
         await load()
       } catch (err) {
         if (handleGitBusy(err, 'Push (force)', pushForce)) return
@@ -346,7 +347,7 @@ export function useGitRemoteOps(opts: {
     const dir = repoRoot.value
     if (!dir) return
     if (!allowForcePush.value) {
-      toasts.push('error', 'Force push is disabled by policy')
+      toasts.push('error', i18n.global.t('git.errors.forcePushDisabledByPolicy'))
       return
     }
     const baseBody: GitRemoteBody = { force: 'force-with-lease', ...githubAuthBody() }
@@ -357,7 +358,7 @@ export function useGitRemoteOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(baseBody),
         })
-        toasts.push('success', 'Pushed (force-with-lease)')
+        toasts.push('success', i18n.global.t('git.toasts.pushedForceWithLease'))
         await load()
       } catch (err) {
         if (handleGitBusy(err, 'Push (force-with-lease)', pushForceWithLease)) return
@@ -390,7 +391,7 @@ export function useGitRemoteOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(baseBody),
         })
-        if (!silent) toasts.push('success', 'Synced')
+        if (!silent) toasts.push('success', i18n.global.t('git.toasts.synced'))
         await load()
       } catch (err) {
         if (handleGitBusy(err, 'Sync', () => sync(opts))) return
@@ -429,7 +430,7 @@ export function useGitRemoteOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(baseBody),
         })
-        if (!silent) toasts.push('success', 'Synced (rebase)')
+        if (!silent) toasts.push('success', i18n.global.t('git.toasts.syncedRebase'))
         await load()
       } catch (err) {
         if (handleGitBusy(err, 'Sync (rebase)', () => syncRebase(opts))) return

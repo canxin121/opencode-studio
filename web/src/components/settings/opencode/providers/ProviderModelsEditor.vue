@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { RiAddLine, RiArrowDownSLine, RiArrowUpSLine, RiCheckLine, RiDeleteBinLine } from '@remixicon/vue'
+import { useI18n } from 'vue-i18n'
 
 import Button from '@/components/ui/Button.vue'
 import Input from '@/components/ui/Input.vue'
@@ -10,19 +12,30 @@ import { useOpencodeConfigPanelContext } from '../opencodeConfigContext'
 
 const props = defineProps<{ providerId: string }>()
 
-const modelStatusPickerOptions: PickerOption[] = [
-  { value: 'default', label: 'default' },
-  { value: 'alpha', label: 'alpha' },
-  { value: 'beta', label: 'beta' },
-  { value: 'deprecated', label: 'deprecated' },
-]
+const { t } = useI18n()
 
-const modelInterleavedPickerOptions: PickerOption[] = [
-  { value: 'default', label: 'default' },
-  { value: 'true', label: 'true' },
-  { value: 'reasoning_content', label: 'reasoning_content' },
-  { value: 'reasoning_details', label: 'reasoning_details' },
-]
+const modelStatusPickerOptions = computed<PickerOption[]>(() => [
+  { value: 'default', label: t('settings.opencodeConfig.sections.providers.modelsEditor.options.status.default') },
+  { value: 'alpha', label: t('settings.opencodeConfig.sections.providers.modelsEditor.options.status.alpha') },
+  { value: 'beta', label: t('settings.opencodeConfig.sections.providers.modelsEditor.options.status.beta') },
+  { value: 'deprecated', label: t('settings.opencodeConfig.sections.providers.modelsEditor.options.status.deprecated') },
+])
+
+const modelInterleavedPickerOptions = computed<PickerOption[]>(() => [
+  {
+    value: 'default',
+    label: t('settings.opencodeConfig.sections.providers.modelsEditor.options.interleaved.default'),
+  },
+  { value: 'true', label: t('settings.opencodeConfig.sections.providers.modelsEditor.options.interleaved.true') },
+  {
+    value: 'reasoning_content',
+    label: t('settings.opencodeConfig.sections.providers.modelsEditor.options.interleaved.reasoningContent'),
+  },
+  {
+    value: 'reasoning_details',
+    label: t('settings.opencodeConfig.sections.providers.modelsEditor.options.interleaved.reasoningDetails'),
+  },
+])
 
 type JsonPrimitive = string | number | boolean | null
 type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue } | undefined
@@ -131,27 +144,31 @@ const providerId = props.providerId
 <template>
   <div class="grid gap-3">
     <div class="flex items-center justify-between">
-      <div class="text-sm font-semibold">Models</div>
+      <div class="text-sm font-semibold">{{ t('settings.opencodeConfig.sections.providers.modelsEditor.title') }}</div>
       <div class="flex items-center gap-2">
-        <Input v-model="newProviderModelName[providerId]" placeholder="Model id" class="max-w-xs" />
+        <Input
+          v-model="newProviderModelName[providerId]"
+          :placeholder="t('settings.opencodeConfig.sections.providers.modelsEditor.placeholders.modelId')"
+          class="max-w-xs"
+        />
         <Tooltip>
           <Button
             size="icon"
             variant="outline"
             class="h-9 w-9"
-            title="Add model"
-            aria-label="Add model"
+            :title="t('settings.opencodeConfig.sections.providers.modelsEditor.actions.addModel')"
+            :aria-label="t('settings.opencodeConfig.sections.providers.modelsEditor.actions.addModel')"
             @click="addProviderModel(providerId)"
           >
             <RiAddLine class="h-4 w-4" />
           </Button>
-          <template #content>Add model</template>
+          <template #content>{{ t('settings.opencodeConfig.sections.providers.modelsEditor.actions.addModel') }}</template>
         </Tooltip>
       </div>
     </div>
 
     <div v-if="Object.keys(providerModels(providerId, false)).length === 0" class="text-xs text-muted-foreground">
-      No models configured.
+      {{ t('settings.opencodeConfig.sections.providers.modelsEditor.empty.noModels') }}
     </div>
     <div
       v-for="(modelConfig, modelId) in providerModels(providerId, false)"
@@ -165,14 +182,26 @@ const providerId = props.providerId
               size="icon"
               variant="ghost"
               class="h-8 w-8"
-              :title="isModelExpanded(providerId, modelId as string) ? 'Collapse' : 'Expand'"
-              :aria-label="isModelExpanded(providerId, modelId as string) ? 'Collapse model' : 'Expand model'"
+              :title="
+                isModelExpanded(providerId, modelId as string)
+                  ? t('settings.opencodeConfig.sections.common.collapse')
+                  : t('settings.opencodeConfig.sections.common.expand')
+              "
+              :aria-label="
+                isModelExpanded(providerId, modelId as string)
+                  ? t('settings.opencodeConfig.sections.providers.modelsEditor.actions.collapseModelAria')
+                  : t('settings.opencodeConfig.sections.providers.modelsEditor.actions.expandModelAria')
+              "
               @click="toggleModelExpanded(providerId, modelId as string)"
             >
               <RiArrowUpSLine v-if="isModelExpanded(providerId, modelId as string)" class="h-4 w-4" />
               <RiArrowDownSLine v-else class="h-4 w-4" />
             </Button>
-            <template #content>{{ isModelExpanded(providerId, modelId as string) ? 'Collapse' : 'Expand' }}</template>
+            <template #content>{{
+              isModelExpanded(providerId, modelId as string)
+                ? t('settings.opencodeConfig.sections.common.collapse')
+                : t('settings.opencodeConfig.sections.common.expand')
+            }}</template>
           </Tooltip>
           <div class="font-mono text-sm break-all">{{ modelId }}</div>
         </div>
@@ -181,48 +210,48 @@ const providerId = props.providerId
             size="icon"
             variant="ghost-destructive"
             class="h-8 w-8"
-            title="Remove"
-            aria-label="Remove model"
+            :title="t('common.remove')"
+            :aria-label="t('settings.opencodeConfig.sections.providers.modelsEditor.actions.removeModelAria')"
             @click="removeProviderModel(providerId, modelId as string)"
           >
             <RiDeleteBinLine class="h-4 w-4" />
           </Button>
-          <template #content>Remove</template>
+          <template #content>{{ t('common.remove') }}</template>
         </Tooltip>
       </div>
 
       <div v-if="isModelExpanded(providerId, modelId as string)" class="space-y-4">
         <div class="grid gap-4 lg:grid-cols-3">
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">Model ID override</span>
+            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.modelsEditor.fields.modelIdOverride') }}</span>
             <Input
               :model-value="modelConfig.id || ''"
               @update:model-value="(v) => setModelField(providerId, modelId as string, 'id', v)"
             />
           </label>
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">Display name</span>
+            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.modelsEditor.fields.displayName') }}</span>
             <Input
               :model-value="modelConfig.name || ''"
               @update:model-value="(v) => setModelField(providerId, modelId as string, 'name', v)"
             />
           </label>
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">Family</span>
+            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.modelsEditor.fields.family') }}</span>
             <Input
               :model-value="modelConfig.family || ''"
               @update:model-value="(v) => setModelField(providerId, modelId as string, 'family', v)"
             />
           </label>
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">Release date</span>
+            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.modelsEditor.fields.releaseDate') }}</span>
             <Input
               :model-value="modelConfig.release_date || ''"
               @update:model-value="(v) => setModelField(providerId, modelId as string, 'release_date', v)"
             />
           </label>
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">Status</span>
+            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.modelsEditor.fields.status') }}</span>
             <OptionPicker
               :model-value="modelConfig.status || 'default'"
               @update:model-value="
@@ -235,19 +264,19 @@ const providerId = props.providerId
                   )
               "
               :options="modelStatusPickerOptions"
-              title="Status"
-              search-placeholder="Search statuses"
+              :title="t('settings.opencodeConfig.sections.providers.modelsEditor.fields.status')"
+              :search-placeholder="t('settings.opencodeConfig.sections.providers.modelsEditor.search.searchStatuses')"
               :include-empty="false"
             />
           </label>
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">Interleaved</span>
+            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.modelsEditor.fields.interleaved') }}</span>
             <OptionPicker
               :model-value="getModelInterleaved(providerId, modelId as string)"
               @update:model-value="(v) => setModelInterleaved(providerId, modelId as string, String(v || ''))"
               :options="modelInterleavedPickerOptions"
-              title="Interleaved"
-              search-placeholder="Search modes"
+              :title="t('settings.opencodeConfig.sections.providers.modelsEditor.fields.interleaved')"
+              :search-placeholder="t('settings.opencodeConfig.sections.providers.modelsEditor.search.searchModes')"
               :include-empty="false"
             />
           </label>
@@ -264,7 +293,7 @@ const providerId = props.providerId
                     setModelField(providerId, modelId as string, 'attachment', (e.target as HTMLInputElement).checked)
                 "
               />
-              Attachment
+              {{ t('settings.opencodeConfig.sections.providers.modelsEditor.capabilities.attachment') }}
             </label>
             <label class="inline-flex items-center gap-2 text-sm">
               <input
@@ -275,7 +304,7 @@ const providerId = props.providerId
                     setModelField(providerId, modelId as string, 'reasoning', (e.target as HTMLInputElement).checked)
                 "
               />
-              Reasoning
+              {{ t('settings.opencodeConfig.sections.providers.modelsEditor.capabilities.reasoning') }}
             </label>
             <label class="inline-flex items-center gap-2 text-sm">
               <input
@@ -286,7 +315,7 @@ const providerId = props.providerId
                     setModelField(providerId, modelId as string, 'temperature', (e.target as HTMLInputElement).checked)
                 "
               />
-              Temperature
+              {{ t('settings.opencodeConfig.sections.providers.modelsEditor.capabilities.temperature') }}
             </label>
             <label class="inline-flex items-center gap-2 text-sm">
               <input
@@ -297,7 +326,7 @@ const providerId = props.providerId
                     setModelField(providerId, modelId as string, 'tool_call', (e.target as HTMLInputElement).checked)
                 "
               />
-              Tool call
+              {{ t('settings.opencodeConfig.sections.providers.modelsEditor.capabilities.toolCall') }}
             </label>
             <label class="inline-flex items-center gap-2 text-sm">
               <input
@@ -308,14 +337,14 @@ const providerId = props.providerId
                     setModelField(providerId, modelId as string, 'experimental', (e.target as HTMLInputElement).checked)
                 "
               />
-              Experimental
+              {{ t('settings.opencodeConfig.sections.providers.modelsEditor.capabilities.experimental') }}
             </label>
           </div>
         </div>
 
         <div class="grid gap-4 lg:grid-cols-2">
           <div class="grid gap-2">
-            <div class="text-xs text-muted-foreground">Cost</div>
+            <div class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.modelsEditor.cost.title') }}</div>
             <div class="grid gap-2 lg:grid-cols-2">
               <input
                 :value="modelConfig.cost?.input ?? ''"
@@ -325,7 +354,7 @@ const providerId = props.providerId
                 type="number"
                 step="0.000001"
                 class="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-                placeholder="input"
+                :placeholder="t('settings.opencodeConfig.sections.providers.modelsEditor.placeholders.input')"
               />
               <input
                 :value="modelConfig.cost?.output ?? ''"
@@ -335,7 +364,7 @@ const providerId = props.providerId
                 type="number"
                 step="0.000001"
                 class="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-                placeholder="output"
+                :placeholder="t('settings.opencodeConfig.sections.providers.modelsEditor.placeholders.output')"
               />
               <input
                 :value="modelConfig.cost?.cache_read ?? ''"
@@ -346,7 +375,7 @@ const providerId = props.providerId
                 type="number"
                 step="0.000001"
                 class="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-                placeholder="cache read"
+                :placeholder="t('settings.opencodeConfig.sections.providers.modelsEditor.placeholders.cacheRead')"
               />
               <input
                 :value="modelConfig.cost?.cache_write ?? ''"
@@ -357,11 +386,11 @@ const providerId = props.providerId
                 type="number"
                 step="0.000001"
                 class="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-                placeholder="cache write"
+                :placeholder="t('settings.opencodeConfig.sections.providers.modelsEditor.placeholders.cacheWrite')"
               />
             </div>
             <div class="grid gap-2 pt-2">
-              <div class="text-xs text-muted-foreground">Over 200k</div>
+              <div class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.modelsEditor.cost.over200k') }}</div>
               <div class="grid gap-2 lg:grid-cols-2">
                 <input
                   :value="modelConfig.cost?.context_over_200k?.input ?? ''"
@@ -372,7 +401,7 @@ const providerId = props.providerId
                   type="number"
                   step="0.000001"
                   class="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-                  placeholder="input"
+                  :placeholder="t('settings.opencodeConfig.sections.providers.modelsEditor.placeholders.input')"
                 />
                 <input
                   :value="modelConfig.cost?.context_over_200k?.output ?? ''"
@@ -383,7 +412,7 @@ const providerId = props.providerId
                   type="number"
                   step="0.000001"
                   class="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-                  placeholder="output"
+                  :placeholder="t('settings.opencodeConfig.sections.providers.modelsEditor.placeholders.output')"
                 />
                 <input
                   :value="modelConfig.cost?.context_over_200k?.cache_read ?? ''"
@@ -399,7 +428,7 @@ const providerId = props.providerId
                   type="number"
                   step="0.000001"
                   class="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-                  placeholder="cache read"
+                  :placeholder="t('settings.opencodeConfig.sections.providers.modelsEditor.placeholders.cacheRead')"
                 />
                 <input
                   :value="modelConfig.cost?.context_over_200k?.cache_write ?? ''"
@@ -415,13 +444,13 @@ const providerId = props.providerId
                   type="number"
                   step="0.000001"
                   class="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-                  placeholder="cache write"
+                  :placeholder="t('settings.opencodeConfig.sections.providers.modelsEditor.placeholders.cacheWrite')"
                 />
               </div>
             </div>
           </div>
           <div class="grid gap-2">
-            <div class="text-xs text-muted-foreground">Limits</div>
+            <div class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.modelsEditor.limits.title') }}</div>
             <div class="grid gap-2 lg:grid-cols-3">
               <input
                 :value="modelConfig.limit?.context ?? ''"
@@ -432,7 +461,7 @@ const providerId = props.providerId
                 type="number"
                 step="1"
                 class="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-                placeholder="context"
+                :placeholder="t('settings.opencodeConfig.sections.providers.modelsEditor.placeholders.context')"
               />
               <input
                 :value="modelConfig.limit?.input ?? ''"
@@ -442,7 +471,7 @@ const providerId = props.providerId
                 type="number"
                 step="1"
                 class="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-                placeholder="input"
+                :placeholder="t('settings.opencodeConfig.sections.providers.modelsEditor.placeholders.input')"
               />
               <input
                 :value="modelConfig.limit?.output ?? ''"
@@ -452,17 +481,17 @@ const providerId = props.providerId
                 type="number"
                 step="1"
                 class="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-                placeholder="output"
+                :placeholder="t('settings.opencodeConfig.sections.providers.modelsEditor.placeholders.output')"
               />
             </div>
           </div>
         </div>
 
         <div class="grid gap-2">
-          <div class="text-xs text-muted-foreground">Modalities</div>
+          <div class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.modelsEditor.modalities.title') }}</div>
           <div class="grid gap-3 lg:grid-cols-2">
             <div class="grid gap-2">
-              <div class="text-xs text-muted-foreground">Input</div>
+              <div class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.modelsEditor.modalities.input') }}</div>
               <div class="flex flex-wrap gap-3">
                 <label
                   v-for="modality in modalities"
@@ -479,7 +508,7 @@ const providerId = props.providerId
               </div>
             </div>
             <div class="grid gap-2">
-              <div class="text-xs text-muted-foreground">Output</div>
+              <div class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.modelsEditor.modalities.output') }}</div>
               <div class="flex flex-wrap gap-3">
                 <label
                   v-for="modality in modalities"
@@ -500,7 +529,7 @@ const providerId = props.providerId
 
         <div class="grid gap-4 lg:grid-cols-2">
           <div class="grid gap-2">
-            <span class="text-xs text-muted-foreground">Model options (JSON)</span>
+            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.modelsEditor.json.modelOptions') }}</span>
             <textarea
               v-model="
                 ensureJsonBuffer(
@@ -519,13 +548,13 @@ const providerId = props.providerId
                   size="icon"
                   variant="outline"
                   class="h-8 w-8"
-                  title="Apply"
-                  aria-label="Apply JSON"
+                  :title="t('common.apply')"
+                  :aria-label="t('settings.opencodeConfig.sections.common.applyJson')"
                   @click="applyJsonBuffer(`model:${providerId}:${modelId}:options`)"
                 >
                   <RiCheckLine class="h-4 w-4" />
                 </Button>
-                <template #content>Apply</template>
+                <template #content>{{ t('common.apply') }}</template>
               </Tooltip>
               <span
                 v-if="
@@ -550,7 +579,7 @@ const providerId = props.providerId
             </div>
           </div>
           <div class="grid gap-2">
-            <span class="text-xs text-muted-foreground">Model headers (JSON)</span>
+            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.modelsEditor.json.modelHeaders') }}</span>
             <textarea
               v-model="
                 ensureJsonBuffer(
@@ -569,13 +598,13 @@ const providerId = props.providerId
                   size="icon"
                   variant="outline"
                   class="h-8 w-8"
-                  title="Apply"
-                  aria-label="Apply JSON"
+                  :title="t('common.apply')"
+                  :aria-label="t('settings.opencodeConfig.sections.common.applyJson')"
                   @click="applyJsonBuffer(`model:${providerId}:${modelId}:headers`)"
                 >
                   <RiCheckLine class="h-4 w-4" />
                 </Button>
-                <template #content>Apply</template>
+                <template #content>{{ t('common.apply') }}</template>
               </Tooltip>
               <span
                 v-if="
@@ -602,7 +631,7 @@ const providerId = props.providerId
         </div>
 
         <div class="grid gap-2">
-          <span class="text-xs text-muted-foreground">Provider override (npm)</span>
+          <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.modelsEditor.fields.providerOverrideNpm') }}</span>
           <Input
             :model-value="modelConfig.provider?.npm || ''"
             @update:model-value="(v) => setModelField(providerId, modelId as string, 'provider', v ? { npm: v } : null)"
@@ -611,12 +640,12 @@ const providerId = props.providerId
 
         <div class="grid gap-3">
           <div class="flex items-center justify-between">
-            <div class="text-sm font-semibold">Variants</div>
+            <div class="text-sm font-semibold">{{ t('settings.opencodeConfig.sections.providers.modelsEditor.variants.title') }}</div>
             <div class="flex items-center gap-2">
               <Input
                 :model-value="getNewVariantName(providerId, modelId as string)"
                 @update:model-value="(v) => setNewVariantName(providerId, modelId as string, String(v))"
-                placeholder="Variant id"
+                :placeholder="t('settings.opencodeConfig.sections.providers.modelsEditor.variants.placeholders.variantId')"
                 class="max-w-xs"
               />
               <Tooltip>
@@ -624,13 +653,13 @@ const providerId = props.providerId
                   size="icon"
                   variant="outline"
                   class="h-9 w-9"
-                  title="Add variant"
-                  aria-label="Add variant"
+                  :title="t('settings.opencodeConfig.sections.providers.modelsEditor.variants.actions.addVariant')"
+                  :aria-label="t('settings.opencodeConfig.sections.providers.modelsEditor.variants.actions.addVariant')"
                   @click="addVariant(providerId, modelId as string)"
                 >
                   <RiAddLine class="h-4 w-4" />
                 </Button>
-                <template #content>Add variant</template>
+                <template #content>{{ t('settings.opencodeConfig.sections.providers.modelsEditor.variants.actions.addVariant') }}</template>
               </Tooltip>
             </div>
           </div>
@@ -638,7 +667,7 @@ const providerId = props.providerId
             v-if="Object.keys(modelVariants(providerId, modelId as string)).length === 0"
             class="text-xs text-muted-foreground"
           >
-            No variants configured.
+            {{ t('settings.opencodeConfig.sections.providers.modelsEditor.variants.empty') }}
           </div>
           <div
             v-for="(variantConfig, variantId) in modelVariants(providerId, modelId as string)"
@@ -652,13 +681,13 @@ const providerId = props.providerId
                   size="icon"
                   variant="ghost-destructive"
                   class="h-8 w-8"
-                  title="Remove"
-                  aria-label="Remove variant"
+                  :title="t('common.remove')"
+                  :aria-label="t('settings.opencodeConfig.sections.providers.modelsEditor.variants.actions.removeVariantAria')"
                   @click="removeVariant(providerId, modelId as string, variantId as string)"
                 >
                   <RiDeleteBinLine class="h-4 w-4" />
                 </Button>
-                <template #content>Remove</template>
+                <template #content>{{ t('common.remove') }}</template>
               </Tooltip>
             </div>
             <label class="inline-flex items-center gap-2 text-sm">
@@ -676,10 +705,10 @@ const providerId = props.providerId
                     })
                 "
               />
-              Disabled
+              {{ t('settings.opencodeConfig.sections.common.disabled') }}
             </label>
             <div class="grid gap-2">
-              <span class="text-xs text-muted-foreground">Variant extra (JSON)</span>
+              <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.modelsEditor.json.variantExtra') }}</span>
               <textarea
                 v-model="
                   ensureJsonBuffer(
@@ -698,13 +727,13 @@ const providerId = props.providerId
                     size="icon"
                     variant="outline"
                     class="h-8 w-8"
-                    title="Apply"
-                    aria-label="Apply JSON"
+                    :title="t('common.apply')"
+                    :aria-label="t('settings.opencodeConfig.sections.common.applyJson')"
                     @click="applyJsonBuffer(`variant:${providerId}:${modelId}:${variantId}:extra`)"
                   >
                     <RiCheckLine class="h-4 w-4" />
                   </Button>
-                  <template #content>Apply</template>
+                  <template #content>{{ t('common.apply') }}</template>
                 </Tooltip>
                 <span
                   v-if="

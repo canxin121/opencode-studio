@@ -1,5 +1,7 @@
 import { computed, ref, type Ref } from 'vue'
 
+import { i18n } from '@/i18n'
+
 import type { AgentListItem, ProviderListItem, RemoteModel } from './OpenCodeConfigPanelOptionTypes'
 
 type ConfigValue = unknown
@@ -483,7 +485,7 @@ export function useOpenCodeConfigPanelOptionLists(opts: {
         : []
 
       if (opts2.toast) {
-        opts.toasts.push('success', 'Refreshed agent/model lists')
+        opts.toasts.push('success', i18n.global.t('settings.opencodeConfig.errors.refreshedAgentModelLists'))
       }
     } catch (err) {
       optionsError.value = err instanceof Error ? err.message : String(err)
@@ -491,7 +493,10 @@ export function useOpenCodeConfigPanelOptionLists(opts: {
       agentsRemote.value = []
 
       if (opts2.toast) {
-        opts.toasts.push('error', optionsError.value || 'Failed to refresh agent/model lists')
+        opts.toasts.push(
+          'error',
+          optionsError.value || i18n.global.t('settings.opencodeConfig.errors.failedToRefreshAgentModelLists'),
+        )
       }
     } finally {
       // Tool IDs are optional; don't block providers/agents UX on failure.

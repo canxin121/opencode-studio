@@ -77,7 +77,7 @@ export default defineComponent({
   <section id="providers" class="scroll-mt-24 rounded-lg border border-border bg-background p-4 space-y-4">
     <div class="flex items-start justify-between gap-3">
       <div class="min-w-0">
-        <div class="text-base font-semibold leading-snug">Allow/deny lists plus provider overrides and models.</div>
+        <div class="text-base font-semibold leading-snug">{{ t('settings.opencodeConfig.sections.providers.title') }}</div>
       </div>
       <div class="flex items-center gap-2">
         <Tooltip>
@@ -85,33 +85,47 @@ export default defineComponent({
             size="icon"
             variant="ghost"
             class="h-8 w-8"
-            title="Refresh health"
-            aria-label="Refresh provider health"
+            :title="t('settings.opencodeConfig.sections.providers.actions.refreshHealth')"
+            :aria-label="t('settings.opencodeConfig.sections.providers.actions.refreshHealthAria')"
             @click="refreshProviderHealth"
             :disabled="providerHealthLoading"
           >
             <RiRefreshLine class="h-4 w-4" :class="providerHealthLoading ? 'animate-spin' : ''" />
           </Button>
-          <template #content>Refresh health</template>
+          <template #content>{{ t('settings.opencodeConfig.sections.providers.actions.refreshHealth') }}</template>
         </Tooltip>
         <Tooltip>
-          <Button size="icon" variant="ghost" class="h-8 w-8" title="Reset section" @click="resetSection('providers')">
+          <Button
+            size="icon"
+            variant="ghost"
+            class="h-8 w-8"
+            :title="t('settings.opencodeConfig.sections.common.resetSection')"
+            @click="resetSection('providers')"
+          >
             <RiRestartLine class="h-4 w-4" />
           </Button>
-          <template #content>Reset section</template>
+          <template #content>{{ t('settings.opencodeConfig.sections.common.resetSection') }}</template>
         </Tooltip>
         <Tooltip>
           <Button
             size="icon"
             variant="outline"
             class="h-8 w-8"
-            :title="isSectionOpen('providers') ? 'Collapse' : 'Expand'"
+            :title="
+              isSectionOpen('providers')
+                ? t('settings.opencodeConfig.sections.common.collapse')
+                : t('settings.opencodeConfig.sections.common.expand')
+            "
             @click="toggleSection('providers')"
           >
             <RiArrowUpSLine v-if="isSectionOpen('providers')" class="h-4 w-4" />
             <RiArrowDownSLine v-else class="h-4 w-4" />
           </Button>
-          <template #content>{{ isSectionOpen('providers') ? 'Collapse' : 'Expand' }}</template>
+          <template #content>{{
+            isSectionOpen('providers')
+              ? t('settings.opencodeConfig.sections.common.collapse')
+              : t('settings.opencodeConfig.sections.common.expand')
+          }}</template>
         </Tooltip>
       </div>
     </div>
@@ -122,30 +136,37 @@ export default defineComponent({
 
     <ProviderAllowDenyLists />
 
-    <div class="grid gap-3">
-      <div class="flex flex-wrap items-center gap-2">
-        <Input v-model="newProviderId" placeholder="New provider id" class="max-w-xs" type="text" />
-        <Tooltip>
-          <Button
-            size="icon"
-            variant="outline"
-            class="h-9 w-9"
-            title="Add provider"
-            aria-label="Add provider"
-            @click="addProvider"
-          >
-            <RiAddLine class="h-4 w-4" />
-          </Button>
-          <template #content>Add provider</template>
-        </Tooltip>
+      <div class="grid gap-3">
+        <div class="flex flex-wrap items-center gap-2">
+          <Input
+            v-model="newProviderId"
+            :placeholder="t('settings.opencodeConfig.sections.providers.placeholders.newProviderId')"
+            class="max-w-xs"
+            type="text"
+          />
+          <Tooltip>
+            <Button
+              size="icon"
+              variant="outline"
+              class="h-9 w-9"
+              :title="t('settings.opencodeConfig.sections.providers.actions.addProvider')"
+              :aria-label="t('settings.opencodeConfig.sections.providers.actions.addProviderAria')"
+              @click="addProvider"
+            >
+              <RiAddLine class="h-4 w-4" />
+            </Button>
+            <template #content>{{ t('settings.opencodeConfig.sections.providers.actions.addProvider') }}</template>
+          </Tooltip>
+        </div>
+        <div v-if="providersList.length === 0" class="text-xs text-muted-foreground">
+          {{ t('settings.opencodeConfig.sections.providers.empty') }}
+        </div>
+        <ProviderCard
+          v-for="[providerId, provider] in providersList"
+          :key="providerId"
+          :provider-id="providerId"
+          :provider="provider"
+        />
       </div>
-      <div v-if="providersList.length === 0" class="text-xs text-muted-foreground">No providers configured.</div>
-      <ProviderCard
-        v-for="[providerId, provider] in providersList"
-        :key="providerId"
-        :provider-id="providerId"
-        :provider="provider"
-      />
-    </div>
   </section>
 </template>

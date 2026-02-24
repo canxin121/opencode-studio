@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { RiArrowLeftSLine, RiArrowRightSLine, RiCheckLine, RiCloseLine, RiShieldKeyholeLine } from '@remixicon/vue'
+import { useI18n } from 'vue-i18n'
 
 import Button from '@/components/ui/Button.vue'
 import Card from '@/components/ui/Card.vue'
@@ -20,6 +21,7 @@ const props = defineProps<{
 
 const chat = useChatStore()
 const toasts = useToastsStore()
+const { t } = useI18n()
 
 const busy = ref(false)
 
@@ -238,7 +240,10 @@ async function submitPermission(reply: 'once' | 'always' | 'reject') {
   busy.value = true
   try {
     await chat.replyPermission(props.sessionId, rid, reply)
-    toasts.push('success', reply === 'reject' ? 'Permission rejected' : 'Permission granted')
+    toasts.push(
+      'success',
+      reply === 'reject' ? t('chat.attention.toasts.permissionRejected') : t('chat.attention.toasts.permissionGranted'),
+    )
   } catch (err) {
     toasts.push('error', err instanceof Error ? err.message : String(err))
   } finally {
@@ -251,13 +256,13 @@ async function submitQuestion() {
   if (!rid) return
   const ans = buildAnswers()
   if (!answersComplete(ans)) {
-    toasts.push('error', 'Please answer all questions')
+    toasts.push('error', t('chat.attention.toasts.pleaseAnswerAllQuestions'))
     return
   }
   busy.value = true
   try {
     await chat.replyQuestion(props.sessionId, rid, ans)
-    toasts.push('success', 'Answer sent')
+    toasts.push('success', t('chat.attention.toasts.answerSent'))
   } catch (err) {
     toasts.push('error', err instanceof Error ? err.message : String(err))
   } finally {
@@ -271,7 +276,7 @@ async function rejectQuestion() {
   busy.value = true
   try {
     await chat.rejectQuestion(props.sessionId, rid)
-    toasts.push('success', 'Question rejected')
+    toasts.push('success', t('chat.attention.toasts.questionRejected'))
   } catch (err) {
     toasts.push('error', err instanceof Error ? err.message : String(err))
   } finally {
@@ -286,13 +291,13 @@ async function rejectQuestion() {
       <div class="flex items-start justify-between gap-3">
         <div class="min-w-0">
           <div class="typography-ui-label font-semibold">
-            {{ kind === 'permission' ? 'Permission required' : 'Question' }}
+            {{ kind === 'permission' ? t('chat.attention.title.permissionRequired') : t('chat.attention.title.question') }}
           </div>
           <div class="typography-micro text-muted-foreground">
             {{
               kind === 'question' && !questionAnswersReady
-                ? 'Answer all questions to enable send.'
-                : 'This blocks the agent until you respond.'
+                ? t('chat.attention.subtitle.answerAllToEnableSend')
+                : t('chat.attention.subtitle.blocksUntilRespond')
             }}
           </div>
         </div>
@@ -304,8 +309,8 @@ async function rejectQuestion() {
               variant="ghost"
               class="h-8 w-8"
               :disabled="busy"
-              title="Reject permission"
-              aria-label="Reject permission"
+              :title="t('chat.attention.ui.rejectPermission')"
+              :aria-label="t('chat.attention.ui.rejectPermission')"
               @click="submitPermission('reject')"
             >
               <RiCloseLine class="h-4 w-4" />
@@ -315,8 +320,8 @@ async function rejectQuestion() {
               variant="outline"
               class="h-8 w-8"
               :disabled="busy"
-              title="Allow once"
-              aria-label="Allow once"
+              :title="t('chat.attention.ui.allowOnce')"
+              :aria-label="t('chat.attention.ui.allowOnce')"
               @click="submitPermission('once')"
             >
               <RiCheckLine class="h-4 w-4" />
@@ -326,8 +331,8 @@ async function rejectQuestion() {
               variant="default"
               class="h-8 w-8"
               :disabled="busy"
-              title="Always allow"
-              aria-label="Always allow"
+              :title="t('chat.attention.ui.alwaysAllow')"
+              :aria-label="t('chat.attention.ui.alwaysAllow')"
               @click="submitPermission('always')"
             >
               <RiShieldKeyholeLine class="h-4 w-4" />
@@ -339,8 +344,8 @@ async function rejectQuestion() {
               variant="ghost"
               class="h-8 w-8"
               :disabled="busy"
-              title="Reject question"
-              aria-label="Reject question"
+              :title="t('chat.attention.ui.rejectQuestion')"
+              :aria-label="t('chat.attention.ui.rejectQuestion')"
               @click="rejectQuestion"
             >
               <RiCloseLine class="h-4 w-4" />
@@ -350,8 +355,8 @@ async function rejectQuestion() {
               variant="default"
               class="h-8 w-8"
               :disabled="!canSendQuestion"
-              title="Send answers"
-              aria-label="Send answers"
+              :title="t('chat.attention.ui.sendAnswers')"
+              :aria-label="t('chat.attention.ui.sendAnswers')"
               @click="submitQuestion"
             >
               <RiCheckLine class="h-4 w-4" />
@@ -364,12 +369,12 @@ async function rejectQuestion() {
     <div class="min-h-0 flex-1 overflow-y-auto px-3 py-3">
       <div v-if="kind === 'permission'" class="space-y-2">
         <div class="text-xs">
-          <div class="text-muted-foreground/80">Permission</div>
+          <div class="text-muted-foreground/80">{{ t('chat.attention.ui.permissionLabel') }}</div>
           <div class="font-mono text-[11px] break-words">{{ permission.permission }}</div>
         </div>
 
         <div v-if="permission.patterns.length" class="text-xs">
-          <div class="text-muted-foreground/80">Patterns</div>
+          <div class="text-muted-foreground/80">{{ t('chat.attention.ui.patternsLabel') }}</div>
           <div class="mt-1 flex flex-wrap gap-1.5">
             <span
               v-for="p in permission.patterns"
@@ -382,7 +387,7 @@ async function rejectQuestion() {
         </div>
 
         <div v-if="permission.always.length" class="text-xs">
-          <div class="text-muted-foreground/80">Will be remembered for</div>
+          <div class="text-muted-foreground/80">{{ t('chat.attention.ui.rememberedForLabel') }}</div>
           <div class="mt-1 flex flex-wrap gap-1.5">
             <span
               v-for="p in permission.always"
@@ -402,14 +407,14 @@ async function rejectQuestion() {
             variant="ghost"
             class="h-7 w-7"
             :disabled="busy || questionIndex <= 0"
-            title="Previous question"
-            aria-label="Previous question"
+            :title="t('chat.attention.ui.previousQuestion')"
+            :aria-label="t('chat.attention.ui.previousQuestion')"
             @click="prevQuestionPage"
           >
             <RiArrowLeftSLine class="h-4 w-4" />
           </Button>
           <div class="inline-flex items-center gap-1.5 text-[11px] font-mono text-muted-foreground">
-            <span>Question {{ questionIndex + 1 }} / {{ questionCount }}</span>
+            <span>{{ t('chat.attention.ui.questionPager', { current: questionIndex + 1, total: questionCount }) }}</span>
             <RiCheckLine v-if="currentQuestionAnswered" class="h-3.5 w-3.5 text-emerald-500" />
           </div>
           <Button
@@ -417,8 +422,8 @@ async function rejectQuestion() {
             variant="ghost"
             class="h-7 w-7"
             :disabled="busy || questionIndex >= questionCount - 1"
-            title="Next question"
-            aria-label="Next question"
+            :title="t('chat.attention.ui.nextQuestion')"
+            :aria-label="t('chat.attention.ui.nextQuestion')"
             @click="nextQuestionPage"
           >
             <RiArrowRightSLine class="h-4 w-4" />
@@ -432,7 +437,7 @@ async function rejectQuestion() {
                 <div class="text-xs font-semibold break-words">{{ currentQuestion.header }}</div>
               </div>
               <div class="text-[10px] text-muted-foreground font-mono shrink-0">
-                {{ currentQuestion.multiple ? 'multiple' : 'single' }}
+                {{ currentQuestion.multiple ? t('chat.attention.ui.multiple') : t('chat.attention.ui.single') }}
               </div>
             </div>
             <div class="text-xs text-muted-foreground whitespace-pre-wrap break-words">
@@ -475,8 +480,8 @@ async function rejectQuestion() {
                 @change="toggleChoice(questionIndex, CUSTOM_CHOICE)"
               />
               <div class="min-w-0">
-                <div class="text-xs font-medium">Custom</div>
-                <div class="text-[11px] text-muted-foreground">Type your own answer</div>
+                <div class="text-xs font-medium">{{ t('chat.attention.ui.custom') }}</div>
+                <div class="text-[11px] text-muted-foreground">{{ t('chat.attention.ui.typeYourOwnAnswer') }}</div>
               </div>
             </label>
 
@@ -490,16 +495,16 @@ async function rejectQuestion() {
             >
               <Input
                 v-model="customText[questionIndex]"
-                placeholder="Type your own answer"
+                :placeholder="t('chat.attention.ui.typeYourOwnAnswer')"
                 class="h-8 text-xs"
                 :disabled="busy"
               />
-              <div class="mt-1 text-[11px] text-muted-foreground">Only sent when the custom option is selected.</div>
+              <div class="mt-1 text-[11px] text-muted-foreground">{{ t('chat.attention.ui.customOnlySentHint') }}</div>
             </div>
           </div>
         </div>
 
-        <div v-else class="text-xs text-muted-foreground">No questions available.</div>
+        <div v-else class="text-xs text-muted-foreground">{{ t('chat.attention.ui.noQuestionsAvailable') }}</div>
       </div>
     </div>
   </Card>

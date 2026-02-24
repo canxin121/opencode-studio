@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type Component } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { RiFileTextLine, RiScissorsLine, RiSearchLine } from '@remixicon/vue'
 
 import ChatPageView from './chat/ChatPageView.vue'
@@ -68,6 +69,7 @@ const activity = useSessionActivityStore()
 const settings = useSettingsStore()
 const ui = useUiStore()
 const toasts = useToastsStore()
+const { t } = useI18n()
 
 const orphanDraft = ref('')
 const draft = computed<string>({
@@ -117,21 +119,21 @@ const composerActionMenuAnchorRef = ref<HTMLElement | null>(null)
 const composerActionItems = computed<ComposerActionItem[]>(() => [
   {
     id: 'compact',
-    label: 'Compact session',
-    description: 'Summarize with the selected model',
+    label: String(t('chat.composer.actions.compact.label')),
+    description: String(t('chat.composer.actions.compact.description')),
     icon: RiScissorsLine,
     disabled: !chat.selectedSessionId || compactBusy.value,
   },
   {
     id: 'init',
-    label: 'Initialize AGENTS.md',
-    description: 'Insert /init command into chat input',
+    label: String(t('chat.composer.actions.init.label')),
+    description: String(t('chat.composer.actions.init.description')),
     icon: RiFileTextLine,
   },
   {
     id: 'review',
-    label: 'Review changes',
-    description: 'Insert /review command into chat input',
+    label: String(t('chat.composer.actions.review.label')),
+    description: String(t('chat.composer.actions.review.description')),
     icon: RiSearchLine,
   },
 ])
@@ -252,10 +254,10 @@ modelSelection = useChatModelSelection({
 })
 
 const composerPickerTitle = computed(() => {
-  if (composerPickerOpen.value === 'model') return 'Model'
-  if (composerPickerOpen.value === 'agent') return 'Agent'
-  if (composerPickerOpen.value === 'variant') return 'Thinking'
-  return 'Options'
+  if (composerPickerOpen.value === 'model') return String(t('chat.composer.picker.modelTitle'))
+  if (composerPickerOpen.value === 'agent') return String(t('chat.composer.picker.agentTitle'))
+  if (composerPickerOpen.value === 'variant') return String(t('chat.composer.picker.variantTitle'))
+  return String(t('chat.composer.picker.optionsTitle'))
 })
 
 const composerPickerSearchable = computed(() => {
@@ -263,10 +265,10 @@ const composerPickerSearchable = computed(() => {
 })
 
 const composerPickerSearchPlaceholder = computed(() => {
-  if (composerPickerOpen.value === 'model') return 'Search models'
-  if (composerPickerOpen.value === 'agent') return 'Search agents'
-  if (composerPickerOpen.value === 'variant') return 'Search variants'
-  return 'Search options'
+  if (composerPickerOpen.value === 'model') return String(t('chat.composer.picker.searchModels'))
+  if (composerPickerOpen.value === 'agent') return String(t('chat.composer.picker.searchAgents'))
+  if (composerPickerOpen.value === 'variant') return String(t('chat.composer.picker.searchVariants'))
+  return String(t('chat.composer.picker.searchOptions'))
 })
 
 const composerPickerQuery = computed(() => {
@@ -294,10 +296,10 @@ function setComposerPickerQuery(value: string) {
 const composerPickerHelperText = computed(() => '')
 
 const composerPickerEmptyText = computed(() => {
-  if (composerPickerOpen.value === 'model') return 'No models found.'
-  if (composerPickerOpen.value === 'agent') return 'No agents found.'
-  if (composerPickerOpen.value === 'variant') return 'No variants found.'
-  return 'No options found.'
+  if (composerPickerOpen.value === 'model') return String(t('chat.composer.picker.emptyModels'))
+  if (composerPickerOpen.value === 'agent') return String(t('chat.composer.picker.emptyAgents'))
+  if (composerPickerOpen.value === 'variant') return String(t('chat.composer.picker.emptyVariants'))
+  return String(t('chat.composer.picker.emptyOptions'))
 })
 
 const composerPickerGroups = computed<OptionMenuGroup[]>(() => {
@@ -305,13 +307,13 @@ const composerPickerGroups = computed<OptionMenuGroup[]>(() => {
     const groups: OptionMenuGroup[] = [
       {
         id: 'model-default',
-        title: 'Default',
+        title: String(t('common.default')),
         collapsible: false,
         items: [
           {
             id: 'model:default',
-            label: 'Auto (OpenCode default)',
-            description: 'Let OpenCode choose the default model',
+            label: String(t('chat.composer.model.autoDefault')),
+            description: String(t('chat.composer.model.autoDefaultDescription')),
             checked: !modelSelection.selectedModelSlug.value,
             keywords: 'auto default model',
           },
@@ -321,7 +323,7 @@ const composerPickerGroups = computed<OptionMenuGroup[]>(() => {
 
     const byProvider = new Map<string, OptionMenuItem[]>()
     for (const opt of modelSelection.filteredModelSlugOptions.value as ModelSlugPickerOption[]) {
-      const providerId = String(opt?.providerId || '').trim() || 'Other'
+      const providerId = String(opt?.providerId || '').trim() || String(t('common.other'))
       const modelId = String(opt?.modelId || '').trim() || String(opt?.value || '').trim()
       const value = String(opt?.value || '').trim()
       if (!value) continue
@@ -354,11 +356,11 @@ const composerPickerGroups = computed<OptionMenuGroup[]>(() => {
     return [
       {
         id: 'agent-default',
-        title: 'Default',
+        title: String(t('common.default')),
         items: [
           {
             id: 'agent:default',
-            label: 'Auto (OpenCode default)',
+            label: String(t('chat.composer.model.autoDefault')),
             description: 'Let OpenCode choose the default agent',
             checked: !modelSelection.selectedAgent.value,
             keywords: 'auto default agent',
@@ -399,11 +401,11 @@ const composerPickerGroups = computed<OptionMenuGroup[]>(() => {
     return [
       {
         id: 'variant-default',
-        title: 'Default',
+        title: String(t('common.default')),
         items: [
           {
             id: 'variant:default',
-            label: 'Default',
+            label: String(t('common.default')),
             description: 'Use model default thinking profile',
             checked: !modelSelection.selectedVariant.value,
             keywords: 'default variant thinking',
@@ -822,7 +824,7 @@ function runComposerActionMenu(item: ComposerActionItem | OptionMenuItem) {
 
 async function copyToClipboard(text: string) {
   const ok = await copyTextToClipboard(String(text || ''))
-  if (!ok) throw new Error('Copy failed')
+  if (!ok) throw new Error(t('common.copyFailed'))
 }
 
 function stringifyForClipboard(value: JsonValue): string {
@@ -838,7 +840,7 @@ async function handleCopySessionError() {
   const sid = String(chat.selectedSessionId || '').trim()
   const selectedError = chat.selectedSessionError
   if (!selectedError) {
-    toasts.push('error', 'No session error to copy')
+    toasts.push('error', t('chat.toasts.noSessionErrorToCopy'))
     return
   }
 
@@ -871,9 +873,9 @@ async function handleCopySessionError() {
 
   try {
     await copyToClipboard(lines.join('\n'))
-    toasts.push('success', 'Copied error details')
+    toasts.push('success', t('chat.toasts.copiedErrorDetails'))
   } catch {
-    toasts.push('error', 'Failed to copy error details')
+    toasts.push('error', t('chat.toasts.failedToCopyErrorDetails'))
   }
 }
 

@@ -1,5 +1,6 @@
 import { ApiError } from '@/lib/api'
 import type { JsonValue } from '@/types/json'
+import { i18n } from '@/i18n'
 
 type QueryValue = string | number | boolean | null | undefined
 
@@ -34,7 +35,7 @@ export function useGitSequencerOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({}),
         })
-        toasts.push('success', 'Merge aborted')
+        toasts.push('success', i18n.global.t('git.toasts.mergeAborted'))
         await load()
       } catch (err) {
         if (handleGitBusy(err, 'Merge abort', abortMerge)) return
@@ -53,7 +54,7 @@ export function useGitSequencerOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({}),
         })
-        toasts.push('success', 'Rebase aborted')
+        toasts.push('success', i18n.global.t('git.toasts.rebaseAborted'))
         await load()
       } catch (err) {
         if (handleGitBusy(err, 'Rebase abort', abortRebase)) return
@@ -72,7 +73,7 @@ export function useGitSequencerOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: '{}',
         })
-        toasts.push('success', 'Cherry-pick continued')
+        toasts.push('success', i18n.global.t('git.toasts.cherryPickContinued'))
         await load()
       } catch (err) {
         if (handleGitBusy(err, 'Cherry-pick continue', cherryPickContinue)) return
@@ -95,7 +96,7 @@ export function useGitSequencerOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: '{}',
         })
-        toasts.push('success', 'Cherry-pick skipped')
+        toasts.push('success', i18n.global.t('git.toasts.cherryPickSkipped'))
         await load()
       } catch (err) {
         if (handleGitBusy(err, 'Cherry-pick skip', cherryPickSkip)) return
@@ -114,7 +115,7 @@ export function useGitSequencerOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: '{}',
         })
-        toasts.push('success', 'Cherry-pick aborted')
+        toasts.push('success', i18n.global.t('git.toasts.cherryPickAborted'))
         await load()
       } catch (err) {
         if (handleGitBusy(err, 'Cherry-pick abort', cherryPickAbort)) return
@@ -133,7 +134,7 @@ export function useGitSequencerOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: '{}',
         })
-        toasts.push('success', 'Revert continued')
+        toasts.push('success', i18n.global.t('git.toasts.revertContinued'))
         await load()
       } catch (err) {
         if (handleGitBusy(err, 'Revert continue', revertContinue)) return
@@ -156,7 +157,7 @@ export function useGitSequencerOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: '{}',
         })
-        toasts.push('success', 'Revert skipped')
+        toasts.push('success', i18n.global.t('git.toasts.revertSkipped'))
         await load()
       } catch (err) {
         if (handleGitBusy(err, 'Revert skip', revertSkip)) return
@@ -175,7 +176,7 @@ export function useGitSequencerOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: '{}',
         })
-        toasts.push('success', 'Revert aborted')
+        toasts.push('success', i18n.global.t('git.toasts.revertAborted'))
         await load()
       } catch (err) {
         if (handleGitBusy(err, 'Revert abort', revertAbortSeq)) return
@@ -194,7 +195,7 @@ export function useGitSequencerOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: '{}',
         })
-        toasts.push('success', 'Rebase continued')
+        toasts.push('success', i18n.global.t('git.toasts.rebaseContinued'))
         await load()
       } catch (err) {
         if (handleGitBusy(err, 'Rebase continue', rebaseContinue)) return
@@ -217,7 +218,7 @@ export function useGitSequencerOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: '{}',
         })
-        toasts.push('success', 'Rebase skipped')
+        toasts.push('success', i18n.global.t('git.toasts.rebaseSkipped'))
         await load()
       } catch (err) {
         if (handleGitBusy(err, 'Rebase skip', rebaseSkip)) return

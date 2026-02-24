@@ -1,5 +1,5 @@
 <script lang="ts">
-import { defineComponent } from 'vue'
+import { computed, defineComponent } from 'vue'
 import { RiArrowDownSLine, RiArrowUpSLine, RiRestartLine } from '@remixicon/vue'
 
 import Button from '@/components/ui/Button.vue'
@@ -26,17 +26,19 @@ export default defineComponent({
   setup() {
     const ctx = useOpencodeConfigPanelContext()
 
-    const triStatePickerOptions: PickerOption[] = [
-      { value: 'default', label: 'default' },
-      { value: 'true', label: 'true' },
-      { value: 'false', label: 'false' },
-    ]
+    const t = ctx.t as unknown as (key: string, params?: Record<string, unknown>) => string
 
-    const diffStylePickerOptions: PickerOption[] = [
-      { value: 'default', label: 'default' },
-      { value: 'auto', label: 'auto' },
-      { value: 'stacked', label: 'stacked' },
-    ]
+    const triStatePickerOptions = computed<PickerOption[]>(() => [
+      { value: 'default', label: t('settings.opencodeConfig.sections.common.options.triState.default') },
+      { value: 'true', label: t('settings.opencodeConfig.sections.common.options.triState.true') },
+      { value: 'false', label: t('settings.opencodeConfig.sections.common.options.triState.false') },
+    ])
+
+    const diffStylePickerOptions = computed<PickerOption[]>(() => [
+      { value: 'default', label: t('settings.opencodeConfig.sections.tui.options.diffStyle.default') },
+      { value: 'auto', label: t('settings.opencodeConfig.sections.tui.options.diffStyle.auto') },
+      { value: 'stacked', label: t('settings.opencodeConfig.sections.tui.options.diffStyle.stacked') },
+    ])
 
     return Object.assign(ctx, { triStatePickerOptions, diffStylePickerOptions })
   },
@@ -47,34 +49,48 @@ export default defineComponent({
   <section id="tui" class="scroll-mt-24 rounded-lg border border-border bg-background p-4 space-y-4">
     <div class="flex items-start justify-between gap-3">
       <div class="min-w-0">
-        <div class="text-base font-semibold leading-snug">Scroll behavior and diff rendering.</div>
+        <div class="text-base font-semibold leading-snug">{{ t('settings.opencodeConfig.sections.tui.title') }}</div>
       </div>
       <div class="flex items-center gap-2">
         <Tooltip>
-          <Button size="icon" variant="ghost" class="h-8 w-8" title="Reset section" @click="resetSection('tui')">
+          <Button
+            size="icon"
+            variant="ghost"
+            class="h-8 w-8"
+            :title="t('settings.opencodeConfig.sections.common.resetSection')"
+            @click="resetSection('tui')"
+          >
             <RiRestartLine class="h-4 w-4" />
           </Button>
-          <template #content>Reset section</template>
+          <template #content>{{ t('settings.opencodeConfig.sections.common.resetSection') }}</template>
         </Tooltip>
         <Tooltip>
           <Button
             size="icon"
             variant="outline"
             class="h-8 w-8"
-            :title="isSectionOpen('tui') ? 'Collapse' : 'Expand'"
+            :title="
+              isSectionOpen('tui')
+                ? t('settings.opencodeConfig.sections.common.collapse')
+                : t('settings.opencodeConfig.sections.common.expand')
+            "
             @click="toggleSection('tui')"
           >
             <RiArrowUpSLine v-if="isSectionOpen('tui')" class="h-4 w-4" />
             <RiArrowDownSLine v-else class="h-4 w-4" />
           </Button>
-          <template #content>{{ isSectionOpen('tui') ? 'Collapse' : 'Expand' }}</template>
+          <template #content>{{
+            isSectionOpen('tui')
+              ? t('settings.opencodeConfig.sections.common.collapse')
+              : t('settings.opencodeConfig.sections.common.expand')
+          }}</template>
         </Tooltip>
       </div>
     </div>
 
     <div v-if="isSectionOpen('tui')" class="grid gap-4 lg:grid-cols-3">
       <label class="grid gap-1">
-        <span class="text-xs text-muted-foreground">Scroll speed</span>
+        <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.tui.fields.scrollSpeed') }}</span>
         <input
           v-model="tuiScrollSpeed"
           type="number"
@@ -84,22 +100,22 @@ export default defineComponent({
         />
       </label>
       <label class="grid gap-1">
-        <span class="text-xs text-muted-foreground">Scroll acceleration</span>
+        <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.tui.fields.scrollAcceleration') }}</span>
         <OptionPicker
           v-model="tuiScrollAcceleration"
           :options="triStatePickerOptions"
-          title="Scroll acceleration"
-          search-placeholder="Search"
+          :title="t('settings.opencodeConfig.sections.tui.fields.scrollAcceleration')"
+          :search-placeholder="t('settings.opencodeConfig.sections.common.search')"
           :include-empty="false"
         />
       </label>
       <label class="grid gap-1">
-        <span class="text-xs text-muted-foreground">Diff style</span>
+        <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.tui.fields.diffStyle') }}</span>
         <OptionPicker
           v-model="tuiDiffStyle"
           :options="diffStylePickerOptions"
-          title="Diff style"
-          search-placeholder="Search"
+          :title="t('settings.opencodeConfig.sections.tui.fields.diffStyle')"
+          :search-placeholder="t('settings.opencodeConfig.sections.common.search')"
           :include-empty="false"
         />
       </label>

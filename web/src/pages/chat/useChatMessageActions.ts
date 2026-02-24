@@ -1,5 +1,6 @@
 import { nextTick, onBeforeUnmount, ref, type Ref } from 'vue'
 import type { RouteLocationNormalizedLoaded, Router } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 
 import { apiJson } from '@/lib/api'
 import { patchSessionIdInQuery } from '@/app/navigation/sessionQuery'
@@ -89,6 +90,8 @@ export function useChatMessageActions(opts: {
   copyToClipboard: (text: string) => Promise<void>
   scrollToBottom: (behavior: 'auto' | 'smooth') => void
 }) {
+  const { t } = useI18n()
+
   const {
     chat,
     toasts,
@@ -127,7 +130,7 @@ export function useChatMessageActions(opts: {
     try {
       await copyToClipboard(text)
     } catch {
-      toasts.push('error', 'Copy failed')
+      toasts.push('error', t('common.copyFailed'))
       return
     }
     copiedMessageId.value = id

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { RiFileTextLine, RiMore2Line } from '@remixicon/vue'
+import { useI18n } from 'vue-i18n'
 import IconButton from '@/components/ui/IconButton.vue'
 import OptionMenu, { type OptionMenuGroup, type OptionMenuItem } from '@/components/ui/OptionMenu.vue'
 import SidebarListItem from '@/components/ui/SidebarListItem.vue'
@@ -25,9 +26,11 @@ const props = withDefaults(
     deletions: 0,
     isMobilePointer: false,
     mobileActionItems: () => [],
-    mobileActionTitle: 'File actions',
+    mobileActionTitle: '',
   },
 )
+
+const { t } = useI18n()
 
 const emit = defineEmits<{
   (e: 'select'): void
@@ -41,6 +44,8 @@ const mobileActionMenuQuery = ref('')
 const hasMobileActions = computed(
   () => props.isMobilePointer && Array.isArray(props.mobileActionItems) && props.mobileActionItems.length > 0,
 )
+
+const mobileActionTitleText = computed(() => (props.mobileActionTitle || '').trim() || t('git.ui.workingTree.fileActionsTitle'))
 
 const mobileActionGroups = computed<OptionMenuGroup[]>(() => {
   if (!hasMobileActions.value) return []
@@ -102,8 +107,8 @@ function onMobileActionSelect(item: OptionMenuItem) {
         <IconButton
           size="sm"
           class="text-muted-foreground hover:text-foreground hover:bg-primary/6"
-          :title="mobileActionTitle"
-          :aria-label="mobileActionTitle"
+          :title="mobileActionTitleText"
+          :aria-label="mobileActionTitleText"
           @click.stop="openMobileActionMenu"
         >
           <RiMore2Line class="h-4 w-4" />
@@ -113,8 +118,8 @@ function onMobileActionSelect(item: OptionMenuItem) {
           :open="mobileActionMenuOpen"
           :query="mobileActionMenuQuery"
           :groups="mobileActionGroups"
-          :title="mobileActionTitle"
-          :mobile-title="mobileActionTitle"
+          :title="mobileActionTitleText"
+          :mobile-title="mobileActionTitleText"
           :searchable="true"
           :is-mobile-pointer="isMobilePointer"
           @update:open="setMobileActionMenuOpen"

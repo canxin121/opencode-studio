@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch, type CSSProperties } from 'vue'
 import { RiAttachmentLine, RiCloseLine, RiFileLine, RiFileUploadLine, RiLoader4Line } from '@remixicon/vue'
+import { useI18n } from 'vue-i18n'
 
 import Button from '@/components/ui/Button.vue'
 import IconButton from '@/components/ui/IconButton.vue'
@@ -28,9 +29,13 @@ const props = withDefaults(
     busy: false,
     isMobilePointer: false,
     desktopAnchorEl: null,
-    title: 'Attachments',
+    title: '',
   },
 )
+
+const { t } = useI18n()
+
+const effectiveTitle = computed(() => String(props.title || '').trim() || String(t('chat.attachments.title')))
 
 const emit = defineEmits<{
   (e: 'update:open', value: boolean): void
@@ -47,8 +52,8 @@ const isMobileSheet = computed(() => Boolean(props.isMobilePointer))
 const fileCount = computed(() => (Array.isArray(props.attachedFiles) ? props.attachedFiles.length : 0))
 const countLabel = computed(() => {
   const n = fileCount.value
-  if (n === 1) return '1 file'
-  return `${n} files`
+  if (n === 1) return String(t('chat.attachments.countLabelOne'))
+  return String(t('chat.attachments.countLabelMany', { count: n }))
 })
 
 function isImageFile(f: AttachedFile): boolean {
@@ -319,17 +324,17 @@ onBeforeUnmount(() => {
         <div class="min-w-0 flex items-center gap-2">
           <RiAttachmentLine class="h-4 w-4 text-muted-foreground" />
           <div class="min-w-0">
-            <div class="text-xs font-semibold text-foreground truncate">{{ title }}</div>
+            <div class="text-xs font-semibold text-foreground truncate">{{ effectiveTitle }}</div>
             <div class="mt-0.5 text-[10px] text-muted-foreground font-mono">
               <span v-if="busy" class="inline-flex items-center gap-1">
                 <RiLoader4Line class="h-3.5 w-3.5 animate-spin" />
-                Attaching…
+                {{ t('chat.attachments.attaching') }}
               </span>
               <span v-else>{{ countLabel }}</span>
             </div>
           </div>
         </div>
-        <IconButton size="sm" title="Close" aria-label="Close" @click="close">
+        <IconButton size="sm" :title="t('common.close')" :aria-label="t('common.close')" @click="close">
           <RiCloseLine class="h-4 w-4" />
         </IconButton>
       </div>
@@ -338,11 +343,11 @@ onBeforeUnmount(() => {
         <div class="flex flex-wrap items-center gap-2">
           <Button size="xs" variant="outline" class="h-8" @click="$emit('attachLocal')">
             <RiFileUploadLine class="h-4 w-4 mr-1.5" />
-            Add from computer
+            {{ t('chat.attachments.actions.addFromComputer') }}
           </Button>
           <Button size="xs" variant="outline" class="h-8" @click="$emit('attachProject')">
             <RiFileLine class="h-4 w-4 mr-1.5" />
-            Add from project
+            {{ t('chat.attachments.actions.addFromProject') }}
           </Button>
           <Button
             size="xs"
@@ -351,14 +356,14 @@ onBeforeUnmount(() => {
             :disabled="fileCount === 0"
             @click="$emit('clear')"
           >
-            Clear all
+            {{ t('chat.attachments.actions.clearAll') }}
           </Button>
         </div>
 
         <div class="flex-1 min-h-0 overflow-auto pr-1">
           <div v-if="fileCount === 0" class="rounded-lg border border-border/60 bg-muted/15 px-3 py-3">
-            <div class="text-xs font-medium">No attachments</div>
-            <div class="mt-1 text-[11px] text-muted-foreground">Use the buttons above to attach files.</div>
+            <div class="text-xs font-medium">{{ t('chat.attachments.empty.title') }}</div>
+            <div class="mt-1 text-[11px] text-muted-foreground">{{ t('chat.attachments.empty.description') }}</div>
           </div>
 
           <div v-else class="space-y-2">
@@ -396,14 +401,14 @@ onBeforeUnmount(() => {
 
               <div class="shrink-0 flex items-center gap-2">
                 <span class="text-[11px] text-muted-foreground font-mono tabular-nums">
-                  <template v-if="f.serverPath">repo</template>
+                  <template v-if="f.serverPath">{{ t('chat.attachments.repo') }}</template>
                   <template v-else>{{ formatBytes(f.size) }}</template>
                 </span>
                 <IconButton
                   size="xs"
                   class="text-muted-foreground hover:text-foreground hover:bg-secondary/50"
-                  title="Remove"
-                  aria-label="Remove attachment"
+                  :title="t('common.remove')"
+                  :aria-label="t('chat.attachments.removeAttachmentAria')"
                   @click="$emit('remove', f.id)"
                 >
                   <RiCloseLine class="h-4 w-4" />
@@ -428,17 +433,17 @@ onBeforeUnmount(() => {
         <div class="min-w-0">
           <div class="flex items-center gap-2">
             <RiAttachmentLine class="h-4.5 w-4.5 text-muted-foreground" />
-            <div class="text-sm font-semibold truncate">{{ title }}</div>
+            <div class="text-sm font-semibold truncate">{{ effectiveTitle }}</div>
           </div>
           <div class="mt-1 text-[12px] text-muted-foreground font-mono">
             <span v-if="busy" class="inline-flex items-center gap-1">
               <RiLoader4Line class="h-4 w-4 animate-spin" />
-              Attaching…
+              {{ t('chat.attachments.attaching') }}
             </span>
             <span v-else>{{ countLabel }}</span>
           </div>
         </div>
-        <IconButton size="sm" title="Close" aria-label="Close" @click="close">
+        <IconButton size="sm" :title="t('common.close')" :aria-label="t('common.close')" @click="close">
           <RiCloseLine class="h-4 w-4" />
         </IconButton>
       </div>
@@ -447,11 +452,11 @@ onBeforeUnmount(() => {
         <div class="flex flex-wrap items-center gap-2">
           <Button size="sm" variant="outline" class="h-9" @click="$emit('attachLocal')">
             <RiFileUploadLine class="h-4 w-4 mr-2" />
-            Add from computer
+            {{ t('chat.attachments.actions.addFromComputer') }}
           </Button>
           <Button size="sm" variant="outline" class="h-9" @click="$emit('attachProject')">
             <RiFileLine class="h-4 w-4 mr-2" />
-            Add from project
+            {{ t('chat.attachments.actions.addFromProject') }}
           </Button>
           <Button
             size="sm"
@@ -460,14 +465,14 @@ onBeforeUnmount(() => {
             :disabled="fileCount === 0"
             @click="$emit('clear')"
           >
-            Clear
+            {{ t('chat.attachments.actions.clear') }}
           </Button>
         </div>
 
         <div class="flex-1 min-h-0 overflow-auto pr-1">
           <div v-if="fileCount === 0" class="rounded-lg border border-border/60 bg-muted/15 px-3 py-3">
-            <div class="text-sm font-medium">No attachments</div>
-            <div class="mt-1 text-[13px] text-muted-foreground">Use the buttons above to attach files.</div>
+            <div class="text-sm font-medium">{{ t('chat.attachments.empty.title') }}</div>
+            <div class="mt-1 text-[13px] text-muted-foreground">{{ t('chat.attachments.empty.description') }}</div>
           </div>
 
           <div v-else class="space-y-2">
@@ -505,14 +510,14 @@ onBeforeUnmount(() => {
 
               <div class="shrink-0 flex items-center gap-2">
                 <span class="text-[12px] text-muted-foreground font-mono tabular-nums">
-                  <template v-if="f.serverPath">repo</template>
+                  <template v-if="f.serverPath">{{ t('chat.attachments.repo') }}</template>
                   <template v-else>{{ formatBytes(f.size) }}</template>
                 </span>
                 <IconButton
                   size="xs"
                   class="text-muted-foreground hover:text-foreground hover:bg-secondary/50"
-                  title="Remove"
-                  aria-label="Remove attachment"
+                  :title="t('common.remove')"
+                  :aria-label="t('chat.attachments.removeAttachmentAria')"
                   @click="$emit('remove', f.id)"
                 >
                   <RiCloseLine class="h-4 w-4" />

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { RiAddLine, RiCheckLine, RiDeleteBinLine } from '@remixicon/vue'
+import { useI18n } from 'vue-i18n'
 
 import Button from '@/components/ui/Button.vue'
 import Input from '@/components/ui/Input.vue'
@@ -8,6 +9,8 @@ import Tooltip from '@/components/ui/Tooltip.vue'
 import { useOpencodeConfigPanelContext } from '../opencodeConfigContext'
 
 const props = defineProps<{ providerId: string }>()
+
+const { t } = useI18n()
 type JsonBuffer = { text: string; error: string | null }
 type JsonPrimitive = string | number | boolean | null
 type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue } | undefined
@@ -90,23 +93,27 @@ const providerId = props.providerId
 <template>
   <div class="grid gap-4">
     <div class="flex items-center justify-between">
-      <div class="text-sm font-semibold">Maps</div>
+      <div class="text-sm font-semibold">{{ t('settings.opencodeConfig.sections.providers.mapsEditor.title') }}</div>
       <button
         type="button"
         class="text-[11px] text-muted-foreground hover:text-foreground"
         @click="toggleProviderOptionsJson(providerId)"
       >
-        {{ showProviderOptionsJson[providerId] ? 'Hide JSON' : 'Show JSON' }}
+        {{
+          showProviderOptionsJson[providerId]
+            ? t('settings.opencodeConfig.sections.providers.mapsEditor.actions.hideJson')
+            : t('settings.opencodeConfig.sections.providers.mapsEditor.actions.showJson')
+        }}
       </button>
     </div>
 
     <div class="grid gap-2">
-      <span class="text-xs text-muted-foreground">Headers</span>
+      <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.mapsEditor.headers.title') }}</span>
       <div
         v-if="getProviderOption(providerId, 'headers') && !isPlainObject(getProviderOption(providerId, 'headers'))"
         class="text-xs text-amber-600"
       >
-        Current headers value is not an object; table editing will overwrite it.
+        {{ t('settings.opencodeConfig.sections.providers.mapsEditor.headers.notObjectWarning') }}
       </div>
       <div class="grid gap-2">
         <div
@@ -117,13 +124,13 @@ const providerId = props.providerId
           <Input
             :model-value="row.k"
             @update:model-value="(v) => updateProviderHeaderKey(providerId, row.k, String(v))"
-            placeholder="Header"
+            :placeholder="t('settings.opencodeConfig.sections.providers.mapsEditor.headers.placeholders.header')"
             class="font-mono"
           />
           <Input
             :model-value="String(row.v ?? '')"
             @update:model-value="(v) => updateProviderHeaderValue(providerId, row.k, String(v))"
-            placeholder="Value"
+            :placeholder="t('settings.opencodeConfig.sections.providers.mapsEditor.headers.placeholders.value')"
             class="font-mono"
           />
           <Tooltip>
@@ -131,44 +138,52 @@ const providerId = props.providerId
               size="icon"
               variant="ghost-destructive"
               class="h-8 w-8"
-              title="Remove"
-              aria-label="Remove header"
+              :title="t('common.remove')"
+              :aria-label="t('settings.opencodeConfig.sections.providers.mapsEditor.headers.actions.removeHeaderAria')"
               @click="removeProviderHeader(providerId, row.k)"
             >
               <RiDeleteBinLine class="h-4 w-4" />
             </Button>
-            <template #content>Remove</template>
+            <template #content>{{ t('common.remove') }}</template>
           </Tooltip>
         </div>
         <div class="grid gap-2 lg:grid-cols-[1fr_1fr_auto] items-center">
-          <Input v-model="providerHeaderNewKey[providerId]" placeholder="New header" class="font-mono" />
-          <Input v-model="providerHeaderNewVal[providerId]" placeholder="Value" class="font-mono" />
+          <Input
+            v-model="providerHeaderNewKey[providerId]"
+            :placeholder="t('settings.opencodeConfig.sections.providers.mapsEditor.headers.placeholders.newHeader')"
+            class="font-mono"
+          />
+          <Input
+            v-model="providerHeaderNewVal[providerId]"
+            :placeholder="t('settings.opencodeConfig.sections.providers.mapsEditor.headers.placeholders.value')"
+            class="font-mono"
+          />
           <Tooltip>
             <Button
               size="icon"
               variant="outline"
               class="h-9 w-9"
-              title="Add"
-              aria-label="Add header"
+              :title="t('common.add')"
+              :aria-label="t('settings.opencodeConfig.sections.providers.mapsEditor.headers.actions.addHeaderAria')"
               @click="addProviderHeader(providerId)"
             >
               <RiAddLine class="h-4 w-4" />
             </Button>
-            <template #content>Add</template>
+            <template #content>{{ t('common.add') }}</template>
           </Tooltip>
         </div>
       </div>
     </div>
 
     <div class="grid gap-2">
-      <span class="text-xs text-muted-foreground">Feature flags</span>
+      <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.mapsEditor.featureFlags.title') }}</span>
       <div
         v-if="
           getProviderOption(providerId, 'featureFlags') && !isPlainObject(getProviderOption(providerId, 'featureFlags'))
         "
         class="text-xs text-amber-600"
       >
-        Current featureFlags value is not an object; table editing will overwrite it.
+        {{ t('settings.opencodeConfig.sections.providers.mapsEditor.featureFlags.notObjectWarning') }}
       </div>
       <div class="grid gap-2">
         <div
@@ -179,7 +194,7 @@ const providerId = props.providerId
           <Input
             :model-value="row.k"
             @update:model-value="(v) => updateProviderFlagKey(providerId, row.k, String(v))"
-            placeholder="Flag"
+            :placeholder="t('settings.opencodeConfig.sections.providers.mapsEditor.featureFlags.placeholders.flag')"
             class="font-mono"
           />
           <Input
@@ -193,39 +208,43 @@ const providerId = props.providerId
               size="icon"
               variant="ghost-destructive"
               class="h-8 w-8"
-              title="Remove"
-              aria-label="Remove flag"
+              :title="t('common.remove')"
+              :aria-label="t('settings.opencodeConfig.sections.providers.mapsEditor.featureFlags.actions.removeFlagAria')"
               @click="removeProviderFlag(providerId, row.k)"
             >
               <RiDeleteBinLine class="h-4 w-4" />
             </Button>
-            <template #content>Remove</template>
+            <template #content>{{ t('common.remove') }}</template>
           </Tooltip>
         </div>
         <div class="grid gap-2 lg:grid-cols-[1fr_1fr_auto] items-center">
-          <Input v-model="providerFlagNewKey[providerId]" placeholder="New flag" class="font-mono" />
+          <Input
+            v-model="providerFlagNewKey[providerId]"
+            :placeholder="t('settings.opencodeConfig.sections.providers.mapsEditor.featureFlags.placeholders.newFlag')"
+            class="font-mono"
+          />
           <Input v-model="providerFlagNewVal[providerId]" placeholder="true" class="font-mono" />
           <Tooltip>
             <Button
               size="icon"
               variant="outline"
               class="h-9 w-9"
-              title="Add"
-              aria-label="Add flag"
+              :title="t('common.add')"
+              :aria-label="t('settings.opencodeConfig.sections.providers.mapsEditor.featureFlags.actions.addFlagAria')"
               @click="addProviderFlag(providerId)"
             >
               <RiAddLine class="h-4 w-4" />
             </Button>
-            <template #content>Add</template>
+            <template #content>{{ t('common.add') }}</template>
           </Tooltip>
         </div>
       </div>
     </div>
 
     <div class="grid gap-2">
-      <span class="text-xs text-muted-foreground">Options (extra)</span>
+      <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.mapsEditor.optionsExtra.title') }}</span>
       <div class="text-[11px] text-muted-foreground">
-        Key/value pairs in provider.options not covered by known fields.
+        {{ t('settings.opencodeConfig.sections.providers.mapsEditor.optionsExtra.help') }}
       </div>
       <div class="grid gap-2">
         <div
@@ -236,13 +255,13 @@ const providerId = props.providerId
           <Input
             :model-value="row.k"
             @update:model-value="(v) => updateProviderExtraKey(providerId, row.k, String(v))"
-            placeholder="Key"
+            :placeholder="t('common.key')"
             class="font-mono"
           />
           <Input
             :model-value="JSON.stringify(row.v)"
             @update:model-value="(v) => updateProviderExtraValue(providerId, row.k, String(v))"
-            placeholder='"value"'
+            :placeholder="t('settings.opencodeConfig.sections.providers.mapsEditor.optionsExtra.placeholders.jsonValue')"
             class="font-mono"
           />
           <Tooltip>
@@ -250,30 +269,38 @@ const providerId = props.providerId
               size="icon"
               variant="ghost-destructive"
               class="h-8 w-8"
-              title="Remove"
-              aria-label="Remove entry"
+              :title="t('common.remove')"
+              :aria-label="t('settings.opencodeConfig.sections.providers.mapsEditor.optionsExtra.actions.removeEntryAria')"
               @click="removeProviderExtra(providerId, row.k)"
             >
               <RiDeleteBinLine class="h-4 w-4" />
             </Button>
-            <template #content>Remove</template>
+            <template #content>{{ t('common.remove') }}</template>
           </Tooltip>
         </div>
         <div class="grid gap-2 lg:grid-cols-[1fr_1fr_auto] items-center">
-          <Input v-model="providerExtraNewKey[providerId]" placeholder="New key" class="font-mono" />
-          <Input v-model="providerExtraNewVal[providerId]" placeholder='"value"' class="font-mono" />
+          <Input
+            v-model="providerExtraNewKey[providerId]"
+            :placeholder="t('settings.opencodeConfig.sections.providers.mapsEditor.optionsExtra.placeholders.newKey')"
+            class="font-mono"
+          />
+          <Input
+            v-model="providerExtraNewVal[providerId]"
+            :placeholder="t('settings.opencodeConfig.sections.providers.mapsEditor.optionsExtra.placeholders.jsonValue')"
+            class="font-mono"
+          />
           <Tooltip>
             <Button
               size="icon"
               variant="outline"
               class="h-9 w-9"
-              title="Add"
-              aria-label="Add entry"
+              :title="t('common.add')"
+              :aria-label="t('settings.opencodeConfig.sections.providers.mapsEditor.optionsExtra.actions.addEntryAria')"
               @click="addProviderExtra(providerId)"
             >
               <RiAddLine class="h-4 w-4" />
             </Button>
-            <template #content>Add</template>
+            <template #content>{{ t('common.add') }}</template>
           </Tooltip>
         </div>
       </div>
@@ -281,7 +308,7 @@ const providerId = props.providerId
 
     <div v-if="showProviderOptionsJson[providerId]" class="grid gap-4">
       <div class="grid gap-2">
-        <span class="text-xs text-muted-foreground">Headers (JSON)</span>
+        <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.mapsEditor.json.headers') }}</span>
         <textarea
           v-model="
             ensureJsonBuffer(
@@ -300,13 +327,13 @@ const providerId = props.providerId
               size="icon"
               variant="outline"
               class="h-8 w-8"
-              title="Apply"
-              aria-label="Apply JSON"
+              :title="t('common.apply')"
+              :aria-label="t('settings.opencodeConfig.sections.common.applyJson')"
               @click="applyJsonBuffer(`provider:${providerId}:headers`)"
             >
               <RiCheckLine class="h-4 w-4" />
             </Button>
-            <template #content>Apply</template>
+            <template #content>{{ t('common.apply') }}</template>
           </Tooltip>
           <span
             v-if="
@@ -332,7 +359,7 @@ const providerId = props.providerId
       </div>
 
       <div class="grid gap-2">
-        <span class="text-xs text-muted-foreground">Feature flags (JSON)</span>
+        <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.mapsEditor.json.featureFlags') }}</span>
         <textarea
           v-model="
             ensureJsonBuffer(
@@ -351,13 +378,13 @@ const providerId = props.providerId
               size="icon"
               variant="outline"
               class="h-8 w-8"
-              title="Apply"
-              aria-label="Apply JSON"
+              :title="t('common.apply')"
+              :aria-label="t('settings.opencodeConfig.sections.common.applyJson')"
               @click="applyJsonBuffer(`provider:${providerId}:featureFlags`)"
             >
               <RiCheckLine class="h-4 w-4" />
             </Button>
-            <template #content>Apply</template>
+            <template #content>{{ t('common.apply') }}</template>
           </Tooltip>
           <span
             v-if="
@@ -383,7 +410,7 @@ const providerId = props.providerId
       </div>
 
       <div class="grid gap-2">
-        <span class="text-xs text-muted-foreground">Options JSON (extra)</span>
+        <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.mapsEditor.json.optionsExtra') }}</span>
         <textarea
           v-model="
             ensureJsonBuffer(
@@ -402,13 +429,13 @@ const providerId = props.providerId
               size="icon"
               variant="outline"
               class="h-8 w-8"
-              title="Apply"
-              aria-label="Apply JSON"
+              :title="t('common.apply')"
+              :aria-label="t('settings.opencodeConfig.sections.common.applyJson')"
               @click="applyJsonBuffer(`provider:${providerId}:optionsExtra`)"
             >
               <RiCheckLine class="h-4 w-4" />
             </Button>
-            <template #content>Apply</template>
+            <template #content>{{ t('common.apply') }}</template>
           </Tooltip>
           <span
             v-if="

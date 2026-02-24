@@ -5,6 +5,7 @@ import { useSettingsStore } from '@/stores/settings'
 import { useToastsStore } from '@/stores/toasts'
 import { useUiStore } from '@/stores/ui'
 import { patchSessionIdInQuery } from '@/app/navigation/sessionQuery'
+import { i18n } from '@/i18n'
 
 type ModifierLabel = 'cmd' | 'ctrl'
 type SessionStatusLike = { type?: string } | null
@@ -179,11 +180,11 @@ export function installKeyboardShortcuts(): () => void {
           .abortSession(sid)
           .then((ok) => {
             if (!ok) {
-              toasts.push('error', 'Failed to abort run')
+              toasts.push('error', i18n.global.t('chat.toasts.failedToAbortRun'))
             }
           })
           .catch(() => {
-            toasts.push('error', 'Failed to abort run')
+            toasts.push('error', i18n.global.t('chat.toasts.failedToAbortRun'))
           })
         return
       }
@@ -191,7 +192,11 @@ export function installKeyboardShortcuts(): () => void {
       e.preventDefault()
       const expiresAt = ui.armAbortPrompt(sid, 3000)
       abortPrimedUntil = expiresAt
-      toasts.push('info', `Press Esc again to abort (${mod === 'cmd' ? 'Cmd' : 'Ctrl'}+.) for shortcuts`, 2000)
+      toasts.push(
+        'info',
+        i18n.global.t('chat.toasts.pressEscAgainToAbort', { modKey: mod === 'cmd' ? 'Cmd' : 'Ctrl' }),
+        2000,
+      )
       if (abortPrimedTimer !== null) {
         window.clearTimeout(abortPrimedTimer)
       }

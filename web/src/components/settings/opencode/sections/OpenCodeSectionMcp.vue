@@ -1,5 +1,5 @@
 <script lang="ts">
-import { defineComponent } from 'vue'
+import { computed, defineComponent } from 'vue'
 import {
   RiAddLine,
   RiArrowDownSLine,
@@ -41,19 +41,20 @@ export default defineComponent({
   setup() {
     const ui = useUiStore()
     const ctx = useOpencodeConfigPanelContext()
+    const t = ctx.t as unknown as (key: string, params?: Record<string, unknown>) => string
     const mcpCommandSuggestions = ['npx', 'uvx', 'docker', 'node', 'python', 'deno', 'bunx']
 
-    const mcpTypePickerOptions: PickerOption[] = [
-      { value: 'toggle', label: 'toggle' },
-      { value: 'local', label: 'local' },
-      { value: 'remote', label: 'remote' },
-    ]
+    const mcpTypePickerOptions = computed<PickerOption[]>(() => [
+      { value: 'toggle', label: t('settings.opencodeConfig.sections.mcp.options.types.toggle') },
+      { value: 'local', label: t('settings.opencodeConfig.sections.mcp.options.types.local') },
+      { value: 'remote', label: t('settings.opencodeConfig.sections.mcp.options.types.remote') },
+    ])
 
-    const mcpOauthPickerOptions: PickerOption[] = [
-      { value: 'default', label: 'default' },
-      { value: 'config', label: 'config' },
-      { value: 'disabled', label: 'disabled' },
-    ]
+    const mcpOauthPickerOptions = computed<PickerOption[]>(() => [
+      { value: 'default', label: t('settings.opencodeConfig.sections.mcp.options.oauth.default') },
+      { value: 'config', label: t('settings.opencodeConfig.sections.mcp.options.oauth.config') },
+      { value: 'disabled', label: t('settings.opencodeConfig.sections.mcp.options.oauth.disabled') },
+    ])
 
     function openMcpConnections() {
       ui.setMcpDialogOpen(true)
@@ -73,7 +74,7 @@ export default defineComponent({
   <section id="mcp" class="scroll-mt-24 rounded-lg border border-border bg-background p-4 space-y-4">
     <div class="flex items-start justify-between gap-3">
       <div class="min-w-0">
-        <div class="text-base font-semibold leading-snug">Model Context Protocol servers.</div>
+        <div class="text-base font-semibold leading-snug">{{ t('settings.opencodeConfig.sections.mcp.title') }}</div>
       </div>
       <div class="flex items-center gap-2">
         <Tooltip>
@@ -81,99 +82,115 @@ export default defineComponent({
             size="sm"
             variant="outline"
             class="gap-2"
-            aria-label="Manage MCP connections"
+            :aria-label="t('settings.opencodeConfig.sections.mcp.actions.manageConnectionsAria')"
             @click="openMcpConnections"
           >
             <RiShieldKeyholeLine class="h-4 w-4" />
-            <span>Connections</span>
+            <span>{{ t('settings.opencodeConfig.sections.mcp.actions.connections') }}</span>
           </Button>
-          <template #content>Connect, disconnect, and authenticate MCP servers</template>
+          <template #content>{{ t('settings.opencodeConfig.sections.mcp.actions.connectionsHelp') }}</template>
         </Tooltip>
         <Tooltip>
-          <Button size="icon" variant="ghost" class="h-8 w-8" title="Reset section" @click="resetSection('mcp')">
+          <Button
+            size="icon"
+            variant="ghost"
+            class="h-8 w-8"
+            :title="t('settings.opencodeConfig.sections.common.resetSection')"
+            @click="resetSection('mcp')"
+          >
             <RiRestartLine class="h-4 w-4" />
           </Button>
-          <template #content>Reset section</template>
+          <template #content>{{ t('settings.opencodeConfig.sections.common.resetSection') }}</template>
         </Tooltip>
         <Tooltip>
           <Button
             size="icon"
             variant="outline"
             class="h-8 w-8"
-            :title="isSectionOpen('mcp') ? 'Collapse' : 'Expand'"
+            :title="
+              isSectionOpen('mcp')
+                ? t('settings.opencodeConfig.sections.common.collapse')
+                : t('settings.opencodeConfig.sections.common.expand')
+            "
             @click="toggleSection('mcp')"
           >
             <RiArrowUpSLine v-if="isSectionOpen('mcp')" class="h-4 w-4" />
             <RiArrowDownSLine v-else class="h-4 w-4" />
           </Button>
-          <template #content>{{ isSectionOpen('mcp') ? 'Collapse' : 'Expand' }}</template>
+          <template #content>{{
+            isSectionOpen('mcp')
+              ? t('settings.opencodeConfig.sections.common.collapse')
+              : t('settings.opencodeConfig.sections.common.expand')
+          }}</template>
         </Tooltip>
       </div>
     </div>
 
     <div v-if="isSectionOpen('mcp')" class="space-y-4">
       <div class="flex flex-wrap items-center gap-2">
-        <Input v-model="newMcpName" placeholder="Server name" class="max-w-xs" />
+        <Input v-model="newMcpName" :placeholder="t('settings.opencodeConfig.sections.mcp.placeholders.serverName')" class="max-w-xs" />
         <Tooltip>
           <Button
             size="icon"
             variant="outline"
             class="h-9 w-9"
-            title="Add MCP server"
-            aria-label="Add MCP server"
+            :title="t('settings.opencodeConfig.sections.mcp.actions.addServer')"
+            :aria-label="t('settings.opencodeConfig.sections.mcp.actions.addServerAria')"
             @click="addMcp"
           >
             <RiAddLine class="h-4 w-4" />
           </Button>
-          <template #content>Add MCP server</template>
+          <template #content>{{ t('settings.opencodeConfig.sections.mcp.actions.addServer') }}</template>
         </Tooltip>
       </div>
-      <div v-if="mcpList.length === 0" class="text-xs text-muted-foreground">No MCP servers configured.</div>
+      <div v-if="mcpList.length === 0" class="text-xs text-muted-foreground">
+        {{ t('settings.opencodeConfig.sections.mcp.empty') }}
+      </div>
       <div v-for="[mcpName, mcp] in mcpList" :key="mcpName" class="rounded-md border border-border p-3 space-y-4">
         <div class="flex items-center justify-between">
           <div class="font-mono text-sm break-all">{{ mcpName }}</div>
           <Tooltip>
-            <Button
-              size="icon"
-              variant="ghost-destructive"
-              class="h-8 w-8"
-              title="Remove"
-              aria-label="Remove MCP server"
-              @click="removeEntry('mcp', mcpName)"
-            >
+              <Button
+                size="icon"
+                variant="ghost-destructive"
+                class="h-8 w-8"
+                :title="t('common.remove')"
+                :aria-label="t('settings.opencodeConfig.sections.mcp.actions.removeServerAria')"
+                @click="removeEntry('mcp', mcpName)"
+              >
               <RiDeleteBinLine class="h-4 w-4" />
             </Button>
-            <template #content>Remove</template>
+            <template #content>{{ t('common.remove') }}</template>
           </Tooltip>
         </div>
         <label class="grid gap-1">
-          <span class="text-xs text-muted-foreground">Type</span>
+          <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.mcp.fields.type') }}</span>
           <OptionPicker
             :model-value="mcpType(mcp)"
             @update:model-value="(v) => setMcpType(mcpName, String(v || ''))"
             :options="mcpTypePickerOptions"
-            title="Type"
-            search-placeholder="Search types"
+            :title="t('settings.opencodeConfig.sections.mcp.fields.type')"
+            :search-placeholder="t('settings.opencodeConfig.sections.mcp.search.searchTypes')"
             :include-empty="false"
           />
         </label>
 
         <template v-if="mcpType(mcp) === 'local'">
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">Command</span>
+            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.mcp.fields.command') }}</span>
             <StringListEditor
               :model-value="mcp.command || []"
               :suggestions="mcpCommandSuggestions"
-              panel-title="MCP launch command"
-              placeholder="npx"
+              :panel-title="t('settings.opencodeConfig.sections.mcp.command.panelTitle')"
+              :placeholder="t('settings.opencodeConfig.sections.mcp.command.placeholder')"
               split-mode="lines"
               :advanced-rows="3"
-              advanced-placeholder="npx\n@modelcontextprotocol/server-filesystem"
+              :advanced-placeholder="t('settings.opencodeConfig.sections.mcp.command.advancedPlaceholder')"
               @update:model-value="(v) => setEntryField('mcp', mcpName, 'command', v)"
             />
           </label>
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">Timeout (ms)</span>
+            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.mcp.fields.timeoutMs') }}</span>
             <input
               :value="mcp.timeout ?? ''"
               @input="
@@ -185,7 +202,7 @@ export default defineComponent({
             />
           </label>
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">Environment (JSON)</span>
+            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.mcp.fields.environmentJson') }}</span>
             <textarea
               v-model="
                 ensureJsonBuffer(
@@ -204,13 +221,13 @@ export default defineComponent({
                   size="icon"
                   variant="outline"
                   class="h-8 w-8"
-                  title="Apply"
-                  aria-label="Apply JSON"
+                  :title="t('common.apply')"
+                  :aria-label="t('settings.opencodeConfig.sections.common.applyJson')"
                   @click="applyJsonBuffer(`mcp:${mcpName}:env`)"
                 >
                   <RiCheckLine class="h-4 w-4" />
                 </Button>
-                <template #content>Apply</template>
+                <template #content>{{ t('common.apply') }}</template>
               </Tooltip>
               <span
                 v-if="
@@ -238,11 +255,11 @@ export default defineComponent({
 
         <template v-else-if="mcpType(mcp) === 'remote'">
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">URL</span>
+            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.mcp.fields.url') }}</span>
             <Input :model-value="mcp.url || ''" @update:model-value="(v) => setEntryField('mcp', mcpName, 'url', v)" />
           </label>
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">Timeout (ms)</span>
+            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.mcp.fields.timeoutMs') }}</span>
             <input
               :value="mcp.timeout ?? ''"
               @input="
@@ -254,7 +271,7 @@ export default defineComponent({
             />
           </label>
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">Headers (JSON)</span>
+            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.mcp.fields.headersJson') }}</span>
             <textarea
               v-model="
                 ensureJsonBuffer(
@@ -273,13 +290,13 @@ export default defineComponent({
                   size="icon"
                   variant="outline"
                   class="h-8 w-8"
-                  title="Apply"
-                  aria-label="Apply JSON"
+                  :title="t('common.apply')"
+                  :aria-label="t('settings.opencodeConfig.sections.common.applyJson')"
                   @click="applyJsonBuffer(`mcp:${mcpName}:headers`)"
                 >
                   <RiCheckLine class="h-4 w-4" />
                 </Button>
-                <template #content>Apply</template>
+                <template #content>{{ t('common.apply') }}</template>
               </Tooltip>
               <span
                 v-if="
@@ -304,7 +321,7 @@ export default defineComponent({
             </div>
           </label>
           <div class="grid gap-2">
-            <span class="text-xs text-muted-foreground">OAuth</span>
+            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.mcp.fields.oauth') }}</span>
             <OptionPicker
               :model-value="mcp.oauth === false ? 'disabled' : mcp.oauth ? 'config' : 'default'"
               @update:model-value="
@@ -323,28 +340,28 @@ export default defineComponent({
                 }
               "
               :options="mcpOauthPickerOptions"
-              title="OAuth"
-              search-placeholder="Search OAuth"
+              :title="t('settings.opencodeConfig.sections.mcp.fields.oauth')"
+              :search-placeholder="t('settings.opencodeConfig.sections.mcp.search.searchOauth')"
               :include-empty="false"
             />
           </div>
           <div v-if="mcp.oauth && mcp.oauth !== false" class="grid gap-3 lg:grid-cols-3">
             <label class="grid gap-1">
-              <span class="text-xs text-muted-foreground">Client ID</span>
+              <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.mcp.oauth.clientId') }}</span>
               <Input
                 :model-value="mcp.oauth.clientId || ''"
                 @update:model-value="(v) => setEntryField('mcp', mcpName, 'oauth', { ...mcp.oauth, clientId: v })"
               />
             </label>
             <label class="grid gap-1">
-              <span class="text-xs text-muted-foreground">Client secret</span>
+              <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.mcp.oauth.clientSecret') }}</span>
               <Input
                 :model-value="mcp.oauth.clientSecret || ''"
                 @update:model-value="(v) => setEntryField('mcp', mcpName, 'oauth', { ...mcp.oauth, clientSecret: v })"
               />
             </label>
             <label class="grid gap-1">
-              <span class="text-xs text-muted-foreground">Scope</span>
+              <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.mcp.oauth.scope') }}</span>
               <Input
                 :model-value="mcp.oauth.scope || ''"
                 @update:model-value="(v) => setEntryField('mcp', mcpName, 'oauth', { ...mcp.oauth, scope: v })"
@@ -359,7 +376,7 @@ export default defineComponent({
             :checked="mcp.enabled !== false"
             @change="(e) => setEntryField('mcp', mcpName, 'enabled', (e.target as HTMLInputElement).checked)"
           />
-          Enabled
+          {{ t('settings.opencodeConfig.sections.common.enabled') }}
         </label>
       </div>
     </div>

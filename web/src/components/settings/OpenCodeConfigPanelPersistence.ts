@@ -1,5 +1,7 @@
 import { onMounted, ref, watch, type ComputedRef, type Ref } from 'vue'
 
+import { i18n } from '@/i18n'
+
 type ToastKind = 'info' | 'success' | 'error'
 type PersistenceValue = unknown
 type PersistenceRecord = Record<string, PersistenceValue>
@@ -58,7 +60,7 @@ export function useOpenCodeConfigPanelPersistence(opts: {
     try {
       const resp = asRecord(await opts.reloadOpenCodeConfig())
       const message = typeof resp.message === 'string' && resp.message.trim() ? resp.message : 'OpenCode reloaded'
-      opts.toasts.push('success', message)
+      opts.toasts.push('success', message === 'OpenCode reloaded' ? i18n.global.t('settings.opencodeConfig.toasts.openCodeReloaded') : message)
     } catch (err) {
       opts.toasts.push('error', err instanceof Error ? err.message : String(err))
     } finally {
@@ -75,12 +77,15 @@ export function useOpenCodeConfigPanelPersistence(opts: {
     opts.validationIssues.value = issues
     const hardErrors = issues.filter((i) => i?.severity === 'error')
     if (hardErrors.length > 0) {
-      opts.toasts.push('error', `Fix validation errors before saving (${hardErrors.length})`)
+      opts.toasts.push(
+        'error',
+        i18n.global.t('settings.opencodeConfig.errors.fixValidationErrorsBeforeSavingCount', { count: hardErrors.length }),
+      )
       return false
     }
 
     if (!opts.applyAllJsonBuffers()) {
-      opts.toasts.push('error', 'Fix JSON errors before saving')
+      opts.toasts.push('error', i18n.global.t('settings.opencodeConfig.errors.fixJsonErrorsBeforeSaving'))
       return false
     }
     if (opts.providerListConflict.value.length > 0) {
@@ -99,7 +104,7 @@ export function useOpenCodeConfigPanelPersistence(opts: {
         directory: opts.directory.value || null,
       })
       opts.syncDraft()
-      opts.toasts.push('success', 'OpenCode config saved')
+      opts.toasts.push('success', i18n.global.t('settings.opencodeConfig.errors.openCodeConfigSaved'))
       opts.lastSaveOkAt.value = Date.now()
       opts.persistSaveMeta()
       return true
@@ -112,7 +117,7 @@ export function useOpenCodeConfigPanelPersistence(opts: {
       // Best-effort: map server validation into field-level issues.
       const mapped = opts.mapServerErrorToIssues(opts.lastSaveError.value || '')
       if (mapped.length) opts.validationIssues.value = [...opts.validationIssues.value, ...mapped]
-      opts.toasts.push('error', opts.lastSaveError.value || 'Save failed')
+      opts.toasts.push('error', opts.lastSaveError.value || i18n.global.t('common.saveFailed'))
       return false
     }
   }

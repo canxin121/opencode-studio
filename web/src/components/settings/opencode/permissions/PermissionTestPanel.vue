@@ -26,34 +26,46 @@ export default defineComponent({
 
 <template>
   <div class="rounded-md border border-border p-3 space-y-3">
-    <div class="text-sm font-semibold">Test permission</div>
+    <div class="text-sm font-semibold">{{ t('settings.opencodeConfig.sections.permissions.test.title') }}</div>
     <div class="grid gap-3 lg:grid-cols-3">
       <label class="grid gap-1">
-        <span class="text-xs text-muted-foreground">Tool</span>
+        <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.permissions.test.fields.tool') }}</span>
         <OptionPicker
           v-model="permissionTestTool"
           :options="permissionTestToolPickerOptions"
-          title="Tool"
-          search-placeholder="Search tools"
+          :title="t('settings.opencodeConfig.sections.permissions.test.fields.tool')"
+          :search-placeholder="t('settings.opencodeConfig.sections.permissions.test.search.searchTools')"
           :include-empty="false"
           monospace
         />
       </label>
       <label class="grid gap-1 lg:col-span-2">
-        <span class="text-xs text-muted-foreground">Input (path/command)</span>
-        <Input v-model="permissionTestInput" placeholder="src/app.ts or curl https://…" />
+        <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.permissions.test.fields.input') }}</span>
+        <Input v-model="permissionTestInput" :placeholder="t('settings.opencodeConfig.sections.permissions.test.placeholders.input')" />
       </label>
     </div>
     <div class="grid gap-1 text-xs text-muted-foreground">
       <div>
-        <span class="font-semibold">Result:</span> {{ permissionTestResult.action }} (source:
-        {{ permissionTestResult.source }}, matched: {{ permissionTestResult.matched }})
+        <span class="font-semibold">{{ t('settings.opencodeConfig.sections.permissions.test.result.label') }}</span>
+        {{
+          t('settings.opencodeConfig.sections.permissions.test.result.summary', {
+            action: permissionTestResult.action,
+            source: permissionTestResult.source,
+            matched: permissionTestResult.matched,
+          })
+        }}
       </div>
       <div v-for="(s, idx) in permissionTestResult.steps" :key="`pts:${idx}`">
         <span class="font-mono">{{ s.key }}</span
         >:
-        <span v-if="s.kind === 'absent'">(no rule)</span>
-        <span v-else>{{ s.kind }}{{ s.matched ? ' match ' + s.matched : '' }} -> {{ s.action || '(none)' }}</span>
+        <span v-if="s.kind === 'absent'">{{ t('settings.opencodeConfig.sections.permissions.test.steps.noRule') }}</span>
+        <span v-else>{{
+          t('settings.opencodeConfig.sections.permissions.test.steps.stepLine', {
+            kind: s.kind,
+            matchedText: s.matched ? ` ${t('settings.opencodeConfig.sections.permissions.test.steps.matchWord')} ${String(s.matched)}` : '',
+            action: s.action || t('settings.opencodeConfig.sections.permissions.test.steps.noneAction'),
+          })
+        }}</span>
       </div>
       <div class="text-[11px]">{{ permissionTestResult.note }}</div>
     </div>

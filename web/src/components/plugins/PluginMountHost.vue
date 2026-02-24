@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 import Skeleton from '@/components/ui/Skeleton.vue'
 import { invokeHostPluginAction, subscribeHostPluginEvents } from '@/plugins/host/sdk'
@@ -49,6 +50,8 @@ const props = withDefaults(
 const emit = defineEmits<{
   (e: 'reserve-change', px: number): void
 }>()
+
+const { t } = useI18n()
 
 const moduleRootEl = ref<HTMLElement | null>(null)
 
@@ -253,7 +256,7 @@ function onIframeLoad() {
 
 function onIframeError() {
   loaded.value = true
-  loadError.value = 'Failed to load plugin UI iframe'
+  loadError.value = String(t('plugins.mountHost.errors.iframeLoadFailed'))
 }
 </script>
 
@@ -280,7 +283,7 @@ function onIframeError() {
       v-if="!loaded"
       class="absolute inset-0 bg-background/85 backdrop-blur-sm"
       role="status"
-      aria-label="Loading plugin UI"
+      :aria-label="t('plugins.mountHost.loadingAria')"
     >
       <div class="h-full w-full flex items-center justify-center p-3">
         <div class="w-full max-w-md">

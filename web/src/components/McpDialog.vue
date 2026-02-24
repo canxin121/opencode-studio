@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 import Dialog from '@/components/ui/Dialog.vue'
 import Button from '@/components/ui/Button.vue'
@@ -11,6 +12,8 @@ type McpStatus = { status: string; error?: string }
 
 const ui = useUiStore()
 const toasts = useToastsStore()
+
+const { t } = useI18n()
 
 const loading = ref(false)
 const error = ref('')
@@ -33,11 +36,22 @@ function statusTone(status: McpStatus | undefined): string {
 
 function actionLabel(status: McpStatus | undefined): string {
   const s = status?.status || ''
-  if (s === 'connected') return 'Disconnect'
-  if (s === 'disabled') return 'Connect'
-  if (s === 'needs_auth') return 'Authenticate'
-  if (s === 'failed') return 'Retry'
+  if (s === 'connected') return String(t('mcp.dialog.actions.disconnect'))
+  if (s === 'disabled') return String(t('mcp.dialog.actions.connect'))
+  if (s === 'needs_auth') return String(t('mcp.dialog.actions.authenticate'))
+  if (s === 'failed') return String(t('mcp.dialog.actions.retry'))
   return ''
+}
+
+function statusLabel(code: string): string {
+  const s = String(code || '').trim()
+  if (!s) return ''
+  if (s === 'connected') return String(t('mcp.status.connected'))
+  if (s === 'disabled') return String(t('mcp.status.disabled'))
+  if (s === 'needs_auth') return String(t('mcp.status.needsAuth'))
+  if (s === 'needs_client_registration') return String(t('mcp.status.needsClientRegistration'))
+  if (s === 'failed') return String(t('mcp.status.failed'))
+  return s
 }
 
 function canAct(status: McpStatus | undefined): boolean {
@@ -90,15 +104,15 @@ watch(
 <template>
   <Dialog
     :open="ui.isMcpDialogOpen"
-    title="MCP servers"
-    description="Manage Model Context Protocol connections"
+    :title="t('mcp.dialog.title')"
+    :description="t('mcp.dialog.description')"
     maxWidth="max-w-[calc(100vw-2rem)] sm:max-w-lg"
     @update:open="(v) => ui.setMcpDialogOpen(v)"
   >
     <div class="space-y-4">
-      <div v-if="loading" class="text-xs text-muted-foreground">Loading MCP status…</div>
+      <div v-if="loading" class="text-xs text-muted-foreground">{{ t('mcp.dialog.loading') }}</div>
       <div v-else-if="error" class="text-xs text-destructive">{{ error }}</div>
-      <div v-else-if="entries.length === 0" class="text-xs text-muted-foreground">No MCP servers configured.</div>
+      <div v-else-if="entries.length === 0" class="text-xs text-muted-foreground">{{ t('mcp.dialog.empty') }}</div>
 
       <div v-else class="space-y-2">
         <div
@@ -109,7 +123,7 @@ watch(
           <div class="flex items-center justify-between gap-2">
             <div class="min-w-0">
               <div class="text-sm font-semibold break-words">{{ name }}</div>
-              <div class="text-[11px]" :class="statusTone(status)">{{ status.status }}</div>
+              <div class="text-[11px]" :class="statusTone(status)">{{ statusLabel(status.status) }}</div>
             </div>
             <Button
               v-if="canAct(status)"
@@ -118,7 +132,7 @@ watch(
               :disabled="busyName === name"
               @click="runAction(name, status)"
             >
-              {{ busyName === name ? 'Working…' : actionLabel(status) }}
+              {{ busyName === name ? t('common.working') : actionLabel(status) }}
             </Button>
           </div>
           <div v-if="status.error" class="mt-2 text-xs text-destructive break-words">{{ status.error }}</div>
@@ -126,9 +140,7 @@ watch(
       </div>
 
       <div class="flex items-center justify-end gap-2">
-        <Button variant="outline" @click="refresh" :disabled="loading">{{
-          loading ? 'Refreshing…' : 'Refresh'
-        }}</Button>
+        <Button variant="outline" @click="refresh" :disabled="loading">{{ loading ? t('mcp.dialog.actions.refreshing') : t('common.refresh') }}</Button>
       </div>
     </div>
   </Dialog>

@@ -1,6 +1,7 @@
 import { ref, type Ref } from 'vue'
 
 import { ApiError } from '@/lib/api'
+import { i18n } from '@/i18n'
 
 import type { GitStashEntry, GitStashListResponse, GitStashShowResponse } from '@/types/git'
 import type { JsonValue } from '@/types/json'
@@ -71,7 +72,7 @@ export function useGitStashOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ ref: r, branch }),
         })
-        toasts.push('success', `Created branch ${branch}`)
+        toasts.push('success', i18n.global.t('git.toasts.createdBranch', { name: branch }))
         await load()
         await loadBranches()
       } catch (err) {
@@ -125,7 +126,7 @@ export function useGitStashOps(opts: {
         stashIncludeUntracked.value = false
         stashKeepIndex.value = false
         stashStaged.value = false
-        toasts.push('success', 'Stashed changes')
+        toasts.push('success', i18n.global.t('git.toasts.stashedChanges'))
         await load()
       } catch (err) {
         if (handleGitBusy(err, 'Stash push', () => stashPushVariant(opts))) return
@@ -159,7 +160,7 @@ export function useGitStashOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ ref: r }),
         })
-        toasts.push('success', `stash ${action} ${r}`)
+        toasts.push('success', i18n.global.t('git.toasts.stashActionRef', { action, ref: r }))
         await load()
       } catch (err) {
         if (handleGitBusy(err, `Stash ${action}`, () => stashAction(action, refStr))) return

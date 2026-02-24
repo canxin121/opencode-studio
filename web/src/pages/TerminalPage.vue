@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { Terminal } from 'xterm'
 import { FitAddon } from 'xterm-addon-fit'
 import 'xterm/css/xterm.css'
@@ -51,6 +52,8 @@ import { useDesktopSidebarResize } from '@/composables/useDesktopSidebarResize'
 import { useDirectoryStore } from '@/stores/directory'
 import { useUiStore } from '@/stores/ui'
 
+const { t } = useI18n()
+
 type TerminalStreamEvent =
   | { type: 'connected'; runtime?: string; ptyBackend?: string }
   | { type: 'data'; data?: string; seq?: number }
@@ -85,12 +88,12 @@ const STORAGE_GIT_HANDOFF_SESSION = 'oc2.terminal.gitHandoffSessionId'
 const TERMINAL_STATE_REMOTE_SAVE_DEBOUNCE_MS = 250
 
 const DEFAULT_FOLDER_ID = 'terminal-default'
-const DEFAULT_FOLDER_NAME = 'Default'
+const DEFAULT_FOLDER_NAME = String(t('terminal.defaults.defaultFolder'))
 const DEFAULT_TERMINAL_CWD = '/home'
 
 const GIT_HANDOFF_FOLDER_ID = 'terminal-folder-git'
-const GIT_HANDOFF_FOLDER_NAME = 'Git'
-const GIT_HANDOFF_SESSION_NAME = 'Git Terminal'
+const GIT_HANDOFF_FOLDER_NAME = String(t('terminal.defaults.gitFolder'))
+const GIT_HANDOFF_SESSION_NAME = String(t('terminal.defaults.gitTerminal'))
 
 type TerminalFolder = {
   id: string
@@ -1158,7 +1161,7 @@ async function removeFolder(folderId: string) {
 
   const stillHasSessions = sidebarSessions.value.some((item) => item.folderId === fid)
   if (stillHasSessions) {
-    setError('Failed to delete all terminals in this folder')
+    setError(String(t('terminal.errors.deleteAllInFolder')))
     return
   }
 
@@ -1290,7 +1293,7 @@ function toggleSessionPinned(id: string) {
 
 const activeSessionName = computed(() => {
   const sid = normalizeSessionId(sessionId.value || '')
-  if (!sid) return 'No terminal selected'
+  if (!sid) return String(t('terminal.active.noneSelected'))
   const customName = normalizeSessionMetaName(sessionMetaFor(sid).name)
   if (customName) return customName
   return sid.slice(0, 8)
@@ -1335,10 +1338,10 @@ function disconnectSessionFromSidebar(id: string) {
 
 function mobileSessionActionTitle(id: string): string {
   const sid = normalizeSessionId(id)
-  if (!sid) return 'Terminal actions'
+  if (!sid) return String(t('terminal.actions.title'))
   const customName = normalizeSessionMetaName(sessionMetaFor(sid).name)
   const label = customName || sid.slice(0, 8)
-  return `Terminal actions: ${label}`
+  return String(t('terminal.actions.titleWithName', { name: label }))
 }
 
 function mobileSessionActionItems(id: string): OptionMenuItem[] {
@@ -1349,33 +1352,33 @@ function mobileSessionActionItems(id: string): OptionMenuItem[] {
   return [
     {
       id: 'rename',
-      label: 'Rename terminal',
+      label: String(t('terminal.actions.rename')),
       icon: RiEditLine,
     },
     {
       id: 'disconnect',
-      label: 'Disconnect stream',
+      label: String(t('terminal.actions.disconnectStream')),
       icon: RiStopCircleLine,
       disabled: !canDisconnectSession(sid),
-      confirmTitle: 'Disconnect terminal stream?',
-      confirmDescription: 'Terminal session is kept and can reconnect later.',
-      confirmText: 'Disconnect',
-      cancelText: 'Cancel',
+      confirmTitle: String(t('terminal.actions.disconnectConfirmTitle')),
+      confirmDescription: String(t('terminal.actions.disconnectConfirmDescription')),
+      confirmText: String(t('terminal.actions.disconnect')),
+      cancelText: String(t('common.cancel')),
     },
     {
       id: 'pin',
-      label: pinned ? 'Unpin terminal' : 'Pin terminal',
+      label: pinned ? String(t('terminal.actions.unpin')) : String(t('terminal.actions.pin')),
       icon: pinned ? RiStarFill : RiStarLine,
     },
     {
       id: 'delete',
-      label: 'Delete terminal',
+      label: String(t('terminal.actions.delete')),
       icon: RiDeleteBinLine,
       variant: 'destructive',
-      confirmTitle: 'Delete terminal session?',
-      confirmDescription: 'This will stop and remove this terminal session.',
-      confirmText: 'Delete',
-      cancelText: 'Cancel',
+      confirmTitle: String(t('terminal.actions.deleteConfirmTitle')),
+      confirmDescription: String(t('terminal.actions.deleteConfirmDescription')),
+      confirmText: String(t('terminal.actions.deleteConfirmText')),
+      cancelText: String(t('common.cancel')),
     },
   ]
 }
@@ -1492,7 +1495,9 @@ const connectionToggleDisabled = computed(() => {
 })
 
 const connectionToggleLabel = computed(() =>
-  connectionToggleMode.value === 'disconnect' ? 'Disconnect terminal stream' : 'Connect terminal stream',
+  connectionToggleMode.value === 'disconnect'
+    ? String(t('terminal.connection.disconnectLabel'))
+    : String(t('terminal.connection.connectLabel')),
 )
 
 function toggleConnection() {
@@ -1806,7 +1811,7 @@ function connectSessionStream(id: string) {
 
       if (e.type === 'resync') {
         if (sessionId.value === sid) {
-          setError('Terminal stream recovered with partial history; some older output may be missing')
+          setError(String(t('terminal.errors.streamRecoveredPartialHistory')))
         }
         return
       }
@@ -1814,7 +1819,7 @@ function connectSessionStream(id: string) {
       if (e.type === 'exit') {
         setStreamStatusForSession(sid, 'exited')
         if (sessionId.value === sid) {
-          setError('terminal exited')
+          setError(String(t('terminal.errors.terminalExited')))
         }
         closeSessionStream(sid, { keepStatus: true })
         removeTrackedSession(sid)
@@ -1864,7 +1869,7 @@ function handleTerminalRequestError(action: string, err: unknown, targetSessionI
     if (wasActive) {
       status.value = 'disconnected'
     }
-    setError('Terminal session no longer exists')
+    setError(String(t('terminal.errors.sessionNoLongerExists')))
     return
   }
 
@@ -1895,7 +1900,7 @@ async function sendInput(data: string) {
   try {
     await sendTerminalInput(id, data)
   } catch (err) {
-    handleTerminalRequestError('Failed to send terminal input', err, id)
+    handleTerminalRequestError(String(t('terminal.errors.failedToSendInput')), err, id)
   }
 }
 
@@ -1912,7 +1917,7 @@ async function sendResize() {
     await resizeTerminal(id, cols, rows)
     lastSentResizeSig = sig
   } catch (err) {
-    handleTerminalRequestError('Failed to resize terminal', err, id)
+    handleTerminalRequestError(String(t('terminal.errors.failedToResize')), err, id)
   }
 }
 
@@ -2020,7 +2025,7 @@ async function closeSession() {
   try {
     await deleteTerminalSession(id)
   } catch (err) {
-    handleTerminalRequestError('Failed to close terminal session', err, id)
+    handleTerminalRequestError(String(t('terminal.errors.failedToCloseSession')), err, id)
     return
   }
   removeTrackedSession(id)
@@ -2047,7 +2052,7 @@ async function openSessionFromSidebar(id: string) {
     const exists = await getSessionInfo(sid)
     if (!exists) {
       removeTrackedSession(sid)
-      setError('Terminal session no longer exists')
+      setError(String(t('terminal.errors.sessionNoLongerExists')))
       return
     }
     setActiveSession(sid)
@@ -2077,7 +2082,7 @@ async function closeTrackedSession(id: string) {
   try {
     await deleteTerminalSession(sid)
   } catch (err) {
-    handleTerminalRequestError('Failed to remove terminal session', err, sid)
+    handleTerminalRequestError(String(t('terminal.errors.failedToRemoveSession')), err, sid)
     return
   }
   removeTrackedSession(sid)
@@ -2188,7 +2193,7 @@ watch(el, () => {
       <div class="h-9 flex-shrink-0 select-none pl-3.5 pr-2 pt-1">
         <div class="flex h-full items-center justify-between gap-2">
           <div class="min-w-0 flex items-center gap-2">
-            <p class="typography-ui-label font-medium text-muted-foreground">Terminals</p>
+            <p class="typography-ui-label font-medium text-muted-foreground">{{ t('terminal.sidebar.title') }}</p>
             <span
               class="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-muted px-1 text-[10px] text-foreground/80"
             >
@@ -2201,8 +2206,8 @@ watch(el, () => {
               variant="ghost"
               size="icon"
               class="h-8 w-8"
-              title="New folder"
-              aria-label="New folder"
+              :title="String(t('terminal.sidebar.newFolder'))"
+              :aria-label="String(t('terminal.sidebar.newFolder'))"
               @click="startFolderCreate"
             >
               <RiAddLine class="h-4 w-4" />
@@ -2212,8 +2217,8 @@ watch(el, () => {
               variant="ghost"
               size="icon"
               class="h-8 w-8"
-              title="Refresh sessions"
-              aria-label="Refresh sessions"
+              :title="String(t('terminal.sidebar.refreshSessions'))"
+              :aria-label="String(t('terminal.sidebar.refreshSessions'))"
               :disabled="sessionListRefreshing"
               @click="refreshTrackedSessions"
             >
@@ -2230,16 +2235,16 @@ watch(el, () => {
           />
           <Input
             v-model="sidebarQuery"
-            placeholder="Search folders and sessions"
+            :placeholder="String(t('terminal.sidebar.searchPlaceholder'))"
             class="h-8 pl-7 pr-7 text-xs"
-            aria-label="Search terminal folders and sessions"
+            :aria-label="String(t('terminal.sidebar.searchAria'))"
           />
           <IconButton
             v-if="sidebarQueryNorm"
             size="xs"
             class="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
-            aria-label="Clear search"
-            title="Clear"
+            :aria-label="String(t('terminal.sidebar.clearSearch'))"
+            :title="String(t('common.clear'))"
             @click="sidebarQuery = ''"
           >
             <RiCloseLine class="h-4 w-4" />
@@ -2249,20 +2254,20 @@ watch(el, () => {
 
       <div v-if="folderCreateOpen" class="flex-shrink-0 px-3 pb-2">
         <div class="rounded-md border border-sidebar-border/70 bg-sidebar/95 p-2">
-          <div class="text-[10px] uppercase tracking-[0.08em] text-muted-foreground">New folder</div>
+          <div class="text-[10px] uppercase tracking-[0.08em] text-muted-foreground">{{ t('terminal.folder.new') }}</div>
           <div class="mt-1 flex items-center gap-1">
             <Input
               v-model="folderCreateDraft"
               class="h-7 min-w-0 flex-1 text-xs"
-              placeholder="Folder name"
+              :placeholder="String(t('terminal.folder.namePlaceholder'))"
               @keydown.enter.prevent="saveFolderCreate"
               @keydown.esc.prevent="stopFolderCreate"
             />
             <IconButton
               size="sm"
               class="text-muted-foreground hover:bg-primary/6"
-              title="Cancel"
-              aria-label="Cancel"
+              :title="String(t('common.cancel'))"
+              :aria-label="String(t('common.cancel'))"
               @click="stopFolderCreate"
             >
               <RiCloseLine class="h-4 w-4" />
@@ -2270,8 +2275,8 @@ watch(el, () => {
             <IconButton
               size="sm"
               class="text-primary hover:bg-primary/10"
-              title="Create folder"
-              aria-label="Create folder"
+              :title="String(t('terminal.folder.create'))"
+              :aria-label="String(t('terminal.folder.create'))"
               @click="saveFolderCreate"
             >
               <RiCheckLine class="h-4 w-4" />
@@ -2283,8 +2288,8 @@ watch(el, () => {
       <div class="flex-1 min-h-0 overflow-x-hidden overflow-y-auto">
         <div class="space-y-2 pb-1 pl-2.5 pr-1">
           <div v-if="!visibleSidebarFolders.length" class="px-2 py-6 text-center text-muted-foreground">
-            <div class="typography-ui-label font-semibold">No matching folders or sessions</div>
-            <div class="typography-meta mt-1">Try a different keyword.</div>
+            <div class="typography-ui-label font-semibold">{{ t('terminal.sidebar.emptyTitle') }}</div>
+            <div class="typography-meta mt-1">{{ t('terminal.sidebar.emptyHint') }}</div>
           </div>
 
           <div v-else class="space-y-1">
@@ -2294,15 +2299,15 @@ watch(el, () => {
                   <Input
                     v-model="folderRenameDraft"
                     class="h-7 min-w-0 flex-1 text-xs"
-                    placeholder="Folder name"
+                    :placeholder="String(t('terminal.folder.namePlaceholder'))"
                     @keydown.enter.prevent="saveFolderRename"
                     @keydown.esc.prevent="cancelFolderRename"
                   />
                   <IconButton
                     size="sm"
                     class="text-muted-foreground hover:bg-primary/6"
-                    title="Cancel"
-                    aria-label="Cancel"
+                    :title="String(t('common.cancel'))"
+                    :aria-label="String(t('common.cancel'))"
                     @click="cancelFolderRename"
                   >
                     <RiCloseLine class="h-4 w-4" />
@@ -2310,8 +2315,8 @@ watch(el, () => {
                   <IconButton
                     size="sm"
                     class="text-primary hover:bg-primary/10"
-                    title="Save folder name"
-                    aria-label="Save folder name"
+                    :title="String(t('terminal.folder.saveName'))"
+                    :aria-label="String(t('terminal.folder.saveName'))"
                     @click="saveFolderRename"
                   >
                     <RiCheckLine class="h-4 w-4" />
@@ -2322,7 +2327,8 @@ watch(el, () => {
                   <IconButton
                     size="xs"
                     class="text-muted-foreground hover:text-foreground"
-                    :aria-label="isFolderCollapsed(folder.id) ? 'Expand folder' : 'Collapse folder'"
+                    :aria-label=
+                      "isFolderCollapsed(folder.id) ? String(t('terminal.sidebar.expandFolder')) : String(t('terminal.sidebar.collapseFolder'))"
                     @click="toggleFolderCollapsed(folder.id)"
                   >
                     <RiArrowRightSLine v-if="isFolderCollapsed(folder.id)" class="h-4 w-4" />
@@ -2343,8 +2349,8 @@ watch(el, () => {
                     <IconButton
                       size="xs"
                       class="text-muted-foreground hover:text-foreground hover:bg-primary/6"
-                      title="New terminal in folder"
-                      aria-label="New terminal in folder"
+                      :title="String(t('terminal.folder.newTerminalInFolder'))"
+                      :aria-label="String(t('terminal.folder.newTerminalInFolder'))"
                       @click.stop="startSessionCreate(folder.id)"
                     >
                       <RiAddLine class="h-4 w-4" />
@@ -2353,26 +2359,26 @@ watch(el, () => {
                     <IconButton
                       size="xs"
                       class="text-muted-foreground hover:text-foreground hover:bg-primary/6"
-                      title="Rename folder"
-                      aria-label="Rename folder"
+                      :title="String(t('terminal.folder.rename'))"
+                      :aria-label="String(t('terminal.folder.rename'))"
                       @click.stop="startFolderRename(folder.id)"
                     >
                       <RiEditLine class="h-4 w-4" />
                     </IconButton>
 
                     <ConfirmPopover
-                      title="Delete folder?"
-                      description="Sessions in this folder will move to another folder."
-                      confirm-text="Delete"
-                      cancel-text="Cancel"
+                      :title="String(t('terminal.folder.deleteConfirmTitle'))"
+                      :description="String(t('terminal.folder.deleteConfirmDescription'))"
+                      :confirm-text="String(t('terminal.folder.deleteConfirmText'))"
+                      :cancel-text="String(t('common.cancel'))"
                       variant="destructive"
                       @confirm="removeFolder(folder.id)"
                     >
                       <IconButton
                         size="xs"
                         class="text-muted-foreground hover:text-destructive hover:bg-primary/6"
-                        title="Delete folder"
-                        aria-label="Delete folder"
+                        :title="String(t('terminal.folder.delete'))"
+                        :aria-label="String(t('terminal.folder.delete'))"
                         @click.stop
                       >
                         <RiDeleteBinLine class="h-4 w-4" />
@@ -2385,7 +2391,7 @@ watch(el, () => {
               <div v-if="!isFolderCollapsed(folder.id)" class="py-1 pl-1 space-y-1">
                 <template v-if="folder.pinnedSessions.length">
                   <div class="px-1.5 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
-                    Pinned
+                    {{ t('terminal.sidebar.pinned') }}
                   </div>
                   <div v-for="item in folder.pinnedSessions" :key="`pin:${item.id}`" class="relative">
                     <SidebarListItem
@@ -2401,14 +2407,14 @@ watch(el, () => {
                       </template>
 
                       <template v-if="!ui.isMobilePointer && isSessionRenaming(item.id)">
-                        <Input
-                          v-model="sessionRenameDraft"
-                          class="h-7 min-w-0 flex-1 text-xs"
-                          placeholder="Terminal name"
-                          @keydown.enter.prevent="saveSessionRename"
-                          @keydown.esc.prevent="cancelSessionRename"
-                          @click.stop
-                        />
+                          <Input
+                            v-model="sessionRenameDraft"
+                            class="h-7 min-w-0 flex-1 text-xs"
+                            :placeholder="String(t('terminal.session.namePlaceholder'))"
+                            @keydown.enter.prevent="saveSessionRename"
+                            @keydown.esc.prevent="cancelSessionRename"
+                            @click.stop
+                          />
                       </template>
 
                       <template v-else>
@@ -2424,8 +2430,8 @@ watch(el, () => {
                             <IconButton
                               size="sm"
                               class="text-muted-foreground hover:text-foreground hover:bg-primary/6"
-                              title="Terminal actions"
-                              aria-label="Terminal actions"
+                              :title="String(t('terminal.actions.title'))"
+                              :aria-label="String(t('terminal.actions.title'))"
                               @click.stop="openMobileSessionActionMenu(item.id)"
                             >
                               <RiMore2Line class="h-4 w-4" />
@@ -2452,8 +2458,8 @@ watch(el, () => {
                           <IconButton
                             size="sm"
                             class="text-muted-foreground hover:bg-primary/6"
-                            title="Cancel rename"
-                            aria-label="Cancel rename"
+                            :title="String(t('terminal.session.cancelRename'))"
+                            :aria-label="String(t('terminal.session.cancelRename'))"
                             @click.stop="cancelSessionRename"
                           >
                             <RiCloseLine class="h-4 w-4" />
@@ -2461,8 +2467,8 @@ watch(el, () => {
                           <IconButton
                             size="sm"
                             class="text-primary hover:bg-primary/10"
-                            title="Save rename"
-                            aria-label="Save rename"
+                            :title="String(t('terminal.session.saveRename'))"
+                            :aria-label="String(t('terminal.session.saveRename'))"
                             @click.stop="saveSessionRename"
                           >
                             <RiCheckLine class="h-4 w-4" />
@@ -2473,17 +2479,17 @@ watch(el, () => {
                           <IconButton
                             size="sm"
                             class="text-muted-foreground hover:text-foreground hover:bg-primary/6"
-                            title="Rename terminal"
-                            aria-label="Rename terminal"
+                            :title="String(t('terminal.actions.rename'))"
+                            :aria-label="String(t('terminal.actions.rename'))"
                             @click.stop="startSessionRename(item.id)"
                           >
                             <RiEditLine class="h-4 w-4" />
                           </IconButton>
                           <ConfirmPopover
-                            title="Disconnect terminal stream?"
-                            description="Terminal session is kept and can reconnect later."
-                            confirm-text="Disconnect"
-                            cancel-text="Cancel"
+                            :title="String(t('terminal.actions.disconnectConfirmTitle'))"
+                            :description="String(t('terminal.actions.disconnectConfirmDescription'))"
+                            :confirm-text="String(t('terminal.actions.disconnect'))"
+                            :cancel-text="String(t('common.cancel'))"
                             variant="destructive"
                             :anchor-to-cursor="false"
                             :confirm-disabled="!canDisconnectSession(item.id)"
@@ -2497,8 +2503,8 @@ watch(el, () => {
                                   ? 'text-destructive hover:bg-destructive/10'
                                   : 'text-muted-foreground/45'
                               "
-                              title="Disconnect stream"
-                              aria-label="Disconnect stream"
+                              :title="String(t('terminal.actions.disconnectStream'))"
+                              :aria-label="String(t('terminal.actions.disconnectStream'))"
                               :disabled="!canDisconnectSession(item.id)"
                               @click.stop
                             >
@@ -2509,25 +2515,25 @@ watch(el, () => {
                             size="sm"
                             class="transition hover:bg-primary/6"
                             :class="item.pinned ? 'text-amber-500' : 'text-muted-foreground hover:text-amber-500'"
-                            :title="item.pinned ? 'Unpin terminal' : 'Pin terminal'"
-                            :aria-label="item.pinned ? 'Unpin terminal' : 'Pin terminal'"
+                            :title="item.pinned ? String(t('terminal.actions.unpin')) : String(t('terminal.actions.pin'))"
+                            :aria-label="item.pinned ? String(t('terminal.actions.unpin')) : String(t('terminal.actions.pin'))"
                             @click.stop="toggleSessionPinned(item.id)"
                           >
                             <component :is="item.pinned ? RiStarFill : RiStarLine" class="h-4 w-4" />
                           </IconButton>
                           <ConfirmPopover
-                            title="Delete terminal session?"
-                            description="This will stop and remove this terminal session."
-                            confirm-text="Delete"
-                            cancel-text="Cancel"
+                            :title="String(t('terminal.actions.deleteConfirmTitle'))"
+                            :description="String(t('terminal.actions.deleteConfirmDescription'))"
+                            :confirm-text="String(t('terminal.actions.deleteConfirmText'))"
+                            :cancel-text="String(t('common.cancel'))"
                             variant="destructive"
                             @confirm="closeTrackedSession(item.id)"
                           >
                             <IconButton
                               size="sm"
                               class="text-muted-foreground hover:text-destructive hover:bg-primary/6"
-                              title="Delete terminal"
-                              aria-label="Delete terminal"
+                              :title="String(t('terminal.actions.delete'))"
+                              :aria-label="String(t('terminal.actions.delete'))"
                               @click.stop
                             >
                               <RiDeleteBinLine class="h-4 w-4" />
@@ -2543,7 +2549,7 @@ watch(el, () => {
                   v-if="folder.recentSessions.length || (!ui.isMobilePointer && sessionCreatingFolderId === folder.id)"
                 >
                   <div class="px-1.5 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
-                    Recent
+                    {{ t('terminal.sidebar.recent') }}
                   </div>
 
                   <div v-if="!ui.isMobilePointer && sessionCreatingFolderId === folder.id" class="group relative">
@@ -2556,7 +2562,7 @@ watch(el, () => {
                           <Input
                             v-model="sessionCreateDraft"
                             class="h-7 min-w-0 flex-1 text-xs"
-                            placeholder="Terminal name"
+                            :placeholder="String(t('terminal.session.namePlaceholder'))"
                             @keydown.enter.prevent="saveSessionCreate"
                             @keydown.esc.prevent="cancelSessionCreate"
                           />
@@ -2567,8 +2573,8 @@ watch(el, () => {
                         <IconButton
                           size="sm"
                           class="text-muted-foreground hover:bg-primary/6"
-                          title="Cancel"
-                          aria-label="Cancel"
+                          :title="String(t('common.cancel'))"
+                          :aria-label="String(t('common.cancel'))"
                           :disabled="sessionCreateBusy"
                           @click="cancelSessionCreate"
                         >
@@ -2577,8 +2583,8 @@ watch(el, () => {
                         <IconButton
                           size="sm"
                           class="text-primary hover:bg-primary/10"
-                          title="Create terminal"
-                          aria-label="Create terminal"
+                          :title="String(t('terminal.session.create'))"
+                          :aria-label="String(t('terminal.session.create'))"
                           :disabled="sessionCreateBusy || !sessionCreateDraft.trim()"
                           @click="saveSessionCreate"
                         >
@@ -2605,7 +2611,7 @@ watch(el, () => {
                         <Input
                           v-model="sessionRenameDraft"
                           class="h-7 min-w-0 flex-1 text-xs"
-                          placeholder="Terminal name"
+                          :placeholder="String(t('terminal.session.namePlaceholder'))"
                           @keydown.enter.prevent="saveSessionRename"
                           @keydown.esc.prevent="cancelSessionRename"
                           @click.stop
@@ -2625,8 +2631,8 @@ watch(el, () => {
                             <IconButton
                               size="sm"
                               class="text-muted-foreground hover:text-foreground hover:bg-primary/6"
-                              title="Terminal actions"
-                              aria-label="Terminal actions"
+                              :title="String(t('terminal.actions.title'))"
+                              :aria-label="String(t('terminal.actions.title'))"
                               @click.stop="openMobileSessionActionMenu(item.id)"
                             >
                               <RiMore2Line class="h-4 w-4" />
@@ -2653,8 +2659,8 @@ watch(el, () => {
                           <IconButton
                             size="sm"
                             class="text-muted-foreground hover:bg-primary/6"
-                            title="Cancel rename"
-                            aria-label="Cancel rename"
+                            :title="String(t('terminal.session.cancelRename'))"
+                            :aria-label="String(t('terminal.session.cancelRename'))"
                             @click.stop="cancelSessionRename"
                           >
                             <RiCloseLine class="h-4 w-4" />
@@ -2662,8 +2668,8 @@ watch(el, () => {
                           <IconButton
                             size="sm"
                             class="text-primary hover:bg-primary/10"
-                            title="Save rename"
-                            aria-label="Save rename"
+                            :title="String(t('terminal.session.saveRename'))"
+                            :aria-label="String(t('terminal.session.saveRename'))"
                             @click.stop="saveSessionRename"
                           >
                             <RiCheckLine class="h-4 w-4" />
@@ -2674,17 +2680,17 @@ watch(el, () => {
                           <IconButton
                             size="sm"
                             class="text-muted-foreground hover:text-foreground hover:bg-primary/6"
-                            title="Rename terminal"
-                            aria-label="Rename terminal"
+                            :title="String(t('terminal.actions.rename'))"
+                            :aria-label="String(t('terminal.actions.rename'))"
                             @click.stop="startSessionRename(item.id)"
                           >
                             <RiEditLine class="h-4 w-4" />
                           </IconButton>
                           <ConfirmPopover
-                            title="Disconnect terminal stream?"
-                            description="Terminal session is kept and can reconnect later."
-                            confirm-text="Disconnect"
-                            cancel-text="Cancel"
+                            :title="String(t('terminal.actions.disconnectConfirmTitle'))"
+                            :description="String(t('terminal.actions.disconnectConfirmDescription'))"
+                            :confirm-text="String(t('terminal.actions.disconnect'))"
+                            :cancel-text="String(t('common.cancel'))"
                             variant="destructive"
                             :anchor-to-cursor="false"
                             :confirm-disabled="!canDisconnectSession(item.id)"
@@ -2698,8 +2704,8 @@ watch(el, () => {
                                   ? 'text-destructive hover:bg-destructive/10'
                                   : 'text-muted-foreground/45'
                               "
-                              title="Disconnect stream"
-                              aria-label="Disconnect stream"
+                              :title="String(t('terminal.actions.disconnectStream'))"
+                              :aria-label="String(t('terminal.actions.disconnectStream'))"
                               :disabled="!canDisconnectSession(item.id)"
                               @click.stop
                             >
@@ -2710,25 +2716,25 @@ watch(el, () => {
                             size="sm"
                             class="transition hover:bg-primary/6"
                             :class="item.pinned ? 'text-amber-500' : 'text-muted-foreground hover:text-amber-500'"
-                            :title="item.pinned ? 'Unpin terminal' : 'Pin terminal'"
-                            :aria-label="item.pinned ? 'Unpin terminal' : 'Pin terminal'"
+                            :title="item.pinned ? String(t('terminal.actions.unpin')) : String(t('terminal.actions.pin'))"
+                            :aria-label="item.pinned ? String(t('terminal.actions.unpin')) : String(t('terminal.actions.pin'))"
                             @click.stop="toggleSessionPinned(item.id)"
                           >
                             <component :is="item.pinned ? RiStarFill : RiStarLine" class="h-4 w-4" />
                           </IconButton>
                           <ConfirmPopover
-                            title="Delete terminal session?"
-                            description="This will stop and remove this terminal session."
-                            confirm-text="Delete"
-                            cancel-text="Cancel"
+                            :title="String(t('terminal.actions.deleteConfirmTitle'))"
+                            :description="String(t('terminal.actions.deleteConfirmDescription'))"
+                            :confirm-text="String(t('terminal.actions.deleteConfirmText'))"
+                            :cancel-text="String(t('common.cancel'))"
                             variant="destructive"
                             @confirm="closeTrackedSession(item.id)"
                           >
                             <IconButton
                               size="sm"
                               class="text-muted-foreground hover:text-destructive hover:bg-primary/6"
-                              title="Delete terminal"
-                              aria-label="Delete terminal"
+                              :title="String(t('terminal.actions.delete'))"
+                              :aria-label="String(t('terminal.actions.delete'))"
                               @click.stop
                             >
                               <RiDeleteBinLine class="h-4 w-4" />
@@ -2749,7 +2755,7 @@ watch(el, () => {
                 >
                   <TextActionButton class="inline-flex items-center gap-1" @click="startSessionCreate(folder.id)">
                     <RiAddLine class="h-3.5 w-3.5" />
-                    New terminal in this folder
+                    {{ t('terminal.folder.newTerminalInThisFolder') }}
                   </TextActionButton>
                 </div>
               </div>
@@ -2762,9 +2768,9 @@ watch(el, () => {
     <div class="min-w-0 flex-1 flex flex-col overflow-hidden" v-show="!ui.isMobile || !ui.isSessionSwitcherOpen">
       <MobileSidebarEmptyState
         v-if="!sessionId"
-        title="Select a terminal session"
-        description="Use the terminals panel to pick an existing session or create a new one."
-        action-label="Open terminals panel"
+        :title="String(t('terminal.emptyState.title'))"
+        :description="String(t('terminal.emptyState.description'))"
+        :action-label="String(t('terminal.emptyState.actionLabel'))"
         :show-action="ui.isMobile"
         @action="openTerminalSidebar"
       />
@@ -2782,10 +2788,10 @@ watch(el, () => {
 
           <ConfirmPopover
             v-if="connectionToggleMode === 'disconnect'"
-            title="Disconnect terminal stream?"
-            description="You can reconnect at any time. Terminal session itself will not be deleted."
-            confirm-text="Disconnect"
-            cancel-text="Cancel"
+            :title="String(t('terminal.actions.disconnectConfirmTitle'))"
+            :description="String(t('terminal.connection.disconnectDescription'))"
+            :confirm-text="String(t('terminal.actions.disconnect'))"
+            :cancel-text="String(t('common.cancel'))"
             variant="destructive"
             :anchor-to-cursor="false"
             @confirm="toggleConnection"
@@ -2840,22 +2846,22 @@ watch(el, () => {
 
     <FormDialog
       :open="mobileSessionCreateDialogOpen"
-      title="New terminal"
-      :description="`Create terminal in ${sessionCreateTargetFolderName}`"
+      :title="String(t('terminal.dialogs.newTerminal.title'))"
+      :description="String(t('terminal.dialogs.newTerminal.description', { folder: sessionCreateTargetFolderName }))"
       @update:open="(v) => !v && cancelSessionCreate()"
     >
       <div class="space-y-3">
         <Input
           v-model="sessionCreateDraft"
           class="h-7 min-w-0 text-xs"
-          placeholder="Terminal name"
+          :placeholder="String(t('terminal.session.namePlaceholder'))"
           @keydown.enter.prevent="saveSessionCreate"
           @keydown.esc.prevent="cancelSessionCreate"
         />
         <div class="flex items-center justify-end gap-2">
-          <Button variant="ghost" :disabled="sessionCreateBusy" @click="cancelSessionCreate">Cancel</Button>
+          <Button variant="ghost" :disabled="sessionCreateBusy" @click="cancelSessionCreate">{{ t('common.cancel') }}</Button>
           <Button :disabled="sessionCreateBusy || !sessionCreateDraft.trim()" @click="saveSessionCreate">
-            {{ sessionCreateBusy ? 'Creating...' : 'Create' }}
+            {{ sessionCreateBusy ? t('terminal.session.creating') : t('terminal.session.create') }}
           </Button>
         </div>
       </div>
@@ -2863,21 +2869,21 @@ watch(el, () => {
 
     <FormDialog
       :open="mobileSessionRenameDialogOpen"
-      title="Rename terminal"
-      description="Update the terminal name"
+      :title="String(t('terminal.dialogs.renameTerminal.title'))"
+      :description="String(t('terminal.dialogs.renameTerminal.description'))"
       @update:open="(v) => !v && cancelSessionRename()"
     >
       <div class="space-y-3">
         <Input
           v-model="sessionRenameDraft"
           class="h-7 min-w-0 text-xs"
-          placeholder="Terminal name"
+          :placeholder="String(t('terminal.session.namePlaceholder'))"
           @keydown.enter.prevent="saveSessionRename"
           @keydown.esc.prevent="cancelSessionRename"
         />
         <div class="flex items-center justify-end gap-2">
-          <Button variant="ghost" @click="cancelSessionRename">Cancel</Button>
-          <Button :disabled="!sessionRenameDraft.trim()" @click="saveSessionRename">Save</Button>
+          <Button variant="ghost" @click="cancelSessionRename">{{ t('common.cancel') }}</Button>
+          <Button :disabled="!sessionRenameDraft.trim()" @click="saveSessionRename">{{ t('common.save') }}</Button>
         </div>
       </div>
     </FormDialog>

@@ -1,4 +1,5 @@
 import { apiErrorBodyRecord, ApiError } from '@/lib/api'
+import { i18n } from '@/i18n'
 
 type QueryValue = string | number | boolean | null | undefined
 type GitValue = unknown
@@ -223,7 +224,7 @@ export function useGitCommitOps(opts: {
 
   function assertNoVerifyPolicy(): boolean {
     if (!commitNoVerify.value || allowNoVerifyCommit.value) return true
-    toasts.push('error', 'Commits without verification are disabled by policy')
+    toasts.push('error', i18n.global.t('git.errors.commitsWithoutVerificationDisabledByPolicy'))
     commitNoVerify.value = false
     return false
   }
@@ -255,7 +256,7 @@ export function useGitCommitOps(opts: {
         body: JSON.stringify({ name: nextBranch, startPoint: 'HEAD', checkout: true }),
       })
       await load()
-      toasts.push('success', `Switched to ${nextBranch}`)
+      toasts.push('success', i18n.global.t('git.toasts.switchedToBranch', { branch: nextBranch }))
       return true
     } catch (err) {
       toasts.push('error', err instanceof Error ? err.message : String(err))
@@ -281,7 +282,7 @@ export function useGitCommitOps(opts: {
 
     const switched = await switchToNewBranchForProtected(branch)
     if (switched) {
-      toasts.push('info', 'Now on a new branch. Commit again to continue.', 2500)
+      toasts.push('info', i18n.global.t('git.errors.nowOnNewBranchCommitAgain'), 2500)
     }
     return true
   }
@@ -372,7 +373,7 @@ export function useGitCommitOps(opts: {
             noGpgSign: commitNoGpgSign.value,
           }),
         })
-        toasts.push('success', 'Committed')
+        toasts.push('success', i18n.global.t('git.toasts.committed'))
         onCommitSuccess(msg)
         await load()
         await maybeOpenPostCommitPrompt()
@@ -409,7 +410,7 @@ export function useGitCommitOps(opts: {
             noGpgSign: commitNoGpgSign.value,
           }),
         })
-        toasts.push('success', 'Committed (all)')
+        toasts.push('success', i18n.global.t('git.toasts.committedAll'))
         onCommitSuccess(msg)
         await load()
         await maybeOpenPostCommitPrompt()
@@ -446,7 +447,7 @@ export function useGitCommitOps(opts: {
             noGpgSign: commitNoGpgSign.value,
           }),
         })
-        toasts.push('success', 'Committed (empty)')
+        toasts.push('success', i18n.global.t('git.toasts.committedEmpty'))
         onCommitSuccess(msg)
         await load()
         await maybeOpenPostCommitPrompt()

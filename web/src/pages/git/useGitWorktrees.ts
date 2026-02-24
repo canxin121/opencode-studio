@@ -1,5 +1,6 @@
 import type { Ref } from 'vue'
 import { ref } from 'vue'
+import { i18n } from '@/i18n'
 
 import type { GitWorktreeInfo } from '@/types/git'
 import type { JsonValue } from '@/types/json'
@@ -78,7 +79,7 @@ export function useGitWorktrees(opts: {
             createBranch,
           }),
         })
-        toasts.push('success', `Added worktree ${path}`)
+        toasts.push('success', i18n.global.t('git.toasts.addedWorktree', { path }))
         newWorktreePath.value = ''
         await loadWorktrees()
       } catch (err) {
@@ -100,7 +101,7 @@ export function useGitWorktrees(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ path: p }),
         })
-        toasts.push('success', `Removed worktree ${p}`)
+        toasts.push('success', i18n.global.t('git.toasts.removedWorktree', { path: p }))
         await loadWorktrees()
       } catch (err) {
         if (handleGitBusy(err, 'Remove worktree', () => removeWorktree(path))) return
@@ -119,7 +120,7 @@ export function useGitWorktrees(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({}),
         })
-        toasts.push('success', 'Pruned worktrees')
+        toasts.push('success', i18n.global.t('git.toasts.prunedWorktrees'))
         await loadWorktrees()
       } catch (err) {
         if (handleGitBusy(err, 'Prune worktrees', pruneWorktrees)) return
@@ -145,7 +146,7 @@ export function useGitWorktrees(opts: {
             deleteFromSource: true,
           }),
         })
-        toasts.push('success', 'Migrated worktree changes')
+        toasts.push('success', i18n.global.t('git.toasts.migratedWorktreeChanges'))
         await loadWorktrees()
       } catch (err) {
         if (handleGitBusy(err, 'Migrate worktree changes', () => migrateWorktreeChanges(sourcePath))) return

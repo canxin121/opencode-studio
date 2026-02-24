@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { RiArrowGoBackLine, RiGitBranchLine } from '@remixicon/vue'
+import { useI18n } from 'vue-i18n'
 
 import Button from '@/components/ui/Button.vue'
 import ConflictEditor from '@/components/ConflictEditor.vue'
 import GitEditorDiffViewer from '@/components/git/GitEditorDiffViewer.vue'
+
+const { t } = useI18n()
 
 type DiffSource = 'working' | 'staged'
 
@@ -39,7 +42,9 @@ function refreshDiff() {
 
 defineExpose({ refreshDiff })
 
-const sourceLabel = computed(() => (props.diffSource === 'staged' ? 'Index' : 'Working Tree'))
+const sourceLabel = computed(() =>
+  props.diffSource === 'staged' ? t('git.ui.diffViewer.labels.index') : t('git.ui.diffViewer.labels.workingTree'),
+)
 const showConflictEditor = computed(() => {
   const file = (props.selectedFile || '').trim()
   if (!file) return false
@@ -108,7 +113,7 @@ function close() {
     <div v-if="!selectedFile" class="flex-1 flex items-center justify-center text-muted-foreground">
       <div class="text-center">
         <RiGitBranchLine class="h-12 w-12 mx-auto mb-2 opacity-20" />
-        <p class="text-sm">Select a file to view changes</p>
+        <p class="text-sm">{{ t('git.ui.diffPane.selectFileHint') }}</p>
       </div>
     </div>
     <div v-else class="flex-1 flex flex-col min-h-0">
@@ -118,7 +123,7 @@ function close() {
           class="absolute top-2 right-2 z-10"
         >
           <Button variant="secondary" size="sm" class="h-7" @click="returnToConflictEditor"
-            >Open Conflict Editor</Button
+            >{{ t('git.ui.diffPane.openConflictEditor') }}</Button
           >
         </div>
         <ConflictEditor

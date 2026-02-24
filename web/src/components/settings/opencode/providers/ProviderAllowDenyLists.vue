@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { RiCloseLine } from '@remixicon/vue'
+import { useI18n } from 'vue-i18n'
 
 import Button from '@/components/ui/Button.vue'
 import Input from '@/components/ui/Input.vue'
@@ -12,6 +13,8 @@ import { useOpencodeConfigPanelContext } from '../opencodeConfigContext'
 import { asStringArray } from '../utils'
 
 const ctx = useOpencodeConfigPanelContext()
+
+const { t } = useI18n()
 
 const {
   showProviderBrowse,
@@ -39,21 +42,29 @@ const providerPickerOptions = computed<PickerOption[]>(() => {
 <template>
   <div class="grid gap-3">
     <div class="flex flex-wrap items-center justify-between gap-2">
-      <div class="text-xs text-muted-foreground">Provider allow/deny lists</div>
+      <div class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.allowDeny.title') }}</div>
       <div class="flex items-center gap-3">
         <button
           type="button"
           class="text-[11px] text-muted-foreground hover:text-foreground"
           @click="showProviderBrowse = !showProviderBrowse"
         >
-          {{ showProviderBrowse ? 'Hide browse list' : 'Browse list' }}
+          {{
+            showProviderBrowse
+              ? t('settings.opencodeConfig.sections.providers.allowDeny.actions.hideBrowse')
+              : t('settings.opencodeConfig.sections.providers.allowDeny.actions.showBrowse')
+          }}
         </button>
         <button
           type="button"
           class="text-[11px] text-muted-foreground hover:text-foreground"
           @click="showAdvancedProviderLists = !showAdvancedProviderLists"
         >
-          {{ showAdvancedProviderLists ? 'Hide advanced text' : 'Show advanced text' }}
+          {{
+            showAdvancedProviderLists
+              ? t('settings.opencodeConfig.sections.common.hideAdvancedText')
+              : t('settings.opencodeConfig.sections.common.showAdvancedText')
+          }}
         </button>
       </div>
     </div>
@@ -61,22 +72,22 @@ const providerPickerOptions = computed<PickerOption[]>(() => {
     <div class="grid gap-4 lg:grid-cols-2">
       <div class="rounded-md border border-border p-3 space-y-2">
         <div class="flex items-center justify-between">
-          <div class="text-sm font-semibold">Enabled</div>
+          <div class="text-sm font-semibold">{{ t('settings.opencodeConfig.sections.providers.allowDeny.enabled.title') }}</div>
           <Tooltip>
             <Button
               size="icon"
               variant="ghost"
               class="h-8 w-8"
-              title="Clear"
-              aria-label="Clear enabled providers"
+              :title="t('common.clear')"
+              :aria-label="t('settings.opencodeConfig.sections.providers.allowDeny.enabled.clearAria')"
               @click="enabledProvidersArr = []"
             >
               <RiCloseLine class="h-4 w-4" />
             </Button>
-            <template #content>Clear</template>
+            <template #content>{{ t('common.clear') }}</template>
           </Tooltip>
         </div>
-        <div class="text-[11px] text-muted-foreground">If non-empty, only these providers are used.</div>
+        <div class="text-[11px] text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.allowDeny.enabled.help') }}</div>
 
         <div class="flex flex-wrap gap-2">
           <span
@@ -93,14 +104,16 @@ const providerPickerOptions = computed<PickerOption[]>(() => {
               ×
             </button>
           </span>
-          <span v-if="enabledProvidersArr.length === 0" class="text-xs text-muted-foreground">None</span>
+          <span v-if="enabledProvidersArr.length === 0" class="text-xs text-muted-foreground">{{
+            t('settings.opencodeConfig.sections.common.none')
+          }}</span>
         </div>
 
         <div class="flex items-center gap-2">
           <InlineSearchAdd
             :options="providerPickerOptions"
-            panel-title="Providers"
-            placeholder="Add provider id"
+            :panel-title="t('settings.opencodeConfig.sections.providers.allowDeny.picker.panelTitle')"
+            :placeholder="t('settings.opencodeConfig.sections.providers.allowDeny.picker.placeholder')"
             monospace
             :selected-values="enabledProvidersArr"
             @add="addEnabledProviderTags"
@@ -116,22 +129,22 @@ const providerPickerOptions = computed<PickerOption[]>(() => {
 
       <div class="rounded-md border border-border p-3 space-y-2">
         <div class="flex items-center justify-between">
-          <div class="text-sm font-semibold">Disabled</div>
+          <div class="text-sm font-semibold">{{ t('settings.opencodeConfig.sections.providers.allowDeny.disabled.title') }}</div>
           <Tooltip>
             <Button
               size="icon"
               variant="ghost"
               class="h-8 w-8"
-              title="Clear"
-              aria-label="Clear disabled providers"
+              :title="t('common.clear')"
+              :aria-label="t('settings.opencodeConfig.sections.providers.allowDeny.disabled.clearAria')"
               @click="disabledProvidersArr = []"
             >
               <RiCloseLine class="h-4 w-4" />
             </Button>
-            <template #content>Clear</template>
+            <template #content>{{ t('common.clear') }}</template>
           </Tooltip>
         </div>
-        <div class="text-[11px] text-muted-foreground">These providers will be excluded.</div>
+        <div class="text-[11px] text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.allowDeny.disabled.help') }}</div>
 
         <div class="flex flex-wrap gap-2">
           <span
@@ -148,14 +161,16 @@ const providerPickerOptions = computed<PickerOption[]>(() => {
               ×
             </button>
           </span>
-          <span v-if="disabledProvidersArr.length === 0" class="text-xs text-muted-foreground">None</span>
+          <span v-if="disabledProvidersArr.length === 0" class="text-xs text-muted-foreground">{{
+            t('settings.opencodeConfig.sections.common.none')
+          }}</span>
         </div>
 
         <div class="flex items-center gap-2">
           <InlineSearchAdd
             :options="providerPickerOptions"
-            panel-title="Providers"
-            placeholder="Add provider id"
+            :panel-title="t('settings.opencodeConfig.sections.providers.allowDeny.picker.panelTitle')"
+            :placeholder="t('settings.opencodeConfig.sections.providers.allowDeny.picker.placeholder')"
             monospace
             :selected-values="disabledProvidersArr"
             @add="addDisabledProviderTags"
@@ -171,10 +186,14 @@ const providerPickerOptions = computed<PickerOption[]>(() => {
     </div>
 
     <div v-if="showProviderBrowse" class="grid gap-2">
-      <Input v-model="providerFilter" placeholder="Filter providers (e.g. openai)" class="max-w-sm" />
+      <Input
+        v-model="providerFilter"
+        :placeholder="t('settings.opencodeConfig.sections.providers.allowDeny.placeholders.filterProviders')"
+        class="max-w-sm"
+      />
       <div class="grid gap-4 lg:grid-cols-2">
         <div class="rounded-md border border-border p-3">
-          <div class="text-xs text-muted-foreground">Toggle enabled providers</div>
+          <div class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.allowDeny.enabled.toggleTitle') }}</div>
           <VirtualList
             v-if="filteredProviderIdOptions.length"
             :items="filteredProviderIdOptions"
@@ -194,11 +213,13 @@ const providerPickerOptions = computed<PickerOption[]>(() => {
               </label>
             </template>
           </VirtualList>
-          <div v-else class="mt-2 text-xs text-muted-foreground">No matching providers.</div>
+          <div v-else class="mt-2 text-xs text-muted-foreground">{{
+            t('settings.opencodeConfig.sections.providers.allowDeny.empty.noMatchingProviders')
+          }}</div>
         </div>
 
         <div class="rounded-md border border-border p-3">
-          <div class="text-xs text-muted-foreground">Toggle disabled providers</div>
+          <div class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.allowDeny.disabled.toggleTitle') }}</div>
           <VirtualList
             v-if="filteredProviderIdOptions.length"
             :items="filteredProviderIdOptions"
@@ -218,32 +239,38 @@ const providerPickerOptions = computed<PickerOption[]>(() => {
               </label>
             </template>
           </VirtualList>
-          <div v-else class="mt-2 text-xs text-muted-foreground">No matching providers.</div>
+          <div v-else class="mt-2 text-xs text-muted-foreground">{{
+            t('settings.opencodeConfig.sections.providers.allowDeny.empty.noMatchingProviders')
+          }}</div>
         </div>
       </div>
     </div>
 
     <div v-if="providerListConflict.length > 0" class="text-xs text-destructive">
-      Conflicts: {{ providerListConflict.join(', ') }} (cannot be both enabled and disabled)
+      {{
+        t('settings.opencodeConfig.sections.providers.allowDeny.errors.conflicts', {
+          conflicts: providerListConflict.join(', '),
+        })
+      }}
     </div>
 
     <div v-if="showAdvancedProviderLists" class="grid gap-4 lg:grid-cols-2">
       <label class="grid gap-1">
-        <span class="text-xs text-muted-foreground">Enabled providers (advanced)</span>
+        <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.allowDeny.enabled.advancedLabel') }}</span>
         <textarea
           v-model="enabledProviders"
           rows="4"
           class="w-full rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs"
-          placeholder="anthropic\nopenai"
+          :placeholder="t('settings.opencodeConfig.sections.providers.allowDeny.placeholders.enabledAdvanced')"
         />
       </label>
       <label class="grid gap-1">
-        <span class="text-xs text-muted-foreground">Disabled providers (advanced)</span>
+        <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.allowDeny.disabled.advancedLabel') }}</span>
         <textarea
           v-model="disabledProviders"
           rows="4"
           class="w-full rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs"
-          placeholder="openrouter"
+          :placeholder="t('settings.opencodeConfig.sections.providers.allowDeny.placeholders.disabledAdvanced')"
         />
       </label>
     </div>

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+
 import Button from '@/components/ui/Button.vue'
 import FormDialog from '@/components/ui/FormDialog.vue'
 import Input from '@/components/ui/Input.vue'
@@ -22,6 +24,8 @@ const emit = defineEmits<{
   (e: 'submit'): void
 }>()
 
+const { t } = useI18n()
+
 function onUpdateOpen(v: boolean) {
   emit('update:open', v)
 }
@@ -41,7 +45,7 @@ function chooseBranch(value: string) {
       <Input
         :model-value="branch"
         class="h-9 font-mono text-xs"
-        placeholder="Branch name"
+        :placeholder="t('git.ui.branchAction.branchNamePlaceholder')"
         @update:model-value="onUpdateBranch"
       />
 
@@ -60,7 +64,9 @@ function chooseBranch(value: string) {
       </ScrollArea>
 
       <div class="flex justify-end gap-2">
-        <Button variant="secondary" size="sm" @click="$emit('update:open', false)" :disabled="busy">Cancel</Button>
+        <Button variant="secondary" size="sm" @click="$emit('update:open', false)" :disabled="busy">{{
+          t('common.cancel')
+        }}</Button>
         <Button size="sm" :disabled="busy || !branch.trim()" @click="$emit('submit')">{{ actionLabel }}</Button>
       </div>
     </div>

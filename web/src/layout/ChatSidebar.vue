@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { RiAddLine, RiDeleteBinLine, RiRefreshLine, RiStarFill, RiStarLine } from '@remixicon/vue'
 
 import RenameSessionDialog from '@/components/chat/RenameSessionDialog.vue'
@@ -26,7 +27,7 @@ import RecentSessionsFooter from '@/layout/chatSidebar/components/RecentSessions
 import RunningSessionsFooter from '@/layout/chatSidebar/components/RunningSessionsFooter.vue'
 import OptionMenu, { type OptionMenuGroup, type OptionMenuItem } from '@/components/ui/OptionMenu.vue'
 import {
-  buildSessionActionItemsForSession,
+  buildSessionActionItemsForSessionI18n,
   useSessionActionMenu,
   type SessionActionItem,
 } from '@/layout/chatSidebar/useSessionActionMenu'
@@ -50,6 +51,7 @@ const toasts = useToastsStore()
 const activity = useSessionActivityStore()
 const directoryStore = useDirectoryStore()
 const directorySessions = useDirectorySessionStore()
+const { t } = useI18n()
 
 const lastSidebarErrorToastByKey = new Map<string, { at: number; message: string }>()
 
@@ -389,27 +391,27 @@ const directoryActionsDialogItems = computed<DirectoryDialogActionItem[]>(() => 
   const base: DirectoryDialogActionItem[] = [
     {
       id: 'refresh',
-      label: 'Refresh',
-      description: 'Reload sessions for this directory',
+      label: String(t('chat.sidebar.directoryActions.refresh.label')),
+      description: String(t('chat.sidebar.directoryActions.refresh.description')),
       icon: RiRefreshLine,
     },
     {
       id: 'new-session',
-      label: 'New session',
-      description: 'Create a new session in this directory',
+      label: String(t('chat.sidebar.directoryActions.newSession.label')),
+      description: String(t('chat.sidebar.directoryActions.newSession.description')),
       icon: RiAddLine,
       disabled: creatingSession.value,
     },
     {
       id: 'remove',
-      label: 'Remove directory',
-      description: 'Remove this directory from the sidebar',
+      label: String(t('chat.sidebar.directoryActions.remove.label')),
+      description: String(t('chat.sidebar.directoryActions.remove.description')),
       icon: RiDeleteBinLine,
       variant: 'destructive',
-      confirmTitle: 'Remove directory?',
-      confirmDescription: 'Remove this directory from the sidebar.',
-      confirmText: 'Remove',
-      cancelText: 'Cancel',
+      confirmTitle: String(t('chat.sidebar.directoryActions.remove.confirmTitle')),
+      confirmDescription: String(t('chat.sidebar.directoryActions.remove.confirmDescription')),
+      confirmText: String(t('common.remove')),
+      cancelText: String(t('common.cancel')),
     },
   ]
   return base
@@ -480,23 +482,27 @@ const sessionActionsDialogItems = computed<SessionDialogActionItem[]>(() => {
   const base: SessionDialogActionItem[] = [
     {
       id: 'toggle-pin',
-      label: isPinned ? 'Unpin session' : 'Pin session',
-      description: isPinned ? 'Remove from pinned list' : 'Keep it at the top',
+      label: isPinned
+        ? String(t('chat.sidebar.sessionActions.unpin.label'))
+        : String(t('chat.sidebar.sessionActions.pin.label')),
+      description: isPinned
+        ? String(t('chat.sidebar.sessionActions.unpin.description'))
+        : String(t('chat.sidebar.sessionActions.pin.description')),
       icon: isPinned ? RiStarFill : RiStarLine,
     },
     {
       id: 'delete',
-      label: 'Delete session',
-      description: 'This cannot be undone',
+      label: String(t('chat.sidebar.sessionActions.delete.label')),
+      description: String(t('chat.sidebar.sessionActions.delete.description')),
       icon: RiDeleteBinLine,
       variant: 'destructive',
-      confirmTitle: 'Delete session?',
-      confirmDescription: 'This cannot be undone.',
-      confirmText: 'Delete',
-      cancelText: 'Cancel',
+      confirmTitle: String(t('chat.sidebar.sessionActions.delete.confirmTitle')),
+      confirmDescription: String(t('chat.sidebar.sessionActions.delete.confirmDescription')),
+      confirmText: String(t('chat.sidebar.sessionActions.delete.confirmText')),
+      cancelText: String(t('common.cancel')),
     },
   ]
-  return [...base, ...buildSessionActionItemsForSession(target?.session)]
+  return [...base, ...buildSessionActionItemsForSessionI18n(t, target?.session)]
 })
 
 const filteredSessionActionsDialogItems = computed<SessionDialogActionItem[]>(() => {
@@ -641,14 +647,14 @@ async function saveRenameFromSidebar() {
   const next = renameDraft.value.trim()
   if (!sid) return
   if (!next) {
-    toasts.push('error', 'Title cannot be empty')
+    toasts.push('error', t('chat.toasts.titleCannotBeEmpty'))
     return
   }
   renameBusy.value = true
   try {
     await chat.renameSession(sid, next)
     resetRenameState()
-    toasts.push('success', 'Session renamed')
+    toasts.push('success', t('chat.toasts.sessionRenamed'))
   } catch (err) {
     toasts.push('error', err instanceof Error ? err.message : String(err))
   } finally {
@@ -1221,7 +1227,7 @@ async function ensureDirectoryAggregateLoaded(
     // Don't render errors inside the sidebar; use toasts instead.
     if (isUiAuthRequiredError(err)) return
     const msg = err instanceof Error ? err.message : String(err)
-    pushSidebarErrorToast('sidebar:sessions', msg || 'Failed to load sessions', 4500, 8000)
+    pushSidebarErrorToast('sidebar:sessions', msg || String(t('chat.sidebar.errors.failedToLoadSessions')), 4500, 8000)
   }
 }
 
@@ -1573,11 +1579,11 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
       :open="directoryActionsOpen"
       v-model:query="directoryActionsDialogQuery"
       :groups="directoryActionMenuGroups"
-      title="Directory Actions"
-      mobile-title="Directory Actions"
+      :title="String(t('chat.sidebar.directoryActions.menuTitle'))"
+      :mobile-title="String(t('chat.sidebar.directoryActions.menuTitle'))"
       :searchable="true"
-      search-placeholder="Search actions"
-      empty-text="No actions found."
+      :search-placeholder="String(t('common.searchActions'))"
+      :empty-text="String(t('common.noActionsFound'))"
       :is-mobile-pointer="true"
       filter-mode="external"
       @update:open="
@@ -1593,11 +1599,11 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
       :open="sessionActionsOpen"
       v-model:query="sessionActionsDialogQuery"
       :groups="sessionActionMenuGroups"
-      title="Session Actions"
-      mobile-title="Session Actions"
+      :title="String(t('chat.sidebar.sessionActions.menuTitle'))"
+      :mobile-title="String(t('chat.sidebar.sessionActions.menuTitle'))"
       :searchable="true"
-      search-placeholder="Search actions"
-      empty-text="No actions found."
+      :search-placeholder="String(t('common.searchActions'))"
+      :empty-text="String(t('common.noActionsFound'))"
       :is-mobile-pointer="true"
       filter-mode="external"
       @update:open="

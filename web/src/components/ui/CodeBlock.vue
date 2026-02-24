@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { RiArrowDownSLine, RiArrowUpSLine, RiCheckLine, RiClipboardLine } from '@remixicon/vue'
+import { useI18n } from 'vue-i18n'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import { highlightCodeToHtml } from '@/lib/highlight'
 import { useToastsStore } from '@/stores/toasts'
@@ -25,6 +26,7 @@ const isLarge = computed(() => {
 const expanded = ref(false)
 
 const toasts = useToastsStore()
+const { t } = useI18n()
 const copyState = ref<'idle' | 'copied' | 'error'>('idle')
 let copyTimer: number | null = null
 
@@ -44,7 +46,7 @@ const highlighted = computed(() => {
 async function copyCode() {
   const ok = await copyTextToClipboard(props.code)
   copyState.value = ok ? 'copied' : 'error'
-  if (!ok) toasts.push('error', 'Copy failed')
+  if (!ok) toasts.push('error', t('common.copyFailed'))
   if (copyTimer) window.clearTimeout(copyTimer)
   copyTimer = window.setTimeout(() => {
     copyState.value = 'idle'
@@ -68,8 +70,8 @@ async function copyCode() {
           v-if="isLarge"
           type="button"
           class="h-7 w-7 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/40 active:scale-95 transition"
-          :title="expanded ? 'Collapse' : `Expand (${lines} lines)`"
-          :aria-label="expanded ? 'Collapse code block' : 'Expand code block'"
+          :title="expanded ? t('codeBlock.collapse') : t('codeBlock.expandLines', { lines })"
+          :aria-label="expanded ? t('codeBlock.collapseAria') : t('codeBlock.expandAria')"
           @click="expanded = !expanded"
         >
           <RiArrowUpSLine v-if="expanded" class="h-4 w-4" />
@@ -79,8 +81,8 @@ async function copyCode() {
           type="button"
           @click="copyCode"
           class="h-7 w-7 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/40 active:scale-95 transition opacity-0 group-hover:opacity-100"
-          title="Copy"
-          aria-label="Copy code"
+          :title="t('codeBlock.copy')"
+          :aria-label="t('codeBlock.copyAria')"
         >
           <RiCheckLine v-if="copyState === 'copied'" class="h-4 w-4 text-primary" />
           <RiClipboardLine v-else class="h-4 w-4" />
@@ -105,8 +107,8 @@ async function copyCode() {
           type="button"
           class="pointer-events-auto inline-flex h-8 w-8 items-center justify-center rounded-md border border-border/60 bg-background/70 backdrop-blur text-muted-foreground hover:text-foreground active:scale-95 transition"
           @click="expanded = true"
-          title="Expand"
-          aria-label="Expand"
+          :title="t('codeBlock.expand')"
+          :aria-label="t('codeBlock.expand')"
         >
           <RiArrowDownSLine class="h-4 w-4" />
         </button>

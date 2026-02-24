@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch, type CSSProperties, type ComponentPublicInstance } from 'vue'
 import { DialogContent, DialogDescription, DialogOverlay, DialogPortal, DialogRoot, DialogTitle } from 'radix-vue'
 import { RiCloseLine } from '@remixicon/vue'
+import { useI18n } from 'vue-i18n'
 
 import IconButton from '@/components/ui/IconButton.vue'
 import { cn } from '@/lib/utils'
@@ -27,6 +28,8 @@ const emit = defineEmits<{
 
 const ui = useUiStore()
 const isMobileSheet = computed(() => Boolean(ui.isMobilePointer))
+
+const { t } = useI18n()
 
 const MOBILE_SHEET_MARGIN_PX = 8
 const MOBILE_SHEET_MIN_MAX_HEIGHT_PX = 180
@@ -206,7 +209,7 @@ onBeforeUnmount(() => {
               {{ description }}
             </DialogDescription>
           </div>
-          <IconButton size="sm" title="Close" aria-label="Close" @click="close">
+          <IconButton size="sm" :title="t('common.close')" :aria-label="t('common.close')" @click="close">
             <RiCloseLine class="h-4 w-4" />
           </IconButton>
         </div>

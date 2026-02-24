@@ -41,6 +41,8 @@ export default defineComponent({
   setup() {
     const ctx = useOpencodeConfigPanelContext()
 
+    const t = ctx.t as unknown as (key: string, params?: Record<string, unknown>) => string
+
     function normalizeAgentName(raw: string): string {
       let v = String(raw || '').trim()
       if (v.startsWith('@')) v = v.slice(1).trim()
@@ -57,10 +59,14 @@ export default defineComponent({
           if (ctx.isValidDefaultAgent && !ctx.isValidDefaultAgent(agent)) return null
           const mode = typeof agent?.mode === 'string' ? agent.mode : ''
           const hidden = agent?.hidden === true
-          const label = `${name}${mode === 'subagent' ? ' (subagent)' : ''}${hidden ? ' (hidden)' : ''}`
-          return {
-            value: name,
-            label,
+           const label = `${name}${
+             mode === 'subagent'
+               ? t('settings.opencodeConfig.sections.general.defaultAgent.options.subagentSuffix')
+               : ''
+           }${hidden ? t('settings.opencodeConfig.sections.general.defaultAgent.options.hiddenSuffix') : ''}`
+           return {
+             value: name,
+             label,
             description: typeof agent?.description === 'string' ? agent.description : undefined,
           } satisfies PickerOption
         })
@@ -82,50 +88,68 @@ export default defineComponent({
       return list.map((f: string) => ({ value: f, label: f }))
     })
 
-    const modelStatusFilterPickerOptions: PickerOption[] = [
-      { value: 'active', label: 'active' },
-      { value: 'beta', label: 'beta' },
-      { value: 'alpha', label: 'alpha' },
-      { value: 'deprecated', label: 'deprecated' },
-    ]
+    const modelStatusFilterPickerOptions = computed<PickerOption[]>(() => [
+      { value: 'active', label: t('settings.opencodeConfig.sections.general.options.modelStatusFilter.active') },
+      { value: 'beta', label: t('settings.opencodeConfig.sections.general.options.modelStatusFilter.beta') },
+      { value: 'alpha', label: t('settings.opencodeConfig.sections.general.options.modelStatusFilter.alpha') },
+      { value: 'deprecated', label: t('settings.opencodeConfig.sections.general.options.modelStatusFilter.deprecated') },
+    ])
 
-    const modelSortPickerOptions: PickerOption[] = [
-      { value: 'alpha', label: 'alpha' },
-      { value: 'context_desc', label: 'context ↓' },
-      { value: 'output_desc', label: 'output ↓' },
-      { value: 'cost_total_asc', label: 'cost (in+out) ↑' },
-      { value: 'cost_input_asc', label: 'cost in ↑' },
-      { value: 'cost_output_asc', label: 'cost out ↑' },
-      { value: 'release_desc', label: 'release ↓' },
-    ]
+    const modelSortPickerOptions = computed<PickerOption[]>(() => [
+      { value: 'alpha', label: t('settings.opencodeConfig.sections.general.modelBrowser.sortOptions.alpha') },
+      {
+        value: 'context_desc',
+        label: t('settings.opencodeConfig.sections.general.modelBrowser.sortOptions.contextDesc'),
+      },
+      {
+        value: 'output_desc',
+        label: t('settings.opencodeConfig.sections.general.modelBrowser.sortOptions.outputDesc'),
+      },
+      {
+        value: 'cost_total_asc',
+        label: t('settings.opencodeConfig.sections.general.modelBrowser.sortOptions.costTotalAsc'),
+      },
+      {
+        value: 'cost_input_asc',
+        label: t('settings.opencodeConfig.sections.general.modelBrowser.sortOptions.costInputAsc'),
+      },
+      {
+        value: 'cost_output_asc',
+        label: t('settings.opencodeConfig.sections.general.modelBrowser.sortOptions.costOutputAsc'),
+      },
+      {
+        value: 'release_desc',
+        label: t('settings.opencodeConfig.sections.general.modelBrowser.sortOptions.releaseDesc'),
+      },
+    ])
 
-    const logLevelPickerOptions: PickerOption[] = [
-      { value: 'default', label: 'default' },
-      { value: 'DEBUG', label: 'DEBUG' },
-      { value: 'INFO', label: 'INFO' },
-      { value: 'WARN', label: 'WARN' },
-      { value: 'ERROR', label: 'ERROR' },
-    ]
+    const logLevelPickerOptions = computed<PickerOption[]>(() => [
+      { value: 'default', label: t('settings.opencodeConfig.sections.general.options.logLevel.default') },
+      { value: 'DEBUG', label: t('settings.opencodeConfig.sections.general.options.logLevel.DEBUG') },
+      { value: 'INFO', label: t('settings.opencodeConfig.sections.general.options.logLevel.INFO') },
+      { value: 'WARN', label: t('settings.opencodeConfig.sections.general.options.logLevel.WARN') },
+      { value: 'ERROR', label: t('settings.opencodeConfig.sections.general.options.logLevel.ERROR') },
+    ])
 
-    const shareModePickerOptions: PickerOption[] = [
-      { value: 'default', label: 'default' },
-      { value: 'manual', label: 'manual' },
-      { value: 'auto', label: 'auto' },
-      { value: 'disabled', label: 'disabled' },
-    ]
+    const shareModePickerOptions = computed<PickerOption[]>(() => [
+      { value: 'default', label: t('settings.opencodeConfig.sections.general.options.shareMode.default') },
+      { value: 'manual', label: t('settings.opencodeConfig.sections.general.options.shareMode.manual') },
+      { value: 'auto', label: t('settings.opencodeConfig.sections.general.options.shareMode.auto') },
+      { value: 'disabled', label: t('settings.opencodeConfig.sections.general.options.shareMode.disabled') },
+    ])
 
-    const autoUpdateModePickerOptions: PickerOption[] = [
-      { value: 'default', label: 'default' },
-      { value: 'notify', label: 'notify' },
-      { value: 'true', label: 'true' },
-      { value: 'false', label: 'false' },
-    ]
+    const autoUpdateModePickerOptions = computed<PickerOption[]>(() => [
+      { value: 'default', label: t('settings.opencodeConfig.sections.general.options.autoUpdate.default') },
+      { value: 'notify', label: t('settings.opencodeConfig.sections.general.options.autoUpdate.notify') },
+      { value: 'true', label: t('settings.opencodeConfig.sections.general.options.autoUpdate.true') },
+      { value: 'false', label: t('settings.opencodeConfig.sections.general.options.autoUpdate.false') },
+    ])
 
-    const snapshotModePickerOptions: PickerOption[] = [
-      { value: 'default', label: 'default' },
-      { value: 'true', label: 'true' },
-      { value: 'false', label: 'false' },
-    ]
+    const snapshotModePickerOptions = computed<PickerOption[]>(() => [
+      { value: 'default', label: t('settings.opencodeConfig.sections.general.options.snapshotTracking.default') },
+      { value: 'true', label: t('settings.opencodeConfig.sections.general.options.snapshotTracking.true') },
+      { value: 'false', label: t('settings.opencodeConfig.sections.general.options.snapshotTracking.false') },
+    ])
 
     return Object.assign(ctx, {
       normalizeAgentName,
@@ -148,67 +172,81 @@ export default defineComponent({
   <section id="general" class="scroll-mt-24 rounded-lg border border-border bg-background p-4 space-y-4">
     <div class="flex items-start justify-between gap-3">
       <div class="min-w-0">
-        <div class="text-base font-semibold leading-snug">Top-level identity, defaults, and schema.</div>
+        <div class="text-base font-semibold leading-snug">{{ t('settings.opencodeConfig.sections.general.title') }}</div>
       </div>
       <div class="flex items-center gap-2">
         <Tooltip>
-          <Button size="icon" variant="ghost" class="h-8 w-8" title="Reset section" @click="resetSection('general')">
+          <Button
+            size="icon"
+            variant="ghost"
+            class="h-8 w-8"
+            :title="t('settings.opencodeConfig.sections.common.resetSection')"
+            @click="resetSection('general')"
+          >
             <RiRestartLine class="h-4 w-4" />
           </Button>
-          <template #content>Reset section</template>
+          <template #content>{{ t('settings.opencodeConfig.sections.common.resetSection') }}</template>
         </Tooltip>
         <Tooltip>
           <Button
             size="icon"
             variant="outline"
             class="h-8 w-8"
-            :title="isSectionOpen('general') ? 'Collapse' : 'Expand'"
+            :title="
+              isSectionOpen('general')
+                ? t('settings.opencodeConfig.sections.common.collapse')
+                : t('settings.opencodeConfig.sections.common.expand')
+            "
             @click="toggleSection('general')"
           >
             <RiArrowUpSLine v-if="isSectionOpen('general')" class="h-4 w-4" />
             <RiArrowDownSLine v-else class="h-4 w-4" />
           </Button>
-          <template #content>{{ isSectionOpen('general') ? 'Collapse' : 'Expand' }}</template>
+          <template #content>{{
+            isSectionOpen('general')
+              ? t('settings.opencodeConfig.sections.common.collapse')
+              : t('settings.opencodeConfig.sections.common.expand')
+          }}</template>
         </Tooltip>
       </div>
     </div>
 
     <div v-if="isSectionOpen('general')" class="space-y-4">
       <div v-if="optionsError" class="text-xs text-destructive break-all">{{ optionsError }}</div>
-      <div v-else class="text-xs text-muted-foreground">
-        Models/agents are discovered from the running OpenCode server.
-      </div>
+      <div v-else class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.help.discovery') }}</div>
 
       <div class="grid gap-4 lg:grid-cols-2">
         <label class="grid gap-1">
-          <span class="text-xs text-muted-foreground">Schema URL</span>
-          <Input v-model="schemaUrl" placeholder="https://opencode.ai/config.json" />
-          <span class="text-[11px] text-muted-foreground"
-            >Usually keep the default; it enables validation and editor hints.</span
-          >
+          <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.fields.schemaUrl') }}</span>
+          <Input
+            v-model="schemaUrl"
+            :placeholder="t('settings.opencodeConfig.sections.general.placeholders.schemaUrl')"
+          />
+          <span class="text-[11px] text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.help.schemaUrl') }}</span>
         </label>
         <label class="grid gap-1">
-          <span class="text-xs text-muted-foreground">Theme</span>
-          <Input v-model="theme" placeholder="opencode" />
-          <span class="text-[11px] text-muted-foreground">Theme name in OpenCode (TUI/Web).</span>
+          <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.fields.theme') }}</span>
+          <Input v-model="theme" :placeholder="t('settings.opencodeConfig.sections.general.placeholders.theme')" />
+          <span class="text-[11px] text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.help.theme') }}</span>
         </label>
         <label class="grid gap-1">
-          <span class="text-xs text-muted-foreground">Username</span>
-          <Input v-model="username" placeholder="Your name" />
-          <span class="text-[11px] text-muted-foreground"
-            >Displayed in conversations; defaults to system username.</span
-          >
+          <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.fields.username') }}</span>
+          <Input
+            v-model="username"
+            :placeholder="t('settings.opencodeConfig.sections.general.placeholders.username')"
+          />
+          <span class="text-[11px] text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.help.username') }}</span>
         </label>
         <label class="grid gap-1">
-          <span class="text-xs text-muted-foreground">Default agent</span>
+          <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.fields.defaultAgent') }}</span>
           <div class="flex items-center gap-2">
             <div class="flex-1 min-w-0">
               <OptionPicker
                 :model-value="defaultAgent"
                 @update:model-value="(v) => (defaultAgent = normalizeAgentName(v))"
                 :options="defaultAgentPickerOptions"
-                title="Default agent"
-                search-placeholder="Search agents"
+                :title="t('settings.opencodeConfig.sections.general.fields.defaultAgent')"
+                :search-placeholder="t('settings.opencodeConfig.sections.general.search.searchAgents')"
                 :icon="RiUserLine"
                 allow-custom
               />
@@ -218,32 +256,32 @@ export default defineComponent({
                 size="icon"
                 variant="outline"
                 class="h-9 w-9"
-                title="Refresh agent/model lists"
-                aria-label="Refresh agent/model lists"
+                :title="t('settings.opencodeConfig.sections.general.actions.refreshOptionLists')"
+                :aria-label="t('settings.opencodeConfig.sections.general.actions.refreshOptionLists')"
                 @click="refreshOptionLists({ toast: true })"
                 :disabled="optionsLoading"
               >
                 <RiRefreshLine class="h-4 w-4" :class="optionsLoading ? 'animate-spin' : ''" />
               </Button>
-              <template #content>Refresh agent/model lists</template>
+              <template #content>{{ t('settings.opencodeConfig.sections.general.actions.refreshOptionLists') }}</template>
             </Tooltip>
           </div>
-          <span class="text-[11px] text-muted-foreground">Must be a primary agent (subagents/hidden are invalid).</span>
+          <span class="text-[11px] text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.help.defaultAgentRequirement') }}</span>
           <span v-if="defaultAgentWarning" class="text-xs text-destructive">{{ defaultAgentWarning }}</span>
           <span v-else-if="issueText('default_agent')" class="text-xs text-destructive">{{
             issueText('default_agent')
           }}</span>
         </label>
         <label class="grid gap-1">
-          <span class="text-xs text-muted-foreground">Default model</span>
+          <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.fields.defaultModel') }}</span>
           <div class="flex items-center gap-2">
             <div class="flex-1 min-w-0">
               <OptionPicker
                 :model-value="model"
                 @update:model-value="(v) => (model = String(v || '').trim())"
                 :options="modelPickerOptions"
-                title="Default model"
-                search-placeholder="Search models"
+                :title="t('settings.opencodeConfig.sections.general.fields.defaultModel')"
+                :search-placeholder="t('settings.opencodeConfig.sections.general.search.searchModels')"
                 :icon="RiStackLine"
                 allow-custom
                 monospace
@@ -254,37 +292,41 @@ export default defineComponent({
                 size="icon"
                 variant="outline"
                 class="h-9 w-9"
-                title="Refresh agent/model lists"
-                aria-label="Refresh agent/model lists"
+                :title="t('settings.opencodeConfig.sections.general.actions.refreshOptionLists')"
+                :aria-label="t('settings.opencodeConfig.sections.general.actions.refreshOptionLists')"
                 @click="refreshOptionLists({ toast: true })"
                 :disabled="optionsLoading"
               >
                 <RiRefreshLine class="h-4 w-4" :class="optionsLoading ? 'animate-spin' : ''" />
               </Button>
-              <template #content>Refresh agent/model lists</template>
+              <template #content>{{ t('settings.opencodeConfig.sections.general.actions.refreshOptionLists') }}</template>
             </Tooltip>
           </div>
           <button
             type="button"
             class="text-[11px] text-muted-foreground hover:text-foreground text-left"
-            @click="showModelBrowse = !showModelBrowse"
-          >
-            {{ showModelBrowse ? 'Hide model browser' : 'Browse models' }}
+          @click="showModelBrowse = !showModelBrowse"
+        >
+            {{
+              showModelBrowse
+                ? t('settings.opencodeConfig.sections.general.actions.hideModelBrowser')
+                : t('settings.opencodeConfig.sections.general.actions.browseModels')
+            }}
           </button>
           <span v-if="modelWarning" class="text-xs text-amber-600">{{ modelWarning }}</span>
           <span v-else-if="modelUnknownWarning" class="text-xs text-amber-600">{{ modelUnknownWarning }}</span>
           <span v-else-if="issueText('model')" class="text-xs text-destructive">{{ issueText('model') }}</span>
         </label>
         <label class="grid gap-1">
-          <span class="text-xs text-muted-foreground">Small model</span>
+          <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.fields.smallModel') }}</span>
           <div class="flex items-center gap-2">
             <div class="flex-1 min-w-0">
               <OptionPicker
                 :model-value="smallModel"
                 @update:model-value="(v) => (smallModel = String(v || '').trim())"
                 :options="modelPickerOptions"
-                title="Small model"
-                search-placeholder="Search models"
+                :title="t('settings.opencodeConfig.sections.general.fields.smallModel')"
+                :search-placeholder="t('settings.opencodeConfig.sections.general.search.searchModels')"
                 :icon="RiSparkling2Line"
                 allow-custom
                 monospace
@@ -295,17 +337,17 @@ export default defineComponent({
                 size="icon"
                 variant="outline"
                 class="h-9 w-9"
-                title="Refresh agent/model lists"
-                aria-label="Refresh agent/model lists"
+                :title="t('settings.opencodeConfig.sections.general.actions.refreshOptionLists')"
+                :aria-label="t('settings.opencodeConfig.sections.general.actions.refreshOptionLists')"
                 @click="refreshOptionLists({ toast: true })"
                 :disabled="optionsLoading"
               >
                 <RiRefreshLine class="h-4 w-4" :class="optionsLoading ? 'animate-spin' : ''" />
               </Button>
-              <template #content>Refresh agent/model lists</template>
+              <template #content>{{ t('settings.opencodeConfig.sections.general.actions.refreshOptionLists') }}</template>
             </Tooltip>
           </div>
-          <span class="text-[11px] text-muted-foreground">Used for lightweight tasks (e.g., title generation).</span>
+          <span class="text-[11px] text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.help.smallModel') }}</span>
           <span v-if="smallModelWarning" class="text-xs text-amber-600">{{ smallModelWarning }}</span>
           <span v-else-if="smallModelUnknownWarning" class="text-xs text-amber-600">{{
             smallModelUnknownWarning
@@ -317,58 +359,61 @@ export default defineComponent({
 
         <div v-if="showModelBrowse" class="lg:col-span-2 rounded-md border border-border p-3 space-y-2">
           <div class="flex items-center justify-between">
-            <div class="text-sm font-semibold">Model browser</div>
+            <div class="text-sm font-semibold">{{ t('settings.opencodeConfig.sections.general.modelBrowser.title') }}</div>
             <Tooltip>
               <Button
                 size="icon"
                 variant="ghost"
                 class="h-8 w-8"
-                title="Close model browser"
-                aria-label="Close model browser"
+                :title="t('settings.opencodeConfig.sections.general.modelBrowser.actions.closeAria')"
+                :aria-label="t('settings.opencodeConfig.sections.general.modelBrowser.actions.closeAria')"
                 @click="showModelBrowse = false"
               >
                 <RiCloseLine class="h-4 w-4" />
               </Button>
-              <template #content>Close</template>
+              <template #content>{{ t('common.close') }}</template>
             </Tooltip>
           </div>
           <div class="grid gap-3 lg:grid-cols-3">
             <label class="grid gap-1">
-              <span class="text-xs text-muted-foreground">Search</span>
-              <Input v-model="modelSlugFilter" placeholder="openai/gpt or name" />
+              <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.modelBrowser.fields.search') }}</span>
+              <Input
+                v-model="modelSlugFilter"
+                :placeholder="t('settings.opencodeConfig.sections.general.modelBrowser.placeholders.search')"
+              />
             </label>
             <label class="grid gap-1">
-              <span class="text-xs text-muted-foreground">Provider</span>
+              <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.modelBrowser.fields.provider') }}</span>
               <OptionPicker
                 v-model="modelProviderFilter"
                 :options="modelProviderFilterPickerOptions"
-                title="Provider"
-                search-placeholder="Search providers"
-                empty-label="All"
+                :title="t('settings.opencodeConfig.sections.general.modelBrowser.fields.provider')"
+                :search-placeholder="t('settings.opencodeConfig.sections.general.search.searchProviders')"
+                :empty-label="t('settings.opencodeConfig.sections.general.common.all')"
               />
             </label>
             <label class="grid gap-1">
-              <span class="text-xs text-muted-foreground">Status</span>
+              <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.modelBrowser.fields.status') }}</span>
               <OptionPicker
                 v-model="modelStatusFilter"
                 :options="modelStatusFilterPickerOptions"
-                title="Status"
-                search-placeholder="Search statuses"
-                empty-label="All"
+                :title="t('settings.opencodeConfig.sections.general.modelBrowser.fields.status')"
+                :search-placeholder="t('settings.opencodeConfig.sections.general.search.searchStatuses')"
+                :empty-label="t('settings.opencodeConfig.sections.general.common.all')"
               />
             </label>
             <label class="grid gap-1">
-              <span class="text-xs text-muted-foreground">Family</span>
+              <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.modelBrowser.fields.family') }}</span>
               <OptionPicker
                 v-model="modelFamilyFilter"
                 :options="modelFamilyFilterPickerOptions"
-                title="Family"
-                search-placeholder="Search families"
-                empty-label="All"
+                :title="t('settings.opencodeConfig.sections.general.modelBrowser.fields.family')"
+                :search-placeholder="t('settings.opencodeConfig.sections.general.search.searchFamilies')"
+                :empty-label="t('settings.opencodeConfig.sections.general.common.all')"
               />
             </label>
             <label class="grid gap-1">
-              <span class="text-xs text-muted-foreground">Min context</span>
+              <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.modelBrowser.fields.minContext') }}</span>
               <input
                 v-model="modelMinContext"
                 type="number"
@@ -378,7 +423,7 @@ export default defineComponent({
               />
             </label>
             <label class="grid gap-1">
-              <span class="text-xs text-muted-foreground">Min output</span>
+              <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.modelBrowser.fields.minOutput') }}</span>
               <input
                 v-model="modelMinOutput"
                 type="number"
@@ -390,27 +435,31 @@ export default defineComponent({
           </div>
 
           <div class="flex flex-wrap items-center gap-3">
-            <label class="inline-flex items-center gap-2 text-sm"
-              ><input type="checkbox" v-model="modelRequireTools" /> Tools</label
-            >
-            <label class="inline-flex items-center gap-2 text-sm"
-              ><input type="checkbox" v-model="modelRequireReasoning" /> Reasoning</label
-            >
-            <label class="inline-flex items-center gap-2 text-sm"
-              ><input type="checkbox" v-model="modelRequireImage" /> Image input</label
-            >
-            <label class="inline-flex items-center gap-2 text-sm"
-              ><input type="checkbox" v-model="modelRequirePdf" /> PDF input</label
-            >
+            <label class="inline-flex items-center gap-2 text-sm">
+              <input type="checkbox" v-model="modelRequireTools" />
+              {{ t('settings.opencodeConfig.sections.general.modelBrowser.filters.tools') }}
+            </label>
+            <label class="inline-flex items-center gap-2 text-sm">
+              <input type="checkbox" v-model="modelRequireReasoning" />
+              {{ t('settings.opencodeConfig.sections.general.modelBrowser.filters.reasoning') }}
+            </label>
+            <label class="inline-flex items-center gap-2 text-sm">
+              <input type="checkbox" v-model="modelRequireImage" />
+              {{ t('settings.opencodeConfig.sections.general.modelBrowser.filters.imageInput') }}
+            </label>
+            <label class="inline-flex items-center gap-2 text-sm">
+              <input type="checkbox" v-model="modelRequirePdf" />
+              {{ t('settings.opencodeConfig.sections.general.modelBrowser.filters.pdfInput') }}
+            </label>
             <div class="flex-1" />
             <label class="inline-flex items-center gap-2 text-sm">
-              <span class="text-xs text-muted-foreground">Sort</span>
+              <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.modelBrowser.fields.sort') }}</span>
               <div class="w-[190px]">
                 <OptionPicker
                   v-model="modelSort"
                   :options="modelSortPickerOptions"
-                  title="Sort"
-                  search-placeholder="Search sorts"
+                  :title="t('settings.opencodeConfig.sections.general.modelBrowser.fields.sort')"
+                  :search-placeholder="t('settings.opencodeConfig.sections.general.search.searchSorts')"
                   :include-empty="false"
                 />
               </div>
@@ -418,7 +467,7 @@ export default defineComponent({
           </div>
 
           <div class="text-[11px] text-muted-foreground">
-            {{ sortedModelEntries.length }} models shown. Click a row to set Default or Small.
+            {{ t('settings.opencodeConfig.sections.general.modelBrowser.help.countLine', { count: sortedModelEntries.length }) }}
           </div>
           <VirtualList
             v-if="modelBrowserRows.length"
@@ -452,70 +501,70 @@ export default defineComponent({
                       size="icon"
                       variant="outline"
                       class="h-8 w-8"
-                      title="Set default model"
-                      aria-label="Set default model"
+                      :title="t('settings.opencodeConfig.sections.general.modelBrowser.actions.setDefaultModel')"
+                      :aria-label="t('settings.opencodeConfig.sections.general.modelBrowser.actions.setDefaultModel')"
                       @click="model = row.entry.slug"
                     >
                       <RiStackLine class="h-4 w-4" />
                     </Button>
-                    <template #content>Default</template>
+                    <template #content>{{ t('settings.opencodeConfig.sections.general.modelBrowser.actions.defaultLabel') }}</template>
                   </Tooltip>
                   <Tooltip>
                     <Button
                       size="icon"
                       variant="outline"
                       class="h-8 w-8"
-                      title="Set small model"
-                      aria-label="Set small model"
+                      :title="t('settings.opencodeConfig.sections.general.modelBrowser.actions.setSmallModel')"
+                      :aria-label="t('settings.opencodeConfig.sections.general.modelBrowser.actions.setSmallModel')"
                       @click="smallModel = row.entry.slug"
                     >
                       <RiSparkling2Line class="h-4 w-4" />
                     </Button>
-                    <template #content>Small</template>
+                    <template #content>{{ t('settings.opencodeConfig.sections.general.modelBrowser.actions.smallLabel') }}</template>
                   </Tooltip>
                 </div>
               </div>
             </template>
           </VirtualList>
-          <div v-else class="text-xs text-muted-foreground">No matching models.</div>
+          <div v-else class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.modelBrowser.empty') }}</div>
         </div>
         <label class="grid gap-1">
-          <span class="text-xs text-muted-foreground">Log level</span>
+          <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.fields.logLevel') }}</span>
           <OptionPicker
             v-model="logLevel"
             :options="logLevelPickerOptions"
-            title="Log level"
-            search-placeholder="Search log levels"
+            :title="t('settings.opencodeConfig.sections.general.fields.logLevel')"
+            :search-placeholder="t('settings.opencodeConfig.sections.general.search.searchLogLevels')"
             :include-empty="false"
           />
         </label>
         <label class="grid gap-1">
-          <span class="text-xs text-muted-foreground">Share mode</span>
+          <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.fields.shareMode') }}</span>
           <OptionPicker
             v-model="shareMode"
             :options="shareModePickerOptions"
-            title="Share mode"
-            search-placeholder="Search share modes"
+            :title="t('settings.opencodeConfig.sections.general.fields.shareMode')"
+            :search-placeholder="t('settings.opencodeConfig.sections.general.search.searchShareModes')"
             :include-empty="false"
           />
         </label>
         <label class="grid gap-1">
-          <span class="text-xs text-muted-foreground">Auto-update</span>
+          <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.fields.autoUpdate') }}</span>
           <OptionPicker
             v-model="autoUpdateMode"
             :options="autoUpdateModePickerOptions"
-            title="Auto-update"
-            search-placeholder="Search update modes"
+            :title="t('settings.opencodeConfig.sections.general.fields.autoUpdate')"
+            :search-placeholder="t('settings.opencodeConfig.sections.general.search.searchUpdateModes')"
             :include-empty="false"
           />
         </label>
         <label class="grid gap-1">
-          <span class="text-xs text-muted-foreground">Snapshot tracking</span>
+          <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.fields.snapshotTracking') }}</span>
           <OptionPicker
             v-model="snapshotMode"
             :options="snapshotModePickerOptions"
-            title="Snapshot tracking"
-            search-placeholder="Search snapshot modes"
+            :title="t('settings.opencodeConfig.sections.general.fields.snapshotTracking')"
+            :search-placeholder="t('settings.opencodeConfig.sections.general.search.searchSnapshotModes')"
             :include-empty="false"
           />
         </label>

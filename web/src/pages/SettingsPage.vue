@@ -478,13 +478,15 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
         <ScrollArea class="h-full">
           <div class="flex flex-col gap-1 p-3">
             <div class="mb-2 flex items-center justify-between px-1">
-              <div class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Settings</div>
+              <div class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                {{ t('settings.title') }}
+              </div>
               <Button
                 variant="ghost"
                 size="icon"
                 class="h-7 w-7"
-                title="Refresh"
-                aria-label="Refresh settings"
+                :title="String(t('settings.refresh'))"
+                :aria-label="String(t('settings.refreshAria'))"
                 @click="settings.refresh"
                 :disabled="settings.loading"
               >
@@ -778,14 +780,14 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
                   </div>
 
                   <div class="mt-1">
-                    <div class="text-xs font-medium text-muted-foreground">Tool details</div>
+                    <div class="text-xs font-medium text-muted-foreground">{{ t('settings.appearance.chat.toolDetails') }}</div>
                     <div class="mt-2 overflow-x-auto rounded-md border border-border/60">
                       <table class="min-w-full text-sm">
                         <thead class="bg-muted/30 text-xs text-muted-foreground">
                           <tr>
-                            <th class="px-3 py-2 text-left font-medium">Tool</th>
-                            <th class="px-3 py-2 text-center font-medium">Transport</th>
-                            <th class="px-3 py-2 text-center font-medium">Expand</th>
+                            <th class="px-3 py-2 text-left font-medium">{{ t('settings.appearance.chat.toolDetailsTable.tool') }}</th>
+                            <th class="px-3 py-2 text-center font-medium">{{ t('settings.appearance.chat.toolDetailsTable.transport') }}</th>
+                            <th class="px-3 py-2 text-center font-medium">{{ t('settings.appearance.chat.toolDetailsTable.expand') }}</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -818,13 +820,12 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
                       </table>
                     </div>
                     <div class="mt-2 text-[11px] text-muted-foreground">
-                      Tool expand defaults are configured per tool.
+                      {{ t('settings.appearance.chat.toolDetailsHint') }}
                     </div>
                   </div>
 
                   <div class="text-xs text-muted-foreground">
-                    Transport controls whether activity payload is requested. Expand controls default open state and,
-                    with transport matching always on, whether full details are included in the initial payload.
+                    {{ t('settings.appearance.chat.activityTransportHelp') }}
                   </div>
                 </div>
               </div>
@@ -832,7 +833,7 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
           </div>
 
           <div v-else class="flex flex-col items-center justify-center h-64 text-muted-foreground">
-            <p>Unknown settings tab.</p>
+            <p>{{ t('settings.unknownTab') }}</p>
           </div>
         </div>
       </main>

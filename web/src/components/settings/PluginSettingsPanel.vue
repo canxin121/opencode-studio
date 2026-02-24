@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 import Button from '@/components/ui/Button.vue'
 import OptionPicker from '@/components/ui/OptionPicker.vue'
@@ -42,6 +43,7 @@ const props = withDefaults(
 
 const pluginHost = usePluginHostStore()
 const toasts = useToastsStore()
+const { t } = useI18n()
 
 const selectedPluginId = ref('')
 const loading = ref(false)
@@ -252,7 +254,7 @@ async function savePluginConfig() {
       throw new Error(resp.error?.message || 'Failed to save plugin config')
     }
     await loadPluginConfig()
-    toasts.push('success', 'Plugin config saved')
+    toasts.push('success', t('settings.pluginSettings.toasts.saved'))
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
     toasts.push('error', error.value || 'Failed to save plugin config')
@@ -806,12 +808,12 @@ function clearArrayRows(path: string[], prop: SchemaProperty) {
 <template>
   <section class="rounded-lg border border-border bg-muted/10 p-4 space-y-4 min-w-0">
     <div class="flex flex-wrap items-center gap-2 min-w-0">
-      <div class="text-sm font-medium">Plugin settings</div>
-      <div class="ml-auto text-xs text-muted-foreground">Config is persisted by each plugin</div>
+      <div class="text-sm font-medium">{{ t('settings.pluginSettings.title') }}</div>
+      <div class="ml-auto text-xs text-muted-foreground">{{ t('settings.pluginSettings.subtitle') }}</div>
     </div>
 
     <div v-if="pluginsWithSchema.length === 0" class="text-xs text-muted-foreground">
-      No plugin published a `settingsSchema` yet.
+      {{ t('settings.pluginSettings.noSchemaPublished') }}
     </div>
 
     <template v-else>
@@ -820,8 +822,8 @@ function clearArrayRows(path: string[], prop: SchemaProperty) {
           <OptionPicker
             v-model="selectedPluginId"
             :options="pluginPickerOptions"
-            title="Plugin"
-            search-placeholder="Search plugins"
+            :title="t('settings.pluginSettings.fields.plugin')"
+            :search-placeholder="t('settings.pluginSettings.searchPlugins')"
             :include-empty="false"
             :disabled="loading || saving"
           />
@@ -834,9 +836,9 @@ function clearArrayRows(path: string[], prop: SchemaProperty) {
           <span class="truncate">{{ selectedPluginLabel }}</span>
         </div>
 
-        <Button variant="outline" size="sm" :disabled="loading || saving" @click="loadPluginConfig">Reload</Button>
+        <Button variant="outline" size="sm" :disabled="loading || saving" @click="loadPluginConfig">{{ t('common.reload') }}</Button>
         <Button size="sm" :disabled="loading || saving || !dirty" @click="savePluginConfig">
-          {{ saving ? 'Saving…' : 'Save' }}
+          {{ saving ? t('common.saving') : t('common.save') }}
         </Button>
       </div>
 
@@ -847,11 +849,11 @@ function clearArrayRows(path: string[], prop: SchemaProperty) {
         {{ error }}
       </div>
 
-      <div v-if="loading" class="text-xs text-muted-foreground">Loading plugin config…</div>
+      <div v-if="loading" class="text-xs text-muted-foreground">{{ t('settings.pluginSettings.loadingConfig') }}</div>
 
       <div v-else class="grid gap-3">
         <div v-if="schemaEntries.length === 0" class="text-xs text-muted-foreground">
-          This plugin did not declare any settings fields.
+          {{ t('settings.pluginSettings.noFieldsDeclared') }}
         </div>
 
         <div
@@ -880,9 +882,9 @@ function clearArrayRows(path: string[], prop: SchemaProperty) {
               :model-value="enumCurrentToken(entry.path, entry.prop)"
               @update:model-value="(v) => onEnumSelect(entry.path, String(v || ''))"
               :options="enumPickerOptions(entry.prop.enum)"
-              title="Select"
-              search-placeholder="Search options"
-              empty-label="(default)"
+              :title="t('common.select')"
+              :search-placeholder="t('common.searchOptions')"
+              :empty-label="`(${t('common.default')})`"
             />
 
             <input
@@ -909,7 +911,7 @@ function clearArrayRows(path: string[], prop: SchemaProperty) {
                 :checked="booleanValue(entry.path, entry.prop)"
                 @change="onBooleanInput(entry.path, $event)"
               />
-              <span class="text-muted-foreground">On</span>
+              <span class="text-muted-foreground">{{ t('common.on') }}</span>
             </label>
 
             <div v-else-if="entry.prop.type === 'array' && isArrayWithPrimitiveItems(entry.prop)" class="grid gap-2">
@@ -924,9 +926,9 @@ function clearArrayRows(path: string[], prop: SchemaProperty) {
                       :model-value="row"
                       @update:model-value="(v) => onArrayRowSelect(entry.path, entry.prop, rowIdx, String(v || ''))"
                       :options="enumPickerOptions(arrayItemEnum(entry.prop))"
-                      title="Select"
-                      search-placeholder="Search options"
-                      empty-label="(empty)"
+                      :title="t('common.select')"
+                      :search-placeholder="t('common.searchOptions')"
+                      :empty-label="`(${t('common.empty')})`"
                     />
                   </div>
 
@@ -938,9 +940,9 @@ function clearArrayRows(path: string[], prop: SchemaProperty) {
                         { value: 'true', label: 'true' },
                         { value: 'false', label: 'false' },
                       ]"
-                      title="Select"
-                      search-placeholder="Search options"
-                      empty-label="(empty)"
+                      :title="t('common.select')"
+                      :search-placeholder="t('common.searchOptions')"
+                      :empty-label="`(${t('common.empty')})`"
                     />
                   </div>
 
@@ -956,10 +958,10 @@ function clearArrayRows(path: string[], prop: SchemaProperty) {
                     "
                     :placeholder="
                       arrayItemType(entry.prop) === 'integer'
-                        ? 'Integer'
+                        ? String(t('common.integer'))
                         : arrayItemType(entry.prop) === 'number'
-                          ? 'Number'
-                          : 'Value'
+                          ? String(t('common.number'))
+                          : String(t('common.value'))
                     "
                     :value="row"
                     class="h-9 w-full sm:flex-1 sm:min-w-0 rounded-md border border-input bg-transparent px-3 text-sm"
@@ -972,19 +974,19 @@ function clearArrayRows(path: string[], prop: SchemaProperty) {
                     class="w-full sm:w-auto"
                     @click="removeArrayRow(entry.path, entry.prop, rowIdx)"
                   >
-                    Remove
+                    {{ t('common.remove') }}
                   </Button>
                 </div>
 
                 <div class="flex flex-wrap items-center gap-2">
-                  <Button variant="outline" size="sm" @click="addArrayRow(entry.path, entry.prop)">Add</Button>
+                  <Button variant="outline" size="sm" @click="addArrayRow(entry.path, entry.prop)">{{ t('common.add') }}</Button>
                   <Button
                     variant="outline"
                     size="sm"
                     :disabled="ensureArrayRows(entry.path, entry.prop).length === 0"
                     @click="clearArrayRows(entry.path, entry.prop)"
                   >
-                    Clear
+                    {{ t('common.clear') }}
                   </Button>
                 </div>
               </div>
@@ -1001,7 +1003,7 @@ function clearArrayRows(path: string[], prop: SchemaProperty) {
                 >
                   <input
                     type="text"
-                    placeholder="Key"
+                    :placeholder="t('common.key')"
                     :value="row.key"
                     class="h-9 w-full sm:w-[40%] sm:min-w-[160px] sm:max-w-[320px] rounded-md border border-input bg-transparent px-3 text-sm"
                     @input="onMapKeyInput(entry.path, entry.prop, rowIdx, $event)"
@@ -1012,9 +1014,9 @@ function clearArrayRows(path: string[], prop: SchemaProperty) {
                       :model-value="row.value"
                       @update:model-value="(v) => onMapValueSelect(entry.path, entry.prop, rowIdx, String(v || ''))"
                       :options="enumPickerOptions(mapValueEnum(entry.prop))"
-                      title="Select"
-                      search-placeholder="Search options"
-                      empty-label="(empty)"
+                      :title="t('common.select')"
+                      :search-placeholder="t('common.searchOptions')"
+                      :empty-label="`(${t('common.empty')})`"
                     />
                   </div>
 
@@ -1026,9 +1028,9 @@ function clearArrayRows(path: string[], prop: SchemaProperty) {
                         { value: 'true', label: 'true' },
                         { value: 'false', label: 'false' },
                       ]"
-                      title="Select"
-                      search-placeholder="Search options"
-                      empty-label="(empty)"
+                      :title="t('common.select')"
+                      :search-placeholder="t('common.searchOptions')"
+                      :empty-label="`(${t('common.empty')})`"
                     />
                   </div>
 
@@ -1044,10 +1046,10 @@ function clearArrayRows(path: string[], prop: SchemaProperty) {
                     "
                     :placeholder="
                       mapValueType(entry.prop) === 'integer'
-                        ? 'Integer'
+                        ? String(t('common.integer'))
                         : mapValueType(entry.prop) === 'number'
-                          ? 'Number'
-                          : 'Value'
+                          ? String(t('common.number'))
+                          : String(t('common.value'))
                     "
                     :value="row.value"
                     class="h-9 w-full sm:flex-1 sm:min-w-0 rounded-md border border-input bg-transparent px-3 text-sm"
@@ -1060,19 +1062,19 @@ function clearArrayRows(path: string[], prop: SchemaProperty) {
                     class="w-full sm:w-auto"
                     @click="removeMapRow(entry.path, entry.prop, rowIdx)"
                   >
-                    Remove
+                    {{ t('common.remove') }}
                   </Button>
                 </div>
 
                 <div class="flex flex-wrap items-center gap-2">
-                  <Button variant="outline" size="sm" @click="addMapRow(entry.path, entry.prop)">Add</Button>
+                  <Button variant="outline" size="sm" @click="addMapRow(entry.path, entry.prop)">{{ t('common.add') }}</Button>
                   <Button
                     variant="outline"
                     size="sm"
                     :disabled="ensureMapRows(entry.path, entry.prop).length === 0"
                     @click="clearMapRows(entry.path, entry.prop)"
                   >
-                    Clear
+                    {{ t('common.clear') }}
                   </Button>
                 </div>
               </div>

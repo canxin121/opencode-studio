@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { RiAddLine, RiCloseLine, RiRefreshLine, RiSearchLine } from '@remixicon/vue'
+import { useI18n } from 'vue-i18n'
 
 import IconButton from '@/components/ui/IconButton.vue'
 import Input from '@/components/ui/Input.vue'
 import SidebarPager from '@/layout/chatSidebar/components/SidebarPager.vue'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   directoryPage: number
@@ -25,7 +28,7 @@ const emit = defineEmits<{
   <div class="h-9 pt-1 select-none pl-3.5 pr-2 flex-shrink-0">
     <div class="flex h-full items-center justify-between gap-2">
       <div class="min-w-0 flex items-center gap-2">
-        <p class="typography-ui-label font-medium text-muted-foreground">Directories</p>
+        <p class="typography-ui-label font-medium text-muted-foreground">{{ t('chat.sidebar.header.directoriesTitle') }}</p>
       </div>
 
       <div class="flex items-center gap-1">
@@ -35,16 +38,20 @@ const emit = defineEmits<{
           :page="directoryPage"
           :page-count="directoryPageCount"
           :disabled="Boolean(directoryPaging)"
-          prev-label="Previous directories page"
-          next-label="Next directories page"
+          :prev-label="String(t('chat.sidebar.header.prevPage'))"
+          :next-label="String(t('chat.sidebar.header.nextPage'))"
           @update:page="(v) => emit('update:directoryPage', v)"
         />
 
-        <IconButton title="Add directory" @click="emit('add-directory')">
+        <IconButton :title="String(t('chat.sidebar.header.addDirectory'))" @click="emit('add-directory')">
           <RiAddLine class="h-4 w-4" />
         </IconButton>
 
-        <IconButton title="Refresh" :disabled="sessionsLoading" @click="emit('refresh')">
+        <IconButton
+          :title="String(t('chat.sidebar.header.refresh'))"
+          :disabled="sessionsLoading"
+          @click="emit('refresh')"
+        >
           <RiRefreshLine class="h-4 w-4" />
         </IconButton>
       </div>
@@ -59,16 +66,16 @@ const emit = defineEmits<{
       <Input
         :model-value="query"
         @update:model-value="(v) => emit('update:query', String(v || ''))"
-        placeholder="Search directories or sessions"
+        :placeholder="String(t('chat.sidebar.header.searchPlaceholder'))"
         class="h-8 pl-7 pr-7 text-xs"
-        aria-label="Search directories or sessions"
+        :aria-label="String(t('chat.sidebar.header.searchAria'))"
       />
       <IconButton
         v-if="query.trim()"
         size="xs"
         class="absolute right-1 top-1/2 -translate-y-1/2"
-        aria-label="Clear search"
-        title="Clear"
+        :aria-label="String(t('chat.sidebar.header.clearSearch'))"
+        :title="String(t('common.clear'))"
         @click="emit('update:query', '')"
       >
         <RiCloseLine class="h-4 w-4" />

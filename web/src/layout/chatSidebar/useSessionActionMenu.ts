@@ -1,5 +1,6 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch, type Component, type ComponentPublicInstance } from 'vue'
 import { RiClipboardLine, RiEditLine, RiFileUploadLine, RiLinkM, RiShareLine } from '@remixicon/vue'
+import { useI18n } from 'vue-i18n'
 
 import type { DirectoryEntry } from '@/features/sessions/model/types'
 
@@ -16,51 +17,66 @@ export type SessionActionItem = {
   disabled?: boolean
 }
 
+type TFunction = (key: string, params?: Record<string, unknown>) => string
+
 function shareUrlForSession(session: SessionLike | null | undefined): string {
   return typeof session?.share?.url === 'string' ? String(session.share.url) : ''
 }
 
 export function buildSessionActionItemsForSession(session: SessionLike | null | undefined): SessionActionItem[] {
+  const { t } = useI18n()
+  return buildSessionActionItemsForSessionI18n(t, session)
+}
+
+export function buildSessionActionItemsForSessionI18n(
+  t: TFunction,
+  session: SessionLike | null | undefined,
+): SessionActionItem[] {
   const shareUrl = shareUrlForSession(session)
   return [
-    { id: 'rename', label: 'Rename session', description: 'Change the session title', icon: RiEditLine },
+    {
+      id: 'rename',
+      label: String(t('chat.sidebar.sessionActions.rename.label')),
+      description: String(t('chat.sidebar.sessionActions.rename.description')),
+      icon: RiEditLine,
+    },
     {
       id: 'copy-transcript',
-      label: 'Copy transcript',
-      description: 'Copy the full conversation',
+      label: String(t('chat.sidebar.sessionActions.copyTranscript.label')),
+      description: String(t('chat.sidebar.sessionActions.copyTranscript.description')),
       icon: RiClipboardLine,
     },
     {
       id: 'export-transcript',
-      label: 'Export transcript',
-      description: 'Download a Markdown transcript',
+      label: String(t('chat.sidebar.sessionActions.exportTranscript.label')),
+      description: String(t('chat.sidebar.sessionActions.exportTranscript.description')),
       icon: RiFileUploadLine,
     },
     {
       id: 'share',
-      label: 'Share session',
-      description: 'Create a public link',
+      label: String(t('chat.sidebar.sessionActions.share.label')),
+      description: String(t('chat.sidebar.sessionActions.share.description')),
       icon: RiShareLine,
       disabled: Boolean(shareUrl),
     },
     {
       id: 'unshare',
-      label: 'Unshare session',
-      description: 'Remove the public link',
+      label: String(t('chat.sidebar.sessionActions.unshare.label')),
+      description: String(t('chat.sidebar.sessionActions.unshare.description')),
       icon: RiLinkM,
       disabled: !shareUrl,
     },
     {
       id: 'copy-share',
-      label: 'Copy share link',
-      description: 'Copy the current share link',
+      label: String(t('chat.sidebar.sessionActions.copyShareLink.label')),
+      description: String(t('chat.sidebar.sessionActions.copyShareLink.description')),
       icon: RiClipboardLine,
       disabled: !shareUrl,
     },
     {
       id: 'open-share',
-      label: 'Open share link',
-      description: 'Open the share link in a new tab',
+      label: String(t('chat.sidebar.sessionActions.openShareLink.label')),
+      description: String(t('chat.sidebar.sessionActions.openShareLink.description')),
       icon: RiLinkM,
       disabled: !shareUrl,
     },
@@ -72,6 +88,8 @@ export function useSessionActionMenu(opts: {
   ui: { requestSessionAction: (id: string) => void }
   selectSession: (sessionId: string) => Promise<void>
 }) {
+  const { t } = useI18n()
+
   type MenuRefLike = { containsTarget: (target: Node | null) => boolean; focusSearch?: () => void }
   type MaybeMenuComponent = ComponentPublicInstance<{ $el?: Element | null }> &
     Partial<{ containsTarget: (target: Node | null) => boolean; focusSearch: () => void }>
@@ -87,7 +105,7 @@ export function useSessionActionMenu(opts: {
   let sessionActionMenuClickHandler: ((event: MouseEvent) => void) | null = null
 
   const sessionActionItems = computed<SessionActionItem[]>(() =>
-    buildSessionActionItemsForSession(sessionActionMenuTarget.value?.session),
+    buildSessionActionItemsForSessionI18n(t, sessionActionMenuTarget.value?.session),
   )
 
   const filteredSessionActionItems = computed<SessionActionItem[]>(() => {

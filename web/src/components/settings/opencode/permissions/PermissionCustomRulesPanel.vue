@@ -34,31 +34,33 @@ export default defineComponent({
   setup() {
     const ctx = useOpencodeConfigPanelContext()
 
+    const t = ctx.t as unknown as (key: string, params?: Record<string, unknown>) => string
+
     const toolIdPickerOptions = computed<PickerOption[]>(() => {
       const list = Array.isArray(ctx.toolIdOptions) ? ctx.toolIdOptions : []
       return (list as string[]).map((id) => ({ value: id, label: id }))
     })
 
-    const permissionRulePickerOptions: PickerOption[] = [
-      { value: 'default', label: 'default' },
-      { value: 'allow', label: 'allow' },
-      { value: 'ask', label: 'ask' },
-      { value: 'deny', label: 'deny' },
-      { value: 'pattern', label: 'pattern map' },
-    ]
+    const permissionRulePickerOptions = computed<PickerOption[]>(() => [
+      { value: 'default', label: t('settings.opencodeConfig.sections.permissions.rules.options.default') },
+      { value: 'allow', label: t('settings.opencodeConfig.sections.permissions.rules.options.allow') },
+      { value: 'ask', label: t('settings.opencodeConfig.sections.permissions.rules.options.ask') },
+      { value: 'deny', label: t('settings.opencodeConfig.sections.permissions.rules.options.deny') },
+      { value: 'pattern', label: t('settings.opencodeConfig.sections.permissions.rules.options.patternMap') },
+    ])
 
-    const permissionActionPickerOptions: PickerOption[] = [
-      { value: 'allow', label: 'allow' },
-      { value: 'ask', label: 'ask' },
-      { value: 'deny', label: 'deny' },
-    ]
+    const permissionActionPickerOptions = computed<PickerOption[]>(() => [
+      { value: 'allow', label: t('settings.opencodeConfig.sections.permissions.rules.options.allow') },
+      { value: 'ask', label: t('settings.opencodeConfig.sections.permissions.rules.options.ask') },
+      { value: 'deny', label: t('settings.opencodeConfig.sections.permissions.rules.options.deny') },
+    ])
 
-    const newPermissionActionPickerOptions: PickerOption[] = [
-      { value: 'default', label: 'default' },
-      { value: 'allow', label: 'allow' },
-      { value: 'ask', label: 'ask' },
-      { value: 'deny', label: 'deny' },
-    ]
+    const newPermissionActionPickerOptions = computed<PickerOption[]>(() => [
+      { value: 'default', label: t('settings.opencodeConfig.sections.permissions.rules.options.default') },
+      { value: 'allow', label: t('settings.opencodeConfig.sections.permissions.rules.options.allow') },
+      { value: 'ask', label: t('settings.opencodeConfig.sections.permissions.rules.options.ask') },
+      { value: 'deny', label: t('settings.opencodeConfig.sections.permissions.rules.options.deny') },
+    ])
 
     return Object.assign(ctx, {
       toolIdPickerOptions,
@@ -72,15 +74,15 @@ export default defineComponent({
 
 <template>
   <div class="grid gap-2">
-    <span class="text-xs text-muted-foreground">Custom tool rules</span>
+    <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.permissions.customRules.title') }}</span>
     <div class="flex flex-wrap items-center gap-2">
       <div class="min-w-[220px] flex-1 max-w-[520px]">
         <OptionPicker
           v-model="newPermissionTool"
           :options="toolIdPickerOptions"
-          title="Tool id"
-          search-placeholder="Search tools"
-          empty-label="Select tool id…"
+          :title="t('settings.opencodeConfig.sections.permissions.customRules.fields.toolId')"
+          :search-placeholder="t('settings.opencodeConfig.sections.permissions.customRules.search.searchTools')"
+          :empty-label="t('settings.opencodeConfig.sections.permissions.customRules.placeholders.selectTool')"
           monospace
         />
       </div>
@@ -88,8 +90,8 @@ export default defineComponent({
         <OptionPicker
           v-model="newPermissionAction"
           :options="newPermissionActionPickerOptions"
-          title="Action"
-          search-placeholder="Search actions"
+          :title="t('settings.opencodeConfig.sections.permissions.customRules.fields.action')"
+          :search-placeholder="t('settings.opencodeConfig.sections.permissions.customRules.search.searchActions')"
           :include-empty="false"
         />
       </div>
@@ -98,23 +100,23 @@ export default defineComponent({
           size="icon"
           variant="outline"
           class="h-9 w-9"
-          title="Add rule"
-          aria-label="Add rule"
+          :title="t('settings.opencodeConfig.sections.permissions.customRules.actions.addRule')"
+          :aria-label="t('settings.opencodeConfig.sections.permissions.customRules.actions.addRule')"
           @click="addCustomPermissionRule"
           :disabled="!newPermissionTool"
         >
           <RiAddLine class="h-4 w-4" />
         </Button>
-        <template #content>Add rule</template>
+        <template #content>{{ t('settings.opencodeConfig.sections.permissions.customRules.actions.addRule') }}</template>
       </Tooltip>
     </div>
 
     <div v-if="toolIdsError" class="text-[11px] text-muted-foreground break-all">
-      Tool IDs unavailable: {{ toolIdsError }}
+      {{ t('settings.opencodeConfig.sections.permissions.customRules.toolIdsUnavailable', { error: toolIdsError }) }}
     </div>
 
     <div v-if="customPermissionKeys.length === 0" class="text-xs text-muted-foreground">
-      No custom rules configured.
+      {{ t('settings.opencodeConfig.sections.permissions.customRules.empty') }}
     </div>
     <div v-else class="grid gap-2">
       <div
@@ -129,8 +131,8 @@ export default defineComponent({
               :model-value="permissionRuleValue(key)"
               @update:model-value="(v) => onPermissionSelectChange(key, String(v || ''))"
               :options="permissionRulePickerOptions"
-              title="Permission"
-              search-placeholder="Search rules"
+              :title="t('settings.opencodeConfig.sections.permissions.rules.fields.permission')"
+              :search-placeholder="t('settings.opencodeConfig.sections.permissions.rules.search.searchRules')"
               :include-empty="false"
             />
           </div>
@@ -140,71 +142,71 @@ export default defineComponent({
             @click="togglePermissionPatternEditor(key)"
             :disabled="permissionRuleValue(key) !== 'pattern'"
           >
-            Edit patterns
+            {{ t('settings.opencodeConfig.sections.permissions.rules.actions.editPatterns') }}
           </Button>
           <span v-if="permissionRuleValue(key) === 'pattern'" class="text-[11px] text-muted-foreground"
-            >{{ permissionPatternCount(key) }} rules</span
+            >{{ t('settings.opencodeConfig.sections.permissions.rules.rulesCount', { count: permissionPatternCount(key) }) }}</span
           >
           <Tooltip>
             <Button
               size="icon"
               variant="ghost-destructive"
               class="h-8 w-8"
-              title="Remove"
-              aria-label="Remove rule"
+              :title="t('common.remove')"
+              :aria-label="t('common.remove')"
               @click="setPermissionRule(key, 'default')"
             >
               <RiDeleteBinLine class="h-4 w-4" />
             </Button>
-            <template #content>Remove</template>
+            <template #content>{{ t('common.remove') }}</template>
           </Tooltip>
         </div>
 
-        <div v-if="permissionPatternEditors[key]?.open" class="grid gap-2">
-          <div class="flex items-center justify-between">
-            <div class="text-xs text-muted-foreground">Pattern map</div>
-            <div class="flex items-center gap-2">
-              <Tooltip>
-                <Button
+          <div v-if="permissionPatternEditors[key]?.open" class="grid gap-2">
+            <div class="flex items-center justify-between">
+              <div class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.permissions.rules.patternMapLabel') }}</div>
+              <div class="flex items-center gap-2">
+                <Tooltip>
+                  <Button
                   size="icon"
                   variant="outline"
                   class="h-8 w-8"
-                  title="Add pattern"
-                  aria-label="Add pattern"
-                  @click="addPatternRow(key)"
-                >
+                    :title="t('settings.opencodeConfig.sections.permissions.rules.actions.addPattern')"
+                    :aria-label="t('settings.opencodeConfig.sections.permissions.rules.actions.addPattern')"
+                    @click="addPatternRow(key)"
+                  >
                   <RiAddLine class="h-4 w-4" />
                 </Button>
-                <template #content>Add pattern</template>
-              </Tooltip>
-              <Tooltip>
-                <Button
+                  <template #content>{{ t('settings.opencodeConfig.sections.permissions.rules.actions.addPattern') }}</template>
+                </Tooltip>
+                <Tooltip>
+                  <Button
                   size="icon"
                   variant="ghost"
                   class="h-8 w-8"
-                  title="Reset"
-                  aria-label="Reset"
-                  @click="resetPermissionPatternEditor(key)"
-                >
+                    :title="t('common.reset')"
+                    :aria-label="t('common.reset')"
+                    @click="resetPermissionPatternEditor(key)"
+                  >
                   <RiRestartLine class="h-4 w-4" />
                 </Button>
-                <template #content>Reset</template>
-              </Tooltip>
-              <Tooltip>
-                <Button
+                  <template #content>{{ t('common.reset') }}</template>
+                </Tooltip>
+                <Tooltip>
+                  <Button
                   size="icon"
                   variant="ghost"
                   class="h-8 w-8"
-                  title="Close"
-                  aria-label="Close"
-                  @click="togglePermissionPatternEditor(key)"
-                >
+                    :title="t('common.close')"
+                    :aria-label="t('common.close')"
+                    @click="togglePermissionPatternEditor(key)"
+                  >
                   <RiCloseLine class="h-4 w-4" />
                 </Button>
-                <template #content>Close</template>
-              </Tooltip>
+                  <template #content>{{ t('common.close') }}</template>
+                </Tooltip>
+              </div>
             </div>
-          </div>
 
           <div class="grid gap-2">
             <div
@@ -214,15 +216,15 @@ export default defineComponent({
             >
               <Input
                 v-model="row.pattern"
-                placeholder="**/*.ts"
+                :placeholder="t('settings.opencodeConfig.sections.permissions.rules.placeholders.pattern')"
                 class="font-mono"
                 @keydown="onPermissionPatternKeydown(key, idx, row, $event as KeyboardEvent)"
               />
               <OptionPicker
                 v-model="row.action"
                 :options="permissionActionPickerOptions"
-                title="Action"
-                search-placeholder="Search actions"
+                :title="t('settings.opencodeConfig.sections.permissions.rules.fields.action')"
+                :search-placeholder="t('settings.opencodeConfig.sections.permissions.rules.search.searchActions')"
                 :include-empty="false"
               />
               <div class="flex items-center gap-1">
@@ -230,8 +232,8 @@ export default defineComponent({
                   size="icon"
                   variant="ghost"
                   class="h-8 w-8"
-                  title="Move up"
-                  aria-label="Move up"
+                  :title="t('common.moveUp')"
+                  :aria-label="t('common.moveUp')"
                   @click="movePatternRow(key, idx, -1)"
                 >
                   <RiArrowUpLine class="h-4 w-4" />
@@ -240,8 +242,8 @@ export default defineComponent({
                   size="icon"
                   variant="ghost"
                   class="h-8 w-8"
-                  title="Move down"
-                  aria-label="Move down"
+                  :title="t('common.moveDown')"
+                  :aria-label="t('common.moveDown')"
                   @click="movePatternRow(key, idx, 1)"
                 >
                   <RiArrowDownLine class="h-4 w-4" />
@@ -250,8 +252,8 @@ export default defineComponent({
                   size="icon"
                   variant="ghost-destructive"
                   class="h-8 w-8"
-                  title="Remove"
-                  aria-label="Remove"
+                  :title="t('common.remove')"
+                  :aria-label="t('common.remove')"
                   @click="removePatternRow(key, idx)"
                 >
                   <RiDeleteBinLine class="h-4 w-4" />
@@ -266,18 +268,20 @@ export default defineComponent({
                 size="icon"
                 variant="outline"
                 class="h-8 w-8"
-                title="Apply patterns"
-                aria-label="Apply patterns"
+                :title="t('settings.opencodeConfig.sections.permissions.rules.actions.applyPatterns')"
+                :aria-label="t('settings.opencodeConfig.sections.permissions.rules.actions.applyPatterns')"
                 @click="applyPermissionPatternEditor(key)"
               >
                 <RiCheckLine class="h-4 w-4" />
               </Button>
-              <template #content>Apply patterns</template>
+              <template #content>{{ t('settings.opencodeConfig.sections.permissions.rules.actions.applyPatterns') }}</template>
             </Tooltip>
             <span v-if="permissionPatternEditors[key]?.error" class="text-xs text-destructive">{{
               permissionPatternEditors[key]?.error
             }}</span>
-            <span v-else class="text-[11px] text-muted-foreground">Order matters (last match wins).</span>
+            <span v-else class="text-[11px] text-muted-foreground">{{
+              t('settings.opencodeConfig.sections.permissions.rules.help.orderMatters')
+            }}</span>
           </div>
         </div>
       </div>

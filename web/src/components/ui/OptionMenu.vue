@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch, type CSSProperties, type Component } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   RiArrowDownSLine,
   RiArrowLeftSLine,
@@ -78,11 +79,11 @@ const props = withDefaults(
     title: '',
     mobileTitle: '',
     searchable: true,
-    searchPlaceholder: 'Search options',
-    emptyText: 'No options found.',
+    searchPlaceholder: '',
+    emptyText: '',
     helperText: '',
     isMobilePointer: false,
-    closeLabel: 'Close',
+    closeLabel: '',
     desktopPlacement: 'bottom-start',
     desktopClass: 'w-64',
     desktopStyle: undefined,
@@ -105,6 +106,18 @@ const emit = defineEmits<{
   (e: 'select', item: OptionMenuItem): void
   (e: 'close'): void
 }>()
+
+const { t } = useI18n()
+
+const effectiveSearchPlaceholder = computed(() =>
+  props.searchPlaceholder && props.searchPlaceholder.trim() ? props.searchPlaceholder : t('common.searchOptions'),
+)
+const effectiveEmptyText = computed(() =>
+  props.emptyText && props.emptyText.trim() ? props.emptyText : t('common.noOptionsFound'),
+)
+const effectiveCloseLabel = computed(() =>
+  props.closeLabel && props.closeLabel.trim() ? props.closeLabel : t('common.close'),
+)
 
 const rootEl = ref<HTMLElement | null>(null)
 const panelEl = ref<HTMLElement | null>(null)
@@ -629,7 +642,7 @@ defineExpose({ containsTarget, focusSearch })
         <div v-if="searchable" class="p-2 border-b border-border/40">
           <Input
             :model-value="query"
-            :placeholder="searchPlaceholder"
+            :placeholder="effectiveSearchPlaceholder"
             :class="desktopInputClass"
             @update:model-value="updateQuery"
           />
@@ -682,8 +695,8 @@ defineExpose({ containsTarget, focusSearch })
                     v-if="item.confirmTitle"
                     :title="item.confirmTitle"
                     :description="item.confirmDescription || ''"
-                    :confirm-text="item.confirmText || 'Confirm'"
-                    :cancel-text="item.cancelText || 'Cancel'"
+                    :confirm-text="item.confirmText || t('common.confirm')"
+                    :cancel-text="item.cancelText || t('common.cancel')"
                     :variant="item.variant === 'destructive' ? 'destructive' : 'default'"
                     @confirm="selectItem(item)"
                   >
@@ -733,7 +746,7 @@ defineExpose({ containsTarget, focusSearch })
             <div v-if="helperText" class="px-3 py-2 text-[11px] text-muted-foreground">{{ helperText }}</div>
           </template>
 
-          <div v-else class="px-3 py-3 text-xs text-muted-foreground">{{ emptyText }}</div>
+          <div v-else class="px-3 py-3 text-xs text-muted-foreground">{{ effectiveEmptyText }}</div>
         </div>
 
         <div
@@ -744,8 +757,8 @@ defineExpose({ containsTarget, focusSearch })
             size="sm"
             variant="ghost"
             class="h-7 w-7 p-0"
-            title="Previous page"
-            aria-label="Previous page"
+            :title="t('common.previousPage')"
+            :aria-label="t('common.previousPage')"
             :disabled="currentPage <= 1"
             @click="goToPrevPage"
           >
@@ -756,8 +769,8 @@ defineExpose({ containsTarget, focusSearch })
             size="sm"
             variant="ghost"
             class="h-7 w-7 p-0"
-            title="Next page"
-            aria-label="Next page"
+            :title="t('common.nextPage')"
+            :aria-label="t('common.nextPage')"
             :disabled="currentPage >= pageCount"
             @click="goToNextPage"
           >
@@ -776,8 +789,8 @@ defineExpose({ containsTarget, focusSearch })
         @click.stop
       >
         <div class="flex items-center justify-between gap-3 px-3 py-2 border-b border-border/40">
-          <div class="text-sm font-semibold">{{ mobileTitle || title || 'Options' }}</div>
-          <IconButton size="sm" :title="closeLabel" :aria-label="closeLabel" @click="closeMenu">
+          <div class="text-sm font-semibold">{{ mobileTitle || title || t('common.options') }}</div>
+          <IconButton size="sm" :title="effectiveCloseLabel" :aria-label="effectiveCloseLabel" @click="closeMenu">
             <RiCloseLine class="h-4 w-4" />
           </IconButton>
         </div>
@@ -785,7 +798,7 @@ defineExpose({ containsTarget, focusSearch })
         <div v-if="searchable" class="p-3 border-b border-border/40">
           <Input
             :model-value="query"
-            :placeholder="searchPlaceholder"
+            :placeholder="effectiveSearchPlaceholder"
             :class="mobileInputClass"
             @update:model-value="updateQuery"
           />
@@ -838,8 +851,8 @@ defineExpose({ containsTarget, focusSearch })
                     v-if="item.confirmTitle"
                     :title="item.confirmTitle"
                     :description="item.confirmDescription || ''"
-                    :confirm-text="item.confirmText || 'Confirm'"
-                    :cancel-text="item.cancelText || 'Cancel'"
+                    :confirm-text="item.confirmText || t('common.confirm')"
+                    :cancel-text="item.cancelText || t('common.cancel')"
                     :variant="item.variant === 'destructive' ? 'destructive' : 'default'"
                     @confirm="selectItem(item)"
                   >
@@ -893,7 +906,7 @@ defineExpose({ containsTarget, focusSearch })
             <div v-if="helperText" class="px-3 py-2 text-[13px] text-muted-foreground">{{ helperText }}</div>
           </template>
 
-          <div v-else class="px-3 py-3 text-sm text-muted-foreground">{{ emptyText }}</div>
+          <div v-else class="px-3 py-3 text-sm text-muted-foreground">{{ effectiveEmptyText }}</div>
         </div>
 
         <div
@@ -904,8 +917,8 @@ defineExpose({ containsTarget, focusSearch })
             size="sm"
             variant="ghost"
             class="h-8 w-8 p-0"
-            title="Previous page"
-            aria-label="Previous page"
+            :title="t('common.previousPage')"
+            :aria-label="t('common.previousPage')"
             :disabled="currentPage <= 1"
             @click="goToPrevPage"
           >
@@ -916,8 +929,8 @@ defineExpose({ containsTarget, focusSearch })
             size="sm"
             variant="ghost"
             class="h-8 w-8 p-0"
-            title="Next page"
-            aria-label="Next page"
+            :title="t('common.nextPage')"
+            :aria-label="t('common.nextPage')"
             :disabled="currentPage >= pageCount"
             @click="goToNextPage"
           >

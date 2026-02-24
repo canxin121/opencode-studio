@@ -1,4 +1,5 @@
 import { ref, type Ref } from 'vue'
+import { i18n } from '@/i18n'
 
 import type { GitBranchesResponse } from '@/types/git'
 import type { JsonValue } from '@/types/json'
@@ -59,7 +60,7 @@ export function useGitBranches(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ name, startPoint: 'HEAD' }),
         })
-        toasts.push('success', `Created branch ${name}`)
+        toasts.push('success', i18n.global.t('git.toasts.createdBranch', { name }))
         newBranchName.value = ''
         await load()
         await loadBranches()
@@ -80,7 +81,7 @@ export function useGitBranches(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ branch }),
         })
-        toasts.push('success', `Checked out ${branch}`)
+        toasts.push('success', i18n.global.t('git.toasts.checkedOutBranch', { name: branch }))
         await load()
         await loadBranches()
       } catch (err) {
@@ -103,7 +104,7 @@ export function useGitBranches(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ branch: name, force }),
         })
-        toasts.push('success', `Deleted branch ${name}`)
+        toasts.push('success', i18n.global.t('git.toasts.deletedBranch', { name }))
         await load()
         await loadBranches()
       } catch (err) {
@@ -126,7 +127,7 @@ export function useGitBranches(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ name: remoteName }),
         })
-        toasts.push('success', `Deleted remote branch ${remoteName}`)
+        toasts.push('success', i18n.global.t('git.toasts.deletedRemoteBranch', { name: remoteName }))
         await load()
         await loadBranches()
       } catch (err) {
@@ -157,7 +158,7 @@ export function useGitBranches(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ from, to }),
         })
-        toasts.push('success', `Renamed ${from} -> ${to}`)
+        toasts.push('success', i18n.global.t('git.toasts.renamedFromTo', { from, to }))
         await load()
         await loadBranches()
       } catch (err) {

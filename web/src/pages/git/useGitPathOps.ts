@@ -1,5 +1,6 @@
 import { ref, type Ref } from 'vue'
 import type { JsonValue } from '@/types/json'
+import { i18n } from '@/i18n'
 
 type QueryValue = string | number | boolean | null | undefined
 
@@ -51,7 +52,7 @@ export function useGitPathOps(opts: {
           body: JSON.stringify({ from, to }),
         })
         if (selectedFile.value === from) selectedFile.value = to
-        toasts.push('success', 'Renamed')
+        toasts.push('success', i18n.global.t('git.toasts.renamed'))
         await load()
       } catch (err) {
         if (handleGitBusy(err, 'Rename', submitRename)) return
@@ -72,7 +73,7 @@ export function useGitPathOps(opts: {
           body: JSON.stringify({ path: p, force }),
         })
         if (selectedFile.value === p) selectedFile.value = null
-        toasts.push('success', 'Deleted')
+        toasts.push('success', i18n.global.t('git.toasts.deleted'))
         await load()
         refreshDiff()
       } catch (err) {

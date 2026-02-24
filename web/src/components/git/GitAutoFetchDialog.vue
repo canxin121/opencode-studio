@@ -1,8 +1,13 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+
 import Button from '@/components/ui/Button.vue'
 import FormDialog from '@/components/ui/FormDialog.vue'
 import Input from '@/components/ui/Input.vue'
 import OptionPicker, { type PickerOption } from '@/components/ui/OptionPicker.vue'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   open: boolean
@@ -42,11 +47,11 @@ function onUpdateInterval(key: 'fetch' | 'sync', v: string | number) {
   if (key === 'sync') emit('update:autoSyncInterval', n)
 }
 
-const postCommitCommandPickerOptions: PickerOption[] = [
-  { value: 'none', label: 'Prompt' },
-  { value: 'push', label: 'Push' },
-  { value: 'sync', label: 'Sync' },
-]
+const postCommitCommandPickerOptions = computed<PickerOption[]>(() => [
+  { value: 'none', label: t('git.ui.postCommit.prompt') },
+  { value: 'push', label: t('git.actions.push') },
+  { value: 'sync', label: t('git.actions.sync') },
+])
 
 function onUpdatePostCommitCommand(value: string | number) {
   const v = String(value || '').trim()
@@ -61,8 +66,8 @@ function onUpdatePostCommitCommand(value: string | number) {
 <template>
   <FormDialog
     :open="open"
-    title="Auto Fetch / Sync"
-    description="Background git updates"
+    :title="t('git.ui.dialogs.autoFetchSync.title')"
+    :description="t('git.ui.dialogs.autoFetchSync.description')"
     maxWidth="max-w-md"
     @update:open="onUpdateOpen"
   >
@@ -70,10 +75,10 @@ function onUpdatePostCommitCommand(value: string | number) {
       <div class="space-y-2">
         <label class="flex items-center gap-2 text-sm">
           <input type="checkbox" class="accent-primary" :checked="autoFetchEnabled" @change="onToggleFetch" />
-          Auto fetch
+          {{ t('git.ui.dialogs.autoFetchSync.autoFetch') }}
         </label>
         <div class="grid gap-1">
-          <div class="text-xs text-muted-foreground">Fetch interval (minutes)</div>
+          <div class="text-xs text-muted-foreground">{{ t('git.ui.dialogs.autoFetchSync.fetchIntervalMinutes') }}</div>
           <Input
             type="number"
             class="h-9 font-mono text-xs"
@@ -86,13 +91,13 @@ function onUpdatePostCommitCommand(value: string | number) {
       <div class="space-y-2">
         <label class="flex items-center gap-2 text-sm">
           <input type="checkbox" class="accent-primary" :checked="autoSyncEnabled" @change="onToggleSync" />
-          Auto sync (pull + push)
+          {{ t('git.ui.dialogs.autoFetchSync.autoSync') }}
         </label>
         <div class="text-[11px] text-muted-foreground">
-          Use with care — sync can fail if you have local changes or conflicts.
+          {{ t('git.ui.dialogs.autoFetchSync.syncWarning') }}
         </div>
         <div class="grid gap-1">
-          <div class="text-xs text-muted-foreground">Sync interval (minutes)</div>
+          <div class="text-xs text-muted-foreground">{{ t('git.ui.dialogs.autoFetchSync.syncIntervalMinutes') }}</div>
           <Input
             type="number"
             class="h-9 font-mono text-xs"
@@ -103,15 +108,15 @@ function onUpdatePostCommitCommand(value: string | number) {
       </div>
 
       <div class="space-y-2">
-        <div class="text-sm">Post-commit action</div>
+        <div class="text-sm">{{ t('git.ui.dialogs.autoFetchSync.postCommitAction') }}</div>
         <div class="text-[11px] text-muted-foreground">
-          After commit, run an action when the branch has an upstream and is ahead.
+          {{ t('git.ui.dialogs.autoFetchSync.postCommitHint') }}
         </div>
         <OptionPicker
           :model-value="postCommitCommand"
           :options="postCommitCommandPickerOptions"
-          title="Post-commit action"
-          search-placeholder="Search actions"
+          :title="t('git.ui.dialogs.autoFetchSync.postCommitAction')"
+          :search-placeholder="t('common.searchActions')"
           :include-empty="false"
           trigger-class="bg-background px-2 text-xs"
           @update:model-value="onUpdatePostCommitCommand"
@@ -119,7 +124,7 @@ function onUpdatePostCommitCommand(value: string | number) {
       </div>
 
       <div class="flex justify-end">
-        <Button variant="secondary" size="sm" @click="$emit('update:open', false)">Close</Button>
+        <Button variant="secondary" size="sm" @click="$emit('update:open', false)">{{ t('common.close') }}</Button>
       </div>
     </div>
   </FormDialog>

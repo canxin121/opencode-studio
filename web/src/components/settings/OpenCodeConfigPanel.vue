@@ -78,6 +78,7 @@ import type { JsonValue as JsonLike } from '@/types/json'
 
 import { refDebounced } from '@vueuse/core'
 import { RiArrowGoBackLine, RiRefreshLine, RiRestartLine, RiSave3Line } from '@remixicon/vue'
+import { useI18n } from 'vue-i18n'
 
 import { useDirectoryStore } from '@/stores/directory'
 import { useOpencodeConfigStore, type OpencodeConfigScope } from '@/stores/opencodeConfig'
@@ -91,14 +92,15 @@ type AgentRow = [string, JsonObject]
 const configStore = useOpencodeConfigStore()
 const directoryStore = useDirectoryStore()
 const toasts = useToastsStore()
+const { t } = useI18n()
 
 const scope = ref<OpencodeConfigScope>(configStore.scope || 'user')
 
-const scopePickerOptions = [
-  { value: 'user', label: 'User config' },
-  { value: 'project', label: 'Project config' },
-  { value: 'custom', label: 'Custom (OPENCODE_CONFIG)' },
-]
+const scopePickerOptions = computed(() => [
+  { value: 'user', label: t('settings.opencodeConfig.scope.user') },
+  { value: 'project', label: t('settings.opencodeConfig.scope.project') },
+  { value: 'custom', label: t('settings.opencodeConfig.scope.custom') },
+])
 
 const directory = computed(() => directoryStore.currentDirectory || '')
 const activePath = computed(() => configStore.activePath || '')
@@ -270,7 +272,7 @@ function addCommand() {
   const template = newCommandTemplate.value.trim()
   if (!name) return
   if (!template) {
-    toasts.push('error', 'Command template is required')
+    toasts.push('error', t('settings.opencodeConfig.errors.commandTemplateRequired'))
     return
   }
   const entry = ensureEntry('command', name)
@@ -413,7 +415,7 @@ async function copyText(value: string, okMsg: string) {
     await navigator.clipboard.writeText(value)
     toasts.push('success', okMsg)
   } catch {
-    toasts.push('error', 'Failed to copy to clipboard')
+    toasts.push('error', t('settings.opencodeConfig.toasts.failedToCopyToClipboard'))
   }
 }
 
@@ -764,6 +766,8 @@ const { refresh, reloadOpenCode, save, resetDraft, reloading, requiresJsoncRewri
 // Provide a shared context so section templates can be split into smaller SFCs
 // without prop drilling.
 const panelContext = reactive({
+  t,
+
   // Section UI
   isSectionOpen,
   toggleSection,
@@ -903,53 +907,70 @@ export type OpenCodeConfigPanelProvidedContext = typeof panelContext
             <OptionPicker
               v-model="scope"
               :options="scopePickerOptions"
-              title="Config scope"
-              search-placeholder="Search scopes"
+              :title="t('settings.opencodeConfig.scope.title')"
+              :search-placeholder="t('settings.opencodeConfig.scope.searchPlaceholder')"
               :include-empty="false"
               trigger-class="rounded-lg border-border bg-background"
             />
           </div>
-          <Button variant="ghost" size="sm" @click="refresh" :disabled="configStore.loading" title="Refresh">
+          <Button
+            variant="ghost"
+            size="sm"
+            @click="refresh"
+            :disabled="configStore.loading"
+            :title="t('common.refresh')"
+          >
             <RiRefreshLine class="h-4 w-4" />
           </Button>
         </div>
 
         <div class="flex items-center gap-2 ml-auto">
-          <Button variant="outline" size="sm" @click="resetDraft" :disabled="resetDisabled" title="Reset">
+          <Button
+            variant="outline"
+            size="sm"
+            @click="resetDraft"
+            :disabled="resetDisabled"
+            :title="t('common.reset')"
+          >
             <RiArrowGoBackLine class="h-4 w-4" />
           </Button>
 
           <ConfirmPopover
-            title="Reload OpenCode now?"
-            description="Apply the updated config to the running OpenCode process."
-            confirm-text="Reload"
-            cancel-text="Cancel"
+            :title="t('settings.opencodeConfig.reloadConfirm.title')"
+            :description="t('settings.opencodeConfig.reloadConfirm.description')"
+            :confirm-text="t('common.reload')"
+            :cancel-text="t('common.cancel')"
             @confirm="reloadOpenCode"
           >
-            <Button variant="outline" size="sm" :disabled="reloading" title="Reload OpenCode">
+            <Button
+              variant="outline"
+              size="sm"
+              :disabled="reloading"
+              :title="t('settings.opencodeConfig.actions.reloadOpenCode')"
+            >
               <RiRestartLine class="h-4 w-4" />
             </Button>
           </ConfirmPopover>
 
           <ConfirmPopover
             v-if="requiresJsoncRewriteConfirm()"
-            title="Rewrite .jsonc as JSON?"
-            description="Saving from this UI rewrites .jsonc as JSON and removes comments/trailing commas."
-            confirm-text="Save"
-            cancel-text="Cancel"
+            :title="t('settings.opencodeConfig.jsoncConfirm.title')"
+            :description="t('settings.opencodeConfig.jsoncConfirm.description')"
+            :confirm-text="t('common.save')"
+            :cancel-text="t('common.cancel')"
             @confirm="() => void save({ allowJsoncRewrite: true })"
           >
-            <Button size="sm" :disabled="actionDisabled" title="Save">
+            <Button size="sm" :disabled="actionDisabled" :title="t('common.save')">
               <RiSave3Line class="h-4 w-4" />
             </Button>
           </ConfirmPopover>
-          <Button v-else size="sm" @click="save" :disabled="actionDisabled" title="Save">
+          <Button v-else size="sm" @click="save" :disabled="actionDisabled" :title="t('common.save')">
             <RiSave3Line class="h-4 w-4" />
           </Button>
         </div>
       </div>
       <div v-if="scope === 'project' && !directory" class="pt-2 text-xs text-amber-600">
-        Project scope requires an active directory.
+        {{ t('settings.opencodeConfig.scope.projectRequiresDirectory') }}
       </div>
     </div>
 
@@ -969,12 +990,16 @@ export type OpenCodeConfigPanelProvidedContext = typeof panelContext
       class="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-amber-800"
     >
       <div class="flex items-center justify-between gap-2">
-        <div class="text-sm font-semibold">Validation</div>
-        <Button size="sm" variant="ghost" @click="validationIssues = []">Clear</Button>
+        <div class="text-sm font-semibold">{{ t('settings.opencodeConfig.validation.title') }}</div>
+        <Button size="sm" variant="ghost" @click="validationIssues = []">{{ t('common.clear') }}</Button>
       </div>
       <div class="mt-1 text-xs">
-        {{ validationIssues.filter((i) => i.severity === 'error').length }} errors,
-        {{ validationIssues.filter((i) => i.severity === 'warning').length }} warnings
+        {{
+          t('settings.opencodeConfig.validation.issueCounts', {
+            errors: validationIssues.filter((i) => i.severity === 'error').length,
+            warnings: validationIssues.filter((i) => i.severity === 'warning').length,
+          })
+        }}
       </div>
       <div class="mt-2 grid gap-1 text-xs">
         <div v-for="(i, idx) in validationIssues.slice(0, 10)" :key="`issue:${idx}`" class="break-all">
@@ -982,7 +1007,7 @@ export type OpenCodeConfigPanelProvidedContext = typeof panelContext
           >: {{ i.message }}
         </div>
         <div v-if="validationIssues.length > 10" class="text-xs text-muted-foreground">
-          … ({{ validationIssues.length - 10 }} more)
+          {{ t('settings.opencodeConfig.validation.moreIssues', { count: validationIssues.length - 10 }) }}
         </div>
       </div>
     </div>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { apiJson } from '@/lib/api'
 import Button from '@/components/ui/Button.vue'
 import Input from '@/components/ui/Input.vue'
@@ -53,9 +54,13 @@ const props = withDefaults(
     resolveToAbsolute: false,
     showOptions: false,
     showHidden: false,
-    buttonLabel: 'Browse',
+    buttonLabel: '',
   },
 )
+
+const { t } = useI18n()
+
+const effectiveButtonLabel = computed(() => String(props.buttonLabel || '').trim() || String(t('ui.pathPicker.actions.browse')))
 
 const emit = defineEmits<{
   (e: 'update:modelValue', value: string): void
@@ -302,7 +307,7 @@ watch(
         :disabled="disabled"
         :class="buttonClass"
       >
-        {{ browserOpen ? 'Hide' : buttonLabel }}
+        {{ browserOpen ? t('common.hide') : effectiveButtonLabel }}
       </Button>
     </div>
 
@@ -316,7 +321,7 @@ watch(
         <div class="flex items-center gap-2 flex-wrap">
           <Input
             v-model="value"
-            :placeholder="placeholder || '/path/to/folder'"
+            :placeholder="placeholder || t('ui.pathPicker.placeholders.path')"
             class="min-w-0 flex-1 font-mono"
             @keydown.enter.prevent="goToBrowserDraft"
           />
@@ -329,12 +334,12 @@ watch(
             :disabled="!value.trim()"
             :class="buttonClass"
           >
-            Go
+            {{ t('ui.pathPicker.actions.go') }}
           </Button>
         </div>
 
         <div class="flex items-center justify-between gap-2 flex-wrap">
-          <Input v-model="browserQuery" placeholder="Filter..." class="min-w-0 flex-1" />
+          <Input v-model="browserQuery" :placeholder="t('ui.pathPicker.placeholders.filter')" class="min-w-0 flex-1" />
 
           <div class="flex items-center gap-1">
             <template v-if="showOptions">
@@ -344,9 +349,13 @@ watch(
                 type="button"
                 class="h-8 w-8"
                 :class="showHidden ? 'bg-secondary/60' : ''"
-                :title="showHidden ? 'Hidden: shown' : 'Hidden: hidden'"
+                :title="
+                  showHidden
+                    ? t('ui.pathPicker.titles.hiddenShown')
+                    : t('ui.pathPicker.titles.hiddenHidden')
+                "
                 :aria-pressed="showHidden"
-                aria-label="Toggle hidden"
+                :aria-label="t('ui.pathPicker.aria.toggleHidden')"
                 @click="showHidden = !showHidden"
               >
                 <RiEyeLine v-if="showHidden" class="h-4 w-4" />
@@ -358,9 +367,13 @@ watch(
                 type="button"
                 class="h-8 w-8"
                 :class="showGitignored ? 'bg-secondary/60' : ''"
-                :title="showGitignored ? 'Gitignored: shown' : 'Gitignored: hidden'"
+                :title="
+                  showGitignored
+                    ? t('ui.pathPicker.titles.gitignoredShown')
+                    : t('ui.pathPicker.titles.gitignoredHidden')
+                "
                 :aria-pressed="showGitignored"
-                aria-label="Toggle gitignored"
+                :aria-label="t('ui.pathPicker.aria.toggleGitignored')"
                 @click="showGitignored = !showGitignored"
               >
                 <RiGitBranchLine class="h-4 w-4" :class="showGitignored ? '' : 'opacity-50'" />
@@ -376,7 +389,7 @@ watch(
               @click="browserFoldersOnly = !browserFoldersOnly"
               :class="buttonClass"
             >
-              {{ browserFoldersOnly ? 'Folders only' : 'All' }}
+              {{ browserFoldersOnly ? t('ui.pathPicker.actions.foldersOnly') : t('common.all') }}
             </Button>
           </div>
         </div>
@@ -395,7 +408,7 @@ watch(
         </div>
 
         <div class="flex-1 min-h-0 rounded-md border border-border overflow-hidden">
-          <div v-if="browserLoading" class="px-3 py-3 text-xs text-muted-foreground">Loading…</div>
+          <div v-if="browserLoading" class="px-3 py-3 text-xs text-muted-foreground">{{ t('common.loading') }}</div>
           <div v-else-if="browserError" class="px-3 py-3 text-xs text-destructive">{{ browserError }}</div>
           <div v-else class="h-full overflow-auto">
             <button
@@ -412,10 +425,10 @@ watch(
                 </span>
                 <span class="min-w-0 truncate" :title="entry.name">{{ entry.name }}</span>
               </div>
-              <span v-if="entry.isDirectory" class="text-xs text-muted-foreground">Open</span>
+              <span v-if="entry.isDirectory" class="text-xs text-muted-foreground">{{ t('common.open') }}</span>
             </button>
             <div v-if="filteredBrowserEntries.length === 0" class="px-3 py-3 text-xs text-muted-foreground">
-              No matches
+              {{ t('ui.pathPicker.empty.noMatches') }}
             </div>
           </div>
         </div>

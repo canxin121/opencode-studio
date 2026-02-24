@@ -63,6 +63,32 @@ function inlineIcon(name: 'copy' | 'check' | 'chevronDown' | 'chevronUp'): strin
   }
 }
 
+export type MarkdownUiLabels = {
+  copyTitle: string
+  copyCodeAria: string
+  copyDiagramSourceAria: string
+  toggleCodeAria: string
+  toggleDiagramAria: string
+  expandTitle: string
+  expandCodeAria: string
+  expandDiagramAria: string
+  expandLinesTitle: (lines: number) => string
+}
+
+const DEFAULT_LABELS: MarkdownUiLabels = {
+  copyTitle: 'Copy',
+  copyCodeAria: 'Copy code',
+  copyDiagramSourceAria: 'Copy diagram source',
+  toggleCodeAria: 'Toggle code block',
+  toggleDiagramAria: 'Toggle diagram',
+  expandTitle: 'Expand',
+  expandCodeAria: 'Expand code block',
+  expandDiagramAria: 'Expand diagram',
+  expandLinesTitle: (lines: number) => `Expand (${lines} lines)`,
+}
+
+let currentLabels: MarkdownUiLabels = DEFAULT_LABELS
+
 function renderMermaidBlock(code: string): string {
   const normalized = normalizeNewlines(String(code ?? '')).trimEnd()
   const lines = countLines(normalized)
@@ -74,7 +100,7 @@ function renderMermaidBlock(code: string): string {
 
   const toggleBtn = large
     ? `
-<button type="button" class="oc-md-codeblock__iconbtn" data-oc-code-action="toggle" aria-label="Toggle diagram" title="Toggle (${linesEsc} lines)">
+<button type="button" class="oc-md-codeblock__iconbtn" data-oc-code-action="toggle" aria-label="${escapeHtml(currentLabels.toggleDiagramAria)}" title="${escapeHtml(currentLabels.expandLinesTitle(lines))}">
   ${inlineIcon('chevronDown')}
   ${inlineIcon('chevronUp')}
 </button>`.trim()
@@ -83,7 +109,7 @@ function renderMermaidBlock(code: string): string {
   const moreBtn = large
     ? `
 <div class="oc-md-mermaid__morewrap">
-  <button type="button" class="oc-md-codeblock__more" data-oc-code-action="toggle" aria-label="Expand diagram" title="Expand">
+  <button type="button" class="oc-md-codeblock__more" data-oc-code-action="toggle" aria-label="${escapeHtml(currentLabels.expandDiagramAria)}" title="${escapeHtml(currentLabels.expandTitle)}">
     ${inlineIcon('chevronDown')}
   </button>
 </div>`.trim()
@@ -95,7 +121,7 @@ function renderMermaidBlock(code: string): string {
     <span class="oc-md-codeblock__lang" title="mermaid">mermaid</span>
     <div class="oc-md-codeblock__actions">
       ${toggleBtn}
-      <button type="button" class="oc-md-codeblock__iconbtn" data-oc-code-action="copy" aria-label="Copy diagram source" title="Copy">
+      <button type="button" class="oc-md-codeblock__iconbtn" data-oc-code-action="copy" aria-label="${escapeHtml(currentLabels.copyDiagramSourceAria)}" title="${escapeHtml(currentLabels.copyTitle)}">
         ${inlineIcon('copy')}
         ${inlineIcon('check')}
       </button>
@@ -127,7 +153,7 @@ function renderFencedCodeBlock(code: string, lang?: string): string {
 
   const toggleBtn = large
     ? `
-<button type="button" class="oc-md-codeblock__iconbtn" data-oc-code-action="toggle" aria-label="Toggle code block" title="Toggle (${linesEsc} lines)">
+<button type="button" class="oc-md-codeblock__iconbtn" data-oc-code-action="toggle" aria-label="${escapeHtml(currentLabels.toggleCodeAria)}" title="${escapeHtml(currentLabels.expandLinesTitle(lines))}">
   ${inlineIcon('chevronDown')}
   ${inlineIcon('chevronUp')}
 </button>`.trim()
@@ -136,7 +162,7 @@ function renderFencedCodeBlock(code: string, lang?: string): string {
   const moreBtn = large
     ? `
 <div class="oc-md-codeblock__morewrap">
-  <button type="button" class="oc-md-codeblock__more" data-oc-code-action="toggle" aria-label="Expand code" title="Expand">
+  <button type="button" class="oc-md-codeblock__more" data-oc-code-action="toggle" aria-label="${escapeHtml(currentLabels.expandCodeAria)}" title="${escapeHtml(currentLabels.expandTitle)}">
     ${inlineIcon('chevronDown')}
   </button>
 </div>`.trim()
@@ -148,7 +174,7 @@ function renderFencedCodeBlock(code: string, lang?: string): string {
     <span class="oc-md-codeblock__lang" title="${titleEsc}">${langEsc}</span>
     <div class="oc-md-codeblock__actions">
       ${toggleBtn}
-      <button type="button" class="oc-md-codeblock__iconbtn" data-oc-code-action="copy" aria-label="Copy code" title="Copy">
+      <button type="button" class="oc-md-codeblock__iconbtn" data-oc-code-action="copy" aria-label="${escapeHtml(currentLabels.copyCodeAria)}" title="${escapeHtml(currentLabels.copyTitle)}">
         ${inlineIcon('copy')}
         ${inlineIcon('check')}
       </button>
@@ -243,8 +269,13 @@ md.core.ruler.push('add_heading_ids', (state) => {
   }
 })
 
-export function renderMarkdown(content: string): string {
-  return md.render(String(content ?? ''))
+export function renderMarkdown(content: string, labels?: Partial<MarkdownUiLabels>): string {
+  currentLabels = { ...DEFAULT_LABELS, ...(labels || {}) }
+  try {
+    return md.render(String(content ?? ''))
+  } finally {
+    currentLabels = DEFAULT_LABELS
+  }
 }
 
 // Convert markdown into plain text (used for thinking/justification parts).

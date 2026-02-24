@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { RiCloseLine, RiListCheck3 } from '@remixicon/vue'
+import { useI18n } from 'vue-i18n'
 
 import Button from '@/components/ui/Button.vue'
 import InlineSearchAdd, { type PickerOption } from '@/components/ui/InlineSearchAdd.vue'
@@ -11,6 +12,8 @@ import { useOpencodeConfigPanelContext } from '../opencodeConfigContext'
 import { asStringArray } from '../utils'
 
 const ctx = useOpencodeConfigPanelContext()
+
+const { t } = useI18n()
 
 const {
   providerConflictPolicy,
@@ -39,22 +42,22 @@ const conflictPolicyPickerOptions: OptionPickerOption[] = [
 <template>
   <div class="rounded-md border border-border p-3 space-y-2">
     <div class="flex flex-wrap items-center justify-between gap-2">
-      <div class="text-sm font-semibold">Bulk actions</div>
-      <div class="text-[11px] text-muted-foreground">Use selection to set allow/deny lists quickly.</div>
+      <div class="text-sm font-semibold">{{ t('settings.opencodeConfig.sections.providers.bulkActions.title') }}</div>
+      <div class="text-[11px] text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.bulkActions.help') }}</div>
     </div>
     <div class="grid gap-3 lg:grid-cols-2">
       <label class="grid gap-1">
-        <span class="text-xs text-muted-foreground">Conflict policy</span>
+        <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.bulkActions.fields.conflictPolicy') }}</span>
         <OptionPicker
           v-model="providerConflictPolicy"
           :options="conflictPolicyPickerOptions"
-          title="Conflict policy"
-          search-placeholder="Search policies"
+          :title="t('settings.opencodeConfig.sections.providers.bulkActions.fields.conflictPolicy')"
+          :search-placeholder="t('settings.opencodeConfig.sections.providers.bulkActions.search.searchPolicies')"
           :include-empty="false"
         />
       </label>
       <div class="lg:col-span-2 grid gap-1">
-        <span class="text-xs text-muted-foreground">Selection</span>
+        <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.bulkActions.fields.selection') }}</span>
         <div class="flex flex-wrap gap-2">
           <span
             v-for="id in bulkProviderSelection"
@@ -70,13 +73,15 @@ const conflictPolicyPickerOptions: OptionPickerOption[] = [
               ×
             </button>
           </span>
-          <span v-if="bulkProviderSelection.length === 0" class="text-xs text-muted-foreground">None</span>
+          <span v-if="bulkProviderSelection.length === 0" class="text-xs text-muted-foreground">{{
+            t('settings.opencodeConfig.sections.common.none')
+          }}</span>
         </div>
         <div class="flex items-center gap-2">
           <InlineSearchAdd
             :options="providerPickerOptions"
-            panel-title="Providers"
-            placeholder="Add provider ids (paste supported)"
+            :panel-title="t('settings.opencodeConfig.sections.providers.bulkActions.picker.panelTitle')"
+            :placeholder="t('settings.opencodeConfig.sections.providers.bulkActions.picker.placeholder')"
             monospace
             :selected-values="bulkProviderSelection"
             @add="addBulkProviderTags"
@@ -92,45 +97,47 @@ const conflictPolicyPickerOptions: OptionPickerOption[] = [
               size="icon"
               variant="ghost"
               class="h-9 w-9"
-              title="Select all"
-              aria-label="Select all"
+              :title="t('common.selectAll')"
+              :aria-label="t('common.selectAll')"
               @click="bulkProviderSelection = providerIdOptions"
             >
               <RiListCheck3 class="h-4 w-4" />
             </Button>
-            <template #content>All</template>
+            <template #content>{{ t('common.all') }}</template>
           </Tooltip>
           <Tooltip>
             <Button
               size="icon"
               variant="ghost"
               class="h-9 w-9"
-              title="Clear"
-              aria-label="Clear selection"
+              :title="t('common.clear')"
+              :aria-label="t('settings.opencodeConfig.sections.providers.bulkActions.actions.clearSelectionAria')"
               @click="bulkProviderSelection = []"
               :disabled="bulkProviderSelection.length === 0"
             >
               <RiCloseLine class="h-4 w-4" />
             </Button>
-            <template #content>Clear</template>
+            <template #content>{{ t('common.clear') }}</template>
           </Tooltip>
         </div>
       </div>
     </div>
   </div>
 
-  <div class="flex flex-wrap items-center gap-2">
-    <Button size="sm" variant="outline" @click="applyBulkEnableOnly" :disabled="bulkProviderSelection.length === 0">
-      Enable only selection
-    </Button>
+<div class="flex flex-wrap items-center gap-2">
+  <Button size="sm" variant="outline" @click="applyBulkEnableOnly" :disabled="bulkProviderSelection.length === 0">
+      {{ t('settings.opencodeConfig.sections.providers.bulkActions.actions.enableOnly') }}
+  </Button>
     <Button
       size="sm"
       variant="outline"
       @click="applyBulkDisableAllExcept"
       :disabled="bulkProviderSelection.length === 0"
-    >
-      Disable all except selection
-    </Button>
-    <span v-if="providerEnvError" class="text-xs text-amber-600 break-all">Env check: {{ providerEnvError }}</span>
+  >
+      {{ t('settings.opencodeConfig.sections.providers.bulkActions.actions.disableAllExcept') }}
+  </Button>
+    <span v-if="providerEnvError" class="text-xs text-amber-600 break-all">{{
+      t('settings.opencodeConfig.sections.providers.bulkActions.errors.envCheck', { error: providerEnvError })
+    }}</span>
   </div>
 </template>

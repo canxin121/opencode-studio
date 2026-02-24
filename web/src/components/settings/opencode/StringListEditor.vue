@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { RiCloseLine } from '@remixicon/vue'
+import { useI18n } from 'vue-i18n'
 
 import IconButton from '@/components/ui/IconButton.vue'
 import InlineSearchAdd, { type PickerOption } from '@/components/ui/InlineSearchAdd.vue'
@@ -10,6 +11,8 @@ import Tooltip from '@/components/ui/Tooltip.vue'
 import { normalizeStringList, removeFromList, splitTags } from '../OpenCodeConfigPanelListUtils'
 
 type SplitMode = 'tags' | 'lines'
+
+const { t } = useI18n()
 
 const props = withDefaults(
   defineProps<{
@@ -29,8 +32,8 @@ const props = withDefaults(
     suggestions: () => [],
     placeholder: '',
     panelTitle: '',
-    emptyText: 'None',
-    advancedLabel: 'Advanced text',
+    emptyText: '',
+    advancedLabel: '',
     advancedPlaceholder: '',
     advancedRows: 4,
     showAdvancedToggle: true,
@@ -45,6 +48,18 @@ const emit = defineEmits<{
 const advancedOpen = ref(false)
 
 const items = computed(() => normalizeStringList(props.modelValue || []))
+
+const emptyTextLabel = computed(() => {
+  const next = String(props.emptyText || '').trim()
+  return next.length > 0 ? next : String(t('settings.opencodeConfig.sections.common.none'))
+})
+
+const advancedLabelText = computed(() => {
+  const next = String(props.advancedLabel || '').trim()
+  return next.length > 0 ? next : String(t('settings.opencodeConfig.stringListEditor.advancedLabel'))
+})
+
+const itemsCountLabel = computed(() => String(t('settings.opencodeConfig.stringListEditor.itemsCount', { count: items.value.length })))
 
 const pickerOptions = computed<PickerOption[]>(() => {
   const out: PickerOption[] = []
@@ -107,17 +122,26 @@ function clearAll() {
   <div class="space-y-2">
     <div class="flex items-center justify-between gap-2">
       <div class="text-[11px] text-muted-foreground">
-        {{ items.length ? `${items.length} item${items.length > 1 ? 's' : ''}` : emptyText }}
+        {{ items.length ? itemsCountLabel : emptyTextLabel }}
       </div>
       <div class="flex items-center gap-2">
         <TextActionButton v-if="showAdvancedToggle" @click="advancedOpen = !advancedOpen">
-          {{ advancedOpen ? 'Hide advanced text' : 'Show advanced text' }}
+          {{
+            advancedOpen
+              ? t('settings.opencodeConfig.sections.common.hideAdvancedText')
+              : t('settings.opencodeConfig.sections.common.showAdvancedText')
+          }}
         </TextActionButton>
         <Tooltip>
-          <IconButton title="Clear" aria-label="Clear list" :disabled="items.length === 0" @click="clearAll">
+          <IconButton
+            :title="t('common.clear')"
+            :aria-label="t('common.clear')"
+            :disabled="items.length === 0"
+            @click="clearAll"
+          >
             <RiCloseLine class="h-4 w-4" />
           </IconButton>
-          <template #content>Clear</template>
+          <template #content>{{ t('common.clear') }}</template>
         </Tooltip>
       </div>
     </div>
@@ -133,7 +157,7 @@ function clearAll() {
           ×
         </IconButton>
       </span>
-      <span v-if="items.length === 0" class="text-xs text-muted-foreground">{{ emptyText }}</span>
+      <span v-if="items.length === 0" class="text-xs text-muted-foreground">{{ emptyTextLabel }}</span>
     </div>
 
     <InlineSearchAdd
@@ -148,7 +172,7 @@ function clearAll() {
     />
 
     <label v-if="showAdvancedToggle && advancedOpen" class="grid gap-1">
-      <span class="text-xs text-muted-foreground">{{ advancedLabel }}</span>
+      <span class="text-xs text-muted-foreground">{{ advancedLabelText }}</span>
       <textarea
         v-model="advancedText"
         :rows="advancedRows"

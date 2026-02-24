@@ -3,16 +3,203 @@ export default {
     title: 'OpenCode Studio',
   },
   common: {
+    add: 'Add',
     cancel: 'Cancel',
     close: 'Close',
+    clear: 'Clear',
+    create: 'Create',
+    delete: 'Delete',
+    checkout: 'Checkout',
+    default: 'Default',
+    other: 'Other',
     save: 'Save',
     saving: 'Saving...',
+    saveFailed: 'Save failed',
     edit: 'Edit',
+    open: 'Open',
+    hide: 'Hide',
+    from: 'From',
+    to: 'To',
     remove: 'Remove',
+    rename: 'Rename',
+    confirm: 'Confirm',
+    working: 'Working...',
+    reloading: 'Reloading...',
+    search: 'Search',
+    searching: 'Searching...',
+    searchOptions: 'Search options',
+    all: 'All',
+    selectAll: 'Select all',
+    replace: 'Replace',
+    discard: 'Discard',
+    undo: 'Undo',
+    clean: 'Clean',
+    retry: 'Retry',
     connecting: 'Connecting...',
+    loading: 'Loading...',
+    loadMore: 'Load more',
+    refresh: 'Refresh',
+    reset: 'Reset',
+    reload: 'Reload',
     unlock: 'Unlock',
     continue: 'Continue',
+    abort: 'Abort',
+    later: 'Later',
+    nextSteps: 'Next steps',
+    useTerminal: 'Use Terminal',
+    openTerminal: 'Open Terminal',
+    scanning: 'Scanning...',
     useProject: 'Use project',
+    use: 'Use',
+    searchActions: 'Search actions',
+    select: 'Select',
+    noActionsFound: 'No actions found.',
+    noOptionsFound: 'No options found.',
+    options: 'Options',
+    copied: 'Copied',
+    copyPath: 'Copy path',
+    view: 'View',
+    apply: 'Apply',
+    ignore: 'Ignore',
+    yes: 'Yes',
+    no: 'No',
+    copyFailed: 'Copy failed',
+    failedToCopyToClipboard: 'Failed to copy to clipboard',
+    downloadFailed: 'Download failed',
+    previousPage: 'Previous page',
+    nextPage: 'Next page',
+    previous: 'Prev',
+    next: 'Next',
+    unknown: 'Unknown',
+    moveUp: 'Move up',
+    moveDown: 'Move down',
+    empty: 'Empty',
+    on: 'On',
+    key: 'Key',
+    value: 'Value',
+    integer: 'Integer',
+    number: 'Number',
+    optionPicker: {
+      searchPlaceholder: 'Search...',
+      selectPlaceholder: 'Select...',
+      truncatedHelper: 'Type to search. Showing {shown} of {total}.',
+      emptyNoMatches: 'No matches.',
+      emptyNoPresetMatches: 'No preset matches. Use custom value below.',
+      customGroupTitle: 'Custom',
+      useValue: 'Use "{value}"',
+      setCustomValue: 'Set a custom value',
+    },
+  },
+  codeBlock: {
+    copy: 'Copy',
+    hide: 'Hide',
+    reveal: 'Reveal',
+    notSet: '(not set)',
+    copyAria: 'Copy code',
+    copyDiagramSourceAria: 'Copy diagram source',
+    expand: 'Expand',
+    collapse: 'Collapse',
+    expandLines: 'Expand ({lines} lines)',
+    expandAria: 'Expand code block',
+    collapseAria: 'Collapse code block',
+    toggleCodeAria: 'Toggle code block',
+    toggleDiagramAria: 'Toggle diagram',
+    expandDiagramAria: 'Expand diagram',
+  },
+  markdown: {
+    tableOfContents: 'Table of Contents',
+  },
+  plugins: {
+    mountHost: {
+      loadingAria: 'Loading plugin UI',
+      errors: {
+        iframeLoadFailed: 'Failed to load plugin UI iframe',
+      },
+    },
+  },
+  help: {
+    dialog: {
+      title: 'Help',
+      description: 'Keyboard shortcuts and quick actions',
+      quickActions: {
+        title: 'Quick Actions',
+        badge: 'Action',
+        reloadConfig: 'Reload OpenCode Configuration',
+        themeLight: 'Theme: Light',
+        themeDark: 'Theme: Dark',
+        themeSystem: 'Theme: System',
+      },
+      sections: {
+        navigationCommands: 'Navigation & Commands',
+        sessionManagement: 'Session Management',
+        interface: 'Interface',
+      },
+      shortcuts: {
+        showKeyboardShortcuts: 'Show Keyboard Shortcuts',
+        toggleSessionSidebar: 'Toggle Session Sidebar',
+        openModelSelector: 'Open Model Selector',
+        cycleThinkingVariant: 'Cycle Thinking Variant',
+        createNewSession: 'Create New Session',
+        sendMessage: 'Send Message',
+        focusChatInput: 'Focus Chat Input',
+        abortActiveRunDouble: 'Abort active run (double press)',
+        cycleTheme: 'Cycle Theme (Light → Dark → System)',
+        openDiffPanel: 'Open Diff Panel',
+        openFiles: 'Open Files',
+        openTerminal: 'Open Terminal',
+        openGitPanel: 'Open Git Panel',
+        openTimeline: 'Open Timeline',
+        openSettings: 'Open Settings',
+      },
+    },
+  },
+  mcp: {
+    dialog: {
+      title: 'MCP servers',
+      description: 'Manage Model Context Protocol connections',
+      loading: 'Loading MCP status...',
+      empty: 'No MCP servers configured.',
+      actions: {
+        connect: 'Connect',
+        disconnect: 'Disconnect',
+        authenticate: 'Authenticate',
+        retry: 'Retry',
+        refreshing: 'Refreshing...',
+      },
+    },
+    status: {
+      connected: 'connected',
+      disabled: 'disabled',
+      needsAuth: 'needs_auth',
+      needsClientRegistration: 'needs_client_registration',
+      failed: 'failed',
+    },
+  },
+  ui: {
+    pathPicker: {
+      actions: {
+        browse: 'Browse',
+        go: 'Go',
+        foldersOnly: 'Folders only',
+      },
+      titles: {
+        hiddenShown: 'Hidden: shown',
+        hiddenHidden: 'Hidden: hidden',
+        gitignoredShown: 'Gitignored: shown',
+        gitignoredHidden: 'Gitignored: hidden',
+      },
+      aria: {
+        toggleHidden: 'Toggle hidden',
+        toggleGitignored: 'Toggle gitignored',
+      },
+      placeholders: {
+        path: '/path/to/folder',
+        filter: 'Filter...',
+      },
+      empty: {
+        noMatches: 'No matches',
+      },
+    },
   },
   nav: {
     chat: 'Chat',
@@ -78,6 +265,7 @@ export default {
     title: 'Settings',
     refresh: 'Refresh',
     refreshAria: 'Refresh settings',
+    unknownTab: 'Unknown settings tab.',
     emptyPlugins: 'No plugins expose settings.',
     tabs: {
       opencode: 'OpenCode',
@@ -85,6 +273,1016 @@ export default {
       backends: 'Backends',
       troubleshooting: 'Troubleshooting',
       appearance: 'Appearance',
+    },
+    backendsPanel: {
+      title: 'Backends',
+      description: 'Manage Studio backend endpoints. Switching the active backend reloads the app.',
+      activeBackend: 'Active backend',
+      backendFallback: 'Backend',
+      activeBadge: 'Active',
+      noBackends: 'No backends configured.',
+      dialogs: {
+        add: {
+          title: 'Add backend',
+          description: 'Add a Studio backend URL and (optionally) activate it.',
+          label: 'Label',
+          labelPlaceholder: 'e.g. Local Studio',
+          baseUrl: 'Base URL',
+          baseUrlPlaceholder: 'http://127.0.0.1:3000',
+          examples: 'Examples: `http://127.0.0.1:3000` or `https://studio.example.com`',
+          setActive: 'Set as active (reload)',
+        },
+        edit: {
+          title: 'Edit backend',
+          description: 'Update backend label or URL. Changing the active backend URL reloads the app.',
+          label: 'Label',
+          baseUrl: 'Base URL',
+        },
+      },
+      confirmRemove: {
+        title: 'Remove backend?',
+      },
+      toasts: {
+        failedToAdd: 'Failed to add backend',
+        added: 'Backend added',
+        addedAndActivated: 'Backend added and activated',
+        failedToUpdate: 'Failed to update backend',
+        updated: 'Backend updated',
+        switching: 'Switching backend...',
+        failedToRemove: 'Failed to remove backend',
+        removed: 'Backend removed',
+        refreshed: 'Backends refreshed',
+      },
+    },
+    pluginSettings: {
+      title: 'Plugin settings',
+      subtitle: 'Config is persisted by each plugin',
+      noSchemaPublished: 'No plugin published a `settingsSchema` yet.',
+      fields: {
+        plugin: 'Plugin',
+      },
+      searchPlugins: 'Search plugins',
+      loadingConfig: 'Loading plugin config...',
+      noFieldsDeclared: 'This plugin did not declare any settings fields.',
+      toasts: {
+        saved: 'Plugin config saved',
+      },
+    },
+    opencodeConfig: {
+      scope: {
+        title: 'Config scope',
+        searchPlaceholder: 'Search scopes',
+        user: 'User config',
+        project: 'Project config',
+        custom: 'Custom (OPENCODE_CONFIG)',
+        projectRequiresDirectory: 'Project scope requires an active directory.',
+      },
+      actions: {
+        reloadOpenCode: 'Reload OpenCode',
+      },
+      reloadConfirm: {
+        title: 'Reload OpenCode now?',
+        description: 'Apply the updated config to the running OpenCode process.',
+      },
+      jsoncConfirm: {
+        title: 'Rewrite .jsonc as JSON?',
+        description: 'Saving from this UI rewrites .jsonc as JSON and removes comments/trailing commas.',
+      },
+      toasts: {
+        failedToCopyToClipboard: 'Failed to copy to clipboard',
+        openCodeReloaded: 'OpenCode reloaded',
+      },
+      providerHealth: {
+        apiKeyEmpty: 'API key is empty',
+        copiedApiKey: 'Copied API key',
+      },
+      errors: {
+        commandTemplateRequired: 'Command template is required',
+        invalidJson: 'Invalid JSON',
+        expectedJsonObjectForEntry: 'Expected a JSON object for {kind} entry',
+        fixJsonErrorsBeforeSaving: 'Fix JSON errors before saving',
+        openCodeConfigSaved: 'OpenCode config saved',
+        refreshedAgentModelLists: 'Refreshed agent/model lists',
+        failedToRefreshAgentModelLists: 'Failed to refresh agent/model lists',
+        noToolsSelectedForBulkApply: 'No tools selected for bulk apply',
+        noCommitTemplateConfigured: 'No commit template configured',
+        fixValidationErrorsBeforeSavingCount: 'Fix validation errors before saving ({count})',
+        copiedKindJson: 'Copied {kind} JSON',
+        pasteKindJsonPrompt: "Paste {kind} JSON to import into '{id}'",
+        importedKindJsonInto: 'Imported {kind} JSON into {id}',
+        setPermissionWildcard: 'Set permission.* = {action}',
+        appliedActionToToolsCount: 'Applied {action} to {count} tools',
+      },
+
+      validation: {
+        title: 'Validation',
+        issueCounts: '{errors} errors, {warnings} warnings',
+        moreIssues: '... ({count} more)',
+      },
+
+      stringListEditor: {
+        advancedLabel: 'Advanced text',
+        itemsCount: '{count} items',
+      },
+
+      sections: {
+        common: {
+          resetSection: 'Reset section',
+          collapse: 'Collapse',
+          expand: 'Expand',
+          search: 'Search',
+          options: {
+            triState: {
+              default: 'default',
+              true: 'true',
+              false: 'false',
+            },
+          },
+          showAdvancedText: 'Show advanced text',
+          hideAdvancedText: 'Hide advanced text',
+          none: 'None',
+          enabled: 'Enabled',
+          disabled: 'Disabled',
+          applyJson: 'Apply JSON',
+        },
+        providers: {
+          title: 'Allow/deny lists plus provider overrides and models.',
+          actions: {
+            refreshHealth: 'Refresh health',
+            refreshHealthAria: 'Refresh provider health',
+            addProvider: 'Add provider',
+            addProviderAria: 'Add provider',
+          },
+          placeholders: {
+            newProviderId: 'New provider id',
+          },
+          empty: 'No providers configured.',
+          allowDeny: {
+            title: 'Provider allow/deny lists',
+            actions: {
+              showBrowse: 'Browse list',
+              hideBrowse: 'Hide browse list',
+            },
+            enabled: {
+              title: 'Enabled',
+              help: 'If non-empty, only these providers are used.',
+              clearAria: 'Clear enabled providers',
+              toggleTitle: 'Toggle enabled providers',
+              advancedLabel: 'Enabled providers (advanced)',
+            },
+            disabled: {
+              title: 'Disabled',
+              help: 'These providers will be excluded.',
+              clearAria: 'Clear disabled providers',
+              toggleTitle: 'Toggle disabled providers',
+              advancedLabel: 'Disabled providers (advanced)',
+            },
+            picker: {
+              panelTitle: 'Providers',
+              placeholder: 'Add provider id',
+            },
+            placeholders: {
+              filterProviders: 'Filter providers (e.g. openai)',
+              enabledAdvanced: 'anthropic\nopenai',
+              disabledAdvanced: 'openrouter',
+            },
+            empty: {
+              noMatchingProviders: 'No matching providers.',
+            },
+            errors: {
+              conflicts: 'Conflicts: {conflicts} (cannot be both enabled and disabled)',
+            },
+          },
+          bulkActions: {
+            title: 'Bulk actions',
+            help: 'Use selection to set allow/deny lists quickly.',
+            fields: {
+              conflictPolicy: 'Conflict policy',
+              selection: 'Selection',
+            },
+            search: {
+              searchPolicies: 'Search policies',
+            },
+            picker: {
+              panelTitle: 'Providers',
+              placeholder: 'Add provider ids (paste supported)',
+            },
+            actions: {
+              clearSelectionAria: 'Clear selection',
+              enableOnly: 'Enable only selection',
+              disableAllExcept: 'Disable all except selection',
+            },
+            errors: {
+              envCheck: 'Env check: {error}',
+            },
+          },
+          providerCard: {
+            actions: {
+              expandProviderAria: 'Expand provider',
+              collapseProviderAria: 'Collapse provider',
+              removeProviderAria: 'Remove provider',
+            },
+            sections: {
+              optionsTitle: 'Options',
+            },
+            fields: {
+              displayName: 'Display name',
+              apiBaseUrl: 'API base URL',
+              idOverride: 'ID override',
+              npmPackage: 'NPM package',
+              environmentVariables: 'Environment variables',
+              modelSlugs: 'Model slugs',
+              whitelistModels: 'Whitelist models',
+              blacklistModels: 'Blacklist models',
+              apiKey: 'API key',
+              baseUrl: 'Base URL',
+              enterpriseUrl: 'Enterprise URL',
+              setCacheKey: 'Set cache key',
+              includeUsage: 'Include usage',
+              useCompletionUrls: 'Use completion URLs',
+              timeout: 'Timeout',
+              timeoutMs: 'Timeout (ms)',
+              region: 'Region',
+              profile: 'Profile',
+              endpoint: 'Endpoint',
+              project: 'Project',
+              location: 'Location',
+              deploymentId: 'Deployment ID',
+              resourceGroup: 'Resource group',
+              gitlabInstanceUrl: 'GitLab instance URL',
+            },
+            search: {
+              searchTimeoutModes: 'Search modes',
+            },
+            timeoutModes: {
+              default: 'default',
+              disabled: 'disabled',
+              custom: 'custom',
+            },
+            placeholders: {
+              envVar: 'OPENAI_API_KEY',
+              modelSlugExampleA: 'gpt-4.1',
+              modelSlugExampleB: 'gpt-3.5',
+            },
+          },
+          modelsEditor: {
+            title: 'Models',
+            actions: {
+              addModel: 'Add model',
+              expandModelAria: 'Expand model',
+              collapseModelAria: 'Collapse model',
+              removeModelAria: 'Remove model',
+            },
+            empty: {
+              noModels: 'No models configured.',
+            },
+            fields: {
+              modelIdOverride: 'Model ID override',
+              displayName: 'Display name',
+              family: 'Family',
+              releaseDate: 'Release date',
+              status: 'Status',
+              interleaved: 'Interleaved',
+              providerOverrideNpm: 'Provider override (npm)',
+            },
+            search: {
+              searchStatuses: 'Search statuses',
+              searchModes: 'Search modes',
+            },
+            options: {
+              status: {
+                default: 'default',
+                alpha: 'alpha',
+                beta: 'beta',
+                deprecated: 'deprecated',
+              },
+              interleaved: {
+                default: 'default',
+                true: 'true',
+                reasoningContent: 'reasoning_content',
+                reasoningDetails: 'reasoning_details',
+              },
+            },
+            capabilities: {
+              attachment: 'Attachment',
+              reasoning: 'Reasoning',
+              temperature: 'Temperature',
+              toolCall: 'Tool call',
+              experimental: 'Experimental',
+            },
+            cost: {
+              title: 'Cost',
+              over200k: 'Over 200k',
+            },
+            limits: {
+              title: 'Limits',
+            },
+            modalities: {
+              title: 'Modalities',
+              input: 'Input',
+              output: 'Output',
+            },
+            json: {
+              modelOptions: 'Model options (JSON)',
+              modelHeaders: 'Model headers (JSON)',
+              variantExtra: 'Variant extra (JSON)',
+            },
+            variants: {
+              title: 'Variants',
+              placeholders: {
+                variantId: 'Variant id',
+              },
+              actions: {
+                addVariant: 'Add variant',
+                removeVariantAria: 'Remove variant',
+              },
+              empty: 'No variants configured.',
+            },
+            placeholders: {
+              modelId: 'Model id',
+              input: 'input',
+              output: 'output',
+              cacheRead: 'cache read',
+              cacheWrite: 'cache write',
+              context: 'context',
+            },
+          },
+          statusChips: {
+            selectable: 'Selectable',
+            excluded: 'Excluded',
+            source: 'source',
+            envSet: 'env: {set}/{total} set',
+            missing: 'missing',
+            cfg: 'cfg',
+            cfgSources: {
+              user: 'user',
+              project: 'project',
+              custom: 'custom',
+              auth: 'auth',
+            },
+            sourcesError: 'sources: {error}',
+          },
+          mapsEditor: {
+            title: 'Maps',
+            actions: {
+              showJson: 'Show JSON',
+              hideJson: 'Hide JSON',
+            },
+            headers: {
+              title: 'Headers',
+              notObjectWarning: 'Current headers value is not an object; table editing will overwrite it.',
+              placeholders: {
+                header: 'Header',
+                newHeader: 'New header',
+                value: 'Value',
+              },
+              actions: {
+                removeHeaderAria: 'Remove header',
+                addHeaderAria: 'Add header',
+              },
+            },
+            featureFlags: {
+              title: 'Feature flags',
+              notObjectWarning: 'Current featureFlags value is not an object; table editing will overwrite it.',
+              placeholders: {
+                flag: 'Flag',
+                newFlag: 'New flag',
+              },
+              actions: {
+                removeFlagAria: 'Remove flag',
+                addFlagAria: 'Add flag',
+              },
+            },
+            optionsExtra: {
+              title: 'Options (extra)',
+              help: 'Key/value pairs in provider.options not covered by known fields.',
+              placeholders: {
+                newKey: 'New key',
+                jsonValue: '"value"',
+              },
+              actions: {
+                removeEntryAria: 'Remove entry',
+                addEntryAria: 'Add entry',
+              },
+            },
+            json: {
+              headers: 'Headers (JSON)',
+              featureFlags: 'Feature flags (JSON)',
+              optionsExtra: 'Options JSON (extra)',
+            },
+          },
+        },
+        agents: {
+          title: 'Agent defaults and overrides.',
+          actions: {
+            addAgent: 'Add agent',
+            addAgentAria: 'Add agent',
+          },
+          placeholders: {
+            agentName: 'Agent name',
+            filterAgents: 'Filter agents',
+          },
+          picker: {
+            count: '{count} agents',
+            empty: 'No agents configured.',
+            badges: {
+              disabled: 'disabled',
+              hidden: 'hidden',
+            },
+          },
+          editor: {
+            empty: 'Select an agent from the list to edit.',
+            help: {
+              singleEdit: 'Edit one agent at a time to keep UI responsive.',
+            },
+            actions: {
+              copyJson: 'Copy JSON',
+              importJson: 'Import JSON',
+              showAdvanced: 'Show advanced',
+              hideAdvanced: 'Hide advanced',
+              toggleAdvancedAria: 'Toggle advanced',
+              removeAgentAria: 'Remove agent',
+            },
+            tabs: {
+              basics: 'Basics',
+              prompt: 'Prompt',
+              permissions: 'Permissions',
+              json: 'JSON',
+            },
+            fields: {
+              model: 'Model',
+              variant: 'Variant',
+              temperature: 'Temperature',
+              topP: 'Top-p',
+              description: 'Description',
+              mode: 'Mode',
+              color: 'Color',
+              steps: 'Steps',
+            },
+            search: {
+              searchModels: 'Search models',
+              searchModes: 'Search modes',
+            },
+            defaults: {
+              modelInherit: 'Default (inherit)',
+            },
+            placeholders: {
+              variant: 'Default model variant',
+              color: '#FF5733',
+            },
+            toggles: {
+              disabled: 'Disabled',
+              hidden: 'Hidden',
+            },
+            prompt: {
+              actions: {
+                insertSkeleton: 'Insert skeleton',
+                insertFrontmatter: 'Insert frontmatter',
+              },
+            },
+            permissions: {
+              title: 'Permission overrides',
+              help: {
+                inherit: 'Unset keys inherit global permission.',
+              },
+            },
+            json: {
+              optionsTitle: 'Options (JSON)',
+              permissionAdvancedTitle: 'Permission (advanced JSON)',
+            },
+            modeOptions: {
+              default: 'default',
+              primary: 'primary',
+              subagent: 'subagent',
+              all: 'all',
+            },
+          },
+        },
+        general: {
+          title: 'Top-level identity, defaults, and schema.',
+          common: {
+            all: 'All',
+          },
+          options: {
+            modelStatusFilter: {
+              active: 'active',
+              beta: 'beta',
+              alpha: 'alpha',
+              deprecated: 'deprecated',
+            },
+            logLevel: {
+              default: 'default',
+              DEBUG: 'DEBUG',
+              INFO: 'INFO',
+              WARN: 'WARN',
+              ERROR: 'ERROR',
+            },
+            shareMode: {
+              default: 'default',
+              manual: 'manual',
+              auto: 'auto',
+              disabled: 'disabled',
+            },
+            autoUpdate: {
+              default: 'default',
+              notify: 'notify',
+              true: 'true',
+              false: 'false',
+            },
+            snapshotTracking: {
+              default: 'default',
+              true: 'true',
+              false: 'false',
+            },
+          },
+          help: {
+            discovery: 'Models/agents are discovered from the running OpenCode server.',
+            schemaUrl: 'Usually keep the default; it enables validation and editor hints.',
+            theme: 'Theme name in OpenCode (TUI/Web).',
+            username: 'Displayed in conversations; defaults to system username.',
+            defaultAgentRequirement: 'Must be a primary agent (subagents/hidden are invalid).',
+            smallModel: 'Used for lightweight tasks (e.g., title generation).',
+          },
+          fields: {
+            schemaUrl: 'Schema URL',
+            theme: 'Theme',
+            username: 'Username',
+            defaultAgent: 'Default agent',
+            defaultModel: 'Default model',
+            smallModel: 'Small model',
+            logLevel: 'Log level',
+            shareMode: 'Share mode',
+            autoUpdate: 'Auto-update',
+            snapshotTracking: 'Snapshot tracking',
+          },
+          placeholders: {
+            schemaUrl: 'https://opencode.ai/config.json',
+            theme: 'opencode',
+            username: 'Your name',
+          },
+          search: {
+            searchAgents: 'Search agents',
+            searchModels: 'Search models',
+            searchProviders: 'Search providers',
+            searchStatuses: 'Search statuses',
+            searchFamilies: 'Search families',
+            searchSorts: 'Search sorts',
+            searchLogLevels: 'Search log levels',
+            searchShareModes: 'Search share modes',
+            searchUpdateModes: 'Search update modes',
+            searchSnapshotModes: 'Search snapshot modes',
+          },
+          actions: {
+            refreshOptionLists: 'Refresh agent/model lists',
+            browseModels: 'Browse models',
+            hideModelBrowser: 'Hide model browser',
+          },
+          defaultAgent: {
+            options: {
+              subagentSuffix: ' (subagent)',
+              hiddenSuffix: ' (hidden)',
+            },
+          },
+          modelBrowser: {
+            title: 'Model browser',
+            fields: {
+              search: 'Search',
+              provider: 'Provider',
+              status: 'Status',
+              family: 'Family',
+              minContext: 'Min context',
+              minOutput: 'Min output',
+              sort: 'Sort',
+            },
+            sortOptions: {
+              alpha: 'alpha',
+              contextDesc: 'context ↓',
+              outputDesc: 'output ↓',
+              costTotalAsc: 'cost (in+out) ↑',
+              costInputAsc: 'cost in ↑',
+              costOutputAsc: 'cost out ↑',
+              releaseDesc: 'release ↓',
+            },
+            placeholders: {
+              search: 'openai/gpt or name',
+            },
+            filters: {
+              tools: 'Tools',
+              reasoning: 'Reasoning',
+              imageInput: 'Image input',
+              pdfInput: 'PDF input',
+            },
+            actions: {
+              closeAria: 'Close model browser',
+              setDefaultModel: 'Set default model',
+              setSmallModel: 'Set small model',
+              defaultLabel: 'Default',
+              smallLabel: 'Small',
+            },
+            help: {
+              countLine: '{count} models shown. Click a row to set Default or Small.',
+            },
+            empty: 'No matching models.',
+          },
+        },
+        compaction: {
+          title: 'Context compaction defaults.',
+          fields: {
+            autoCompact: 'Auto-compact',
+            pruneToolOutput: 'Prune tool output',
+          },
+        },
+        tui: {
+          title: 'Scroll behavior and diff rendering.',
+          fields: {
+            scrollSpeed: 'Scroll speed',
+            scrollAcceleration: 'Scroll acceleration',
+            diffStyle: 'Diff style',
+          },
+          options: {
+            diffStyle: {
+              default: 'default',
+              auto: 'auto',
+              stacked: 'stacked',
+            },
+          },
+        },
+        keybinds: {
+          title: 'Override keybinds by name.',
+        },
+        enterprise: {
+          title: 'Enterprise URL overrides.',
+          fields: {
+            enterpriseUrl: 'Enterprise URL',
+          },
+          placeholders: {
+            enterpriseUrl: 'https://github.example.com',
+          },
+        },
+        permissions: {
+          title: 'Global tool permissions.',
+          presets: {
+            title: 'Presets',
+            fields: {
+              preset: 'Preset',
+              applyMode: 'Apply mode',
+            },
+            search: {
+              searchPresets: 'Search presets',
+              searchModes: 'Search modes',
+            },
+            options: {
+              safeDefault: 'Safe default',
+              powerUser: 'Power user',
+              readOnly: 'Read-only',
+              merge: 'merge',
+              replace: 'replace',
+            },
+            actions: {
+              applyPreset: 'Apply preset',
+            },
+            tip: 'Tip: use merge to keep existing custom rules.',
+          },
+          bulk: {
+            title: 'Bulk operations',
+            fields: {
+              action: 'Action',
+              target: 'Target',
+              tag: 'Tag',
+              clearOthers: 'Clear others',
+              clearNonTargetKeys: 'Clear non-target keys',
+              selection: 'Selection',
+            },
+            search: {
+              searchActions: 'Search actions',
+              searchTargets: 'Search targets',
+              searchTags: 'Search tags',
+            },
+            picker: {
+              panelTitle: 'Tools',
+              placeholder: 'Add tool ids (paste supported)',
+              emptyText: 'None selected',
+            },
+            selectionCount: '{count} selected',
+            toolsCount: '{count} tools',
+            help: 'Bulk uses string rules; pattern maps are left intact unless overwritten.',
+            actions: {
+              selectByTag: 'Select tools by tag',
+              applyBulk: 'Apply bulk',
+            },
+            options: {
+              allow: 'allow',
+              ask: 'ask',
+              deny: 'deny',
+              targetSelection: 'selection',
+              targetByTag: 'by tag',
+              targetAllKnown: 'all known tools',
+              targetStarOnly: 'set * only',
+              tagFilesystem: 'filesystem',
+              tagExec: 'exec',
+              tagNetwork: 'network',
+              tagOther: 'other',
+            },
+          },
+          test: {
+            title: 'Test permission',
+            fields: {
+              tool: 'Tool',
+              input: 'Input (path/command)',
+            },
+            search: {
+              searchTools: 'Search tools',
+            },
+            placeholders: {
+              input: 'src/app.ts or curl https://...',
+            },
+            result: {
+              label: 'Result:',
+              summary: '{action} (source: {source}, matched: {matched})',
+            },
+            steps: {
+              noRule: '(no rule)',
+              matchWord: 'match',
+              noneAction: '(none)',
+              stepLine: '{kind}{matchedText} -> {action}',
+            },
+          },
+          rules: {
+            title: 'Global permission rules',
+            fields: {
+              permission: 'Permission',
+              action: 'Action',
+            },
+            search: {
+              searchRules: 'Search rules',
+              searchActions: 'Search actions',
+            },
+            actions: {
+              editPatterns: 'Edit patterns',
+              addPattern: 'Add pattern',
+              applyPatterns: 'Apply patterns',
+            },
+            rulesCount: '{count} rules',
+            patternMapTitle: '{key} pattern map',
+            patternMapLabel: 'Pattern map',
+            placeholders: {
+              pattern: '**/*.ts',
+            },
+            help: {
+              orderMatters: 'Order matters (last match wins).',
+            },
+            options: {
+              default: 'default',
+              allow: 'allow',
+              ask: 'ask',
+              deny: 'deny',
+              patternMap: 'pattern map',
+            },
+          },
+          customRules: {
+            title: 'Custom tool rules',
+            fields: {
+              toolId: 'Tool id',
+              action: 'Action',
+            },
+            search: {
+              searchTools: 'Search tools',
+              searchActions: 'Search actions',
+            },
+            placeholders: {
+              selectTool: 'Select tool id...',
+            },
+            actions: {
+              addRule: 'Add rule',
+            },
+            toolIdsUnavailable: 'Tool IDs unavailable: {error}',
+            empty: 'No custom rules configured.',
+          },
+          jsonEditors: {
+            title: 'Permission rules (advanced JSON)',
+          },
+        },
+        experimental: {
+          title: 'Unstable settings.',
+          fields: {
+            disablePasteSummary: 'Disable paste summary',
+            batchTool: 'Batch tool',
+            openTelemetry: 'OpenTelemetry',
+            continueLoopOnDeny: 'Continue loop on deny',
+            mcpTimeoutMs: 'MCP timeout (ms)',
+          },
+          primaryTools: {
+            title: 'Primary tools',
+            help: 'If set, OpenCode prefers these tools when planning.',
+            empty: 'No matching tools.',
+            toolIdsUnavailable: 'Tool IDs unavailable: {error}',
+            placeholders: {
+              filterTools: 'Filter tools (e.g. bash)',
+              advanced: 'bash\nread',
+            },
+          },
+        },
+        instructions: {
+          title: 'Instruction sources, skills, and plugins.',
+          panels: {
+            instructionsTitle: 'Instructions',
+            instructionsHelp: 'Files/URLs loaded as extra instructions.',
+            skillsPathsTitle: 'Skills paths',
+            skillsPathsHelp: 'Additional folders that contain reusable OpenCode skills.',
+            pluginsTitle: 'Plugins',
+            pluginsHelp: 'NPM specifiers or local file URLs (e.g. file:./plugin.js).',
+          },
+          empty: {
+            instructions: 'No instructions added.',
+            skillsPaths: 'No skill paths added.',
+            plugins: 'No plugins added.',
+          },
+          placeholders: {
+            instructions: '/path/to/instructions.md or https://...',
+            skillsPath: '/path/to/skills',
+            plugin: "{'@scope/name@version or file:...'}",
+          },
+          actions: {
+            clearInstructionsAria: 'Clear instructions',
+            addInstructionAria: 'Add instruction',
+            clearSkillsPathsAria: 'Clear skills paths',
+            addSkillsPathAria: 'Add skill path',
+            clearPluginsAria: 'Clear plugins',
+            addPluginAria: 'Add plugin',
+          },
+        },
+        server: {
+          title: 'Server options and file watcher ignores.',
+          fields: {
+            port: 'Port',
+            hostname: 'Hostname',
+            mdns: 'mDNS',
+            mdnsDomain: 'mDNS domain',
+          },
+          placeholders: {
+            hostname: '127.0.0.1',
+            mdnsDomain: 'opencode.local',
+            corsOrigin: 'https://example.com',
+            watcherIgnoreGlob: '**/dist',
+            watcherIgnoreAdvanced: '**/dist\n**/.git',
+          },
+          listsTitle: 'Lists',
+          cors: {
+            title: 'CORS origins',
+            help: 'One origin per entry (exact match).',
+            panelTitle: 'CORS',
+            advancedLabel: 'CORS origins (advanced text)',
+            clearAria: 'Clear CORS origins',
+          },
+          watcherIgnore: {
+            title: 'Watcher ignore globs',
+            help: 'Glob patterns to ignore for file watching.',
+            panelTitle: 'Ignore globs',
+            advancedLabel: 'Watcher ignore globs (advanced text)',
+            clearAria: 'Clear watcher ignore globs',
+          },
+        },
+        commands: {
+          title: 'Custom slash commands.',
+          placeholders: {
+            commandName: 'Command name',
+            template: 'Template',
+            filterCommands: 'Filter commands',
+          },
+          actions: {
+            addCommand: 'Add command',
+            addCommandAria: 'Add command',
+            removeCommandAria: 'Remove command',
+            copyJson: 'Copy JSON',
+            importJson: 'Import JSON',
+            insertSkeleton: 'Insert skeleton',
+            insertFrontmatter: 'Insert frontmatter',
+          },
+          empty: {
+            noCommands: 'No commands configured.',
+          },
+          fields: {
+            template: 'Template',
+            description: 'Description',
+            agent: 'Agent',
+            model: 'Model',
+            subtask: 'Subtask',
+          },
+          help: {
+            agentName: "{'Uses the agent name (without @). Leave empty to use default agent.'}",
+          },
+          search: {
+            searchAgents: 'Search agents',
+            searchModels: 'Search models',
+          },
+          defaults: {
+            useConfigDefault: 'Default (use config)',
+          },
+        },
+        formatter: {
+          title: 'Formatter and language server configs.',
+          fields: {
+            command: 'Command',
+            extensions: 'Extensions',
+            environmentJson: 'Environment (JSON)',
+          },
+          formatters: {
+            disableAll: 'Disable all formatters',
+            placeholders: {
+              formatterId: 'Formatter id',
+            },
+            actions: {
+              add: 'Add formatter',
+              addAria: 'Add formatter',
+              removeAria: 'Remove formatter',
+            },
+            empty: 'No formatters configured.',
+            command: {
+              panelTitle: 'Formatter command',
+              placeholder: 'prettier',
+              advancedPlaceholder: 'prettier\n--write\n$FILE',
+            },
+            extensions: {
+              placeholder: '.ts',
+              advancedPlaceholder: '.ts\n.tsx',
+            },
+          },
+          lsp: {
+            disableAll: 'Disable all LSP servers',
+            placeholders: {
+              lspId: 'LSP id',
+            },
+            actions: {
+              add: 'Add LSP',
+              addAria: 'Add LSP',
+              removeAria: 'Remove LSP',
+            },
+            empty: 'No LSP servers configured.',
+            fields: {
+              mode: 'Mode',
+              initializationJson: 'Initialization (JSON)',
+            },
+            search: {
+              searchModes: 'Search modes',
+            },
+            command: {
+              panelTitle: 'LSP command',
+              placeholder: 'typescript-language-server',
+              advancedPlaceholder: 'typescript-language-server\n--stdio',
+            },
+          },
+        },
+        mcp: {
+          title: 'Model Context Protocol servers.',
+          actions: {
+            connections: 'Connections',
+            connectionsHelp: 'Connect, disconnect, and authenticate MCP servers',
+            manageConnectionsAria: 'Manage MCP connections',
+            addServer: 'Add MCP server',
+            addServerAria: 'Add MCP server',
+            removeServerAria: 'Remove MCP server',
+          },
+          placeholders: {
+            serverName: 'Server name',
+          },
+          empty: 'No MCP servers configured.',
+          fields: {
+            type: 'Type',
+            command: 'Command',
+            timeoutMs: 'Timeout (ms)',
+            environmentJson: 'Environment (JSON)',
+            url: 'URL',
+            headersJson: 'Headers (JSON)',
+            oauth: 'OAuth',
+          },
+          search: {
+            searchTypes: 'Search types',
+            searchOauth: 'Search OAuth',
+          },
+          command: {
+            panelTitle: 'MCP launch command',
+            placeholder: 'npx',
+            advancedPlaceholder: "npx\n{'@modelcontextprotocol/server-filesystem'}",
+          },
+          oauth: {
+            clientId: 'Client ID',
+            clientSecret: 'Client secret',
+            scope: 'Scope',
+          },
+          options: {
+            types: {
+              toggle: 'toggle',
+              local: 'local',
+              remote: 'remote',
+            },
+            oauth: {
+              default: 'default',
+              config: 'config',
+              disabled: 'disabled',
+            },
+          },
+        },
+      },
     },
     troubleshooting: {
       title: 'Troubleshooting',
@@ -134,7 +1332,1694 @@ export default {
           transport: 'Transport',
           expand: 'Expand',
         },
+        toolDetails: 'Tool details',
+        toolDetailsTable: {
+          tool: 'Tool',
+          transport: 'Transport',
+          expand: 'Expand',
+        },
+        toolDetailsHint: 'Tool expand defaults are configured per tool.',
+        activityTransportHelp:
+          'Transport controls whether activity payload is requested. Expand controls default open state and, with transport matching always on, whether full details are included in the initial payload.',
       },
+    },
+  },
+  terminal: {
+    defaults: {
+      defaultFolder: 'Default',
+      gitFolder: 'Git',
+      gitTerminal: 'Git Terminal',
+    },
+    keybar: {
+      titles: {
+        ctrlToggle: 'Ctrl (toggle)',
+        altToggle: 'Alt (toggle)',
+        shiftToggle: 'Shift (toggle)',
+      },
+      keys: {
+        ctrl: 'Ctrl',
+        alt: 'Alt',
+        shift: 'Shift',
+        esc: 'Esc',
+        tab: 'Tab',
+        backspace: 'Bksp',
+        enter: 'Enter',
+        left: 'Left',
+        down: 'Down',
+        up: 'Up',
+        right: 'Right',
+        home: 'Home',
+        end: 'End',
+        pageUp: 'PgUp',
+        pageDown: 'PgDn',
+      },
+    },
+    emptyState: {
+      title: 'Select a terminal session',
+      description: 'Use the terminals panel to pick an existing session or create a new one.',
+      actionLabel: 'Open terminals panel',
+    },
+    sidebar: {
+      title: 'Terminals',
+      newFolder: 'New folder',
+      refreshSessions: 'Refresh sessions',
+      searchPlaceholder: 'Search folders and sessions',
+      searchAria: 'Search terminal folders and sessions',
+      clearSearch: 'Clear search',
+      emptyTitle: 'No matching folders or sessions',
+      emptyHint: 'Try a different keyword.',
+      expandFolder: 'Expand folder',
+      collapseFolder: 'Collapse folder',
+      pinned: 'Pinned',
+      recent: 'Recent',
+    },
+    folder: {
+      new: 'New folder',
+      namePlaceholder: 'Folder name',
+      create: 'Create folder',
+      saveName: 'Save folder name',
+      rename: 'Rename folder',
+      delete: 'Delete folder',
+      newTerminalInFolder: 'New terminal in folder',
+      newTerminalInThisFolder: 'New terminal in this folder',
+      deleteConfirmTitle: 'Delete folder?',
+      deleteConfirmDescription: 'Sessions in this folder will move to another folder.',
+      deleteConfirmText: 'Delete',
+    },
+    active: {
+      noneSelected: 'No terminal selected',
+    },
+    session: {
+      namePlaceholder: 'Terminal name',
+      create: 'Create',
+      creating: 'Creating...',
+      cancelRename: 'Cancel rename',
+      saveRename: 'Save rename',
+    },
+    connection: {
+      connectLabel: 'Connect terminal stream',
+      disconnectLabel: 'Disconnect terminal stream',
+      disconnectDescription: 'You can reconnect at any time. Terminal session itself will not be deleted.',
+    },
+    dialogs: {
+      newTerminal: {
+        title: 'New terminal',
+        description: 'Create terminal in {folder}',
+      },
+      renameTerminal: {
+        title: 'Rename terminal',
+        description: 'Update the terminal name',
+      },
+    },
+    actions: {
+      title: 'Terminal actions',
+      titleWithName: 'Terminal actions: {name}',
+      rename: 'Rename terminal',
+      disconnectStream: 'Disconnect stream',
+      disconnectConfirmTitle: 'Disconnect terminal stream?',
+      disconnectConfirmDescription: 'Terminal session is kept and can reconnect later.',
+      disconnect: 'Disconnect',
+      pin: 'Pin terminal',
+      unpin: 'Unpin terminal',
+      delete: 'Delete terminal',
+      deleteConfirmTitle: 'Delete terminal session?',
+      deleteConfirmDescription: 'This will stop and remove this terminal session.',
+      deleteConfirmText: 'Delete',
+    },
+    errors: {
+      deleteAllInFolder: 'Failed to delete all terminals in this folder',
+      streamRecoveredPartialHistory: 'Terminal stream recovered with partial history; some older output may be missing',
+      terminalExited: 'Terminal exited',
+      sessionNoLongerExists: 'Terminal session no longer exists',
+      failedToSendInput: 'Failed to send terminal input',
+      failedToResize: 'Failed to resize terminal',
+      failedToCloseSession: 'Failed to close terminal session',
+      failedToRemoveSession: 'Failed to remove terminal session',
+    },
+  },
+  chat: {
+    toasts: {
+      noSessionErrorToCopy: 'No session error to copy',
+      copiedErrorDetails: 'Copied error details',
+      failedToCopyErrorDetails: 'Failed to copy error details',
+      titleCannotBeEmpty: 'Title cannot be empty',
+      sessionRenamed: 'Session renamed',
+      noTranscriptAvailable: 'No transcript available',
+      transcriptCopied: 'Transcript copied',
+      transcriptExportedAs: 'Transcript exported as {filename}',
+      sharingDisabledInConfig: 'Sharing is disabled in config',
+      shareLinkCopied: 'Share link copied',
+      sessionShared: 'Session shared',
+      sessionUnshared: 'Session unshared',
+      selectModelToCompact: 'Select a model to compact this session',
+      compactionStarted: 'Compaction started',
+      abortedRun: 'Aborted run',
+      failedToAbortRun: 'Failed to abort run',
+      pressEscAgainToAbort: 'Press Esc again to abort ({modKey}+.) for shortcuts',
+      answerAllQuestions: 'Please answer all questions',
+      answerSent: 'Answer sent',
+      questionRejected: 'Question rejected',
+    },
+    attention: {
+      title: {
+        permissionRequired: 'Permission required',
+        question: 'Question',
+      },
+      subtitle: {
+        answerAllToEnableSend: 'Answer all questions to enable send.',
+        blocksUntilRespond: 'This blocks the agent until you respond.',
+      },
+      ui: {
+        rejectPermission: 'Reject permission',
+        allowOnce: 'Allow once',
+        alwaysAllow: 'Always allow',
+        rejectQuestion: 'Reject question',
+        sendAnswers: 'Send answers',
+        permissionLabel: 'Permission',
+        patternsLabel: 'Patterns',
+        rememberedForLabel: 'Will be remembered for',
+        previousQuestion: 'Previous question',
+        nextQuestion: 'Next question',
+        questionPager: 'Question {current} / {total}',
+        multiple: 'multiple',
+        single: 'single',
+        custom: 'Custom',
+        typeYourOwnAnswer: 'Type your own answer',
+        customOnlySentHint: 'Only sent when the custom option is selected.',
+        noQuestionsAvailable: 'No questions available.',
+      },
+      toasts: {
+        pleaseAnswerAllQuestions: 'Please answer all questions',
+        answerSent: 'Answer sent',
+        questionRejected: 'Question rejected',
+        permissionRejected: 'Permission rejected',
+        permissionGranted: 'Permission granted',
+      },
+    },
+    composer: {
+      actions: {
+        compact: {
+          label: 'Compact session',
+          description: 'Summarize with the selected model',
+        },
+        init: {
+          label: 'Initialize AGENTS.md',
+          description: 'Insert /init command into chat input',
+        },
+        review: {
+          label: 'Review changes',
+          description: 'Insert /review command into chat input',
+        },
+      },
+      picker: {
+        modelTitle: 'Model',
+        agentTitle: 'Agent',
+        variantTitle: 'Thinking',
+        optionsTitle: 'Options',
+        searchModels: 'Search models',
+        searchAgents: 'Search agents',
+        searchVariants: 'Search variants',
+        searchOptions: 'Search options',
+        emptyModels: 'No models found.',
+        emptyAgents: 'No agents found.',
+        emptyVariants: 'No variants found.',
+        emptyOptions: 'No options found.',
+      },
+      model: {
+        autoDefault: 'Auto (OpenCode default)',
+        autoDefaultDescription: 'Let OpenCode choose the default model',
+      },
+      editor: {
+        open: 'Open editor',
+        collapse: 'Collapse editor',
+      },
+      input: {
+        placeholder: 'Type a message…',
+      },
+    },
+
+    page: {
+      nav: {
+        previousUserMessage: 'Previous user message',
+        nextUserMessage: 'Next user message',
+        bottom: 'Bottom',
+      },
+      attachments: 'Attachments',
+      attachmentsWithCount: 'Attachments ({count})',
+      tools: 'Tools',
+      usage: {
+        tokensSuffix: '{value} tokens',
+      },
+      primary: {
+        send: 'Send',
+        sendMessage: 'Send message',
+        stop: 'Stop',
+        stopRun: 'Stop run',
+      },
+    },
+
+    attachments: {
+      title: 'Attachments',
+      attaching: 'Attaching…',
+      countLabelOne: '1 file',
+      countLabelMany: '{count} files',
+      repo: 'repo',
+      removeAttachmentAria: 'Remove attachment',
+      actions: {
+        addFromComputer: 'Add from computer',
+        addFromProject: 'Add from project',
+        clearAll: 'Clear all',
+        clear: 'Clear',
+      },
+      empty: {
+        title: 'No attachments',
+        description: 'Use the buttons above to attach files.',
+      },
+    },
+
+    attachProjectDialog: {
+      title: 'Attach project file',
+      description: 'Pick a file from the current project to attach',
+      pathPlaceholder: 'Select a file',
+      attachedCount: 'Attached: {count} file(s)',
+    },
+
+    renameSessionDialog: {
+      title: 'Rename session',
+      description: 'Update the session title',
+    },
+
+    messages: {
+      empty: {
+        title: 'Select a session',
+        description: 'Use the sessions panel to pick or create one.',
+        actionLabel: 'Open sessions panel',
+        desktopDescription: 'Use the left panel to pick or create one.',
+      },
+      loadingOlder: 'Loading older messages...',
+      activity: {
+        moreCount: '+{count} more...',
+        hide: 'Hide',
+      },
+      optimistic: {
+        sending: 'sending...',
+        sent: 'sent',
+      },
+    },
+
+    revertMarker: {
+      revertedMessageCountOne: '1 message reverted',
+      revertedMessageCountMany: '{count} messages reverted',
+      boundaryLine: 'revert boundary: {id}',
+      redoTitle: 'Redo / restore reverted messages',
+      redo: 'Redo',
+      restoreAllTitle: 'Restore all reverted messages',
+      restoreAll: 'Restore',
+    },
+
+    roles: {
+      activity: 'activity',
+      user: 'user',
+      assistant: 'assistant',
+      system: 'system',
+    },
+
+    sessionError: {
+      classification: {
+        contextOverflow: 'Context overflow',
+        providerAuth: 'Auth error',
+        network: 'Network error',
+        providerApi: 'Provider error',
+        sessionError: 'Session error',
+      },
+      body: {
+        withCode: '[{code}] Session error',
+        default: 'Session error',
+      },
+      actions: {
+        copyDetails: 'Copy details',
+        dismiss: 'Dismiss',
+      },
+    },
+
+    messageItem: {
+      interrupted: 'interrupted',
+      errorDetails: 'error details',
+      fileFallback: 'file',
+      attachmentFallback: 'attachment',
+      fork: {
+        confirmTitle: 'Fork session?',
+        confirmDescription: 'Fork a new session from this message.',
+        confirmAction: 'Fork',
+        actionTitle: 'Fork from here',
+      },
+      revert: {
+        confirmTitle: 'Revert session?',
+        confirmDescription: 'Revert the session to this point. This will discard later turns.',
+        confirmAction: 'Revert',
+        actionTitle: 'Revert from here',
+      },
+      copy: {
+        actionTitle: 'Copy message',
+      },
+    },
+    sidebar: {
+      errors: {
+        failedToLoadSessions: 'Failed to load sessions',
+      },
+      addDirectoryDialog: {
+        title: 'Add directory',
+        description: 'Add a directory path to show sessions.',
+        placeholders: {
+          path: '/path/to/project',
+        },
+      },
+      header: {
+        directoriesTitle: 'Directories',
+        prevPage: 'Previous directories page',
+        nextPage: 'Next directories page',
+        addDirectory: 'Add directory',
+        refresh: 'Refresh',
+        searchPlaceholder: 'Search directories or sessions',
+        searchAria: 'Search directories or sessions',
+        clearSearch: 'Clear search',
+      },
+      directoriesList: {
+        empty: {
+          title: 'No directories yet',
+          description: 'Add a directory path to start.',
+        },
+        search: {
+          sessionsTitle: 'Sessions',
+          noMatchingSessions: 'No matching sessions.',
+          loadingDirectories: 'Loading directories...',
+        },
+        noMatchingDirectories: {
+          title: 'No matching directories',
+          description: 'Try a different search.',
+        },
+        expandDirectory: 'Expand directory',
+        collapseDirectory: 'Collapse directory',
+        activeSessions: 'Active sessions',
+        directoryActions: 'Directory actions',
+        loadingSessions: 'Loading sessions...',
+        noSessionsYet: 'No sessions yet.',
+        pinnedTitle: 'Pinned',
+        recentTitle: 'Recent',
+        prevSessionsPage: 'Previous sessions page',
+        nextSessionsPage: 'Next sessions page',
+      },
+      directoryActions: {
+        menuTitle: 'Directory Actions',
+        refresh: {
+          label: 'Refresh',
+          description: 'Reload sessions for this directory',
+        },
+        newSession: {
+          label: 'New session',
+          description: 'Create a new session in this directory',
+        },
+        remove: {
+          label: 'Remove directory',
+          description: 'Remove this directory from the sidebar',
+          confirmTitle: 'Remove directory?',
+          confirmDescription: 'Remove this directory from the sidebar.',
+        },
+      },
+      sessionActions: {
+        menuTitle: 'Session Actions',
+        rename: {
+          label: 'Rename session',
+          description: 'Change the session title',
+        },
+        copyTranscript: {
+          label: 'Copy transcript',
+          description: 'Copy the full conversation',
+        },
+        exportTranscript: {
+          label: 'Export transcript',
+          description: 'Download a Markdown transcript',
+        },
+        share: {
+          label: 'Share session',
+          description: 'Create a public link',
+        },
+        unshare: {
+          label: 'Unshare session',
+          description: 'Remove the public link',
+        },
+        copyShareLink: {
+          label: 'Copy share link',
+          description: 'Copy the current share link',
+        },
+        openShareLink: {
+          label: 'Open share link',
+          description: 'Open the share link in a new tab',
+        },
+        pin: {
+          label: 'Pin session',
+          description: 'Keep it at the top',
+        },
+        unpin: {
+          label: 'Unpin session',
+          description: 'Remove from pinned list',
+        },
+        delete: {
+          label: 'Delete session',
+          description: 'This cannot be undone',
+          confirmTitle: 'Delete session?',
+          confirmDescription: 'This cannot be undone.',
+          confirmText: 'Delete',
+        },
+      },
+      footers: {
+        recent: {
+          toggleAria: 'Toggle recent sessions',
+          title: 'Recent',
+          prevPage: 'Previous recent page',
+          nextPage: 'Next recent page',
+          empty: 'No recent sessions.',
+        },
+        pinned: {
+          toggleAria: 'Toggle pinned sessions',
+          title: 'Pinned',
+          prevPage: 'Previous pinned page',
+          nextPage: 'Next pinned page',
+          empty: 'No pinned sessions.',
+        },
+        running: {
+          toggleAria: 'Toggle running sessions',
+          title: 'Running',
+          prevPage: 'Previous running page',
+          nextPage: 'Next running page',
+          empty: 'No running sessions.',
+        },
+      },
+      sessionRow: {
+        status: {
+          idle: 'Idle',
+        },
+        threadToggle: {
+          expand: 'Expand thread',
+          collapse: 'Collapse thread',
+        },
+        loading: {
+          session: 'Loading session',
+          directory: 'Loading directory',
+        },
+        attention: {
+          questionAsked: 'Question asked',
+        },
+        placeholders: {
+          sessionTitle: 'Session title',
+        },
+        rename: {
+          cancel: 'Cancel rename',
+          save: 'Save rename',
+          saving: 'Saving rename',
+        },
+      },
+    },
+  },
+  git: {
+    actions: {
+      fetch: 'Fetch',
+      pull: 'Pull',
+      push: 'Push',
+      sync: 'Sync',
+      merge: 'Merge',
+      rebase: 'Rebase',
+      stash: 'Stash',
+    },
+    ui: {
+      sourceControl: 'Source Control',
+      sourceControlActions: 'Source Control Actions',
+      repository: 'Repository',
+      moreActions: 'More Actions',
+      noProjectSelectedTitle: 'No Project Selected',
+      noProjectSelectedDescription: 'Open a project first to use Source Control.',
+      noGitRepositoryTitle: 'No Git Repository',
+      noGitRepositoryDescription: 'Select a repository, or initialize one in this project.',
+      selectRepo: 'Select repo',
+      initialize: 'Initialize',
+
+      branchAction: {
+        branchNamePlaceholder: 'Branch name',
+      },
+
+      unsafeRepo: {
+        trustRequiredTitle: 'Repository trust required',
+        blockedDefaultHint: 'Git blocked this repository because it is not marked as safe on this machine.',
+        trustThisRepository: 'Trust this repository',
+      },
+
+      signing: {
+        sshMayFailTitle: 'SSH commit signing may fail',
+        sshMayFailDescription:
+          'SSH agent is not available or has no keys. Use a terminal to load keys (ssh-agent/ssh-add), then retry.',
+      },
+
+      sequencer: {
+        mergeInProgressTitle: 'Merge in progress',
+        mergeInProgressDescription: 'Resolve conflicts, then commit. Or abort the merge.',
+        rebaseInProgressTitle: 'Rebase in progress',
+        rebaseInProgressDescription: 'Continue/skip in a terminal, or abort the rebase.',
+        cherryPickInProgressTitle: 'Cherry-pick in progress',
+        cherryPickInProgressDescription: 'Resolve conflicts, then continue/skip, or abort.',
+        revertInProgressTitle: 'Revert in progress',
+        revertInProgressDescription: 'Resolve conflicts, then continue/skip, or abort.',
+        openConflict: 'Open Conflict',
+        skip: 'Skip',
+        mergeActions: 'Merge actions',
+        rebaseActions: 'Rebase actions',
+        cherryPickActions: 'Cherry-pick actions',
+        revertActions: 'Revert actions',
+        moreMergeActions: 'More merge actions',
+        moreRebaseActions: 'More rebase actions',
+        moreCherryPickActions: 'More cherry-pick actions',
+        moreRevertActions: 'More revert actions',
+      },
+
+      dialogs: {
+        selectChangedFileTitle: 'Select a changed file',
+        selectChangedFileDescription: 'Pick a file from Source Control to inspect the diff.',
+        openSourceControlPanel: 'Open source control panel',
+        mergeBranchTitle: 'Merge Branch',
+        mergeBranchDescription: 'Merge a branch into the current branch',
+        rebaseBranchTitle: 'Rebase Branch',
+        rebaseBranchDescription: 'Rebase the current branch onto another',
+        commitErrorDescription: 'Git reported an error',
+
+        remotes: {
+          title: 'Remotes',
+          description: 'Manage repository remotes',
+          sections: {
+            addRemote: 'Add remote',
+            manageRemote: 'Manage remote',
+          },
+          selectRemote: 'Select a remote',
+          placeholders: {
+            newRemoteName: 'New remote name',
+            newRemoteUrl: 'New remote URL',
+          },
+          actions: {
+            setUrl: 'Set URL',
+            copyUrl: 'Copy URL',
+          },
+          confirmRemove: {
+            title: 'Remove remote?',
+            description: 'This will remove the remote configuration.',
+          },
+          empty: 'No remotes',
+        },
+
+        tags: {
+          title: 'Tags',
+          description: 'Create and manage tags',
+          sections: {
+            createTag: 'Create tag',
+            remoteForDeletingTags: 'Remote for deleting tags',
+            existingTags: 'Existing tags',
+          },
+          placeholders: {
+            annotatedMessageOptional: '(optional) annotated message',
+          },
+          actions: {
+            deleteRemote: 'Delete Remote',
+          },
+          confirmDeleteLocal: {
+            title: 'Delete local tag?',
+            description: 'This only removes the tag locally.',
+          },
+          confirmDeleteRemote: {
+            title: 'Delete remote tag?',
+            description: 'This pushes a delete to the remote.',
+          },
+          empty: 'No tags',
+        },
+
+        worktrees: {
+          title: 'Worktrees',
+          description: 'Manage git worktrees',
+          sections: {
+            addWorktree: 'Add worktree',
+          },
+          actions: {
+            prune: 'Prune',
+            addWorktree: 'Add worktree',
+            migrate: 'Migrate',
+            migrateChanges: 'Migrate changes',
+          },
+          hints: {
+            pathRelativeToRepoRoot: 'Path is relative to the repository root and must stay inside it.',
+          },
+          placeholders: {
+            branchName: 'Branch name',
+            startPoint: 'Start point (HEAD)',
+          },
+          createNewBranch: 'Create new branch',
+          detached: '(detached)',
+          status: {
+            locked: 'Locked',
+            prunable: 'Prunable',
+          },
+          confirmMigrate: {
+            title: 'Migrate changes here?',
+            description: 'Move local changes from this worktree into the current one.',
+          },
+          confirmRemove: {
+            title: 'Remove worktree?',
+            description: 'This removes the worktree directory.',
+          },
+          empty: 'No worktrees',
+        },
+
+        repoPicker: {
+          title: 'Repositories',
+          description: 'Select a git repository within the active project',
+          actions: {
+            initializeRepo: 'Initialize repo',
+            cloneRepo: 'Clone repo',
+            closeRepo: 'Close repository',
+            reopenRepo: 'Reopen',
+          },
+          empty: {
+            title: 'No repositories found',
+            description: 'Create one with "Initialize repo".',
+          },
+          sections: {
+            closedRepos: 'Closed repositories',
+            parentRepos: 'Repositories in parent folders',
+          },
+        },
+
+        autoFetchSync: {
+          title: 'Auto Fetch / Sync',
+          description: 'Background git updates',
+          autoFetch: 'Auto fetch',
+          fetchIntervalMinutes: 'Fetch interval (minutes)',
+          autoSync: 'Auto sync (pull + push)',
+          syncWarning: 'Use with care - sync can fail if you have local changes or conflicts.',
+          syncIntervalMinutes: 'Sync interval (minutes)',
+          postCommitAction: 'Post-commit action',
+          postCommitHint: 'After commit, run an action when the branch has an upstream and is ahead.',
+        },
+
+        history: {
+          title: 'History',
+          description: 'Recent commits',
+          sections: {
+            commits: 'Commits',
+            files: 'Files',
+          },
+          compareBase: 'Compare base:',
+          noMessage: '(no message)',
+          emptyCommits: 'No commits',
+          selectCommitToViewDiff: 'Select a commit to view diff.',
+          fields: {
+            refType: 'Ref type',
+            ref: 'Ref',
+            resetMode: 'Reset mode',
+          },
+          search: {
+            refTypes: 'Search types',
+            refs: 'Search refs',
+            resetModes: 'Search modes',
+          },
+          placeholders: {
+            tagName: 'Tag name',
+            branchName: 'Branch name',
+            authorContains: 'Author contains',
+            messageContains: 'Message contains',
+          },
+          allTags: 'All tags',
+          allBranches: 'All branches',
+          refType: {
+            branch: 'Branch',
+            tag: 'Tag',
+          },
+          resetModes: {
+            soft: 'Reset soft',
+            mixed: 'Reset mixed',
+            hard: 'Reset hard',
+          },
+          actions: {
+            copyHash: 'Copy hash',
+            checkout: 'Checkout',
+            createBranch: 'Create branch',
+            selectForCompare: 'Select for compare',
+            compareSelected: 'Selected ({hash})',
+            compareWithParent: 'Compare with parent',
+            compareWithSelected: 'Compare with selected',
+            reset: 'Reset',
+            cherryPick: 'Cherry-pick',
+            revert: 'Revert',
+            allFiles: 'All files',
+          },
+          confirmReset: {
+            title: 'Reset to this commit?',
+            description: 'This will move HEAD and update the working tree based on mode.',
+          },
+          confirmCherryPick: {
+            title: 'Cherry-pick this commit?',
+            description: 'This will apply the commit on top of the current branch.',
+          },
+          confirmRevert: {
+            title: 'Revert this commit?',
+            description: 'This will create a new commit that reverts the changes.',
+          },
+          loadingFiles: 'Loading files...',
+          emptyFiles: 'No file changes.',
+          diffTitleFile: 'Diff - {file}',
+          diffTitleAllFiles: 'Diff - All files',
+          loadingDiff: 'Loading diff...',
+          emptyDiff: 'No diff content.',
+          confirmHardReset: {
+            title: 'Confirm hard reset',
+            description: 'This will rewrite the working tree and discard local changes.',
+            confirmText: 'Confirm hard reset',
+            typeResetHintPrefix: 'Type',
+            typeResetHintSuffix: 'to confirm hard reset.',
+          },
+        },
+
+        stashDiff: {
+          title: 'Stash Diff',
+          titleWithRef: 'Stash Diff: {ref}',
+          description: 'Inspect stash patch content',
+          loading: 'Loading stash diff...',
+          empty: 'No diff output.',
+        },
+
+        createBranchFrom: {
+          title: 'Create Branch From',
+          description: 'Create a branch at a specific ref',
+          fields: {
+            branchName: 'Branch name',
+            startPoint: 'Start point',
+          },
+          checkoutAfterCreate: 'Checkout branch after create',
+        },
+
+        renameBranch: {
+          title: 'Rename branch',
+          description: 'Rename a local branch',
+        },
+
+        branches: {
+          title: 'Branches',
+          description: 'Manage repository branches',
+          sections: {
+            branches: 'Branches',
+          },
+          placeholders: {
+            newBranchName: 'New branch name...',
+          },
+          actions: {
+            checkout: 'Checkout',
+            deleteBranch: 'Delete',
+            deleteRemote: 'Delete Remote',
+          },
+          confirmDeleteLocal: {
+            title: 'Delete branch?',
+            description: 'This cannot be undone.',
+          },
+          confirmDeleteRemote: {
+            title: 'Delete remote branch?',
+            description: 'This will delete the branch from the remote.',
+          },
+        },
+
+        lfs: {
+          title: 'Git LFS',
+          description: 'Large File Storage',
+          sections: {
+            status: 'Status',
+            trackPatterns: 'Track patterns',
+            locks: 'Locks',
+          },
+          installedLabel: 'Installed:',
+          actions: {
+            installForRepo: 'Install for repo',
+            track: 'Track',
+            lock: 'Lock',
+            unlock: 'Unlock',
+            forceUnlock: 'Force unlock',
+          },
+          placeholders: {
+            trackPattern: '*.psd',
+            lockPath: 'path/to/file.bin',
+          },
+          emptyTrackedPatterns: 'No tracked patterns',
+          emptyLocks: 'No locks',
+        },
+
+        submodules: {
+          title: 'Submodules',
+          description: 'Manage git submodules',
+          sections: {
+            addSubmodule: 'Add submodule',
+          },
+          placeholders: {
+            url: 'https://github.com/org/repo.git',
+            path: 'path/to/submodule',
+            branchOptional: '(optional) branch',
+          },
+          empty: 'No submodules',
+          branchLine: 'Branch: {branch}',
+          actions: {
+            init: 'Init',
+            update: 'Update',
+            updateInitRecursive: 'Update (init+recursive)',
+          },
+        },
+
+        clone: {
+          title: 'Clone Repository',
+          description: 'Clone a remote repository into the project',
+          fields: {
+            repositoryUrl: 'Repository URL',
+            targetPath: 'Target path (relative to project)',
+            checkoutRefOptional: 'Checkout ref/branch (optional)',
+          },
+          placeholders: {
+            repositoryUrl: 'https://github.com/org/repo.git',
+            targetPath: '(leave blank to derive from URL)',
+          },
+          hints: {
+            targetPathExample: 'Example: `repos/my-app` - defaults to the repo name if empty.',
+          },
+          cloneSubmodulesRecursively: 'Clone submodules recursively',
+          actions: {
+            clone: 'Clone',
+          },
+        },
+
+        initRepo: {
+          title: 'Initialize Git Repository',
+          description: 'Create a new .git directory',
+          fields: {
+            path: 'Path (relative to project)',
+            defaultBranchOptional: 'Default branch (optional)',
+          },
+          placeholders: {
+            path: '. (project root)',
+          },
+          hints: {
+            pathExamples: 'Examples: `.` or `packages/api`',
+            initialBranchFlag: 'Uses `git init --initial-branch` when provided.',
+          },
+          actions: {
+            initialize: 'Initialize',
+          },
+        },
+
+        compare: {
+          title: 'Compare',
+          description: 'Compare two refs or branches',
+          placeholders: {
+            base: 'Base (e.g. main)',
+            head: 'Head (e.g. feature/foo)',
+            pathOptional: 'Optional path filter (e.g. src/app.ts)',
+          },
+          actions: {
+            swapRefs: 'Swap refs',
+            compare: 'Compare',
+          },
+          empty: 'No diff to show.',
+        },
+
+        renameFile: {
+          title: 'Rename',
+          description: 'Rename a file in the repository',
+        },
+
+        checkoutDetached: {
+          title: 'Checkout Detached',
+          description: 'Checkout a ref in detached HEAD state',
+          placeholders: {
+            ref: 'HEAD~1',
+          },
+        },
+      },
+
+      postCommit: {
+        description: 'Next steps',
+        globalDefault: 'Global default: {label}',
+        rememberChoice: 'Remember this choice for this repository',
+        prompt: 'Prompt',
+      },
+      searchRemotes: 'Search remotes',
+
+      diffViewer: {
+        labels: {
+          index: 'Index',
+          workingTree: 'Working tree',
+        },
+        noOriginal: '(no original)',
+        noModified: '(no modified)',
+        loading: 'Loading diff...',
+        actions: {
+          openFile: 'Open file',
+          revealInFiles: 'Reveal in Files',
+        },
+      },
+
+      diffPane: {
+        selectFileHint: 'Select a file to view changes',
+        openConflictEditor: 'Open Conflict Editor',
+      },
+
+      conflictEditor: {
+        title: 'Resolve conflicts',
+        actions: {
+          takeOurs: 'Take Ours',
+          oursAndNext: 'Ours & Next',
+          takeTheirs: 'Take Theirs',
+          theirsAndNext: 'Theirs & Next',
+          takeBase: 'Take Base',
+          takeBoth: 'Take Both',
+          applyAndNext: 'Apply & Next',
+          openDiff: 'Open Diff',
+        },
+        blockCount: {
+          one: '{count} block',
+          many: '{count} blocks',
+        },
+        unmergedWithoutMarkers: 'Unmerged without text markers',
+        empty: {
+          noMarkersTitle: 'No text conflict markers found',
+          unmergedNote:
+            'This conflict is marker-free (often binary). You can still resolve with "Take Ours/Theirs", or open the standard diff.',
+          resolvedNote: 'This file may already be resolved. Open the standard diff to verify its final state.',
+        },
+        blockTitle: 'Block #{index}',
+        labels: {
+          ours: 'Ours',
+          theirs: 'Theirs',
+          base: 'Base',
+          both: 'Both',
+        },
+      },
+
+      stashPanel: {
+        actions: {
+          dropAll: 'Drop all',
+          stashEllipsis: 'Stash...',
+          pop: 'Pop',
+          drop: 'Drop',
+        },
+        confirmDropAll: {
+          title: 'Drop all stashes?',
+          description: 'This permanently removes every stash entry.',
+        },
+        empty: 'No stashes',
+      },
+
+      commitBox: {
+        messagePlaceholder: 'Message (Cmd+Enter to commit)',
+        gitmojiTitle: 'Gitmoji',
+        searchEmojis: 'Search emojis',
+        emojiEmptyLabel: 'Emoji',
+      },
+
+      workingTree: {
+        fileActionsTitle: 'File actions',
+        showMoreCount: 'Show more ({shown}/{total})',
+        sections: {
+          changes: 'Changes',
+          stagedChanges: 'Staged Changes',
+          untracked: 'Untracked',
+          mergeChanges: 'Merge Changes',
+        },
+        actions: {
+          stageAll: 'Stage all',
+          stage: 'Stage',
+          unstageAll: 'Unstage all',
+          unstage: 'Unstage',
+          history: 'History',
+          ignore: 'Ignore',
+          discardChanges: 'Discard changes',
+          deleteFile: 'Delete file',
+        },
+        confirmDiscard: {
+          title: 'Discard changes?',
+          description: 'This cannot be undone.',
+        },
+        confirmDeleteTracked: {
+          title: 'Delete file?',
+          description: 'Tracked files will be removed and staged (git rm).',
+        },
+        confirmDeleteUntracked: {
+          title: 'Delete file?',
+          description: 'This cannot be undone.',
+        },
+      },
+    },
+    fields: {
+      remote: 'Remote',
+      branch: 'Branch',
+      refspecOptional: 'Refspec (optional)',
+      messageOptional: 'Message (optional)',
+    },
+    remoteTargetDialogs: {
+      chooseRemoteAndBranch: 'Choose a remote and branch',
+      push: {
+        title: 'Push To...',
+        advancedHint: 'Or provide a refspec below (for advanced push).',
+        tipTerminal: 'Tip: if auth/signing prompts are needed, use Terminal.',
+        setUpstream: 'Set upstream (-u)',
+      },
+      pull: {
+        title: 'Pull From...',
+        advancedHint: 'Or provide a refspec below (for advanced pull).',
+      },
+      fetch: {
+        title: 'Fetch From...',
+        description: 'Choose a remote and branch to fetch',
+        advancedHint: 'Or provide a refspec below (for advanced fetch).',
+      },
+      loadingRemoteBranches: 'Loading remote branches...',
+      stash: {
+        title: 'Stash Changes',
+        description: 'Save local changes for later',
+        stagedOnly: 'Staged only',
+        includeUntracked: 'Include untracked',
+        keepIndex: 'Keep staged (keep index)',
+      },
+    },
+    authDialogs: {
+      credentials: {
+        title: 'Git Authentication',
+        description: 'Enter credentials to continue',
+        githubTokenOptionalTitle: 'GitHub token (optional)',
+        githubTokenOptionalDescription: 'If you save a token here, Fetch/Pull/Push can auto-auth like VS Code.',
+        rememberForRepo: 'Remember for this repo (localStorage)',
+        username: 'Username',
+        passwordOrToken: 'Password / Token',
+      },
+      gitBusy: {
+        description: 'Another git operation is running',
+      },
+      sso: {
+        title: 'SSO authorization required',
+        description: 'Your organization requires SSO for this remote',
+      },
+      terminalHelp: {
+        description: 'This action requires an interactive terminal',
+      },
+      gpgPassphrase: {
+        title: 'GPG Passphrase',
+        description: 'Enter your GPG key passphrase to sign the commit',
+        passphraseLabel: 'Passphrase',
+        signAndCommit: 'Sign & Commit',
+      },
+      gpgEnablePreset: {
+        title: 'Enable GPG Passphrase Preset?',
+        description: 'This updates your gpg-agent configuration',
+        confirmEnableRetry: 'Enable & Retry',
+        body:
+          'Your gpg-agent is not allowing passphrase presetting. To let OpenCode Studio sign commits after you enter the passphrase in the UI, we can add `allow-preset-passphrase` to `~/.gnupg/gpg-agent.conf` and restart gpg-agent.',
+      },
+      gpgMissingKey: {
+        title: 'No GPG Signing Key',
+        description: 'Signing is enabled but no secret key is available',
+        defaultExplain: 'No GPG secret key found for signing.',
+        setSigningKeyLocal: 'Set `user.signingkey` (local)',
+        placeholderKeyIdOrFingerprint: 'KEYID or fingerprint',
+        setSigningKeyButton: 'Set signing key',
+        disableSigningButton: 'Disable signing',
+      },
+    },
+    actionsMenu: {
+      groups: {
+        commit: 'Commit',
+        stage: 'Stage',
+        sync: 'Sync',
+        inspect: 'Inspect',
+        branching: 'Branching',
+        cleanup: 'Cleanup',
+      },
+      commit: {
+        noVerify: {
+          label: 'No verify',
+          description: 'Skip pre-commit hooks',
+        },
+        signoff: {
+          label: 'Sign-off',
+          description: 'Append Signed-off-by trailer',
+        },
+        amend: {
+          label: 'Amend',
+          description: 'Amend the latest commit',
+        },
+        noGpgSign: {
+          label: 'No sign',
+          description: 'Skip GPG signing for this commit',
+        },
+        restoreTemplate: {
+          label: 'Restore Template',
+          description: 'Restore commit message template',
+        },
+        discardMessage: {
+          label: 'Discard Message',
+          description: 'Clear the current commit message',
+          confirmTitle: 'Discard commit message?',
+          confirmDescription: 'This clears the current commit message draft.',
+        },
+        undoLastCommit: {
+          label: 'Undo Last Commit',
+          description: 'Run git reset --soft HEAD~1',
+          confirmTitle: 'Undo last commit?',
+          confirmDescription: 'This keeps file changes but removes the latest commit.',
+        },
+        commitAll: {
+          label: 'Commit All',
+          description: 'Commit tracked and untracked changes',
+        },
+        commitEmpty: {
+          label: 'Commit Empty',
+          description: 'Create an empty commit with current message',
+        },
+      },
+      stage: {
+        stageAll: {
+          label: 'Stage All',
+          description: 'Stage all tracked and untracked changes',
+        },
+        stageAllTracked: {
+          label: 'Stage All Tracked',
+          description: 'Stage tracked file changes only',
+        },
+        stageAllUntracked: {
+          label: 'Stage All Untracked',
+          description: 'Stage untracked files only',
+        },
+        stageAllMerge: {
+          label: 'Stage All Merge',
+          description: 'Stage merge conflict resolutions',
+        },
+      },
+      sync: {
+        fetch: {
+          label: 'Fetch',
+          description: 'Fetch updates from remote',
+        },
+        fetchFrom: {
+          label: 'Fetch from...',
+          description: 'Choose remote and branch to fetch from',
+        },
+        fetchPrune: {
+          label: 'Fetch (Prune)',
+          description: 'Fetch and prune deleted refs',
+        },
+        fetchAll: {
+          label: 'Fetch (All)',
+          description: 'Fetch from all remotes',
+        },
+        pull: {
+          label: 'Pull',
+          description: 'Pull remote changes',
+        },
+        pullRebase: {
+          label: 'Pull (Rebase)',
+          description: 'Pull and rebase current branch',
+        },
+        pullFrom: {
+          label: 'Pull from...',
+          description: 'Choose remote and branch to pull from',
+        },
+        push: {
+          label: 'Push',
+          description: 'Push local commits to remote',
+        },
+        pushForce: {
+          label: 'Push (Force)',
+          description: 'Force push remote branch history',
+          confirmTitle: 'Force push?',
+          confirmDescription: 'This can overwrite remote history.',
+          confirmText: 'Force push',
+        },
+        pushForceWithLease: {
+          label: 'Push (Force with lease)',
+          description: 'Force push while guarding against stale remote refs',
+          confirmTitle: 'Force push (with lease)?',
+          confirmDescription: 'This can overwrite remote history.',
+          confirmText: 'Force push',
+        },
+        pushTags: {
+          label: 'Push Tags',
+          description: 'Push local tags to remote',
+        },
+        pushFollowTags: {
+          label: 'Push (Follow tags)',
+          description: 'Push commits and reachable tags',
+        },
+        pushTo: {
+          label: 'Push to...',
+          description: 'Choose remote and branch to push to',
+        },
+        syncNow: {
+          label: 'Sync',
+          description: 'Fetch and push in one flow',
+        },
+        syncRebase: {
+          label: 'Sync (Rebase)',
+          description: 'Pull --rebase and push in one flow',
+        },
+      },
+      inspect: {
+        branches: {
+          label: 'Branches...',
+          description: 'Browse and switch branches',
+        },
+        remotes: {
+          label: 'Remotes...',
+          description: 'Manage git remotes',
+        },
+        worktrees: {
+          label: 'Worktrees...',
+          description: 'Manage linked worktrees',
+        },
+        history: {
+          label: 'History...',
+          description: 'Inspect commit history',
+        },
+        compare: {
+          label: 'Compare...',
+          description: 'Compare refs and branches',
+        },
+        compareUpstream: {
+          label: 'Compare with upstream',
+          description: 'Compare current branch against its tracking branch',
+        },
+        tags: {
+          label: 'Tags...',
+          description: 'Create and manage tags',
+        },
+        submodules: {
+          label: 'Submodules...',
+          description: 'Inspect submodule status',
+        },
+        lfs: {
+          label: 'Git LFS...',
+          description: 'Inspect Git LFS status',
+        },
+        autoFetch: {
+          label: 'Auto Fetch...',
+          description: 'Configure background fetch',
+        },
+        stash: {
+          label: 'Stash...',
+          description: 'Open stash operations',
+        },
+        stashStagedOnly: {
+          label: 'Stash (Staged only)',
+          description: 'Stash only staged changes',
+        },
+        stashKeepIndex: {
+          label: 'Stash (Keep index)',
+          description: 'Stash unstaged changes only',
+        },
+        stashIncludeUntracked: {
+          label: 'Stash (Include untracked)',
+          description: 'Stash tracked and untracked changes',
+        },
+        stashDropAll: {
+          label: 'Stash (Drop all)',
+          description: 'Delete all stash entries',
+          confirmTitle: 'Drop all stashes?',
+          confirmDescription: 'This permanently removes all stash entries.',
+          confirmText: 'Drop all',
+        },
+      },
+      branching: {
+        mergeBranch: {
+          label: 'Merge Branch...',
+          description: 'Merge another branch into current branch',
+        },
+        rebaseBranch: {
+          label: 'Rebase Branch...',
+          description: 'Rebase current branch onto another branch',
+        },
+        createBranchFrom: {
+          label: 'Create Branch from...',
+          description: 'Create a branch from selected ref',
+        },
+        checkoutDetached: {
+          label: 'Checkout Detached...',
+          description: 'Checkout a detached commit or ref',
+        },
+      },
+      cleanup: {
+        cleanUntracked: {
+          label: 'Clean Untracked',
+          description: 'Delete untracked files and folders',
+          confirmTitle: 'Clean untracked?',
+          confirmDescription: 'This will delete untracked files and folders.',
+        },
+        cleanAll: {
+          label: 'Clean All (incl. ignored)',
+          description: 'Delete untracked and ignored files',
+          confirmTitle: 'Clean all (including ignored)?',
+          confirmDescription: 'This will delete untracked and ignored files.',
+        },
+        discardAllTracked: {
+          label: 'Discard All Tracked',
+          description: 'Reset index and working tree for tracked files',
+          confirmTitle: 'Discard all tracked changes?',
+          confirmDescription: 'This resets index + working tree for tracked files.',
+        },
+      },
+    },
+    toasts: {
+      copiedCommitHash: 'Copied commit hash',
+      copiedRemoteUrl: 'Copied remote URL',
+      copiedWorktreePath: 'Copied worktree path',
+      selectedCommitForCompare: 'Selected {hash} for compare',
+      selectedCommitHasNoParent: 'Selected commit has no parent to compare',
+      noUpstreamTrackingBranch: 'No upstream tracking branch',
+      noConflictsFound: 'No conflicts found',
+      repositoryMarkedSafe: 'Repository marked as safe',
+
+      fetched: 'Fetched',
+      fetchedPrune: 'Fetched (prune)',
+      fetchedAll: 'Fetched (all)',
+      pulled: 'Pulled',
+      pulledRebase: 'Pulled (rebase)',
+      pushed: 'Pushed',
+      pushedTags: 'Pushed tags',
+      pushedFollowTags: 'Pushed (follow tags)',
+      pushedForce: 'Pushed (force)',
+      pushedForceWithLease: 'Pushed (force-with-lease)',
+      synced: 'Synced',
+      syncedRebase: 'Synced (rebase)',
+
+      committed: 'Committed',
+      committedAll: 'Committed (all)',
+      committedEmpty: 'Committed (empty)',
+      changesDiscarded: 'Changes discarded',
+      alreadyIgnored: 'Already ignored',
+      stashedChanges: 'Stashed changes',
+      prunedWorktrees: 'Pruned worktrees',
+      migratedWorktreeChanges: 'Migrated worktree changes',
+      initializedGitRepository: 'Initialized git repository',
+      clonedRepository: 'Cloned repository',
+      noDifferencesFound: 'No differences found',
+      undidLastCommit: 'Undid last commit',
+      mergeAborted: 'Merge aborted',
+      rebaseAborted: 'Rebase aborted',
+      cherryPickContinued: 'Cherry-pick continued',
+      cherryPickSkipped: 'Cherry-pick skipped',
+      cherryPickAborted: 'Cherry-pick aborted',
+      revertContinued: 'Revert continued',
+      revertSkipped: 'Revert skipped',
+      revertAborted: 'Revert aborted',
+      rebaseContinued: 'Rebase continued',
+      rebaseSkipped: 'Rebase skipped',
+      gitLfsInstalled: 'Git LFS installed for repo',
+      renamed: 'Renamed',
+      deleted: 'Deleted',
+      tokenSaved: 'Token saved',
+      disabledGpgSigningForRepo: 'Disabled GPG signing for this repository',
+      updatedUserSigningKeyLocal: 'Updated user.signingkey (local)',
+      preparedGpgAgentConfig: 'Updated gpg-agent config',
+
+      trackedPattern: 'Tracked {pattern}',
+      lockedPath: 'Locked {path}',
+      unlockedPath: 'Unlocked {path}',
+      cherryPickedShortHash: 'Cherry-picked {hash}',
+      revertedShortHash: 'Reverted {hash}',
+      resetToShortHashWithMode: 'Reset to {hash} ({mode})',
+      closedRepository: 'Closed repository {relative}',
+      reopenedRepository: 'Reopened repository {relative}',
+      addedWorktree: 'Added worktree {path}',
+      removedWorktree: 'Removed worktree {path}',
+      switchedToBranch: 'Switched to {branch}',
+      repositoryBusy: 'Repository busy ({op})',
+      stashActionRef: 'stash {action} {ref}',
+      ignoredPath: 'Ignored {path}',
+      pushedToRemoteTarget: 'Pushed to {remote}/{target}',
+      fetchedRemoteTarget: 'Fetched {remote}/{target}',
+      pulledFromRemoteTarget: 'Pulled from {remote}/{target}',
+      createdBranch: 'Created branch {name}',
+      checkedOutBranch: 'Checked out {name}',
+      deletedBranch: 'Deleted branch {name}',
+      deletedRemoteBranch: 'Deleted remote branch {name}',
+      renamedFromTo: 'Renamed {from} -> {to}',
+      detachedHeadAt: 'Detached HEAD at {ref}',
+      addedRemote: 'Added remote {name}',
+      updatedRemoteUrl: 'Updated {name} URL',
+      removedRemote: 'Removed remote {name}',
+      mergedTarget: 'Merged {target}',
+      rebasedOntoTarget: 'Rebased onto {target}',
+      createdTag: 'Created tag {name}',
+      deletedTag: 'Deleted tag {name}',
+      deletedRemoteTag: 'Deleted remote tag {name}',
+      addedSubmodule: 'Added submodule {path}',
+      initializedItem: 'Initialized {name}',
+      updatedSubmodule: 'Updated {path}',
+      updatedSubmodules: 'Updated submodules',
+    },
+    errors: {
+      worktreeOutsideProjectRoot: 'Worktree is outside the project root',
+      forcePushDisabledByPolicy: 'Force push is disabled by policy',
+      commitsWithoutVerificationDisabledByPolicy: 'Commits without verification are disabled by policy',
+      nowOnNewBranchCommitAgain: 'Now on a new branch. Commit again to continue.',
+      blockedTerminalUnsupportedRepoPath: 'Blocked terminal command: unsupported repository path',
+      blockedTerminalOutsideAllowlist: 'Blocked terminal command outside trusted allowlist',
+      failedToPrepareTerminalHandoff: 'Failed to prepare terminal command handoff',
+    },
+  },
+  files: {
+    errors: {
+      noProjectSelected: 'No project selected',
+    },
+    actions: {
+      download: 'Download',
+      copyPath: 'Copy path',
+    },
+    confirmDiscard: {
+      title: 'Unsaved changes',
+      description: 'Save your edits before continuing?',
+      discard: 'Discard',
+      saveChanges: 'Save changes',
+    },
+    dialog: {
+      namePlaceholder: 'Name',
+      title: {
+        createFile: 'Create file',
+        createFolder: 'Create folder',
+        rename: 'Rename',
+      },
+      rootFallback: 'root',
+      description: {
+        createFile: 'Create a new file in {base}',
+        createFolder: 'Create a new folder in {base}',
+        rename: 'Rename {name}',
+      },
+    },
+    empty: {
+      noProject: {
+        title: 'No Project Selected',
+        mobileDescription: 'Choose a project folder first, then the file tree will appear here.',
+        desktopDescription: 'Select a project (or a session) to browse files.',
+      },
+    },
+    search: {
+      mode: {
+        files: 'Files',
+        content: 'Content',
+      },
+      files: {
+        placeholder: 'Search files',
+        hint: 'Type to search file names and paths.',
+        noQuery: 'No search query.',
+        noFilesFound: 'No files found.',
+      },
+      content: {
+        placeholder: 'Search',
+        hint: 'Type to search in file contents.',
+        noMatchesFound: 'No matches found.',
+        showReplace: 'Show replace',
+        hideReplace: 'Hide replace',
+        replacePlaceholder: 'Replace',
+        matchCase: 'Match case',
+        matchWholeWord: 'Match whole word',
+        useRegex: 'Use regular expression',
+        matchSingle: 'match',
+        matchPlural: 'matches',
+        fileSingle: 'file',
+        filePlural: 'files',
+        resultSummary: '{matches} {matchWord} in {files} {fileWord}',
+        resultSummaryLimited: '{text} (limited)',
+      },
+    },
+    scope: {
+      workspaceRoot: 'workspace root',
+      options: {
+        workspace: {
+          label: 'Workspace',
+        },
+        selected: {
+          label: 'Selected folder',
+          emptyDescription: 'Select a folder in explorer first',
+        },
+        activeFile: {
+          label: 'Current file folder',
+          emptyDescription: 'Open a file first',
+        },
+      },
+    },
+    timeline: {
+      errors: {
+        onlyTextFiles: 'Timeline compare is only available for text files',
+        cannotOpen: 'Cannot open timeline for this entry',
+        missingInCommit: 'File does not exist in this commit.',
+        binaryUnavailable: 'Selected commit stores this file as binary. Text compare is unavailable.',
+      },
+      info: {
+        truncated: 'Commit content is large and has been truncated for preview.',
+      },
+    },
+    viewer: {
+      title: {
+        selectFile: 'Select a file',
+      },
+      viewMenu: {
+        title: 'View settings',
+        groupTitle: 'View options',
+        blame: {
+          enable: 'Enable blame',
+          disable: 'Disable blame',
+          description: 'Toggle commit ownership markers',
+        },
+        timeline: {
+          enable: 'Enable timeline',
+          disable: 'Disable timeline',
+          description: 'Compare two commits in editor',
+        },
+        wrap: {
+          enable: 'Enable wrap lines',
+          disable: 'Disable wrap lines',
+          description: 'Toggle line wrapping in editor',
+        },
+        autosave: {
+          enable: 'Enable autosave',
+          disable: 'Disable autosave',
+          description: 'Save text changes automatically',
+        },
+      },
+      save: {
+        titleDirty: 'Save (Ctrl/Cmd+S)',
+        titleSaved: 'Saved',
+      },
+      actions: {
+        copyContents: 'Copy contents',
+        downloadRaw: 'Download raw',
+      },
+      status: {
+        loadingTimelineCommits: 'Loading timeline commits...',
+        loadingBlame: 'Loading blame...',
+        noBlameYet: 'No blame lines available for this file yet.',
+        showingBlameLastSaved: 'Showing blame for last saved file content.',
+        loadingChanges: 'Loading {scope} changes...',
+        noChanges: 'No {scope} changes.',
+        hunksSummary: '{count} hunks · {range}',
+        loadingImage: 'Loading image…',
+      },
+      gitDiffMode: {
+        staged: 'staged',
+        workingTree: 'working tree',
+      },
+      gitDiffRange: {
+        headToIndex: 'HEAD -> Index',
+        indexToWorkingTree: 'Index -> Working tree',
+      },
+      empty: {
+        mobileDescription: 'Pick a file from the files panel to inspect or edit.',
+        desktopDescription: 'Pick a file from the tree.',
+      },
+      binaryPreviewUnavailable: 'Binary file preview not available.',
+      imageAltFallback: 'Image',
+      timeline: {
+        selectCommitTitle: 'Select commit',
+        selectCommitShort: 'Select commit',
+        searchPlaceholder: 'Search hash, message, author, email, refs',
+        emptyText: 'No commits match your search.',
+        selectBothCommitsHint: 'Select both commits from the top dropdowns to start comparing.',
+        noMessage: '(no message)',
+      },
+      selection: {
+        clearAria: 'Clear selection',
+        notePlaceholder: 'Add a note for chat (optional)',
+        insertHint: 'Insert selected lines into chat composer',
+        insertButton: 'Insert',
+      },
+    },
+    toasts: {
+      saveFileBeforeGitHunkActions: 'Save the file before applying git hunk actions',
+      saveCurrentFileBeforeReplaceAcrossFiles: 'Save current file before replacing across files',
+      replaceAcrossFiles: {
+        replacedMatch: 'Replaced {count} match{suffix}',
+        replacedMatches: 'Replaced {count} matches{suffix}',
+        skippedFileSuffix: ', skipped {count} file',
+        skippedFilesSuffix: ', skipped {count} files',
+      },
+      matchReplaced: 'Match replaced',
+      noMatchesReplaced: 'No matches replaced',
+      uploadedFile: 'Uploaded {count} file',
+      uploadedFiles: 'Uploaded {count} files',
+      savedFile: 'Saved file',
+      fileCreated: 'File created',
+      folderCreated: 'Folder created',
+      renamed: 'Renamed',
+      deleted: 'Deleted',
+      selectSomeLinesToInsert: 'Select some lines to insert',
+      selectChatSessionFirst: 'Select a chat session first',
+      insertedIntoChatComposer: 'Inserted into chat composer',
+    },
+    explorer: {
+      title: 'Explorer',
+      toolbar: {
+        newFile: 'New file',
+        newFolder: 'New folder',
+        refreshTree: 'Refresh tree',
+        actions: 'Explorer actions',
+      },
+      view: {
+        tree: 'Tree',
+        search: 'Search',
+      },
+      actionMenu: {
+        groups: {
+          actions: 'Explorer actions',
+          visibility: 'Visibility',
+        },
+        uploadFiles: 'Upload files',
+        uploading: 'Uploading...',
+        collapseFolders: 'Collapse folders',
+        collapseFoldersDescription: 'Fold all expanded directories',
+        showHiddenFiles: 'Show hidden files',
+        showHiddenFilesDescription: 'Include dotfiles in explorer',
+        showGitignoredFiles: 'Show gitignored files',
+        showGitignoredFilesDescription: 'Disable gitignore filtering',
+      },
+      actions: {
+        actions: 'Actions',
+        fileActions: 'File actions',
+        folderActions: 'Folder actions',
+        rename: 'Rename',
+        delete: 'Delete',
+        deleteFileTitle: 'Delete file?',
+        deleteFolderTitle: 'Delete folder?',
+        deleteDescription: 'Delete {name}? This cannot be undone.',
+      },
+      inlineCreate: {
+        folderName: 'folder name',
+        fileName: 'file name',
+      },
+      searchUnavailable: 'Search is unavailable.',
     },
   },
 } as const

@@ -17,6 +17,7 @@ import {
   getAssistantErrorInfo,
 } from '@/pages/chat/assistantError'
 import type { JsonValue } from '@/types/json'
+import { useI18n } from 'vue-i18n'
 
 type MessagePartLike = {
   id?: string
@@ -61,6 +62,8 @@ const emit = defineEmits<{
   (e: 'copy', message: MessageLike): void
 }>()
 
+const { t } = useI18n()
+
 function isFilePart(part: MessagePartLike): part is FilePart {
   return part?.type === 'file' && typeof part?.url === 'string' && part.url.length > 0
 }
@@ -81,14 +84,14 @@ function filePartLabel(part: MessagePartLike): string {
   const name = typeof part?.filename === 'string' ? part.filename.trim() : ''
   if (name) return name
   const url = typeof part?.url === 'string' ? part.url : ''
-  if (!url) return 'file'
-  if (url.startsWith('data:')) return 'attachment'
+  if (!url) return String(t('chat.messageItem.fileFallback'))
+  if (url.startsWith('data:')) return String(t('chat.messageItem.attachmentFallback'))
   try {
     const u = new URL(url)
     const last = u.pathname.split('/').filter(Boolean).pop()
-    return last || 'file'
+    return last || String(t('chat.messageItem.fileFallback'))
   } catch {
-    return 'file'
+    return String(t('chat.messageItem.fileFallback'))
   }
 }
 
@@ -143,7 +146,7 @@ const assistantHasError = () => role() === 'assistant' && Boolean(assistantError
             <span v-if="showTimestamps">{{ formatTime(message.info.time?.created) }}</span>
             <span v-if="message.info.agent" class="font-mono truncate">{{ message.info.agent }}</span>
             <span v-if="message.info.modelID" class="font-mono truncate">{{ message.info.modelID }}</span>
-            <span v-if="assistantInterrupted()" class="text-muted-foreground">interrupted</span>
+            <span v-if="assistantInterrupted()" class="text-muted-foreground">{{ t('chat.messageItem.interrupted') }}</span>
           </div>
 
           <div class="flex-1" />
@@ -151,24 +154,30 @@ const assistantHasError = () => role() === 'assistant' && Boolean(assistantError
           <div v-if="role() === 'user' || role() === 'assistant'" class="flex items-center gap-1">
             <ConfirmPopover
               v-if="role() === 'user'"
-              title="Fork session?"
-              description="Fork a new session from this message."
-              confirm-text="Fork"
-              cancel-text="Cancel"
+              :title="t('chat.messageItem.fork.confirmTitle')"
+              :description="t('chat.messageItem.fork.confirmDescription')"
+              :confirm-text="t('chat.messageItem.fork.confirmAction')"
+              :cancel-text="t('common.cancel')"
               :anchor-to-cursor="false"
               @confirm="emit('fork', messageId())"
             >
-              <Button variant="ghost" size="icon" class="h-7 w-7" title="Fork from here" aria-label="Fork from here">
+              <Button
+                variant="ghost"
+                size="icon"
+                class="h-7 w-7"
+                :title="t('chat.messageItem.fork.actionTitle')"
+                :aria-label="t('chat.messageItem.fork.actionTitle')"
+              >
                 <RiGitBranchLine class="h-4 w-4" />
               </Button>
             </ConfirmPopover>
 
             <ConfirmPopover
               v-if="role() === 'user'"
-              title="Revert session?"
-              description="Revert the session to this point. This will discard later turns."
-              confirm-text="Revert"
-              cancel-text="Cancel"
+              :title="t('chat.messageItem.revert.confirmTitle')"
+              :description="t('chat.messageItem.revert.confirmDescription')"
+              :confirm-text="t('chat.messageItem.revert.confirmAction')"
+              :cancel-text="t('common.cancel')"
               variant="destructive"
               :anchor-to-cursor="false"
               @confirm="emit('revert', messageId())"
@@ -177,8 +186,8 @@ const assistantHasError = () => role() === 'assistant' && Boolean(assistantError
                 variant="ghost"
                 size="icon"
                 class="h-7 w-7"
-                title="Revert from here"
-                aria-label="Revert from here"
+                :title="t('chat.messageItem.revert.actionTitle')"
+                :aria-label="t('chat.messageItem.revert.actionTitle')"
                 :disabled="revertBusyMessageId === messageId()"
               >
                 <RiLoader4Line v-if="revertBusyMessageId === messageId()" class="h-4 w-4 animate-spin" />
@@ -190,8 +199,8 @@ const assistantHasError = () => role() === 'assistant' && Boolean(assistantError
               variant="ghost"
               size="icon"
               class="h-7 w-7"
-              title="Copy message"
-              aria-label="Copy message"
+              :title="t('chat.messageItem.copy.actionTitle')"
+              :aria-label="t('chat.messageItem.copy.actionTitle')"
               @click="$emit('copy', message)"
             >
               <RiCheckLine v-if="copiedMessageId === messageId()" class="h-4 w-4 text-emerald-500" />
@@ -246,7 +255,7 @@ const assistantHasError = () => role() === 'assistant' && Boolean(assistantError
             <summary
               class="cursor-pointer select-none px-2 py-1 text-[11px] font-medium text-rose-900 dark:text-rose-100"
             >
-              error details
+              {{ t('chat.messageItem.errorDetails') }}
             </summary>
             <pre
               class="max-h-64 overflow-auto border-t border-rose-300/50 px-2 py-1 text-[11px] leading-relaxed whitespace-pre-wrap break-words text-rose-950 dark:border-rose-500/35 dark:text-rose-100"

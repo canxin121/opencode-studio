@@ -1,4 +1,5 @@
 import type { JsonValue } from '@/types/json'
+import { i18n } from '@/i18n'
 
 type QueryValue = string | number | boolean | null | undefined
 
@@ -208,7 +209,7 @@ export function useGitWorkingTreeOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ path }),
         })
-        toasts.push('success', 'Changes discarded')
+        toasts.push('success', i18n.global.t('git.toasts.changesDiscarded'))
         await load()
         if (selectedFile.value === path) refreshDiff()
       } catch (err) {
@@ -231,9 +232,9 @@ export function useGitWorkingTreeOps(opts: {
         })
         if (selectedFile.value === p) selectedFile.value = null
         if (resp?.added === false) {
-          toasts.push('info', 'Already ignored')
+          toasts.push('info', i18n.global.t('git.toasts.alreadyIgnored'))
         } else {
-          toasts.push('success', `Ignored ${resp?.path || p}`)
+          toasts.push('success', i18n.global.t('git.toasts.ignoredPath', { path: String(resp?.path || p) }))
         }
         await load()
         refreshDiff()

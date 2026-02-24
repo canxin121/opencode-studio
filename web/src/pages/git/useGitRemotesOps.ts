@@ -1,4 +1,5 @@
 import { computed, ref, type Ref } from 'vue'
+import { i18n } from '@/i18n'
 
 import type { GitRemoteInfoResponse } from '@/types/git'
 import type { JsonValue } from '@/types/json'
@@ -74,7 +75,7 @@ export function useGitRemotesOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ name, url }),
         })
-        toasts.push('success', `Added remote ${name}`)
+        toasts.push('success', i18n.global.t('git.toasts.addedRemote', { name }))
         newRemoteName.value = ''
         newRemoteUrl.value = ''
         await loadRemotes()
@@ -99,7 +100,7 @@ export function useGitRemotesOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ name, newName }),
         })
-        toasts.push('success', `Renamed ${name} -> ${newName}`)
+        toasts.push('success', i18n.global.t('git.toasts.renamedFromTo', { from: name, to: newName }))
         selectedRemote.value = newName
         renameRemoteTo.value = ''
         await loadRemotes()
@@ -124,7 +125,7 @@ export function useGitRemotesOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ name, url }),
         })
-        toasts.push('success', `Updated ${name} URL`)
+        toasts.push('success', i18n.global.t('git.toasts.updatedRemoteUrl', { name }))
         setRemoteUrl.value = ''
         await loadRemotes()
       } catch (err) {
@@ -147,7 +148,7 @@ export function useGitRemotesOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ name: n }),
         })
-        toasts.push('success', `Removed remote ${n}`)
+        toasts.push('success', i18n.global.t('git.toasts.removedRemote', { name: n }))
         if (selectedRemote.value === n) selectedRemote.value = ''
         await loadRemotes()
       } catch (err) {

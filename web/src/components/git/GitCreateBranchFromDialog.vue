@@ -1,7 +1,11 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+
 import Button from '@/components/ui/Button.vue'
 import FormDialog from '@/components/ui/FormDialog.vue'
 import Input from '@/components/ui/Input.vue'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   open: boolean
@@ -37,14 +41,14 @@ function onUpdateCheckout(ev: Event) {
 <template>
   <FormDialog
     :open="open"
-    title="Create Branch From"
-    description="Create a branch at a specific ref"
+    :title="t('git.ui.dialogs.createBranchFrom.title')"
+    :description="t('git.ui.dialogs.createBranchFrom.description')"
     maxWidth="max-w-md"
     @update:open="onUpdateOpen"
   >
     <div class="space-y-3">
       <div class="grid gap-1">
-        <div class="text-xs font-medium text-muted-foreground">Branch name</div>
+        <div class="text-xs font-medium text-muted-foreground">{{ t('git.ui.dialogs.createBranchFrom.fields.branchName') }}</div>
         <Input
           :model-value="branchName"
           class="h-9 font-mono text-xs"
@@ -53,7 +57,7 @@ function onUpdateCheckout(ev: Event) {
         />
       </div>
       <div class="grid gap-1">
-        <div class="text-xs font-medium text-muted-foreground">Start point</div>
+        <div class="text-xs font-medium text-muted-foreground">{{ t('git.ui.dialogs.createBranchFrom.fields.startPoint') }}</div>
         <Input
           :model-value="startPoint"
           class="h-9 font-mono text-xs"
@@ -63,11 +67,11 @@ function onUpdateCheckout(ev: Event) {
       </div>
       <label class="inline-flex items-center gap-2 text-xs text-muted-foreground select-none">
         <input :checked="checkoutAfterCreate" type="checkbox" class="accent-primary" @change="onUpdateCheckout" />
-        <span>Checkout branch after create</span>
+        <span>{{ t('git.ui.dialogs.createBranchFrom.checkoutAfterCreate') }}</span>
       </label>
       <div class="flex justify-end gap-2">
-        <Button variant="secondary" size="sm" @click="$emit('update:open', false)">Cancel</Button>
-        <Button size="sm" :disabled="!branchName.trim()" @click="$emit('create')">Create</Button>
+        <Button variant="secondary" size="sm" @click="$emit('update:open', false)">{{ t('common.cancel') }}</Button>
+        <Button size="sm" :disabled="!branchName.trim()" @click="$emit('create')">{{ t('common.create') }}</Button>
       </div>
     </div>
   </FormDialog>

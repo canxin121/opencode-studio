@@ -3,6 +3,7 @@ import { computed, type Ref } from 'vue'
 import { addTagsToList, normalizeStringList } from './OpenCodeConfigPanelListUtils'
 import type { ToastKind } from '@/stores/toasts'
 import type { JsonValue as JsonLike } from '@/types/json'
+import { i18n } from '@/i18n'
 
 type JsonObject = Record<string, JsonLike>
 type PermissionAction = 'allow' | 'ask' | 'deny'
@@ -179,7 +180,7 @@ export function useOpenCodeConfigPanelPermissionsPreset(opts: {
       opts.setPath(opts.draft.value, 'permission', map)
       opts.markDirty()
       opts.refreshJsonBuffer('permission')
-      opts.toasts.push('success', `Set permission.* = ${action}`)
+      opts.toasts.push('success', i18n.global.t('settings.opencodeConfig.errors.setPermissionWildcard', { action }))
       return
     }
 
@@ -193,7 +194,7 @@ export function useOpenCodeConfigPanelPermissionsPreset(opts: {
     }
     ids = normalizeStringList(ids).filter((id) => id !== '*')
     if (ids.length === 0) {
-      opts.toasts.push('error', 'No tools selected for bulk apply')
+      opts.toasts.push('error', i18n.global.t('settings.opencodeConfig.errors.noToolsSelectedForBulkApply'))
       return
     }
 
@@ -210,7 +211,10 @@ export function useOpenCodeConfigPanelPermissionsPreset(opts: {
     opts.setPath(opts.draft.value, 'permission', map)
     opts.markDirty()
     opts.refreshJsonBuffer('permission')
-    opts.toasts.push('success', `Applied ${action} to ${ids.length} tools`)
+    opts.toasts.push(
+      'success',
+      i18n.global.t('settings.opencodeConfig.errors.appliedActionToToolsCount', { action, count: ids.length }),
+    )
   }
 
   function evalPermissionForKey(map: JsonObject, key: string, input: string): PermissionEvalStep {

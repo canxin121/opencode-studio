@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import Button from '@/components/ui/Button.vue'
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import FormDialog from '@/components/ui/FormDialog.vue'
@@ -90,6 +91,7 @@ const toasts = useToastsStore()
 const directoryStore = useDirectoryStore()
 const ui = useUiStore()
 const { startDesktopSidebarResize } = useDesktopSidebarResize()
+const { t } = useI18n()
 
 const projectRoot = computed(() => directoryStore.currentDirectory || '')
 const root = computed(() => trimTrailingSlashes(normalizePath((projectRoot.value || '').trim())))
@@ -655,7 +657,7 @@ const contentSearchScopePath = computed(() => {
 function labelForScopePath(path: string): string {
   if (!path) return ''
   const rel = relativeToWorkspace(path)
-  return rel === '.' ? 'workspace root' : rel
+  return rel === '.' ? t('files.scope.workspaceRoot') : rel
 }
 
 const contentSearchScopeOptions = computed(() => {
@@ -666,20 +668,20 @@ const contentSearchScopeOptions = computed(() => {
   return [
     {
       id: 'workspace' as const,
-      label: 'Workspace',
+      label: t('files.scope.options.workspace.label'),
       description: labelForScopePath(rootPath),
       disabled: !rootPath,
     },
     {
       id: 'selected' as const,
-      label: 'Selected folder',
-      description: selectedPath ? labelForScopePath(selectedPath) : 'Select a folder in explorer first',
+      label: t('files.scope.options.selected.label'),
+      description: selectedPath ? labelForScopePath(selectedPath) : t('files.scope.options.selected.emptyDescription'),
       disabled: !selectedPath,
     },
     {
       id: 'active-file' as const,
-      label: 'Current file folder',
-      description: activeFilePath ? labelForScopePath(activeFilePath) : 'Open a file first',
+      label: t('files.scope.options.activeFile.label'),
+      description: activeFilePath ? labelForScopePath(activeFilePath) : t('files.scope.options.activeFile.emptyDescription'),
       disabled: !activeFilePath,
     },
   ]
@@ -690,32 +692,34 @@ const activeContentSearchScope = computed(() => {
 })
 
 const contentSearchSummary = computed(() => {
-  if (!hasContentSearch.value) return 'Type to search inside file contents.'
-  if (contentSearchLoading.value) return 'Searching...'
+  if (!hasContentSearch.value) return t('files.search.content.hint')
+  if (contentSearchLoading.value) return t('common.searching')
   const files = contentSearchFiles.value.length
   const matches = contentSearchMatchCount.value
-  const text = `${matches} match${matches === 1 ? '' : 'es'} in ${files} file${files === 1 ? '' : 's'}`
-  return contentSearchTruncated.value ? `${text} (limited)` : text
+  const matchWord = matches === 1 ? t('files.search.content.matchSingle') : t('files.search.content.matchPlural')
+  const fileWord = files === 1 ? t('files.search.content.fileSingle') : t('files.search.content.filePlural')
+  const text = t('files.search.content.resultSummary', { matches, matchWord, files, fileWord })
+  return contentSearchTruncated.value ? t('files.search.content.resultSummaryLimited', { text }) : text
 })
 
 const dialogTitle = computed(() => {
   switch (activeDialog.value) {
     case 'createFile':
-      return 'Create file'
+      return t('files.dialog.title.createFile')
     case 'createFolder':
-      return 'Create folder'
+      return t('files.dialog.title.createFolder')
     case 'rename':
-      return 'Rename'
+      return t('files.dialog.title.rename')
     default:
       return ''
   }
 })
 
 const dialogDescription = computed(() => {
-  const base = dialogData.value?.path || root.value || 'root'
-  if (activeDialog.value === 'createFile') return `Create a new file in ${base}`
-  if (activeDialog.value === 'createFolder') return `Create a new folder in ${base}`
-  if (activeDialog.value === 'rename') return `Rename ${dialogData.value?.name || ''}`
+  const base = dialogData.value?.path || root.value || t('files.dialog.rootFallback')
+  if (activeDialog.value === 'createFile') return t('files.dialog.description.createFile', { base })
+  if (activeDialog.value === 'createFolder') return t('files.dialog.description.createFolder', { base })
+  if (activeDialog.value === 'rename') return t('files.dialog.description.rename', { name: dialogData.value?.name || '' })
   return ''
 })
 
@@ -823,10 +827,10 @@ function applyTimelineCommitContent(side: TimelineSide, requestSeq: number, payl
   if (!payload?.exists) {
     if (isLeft) {
       fileTimelineLeftContent.value = ''
-      fileTimelineLeftError.value = 'File does not exist in this commit.'
+      fileTimelineLeftError.value = t('files.timeline.errors.missingInCommit')
     } else {
       fileTimelineRightContent.value = ''
-      fileTimelineRightError.value = 'File does not exist in this commit.'
+      fileTimelineRightError.value = t('files.timeline.errors.missingInCommit')
     }
     return
   }
@@ -834,10 +838,10 @@ function applyTimelineCommitContent(side: TimelineSide, requestSeq: number, payl
   if (payload.binary) {
     if (isLeft) {
       fileTimelineLeftContent.value = ''
-      fileTimelineLeftError.value = 'Selected commit stores this file as binary. Text compare is unavailable.'
+      fileTimelineLeftError.value = t('files.timeline.errors.binaryUnavailable')
     } else {
       fileTimelineRightContent.value = ''
-      fileTimelineRightError.value = 'Selected commit stores this file as binary. Text compare is unavailable.'
+      fileTimelineRightError.value = t('files.timeline.errors.binaryUnavailable')
     }
     return
   }
@@ -851,7 +855,7 @@ function applyTimelineCommitContent(side: TimelineSide, requestSeq: number, payl
   }
 
   if (payload.truncated) {
-    toasts.push('info', 'Commit content is large and has been truncated for preview.')
+    toasts.push('info', t('files.timeline.info.truncated'))
   }
 }
 
@@ -1002,13 +1006,13 @@ async function loadMoreFileTimeline() {
 function openFileTimeline() {
   const file = selectedFile.value
   if (!file || file.type !== 'file' || viewerMode.value !== 'text') {
-    toasts.push('error', 'Timeline compare is only available for text files')
+    toasts.push('error', t('files.timeline.errors.onlyTextFiles'))
     return
   }
 
   const relPath = relativeToWorkspace(file.path).trim()
   if (!relPath || relPath === '.') {
-    toasts.push('error', 'Cannot open timeline for this entry')
+    toasts.push('error', t('files.timeline.errors.cannotOpen'))
     return
   }
 
@@ -1039,10 +1043,10 @@ function openFileTimeline() {
 async function copyToClipboard(text: string) {
   const ok = await copyTextToClipboard(text)
   if (ok) {
-    toasts.push('success', 'Copied')
+    toasts.push('success', t('common.copied'))
     return
   }
-  toasts.push('error', 'Copy failed')
+  toasts.push('error', t('common.copyFailed'))
 }
 
 async function triggerDownloadForPath(path: string, fileName?: string) {
@@ -1075,7 +1079,7 @@ async function triggerDownloadForPath(path: string, fileName?: string) {
   } catch (err) {
     const msg =
       err instanceof ApiError ? err.message || err.bodyText || '' : err instanceof Error ? err.message : String(err)
-    toasts.push('error', msg || 'Download failed')
+    toasts.push('error', msg || t('common.downloadFailed'))
   }
 }
 
@@ -1434,7 +1438,7 @@ async function applyGitPatch(patch: string, mode: GitPatchMode) {
   if (!rootPath || !file || !patch.trim()) return
   if (gitPatchBusy.value) return
   if (dirty.value) {
-    toasts.push('error', 'Save the file before applying git hunk actions')
+    toasts.push('error', t('files.toasts.saveFileBeforeGitHunkActions'))
     return
   }
 
@@ -1602,7 +1606,7 @@ async function replaceContentSearchMatch(file: FsContentSearchFileResult, match:
   const rootPath = root.value
   if (!rootPath) return
   if (dirty.value) {
-    toasts.push('error', 'Save current file before replacing across files')
+    toasts.push('error', t('files.toasts.saveCurrentFileBeforeReplaceAcrossFiles'))
     return
   }
 
@@ -1621,7 +1625,7 @@ async function replaceContentSearchMatch(file: FsContentSearchFileResult, match:
 
     const replaced = Number(resp.replacementCount || 0)
     if (replaced > 0) {
-      toasts.push('success', 'Match replaced')
+      toasts.push('success', t('files.toasts.matchReplaced'))
     }
 
     if (selectedFile.value?.type === 'file' && normalizePath(selectedFile.value.path) === normalizePath(file.path)) {
@@ -1641,7 +1645,7 @@ async function replaceAllContentSearchMatches() {
   const q = contentSearchQuery.value.trim()
   if (!rootPath || !q || !contentSearchFiles.value.length) return
   if (dirty.value) {
-    toasts.push('error', 'Save current file before replacing across files')
+    toasts.push('error', t('files.toasts.saveCurrentFileBeforeReplaceAcrossFiles'))
     return
   }
 
@@ -1662,10 +1666,20 @@ async function replaceAllContentSearchMatches() {
     const replacements = Number(resp.replacementCount || 0)
     const skipped = Number(resp.skipped || 0)
     if (replacements > 0) {
-      const suffix = skipped > 0 ? `, skipped ${skipped} file${skipped === 1 ? '' : 's'}` : ''
-      toasts.push('success', `Replaced ${replacements} match${replacements === 1 ? '' : 'es'}${suffix}`)
+      const suffix =
+        skipped > 0
+          ? skipped === 1
+            ? t('files.toasts.replaceAcrossFiles.skippedFileSuffix', { count: skipped })
+            : t('files.toasts.replaceAcrossFiles.skippedFilesSuffix', { count: skipped })
+          : ''
+      toasts.push(
+        'success',
+        replacements === 1
+          ? t('files.toasts.replaceAcrossFiles.replacedMatch', { count: replacements, suffix })
+          : t('files.toasts.replaceAcrossFiles.replacedMatches', { count: replacements, suffix }),
+      )
     } else {
-      toasts.push('info', 'No matches replaced')
+      toasts.push('info', t('files.toasts.noMatchesReplaced'))
     }
 
     if (selectedFile.value?.type === 'file') {
@@ -1730,7 +1744,7 @@ async function openFile(node: FileNode) {
   if (isPathHiddenInFiles(node.path)) return
   const rootPath = root.value
   if (!rootPath) {
-    fileError.value = 'No project selected'
+    fileError.value = String(t('files.errors.noProjectSelected'))
     return
   }
   const seq = ++openFileSeq
@@ -1828,7 +1842,7 @@ async function save(opts?: { silent?: boolean }): Promise<boolean> {
       void loadGitDiff()
     }
     if (!opts?.silent) {
-      toasts.push('success', 'Saved file')
+      toasts.push('success', t('files.toasts.savedFile'))
     }
     return true
   } catch (err) {
@@ -1859,7 +1873,12 @@ async function uploadFilesToDirectory(files: FileList, targetDir?: string) {
       const target = joinPath(destination, file.name)
       await uploadFile({ directory: rootPath, path: target, file })
     }
-    toasts.push('success', `Uploaded ${list.length} file${list.length === 1 ? '' : 's'}`)
+    toasts.push(
+      'success',
+      list.length === 1
+        ? t('files.toasts.uploadedFile', { count: list.length })
+        : t('files.toasts.uploadedFiles', { count: list.length }),
+    )
     await refreshRoot()
   } catch (err) {
     const msg =
@@ -1918,7 +1937,7 @@ function normalizeCreateDirectory(basePath: string): string {
 
 async function createNode(kind: CreateKind, basePath: string, name: string) {
   const rootPath = root.value
-  if (!rootPath) throw new Error('No project selected')
+  if (!rootPath) throw new Error(String(t('files.errors.noProjectSelected')))
 
   const trimmedName = String(name || '').trim()
   if (!trimmedName) {
@@ -1930,10 +1949,10 @@ async function createNode(kind: CreateKind, basePath: string, name: string) {
 
   if (kind === 'createFile') {
     await writeFile({ directory: rootPath, path: target, content: '' })
-    toasts.push('success', 'File created')
+    toasts.push('success', t('files.toasts.fileCreated'))
   } else {
     await makeDirectory({ directory: rootPath, path: target })
-    toasts.push('success', 'Folder created')
+    toasts.push('success', t('files.toasts.folderCreated'))
   }
 
   await refreshRoot()
@@ -1952,7 +1971,7 @@ async function createNodeFromExplorer(kind: CreateKind, basePath: string, name: 
 
 async function renameNodePath(oldPath: string, nextName: string) {
   const rootPath = root.value
-  if (!rootPath) throw new Error('No project selected')
+  if (!rootPath) throw new Error(String(t('files.errors.noProjectSelected')))
 
   const trimmedName = String(nextName || '').trim()
   if (!trimmedName) throw new Error('Name is required')
@@ -1977,7 +1996,7 @@ async function renameNodePath(oldPath: string, nextName: string) {
     closeFileTimeline()
   }
 
-  toasts.push('success', 'Renamed')
+  toasts.push('success', t('files.toasts.renamed'))
 }
 
 async function renameNodeFromExplorer(node: FileNode, nextName: string): Promise<boolean> {
@@ -2058,7 +2077,7 @@ async function deleteNode(node: FileNode) {
       clearGitDiff()
       closeFileTimeline()
     }
-    toasts.push('success', 'Deleted')
+    toasts.push('success', t('files.toasts.deleted'))
     await refreshRoot()
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
@@ -2075,11 +2094,11 @@ async function insertSelectionIntoChatComposer() {
   const path = selectedFile.value?.path
   const sessionId = chat.selectedSessionId
   if (!sel || !sel.text.trim() || !path) {
-    toasts.push('error', 'Select some lines to insert')
+    toasts.push('error', t('files.toasts.selectSomeLinesToInsert'))
     return
   }
   if (!sessionId) {
-    toasts.push('error', 'Select a chat session first')
+    toasts.push('error', t('files.toasts.selectChatSessionFirst'))
     return
   }
 
@@ -2093,7 +2112,7 @@ async function insertSelectionIntoChatComposer() {
   const existing = chat.getComposerDraft(sessionId)
   const glued = existing && existing.trim() ? `${existing.replace(/\s+$/g, '')}\n\n${text}` : text
   chat.setComposerDraft(sessionId, glued)
-  toasts.push('success', 'Inserted into chat composer')
+  toasts.push('success', t('files.toasts.insertedIntoChatComposer'))
   selection.value = null
   commentText.value = ''
 }
@@ -2223,10 +2242,10 @@ onMounted(async () => {
   <section class="h-full flex flex-col overflow-hidden m-0 p-0">
     <ConfirmPopover
       :open="confirmDiscardOpen"
-      title="Unsaved changes"
-      description="Save your edits before continuing?"
-      confirm-text="Discard"
-      cancel-text="Save changes"
+      :title="String(t('files.confirmDiscard.title'))"
+      :description="String(t('files.confirmDiscard.description'))"
+      :confirm-text="String(t('files.confirmDiscard.discard'))"
+      :cancel-text="String(t('files.confirmDiscard.saveChanges'))"
       variant="destructive"
       :confirm-disabled="isSaving"
       :cancel-disabled="isSaving"
@@ -2253,11 +2272,11 @@ onMounted(async () => {
       "
     >
       <div class="space-y-3">
-        <Input v-model="dialogInput" placeholder="Name" class="h-9 font-mono" />
+        <Input v-model="dialogInput" :placeholder="String(t('files.dialog.namePlaceholder'))" class="h-9 font-mono" />
         <div class="flex items-center justify-end gap-2">
-          <Button variant="ghost" @click="closeDialog" :disabled="dialogSubmitting">Cancel</Button>
+          <Button variant="ghost" @click="closeDialog" :disabled="dialogSubmitting">{{ t('common.cancel') }}</Button>
           <Button @click="handleDialogSubmit" :disabled="dialogSubmitting || !dialogInput.trim()">
-            {{ dialogSubmitting ? 'Working...' : 'Confirm' }}
+            {{ dialogSubmitting ? t('common.working') : t('common.confirm') }}
           </Button>
         </div>
       </div>
@@ -2267,14 +2286,14 @@ onMounted(async () => {
       <div v-if="!root" class="h-full">
         <div v-if="isMobile && ui.isSessionSwitcherOpen" class="h-full p-3">
           <div class="rounded-sm border border-sidebar-border/60 bg-sidebar-accent/10 p-3">
-            <div class="text-sm font-medium">No Project Selected</div>
+            <div class="text-sm font-medium">{{ t('files.empty.noProject.title') }}</div>
             <div class="mt-1 text-xs text-muted-foreground">
-              Choose a project folder first, then the file tree will appear here.
+              {{ t('files.empty.noProject.mobileDescription') }}
             </div>
           </div>
         </div>
         <div v-else class="h-full grid place-items-center text-muted-foreground typography-meta">
-          Select a project (or a session) to browse files.
+          {{ t('files.empty.noProject.desktopDescription') }}
         </div>
       </div>
 
@@ -2325,7 +2344,7 @@ onMounted(async () => {
                           class="rounded-sm"
                           @click="explorerSearchMode = 'files'"
                         >
-                          Files
+                          {{ t('files.search.mode.files') }}
                         </SegmentedButton>
                         <SegmentedButton
                           :active="explorerSearchMode === 'content'"
@@ -2333,7 +2352,7 @@ onMounted(async () => {
                           class="rounded-sm"
                           @click="explorerSearchMode = 'content'"
                         >
-                          Content
+                          {{ t('files.search.mode.content') }}
                         </SegmentedButton>
                       </SegmentedControl>
 
@@ -2342,7 +2361,7 @@ onMounted(async () => {
                           <div class="flex items-center gap-1">
                             <Input
                               v-model="searchQuery"
-                              placeholder="Search files"
+                              :placeholder="String(t('files.search.files.placeholder'))"
                               class="oc-vscode-subtle-input h-[26px] flex-1 font-mono text-[12px]"
                               @keydown.enter.prevent="runSearch"
                             />
@@ -2352,11 +2371,11 @@ onMounted(async () => {
                               :disabled="searching || !hasFileSearch"
                               @click="runSearch"
                             >
-                              {{ searching ? '...' : 'Search' }}
+                              {{ searching ? t('common.loading') : t('common.search') }}
                             </Button>
                             <SidebarIconButton
-                              title="Clear"
-                              aria-label="Clear"
+                              :title="String(t('common.clear'))"
+                              :aria-label="String(t('common.clear'))"
                               :disabled="!hasFileSearch"
                               @click="clearFileSearch"
                             >
@@ -2364,8 +2383,8 @@ onMounted(async () => {
                             </SidebarIconButton>
                           </div>
                           <div class="px-0.5 text-[11px] text-muted-foreground">
-                            <span v-if="!hasFileSearch">Type to search file names and paths.</span>
-                            <span v-else-if="searching">Searching...</span>
+                            <span v-if="!hasFileSearch">{{ t('files.search.files.hint') }}</span>
+                            <span v-else-if="searching">{{ t('common.searching') }}</span>
                             <span v-else
                               >{{ searchResults.length }} result{{ searchResults.length === 1 ? '' : 's' }}</span
                             >
@@ -2377,8 +2396,10 @@ onMounted(async () => {
                             <button
                               type="button"
                               class="absolute left-0 top-0 inline-flex h-[26px] w-4 items-center justify-center rounded-sm text-[10px] text-muted-foreground transition hover:bg-sidebar-accent/70 hover:text-foreground"
-                              :title="contentSearchReplaceOpen ? 'Hide replace' : 'Show replace'"
-                              :aria-label="contentSearchReplaceOpen ? 'Hide replace' : 'Show replace'"
+                              :title=
+                                "contentSearchReplaceOpen ? String(t('files.search.content.hideReplace')) : String(t('files.search.content.showReplace'))"
+                              :aria-label=
+                                "contentSearchReplaceOpen ? String(t('files.search.content.hideReplace')) : String(t('files.search.content.showReplace'))"
                               @click="contentSearchReplaceOpen = !contentSearchReplaceOpen"
                             >
                               {{ contentSearchReplaceOpen ? 'v' : '>' }}
@@ -2387,7 +2408,7 @@ onMounted(async () => {
                             <div class="ml-[18px] flex items-center gap-1">
                               <Input
                                 v-model="contentSearchQuery"
-                                placeholder="Search"
+                                :placeholder="String(t('files.search.content.placeholder'))"
                                 class="oc-vscode-subtle-input h-[26px] flex-1 font-mono text-[12px]"
                                 @keydown.enter.prevent="runContentSearch"
                               />
@@ -2397,11 +2418,11 @@ onMounted(async () => {
                                 :disabled="contentSearchLoading || contentSearchReplacing || !hasContentSearch"
                                 @click="runContentSearch"
                               >
-                                {{ contentSearchLoading ? '...' : 'Search' }}
+                                {{ contentSearchLoading ? t('common.loading') : t('common.search') }}
                               </Button>
                               <SidebarIconButton
-                                title="Clear"
-                                aria-label="Clear"
+                                :title="String(t('common.clear'))"
+                                :aria-label="String(t('common.clear'))"
                                 :disabled="!hasContentSearch"
                                 @click="clearContentSearch"
                               >
@@ -2415,7 +2436,7 @@ onMounted(async () => {
                                     ? 'border-sidebar-border bg-sidebar-accent/80 text-foreground'
                                     : 'border-sidebar-border/60 bg-sidebar-accent/25 text-muted-foreground hover:text-foreground'
                                 "
-                                title="Match case"
+                                :title="String(t('files.search.content.matchCase'))"
                                 @click="contentSearchCaseSensitive = !contentSearchCaseSensitive"
                               >
                                 Aa
@@ -2428,7 +2449,7 @@ onMounted(async () => {
                                     ? 'border-sidebar-border bg-sidebar-accent/80 text-foreground'
                                     : 'border-sidebar-border/60 bg-sidebar-accent/25 text-muted-foreground hover:text-foreground'
                                 "
-                                title="Match whole word"
+                                :title="String(t('files.search.content.matchWholeWord'))"
                                 @click="contentSearchWholeWord = !contentSearchWholeWord"
                               >
                                 W
@@ -2441,7 +2462,7 @@ onMounted(async () => {
                                     ? 'border-sidebar-border bg-sidebar-accent/80 text-foreground'
                                     : 'border-sidebar-border/60 bg-sidebar-accent/25 text-muted-foreground hover:text-foreground'
                                 "
-                                title="Use regular expression"
+                                :title="String(t('files.search.content.useRegex'))"
                                 @click="contentSearchRegex = !contentSearchRegex"
                               >
                                 .*
@@ -2452,7 +2473,7 @@ onMounted(async () => {
                           <div v-if="contentSearchReplaceOpen" class="ml-[18px] flex items-center gap-1">
                             <Input
                               v-model="contentSearchReplace"
-                              placeholder="Replace"
+                              :placeholder="String(t('files.search.content.replacePlaceholder'))"
                               class="oc-vscode-subtle-input h-[26px] flex-1 font-mono text-[12px]"
                             />
                             <Button
@@ -2466,7 +2487,7 @@ onMounted(async () => {
                               "
                               @click="replaceAllContentSearchMatches"
                             >
-                              {{ contentSearchReplacing ? '...' : 'All' }}
+                              {{ contentSearchReplacing ? t('common.loading') : t('common.all') }}
                             </Button>
                           </div>
 
@@ -2503,11 +2524,11 @@ onMounted(async () => {
                       <div class="px-1 py-1">
                         <template v-if="explorerSearchMode === 'files'">
                           <div v-if="!hasFileSearch" class="px-2 py-2 text-xs text-muted-foreground">
-                            No search query.
+                            {{ t('files.search.files.noQuery') }}
                           </div>
-                          <div v-else-if="searching" class="px-2 py-2 text-xs text-muted-foreground">Searching...</div>
+                          <div v-else-if="searching" class="px-2 py-2 text-xs text-muted-foreground">{{ t('common.searching') }}</div>
                           <div v-else-if="searchResults.length === 0" class="px-2 py-2 text-xs text-muted-foreground">
-                            No files found.
+                            {{ t('files.search.files.noFilesFound') }}
                           </div>
                           <div v-else class="space-y-0.5">
                             <button
@@ -2532,16 +2553,16 @@ onMounted(async () => {
                             {{ contentSearchError }}
                           </div>
                           <div v-if="!hasContentSearch" class="px-2 py-2 text-xs text-muted-foreground">
-                            Type to search in file contents.
+                            {{ t('files.search.content.hint') }}
                           </div>
                           <div
                             v-else-if="contentSearchLoading && !contentSearchFiles.length"
                             class="px-2 py-2 text-xs text-muted-foreground"
                           >
-                            Searching...
+                            {{ t('common.searching') }}
                           </div>
                           <div v-else-if="!contentSearchFiles.length" class="px-2 py-2 text-xs text-muted-foreground">
-                            No matches found.
+                            {{ t('files.search.content.noMatchesFound') }}
                           </div>
                           <div v-else class="space-y-0">
                             <div
@@ -2590,7 +2611,7 @@ onMounted(async () => {
                                     :disabled="contentSearchReplacing"
                                     @click="replaceContentSearchMatch(file, match)"
                                   >
-                                    Replace
+                                    {{ t('common.replace') }}
                                   </button>
                                 </div>
                               </div>

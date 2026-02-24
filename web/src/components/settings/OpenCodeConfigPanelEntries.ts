@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import type { ToastKind } from '@/stores/toasts'
+import { i18n } from '@/i18n'
 
 type Kind = 'agent' | 'command'
 type EntryValue = unknown
@@ -73,17 +74,20 @@ export function useOpenCodeConfigPanelEntries(opts: {
 
   async function copyEntryJson(kind: Kind, id: string) {
     const entry = kind === 'agent' ? getAgentEntry(id) : getCommandEntry(id)
-    await copyText(JSON.stringify(entry, null, 2), `Copied ${kind} JSON`)
+    await copyText(
+      JSON.stringify(entry, null, 2),
+      i18n.global.t('settings.opencodeConfig.errors.copiedKindJson', { kind }),
+    )
   }
 
   function importEntryJson(kind: Kind, id: string) {
-    const raw = window.prompt(`Paste ${kind} JSON to import into '${id}'`, '')
+    const raw = window.prompt(i18n.global.t('settings.opencodeConfig.errors.pasteKindJsonPrompt', { kind, id }), '')
     if (!raw) return
     let parsedRaw: EntryValue
     try {
       parsedRaw = JSON.parse(raw)
     } catch {
-      toasts.push('error', 'Invalid JSON')
+      toasts.push('error', i18n.global.t('settings.opencodeConfig.errors.invalidJson'))
       return
     }
 
@@ -112,7 +116,7 @@ export function useOpenCodeConfigPanelEntries(opts: {
     }
 
     if (!isPlainObject(entry)) {
-      toasts.push('error', `Expected a JSON object for ${kind} entry`)
+      toasts.push('error', i18n.global.t('settings.opencodeConfig.errors.expectedJsonObjectForEntry', { kind }))
       return
     }
 
@@ -125,7 +129,7 @@ export function useOpenCodeConfigPanelEntries(opts: {
       refreshJsonBuffer(`agent:${id}:options`)
       refreshJsonBuffer(`agent:${id}:permission`)
     }
-    toasts.push('success', `Imported ${kind} JSON into ${id}`)
+    toasts.push('success', i18n.global.t('settings.opencodeConfig.errors.importedKindJsonInto', { kind, id }))
   }
 
   function insertAgentPromptSnippet(agentId: string, snippet: string) {

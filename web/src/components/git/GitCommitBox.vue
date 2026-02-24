@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 import MiniActionButton from '@/components/ui/MiniActionButton.vue'
 import OptionPicker from '@/components/ui/OptionPicker.vue'
 
 type Gitmoji = { emoji: string; label: string }
+
+const { t } = useI18n()
 
 const props = defineProps<{
   message: string
@@ -48,7 +51,7 @@ const gitmojiPickerOptions = computed(() =>
     <textarea
       :value="message"
       class="h-24 w-full resize-none rounded-sm border border-sidebar-border/70 bg-sidebar-accent/15 px-2.5 py-2 text-[12px] font-mono shadow-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-      placeholder="Message (Cmd+Enter to commit)"
+      :placeholder="t('git.ui.commitBox.messagePlaceholder')"
       @input="updateMessage"
       @keydown.meta.enter="$emit('commit')"
       @keydown.ctrl.enter="$emit('commit')"
@@ -61,9 +64,9 @@ const gitmojiPickerOptions = computed(() =>
           <OptionPicker
             :model-value="selectedGitmoji"
             :options="gitmojiPickerOptions"
-            title="Gitmoji"
-            search-placeholder="Search emojis"
-            empty-label="Emoji"
+            :title="t('git.ui.commitBox.gitmojiTitle')"
+            :search-placeholder="t('git.ui.commitBox.searchEmojis')"
+            :empty-label="t('git.ui.commitBox.emojiEmptyLabel')"
             :empty-disabled="true"
             trigger-class="h-6 px-1 text-[10px] rounded-sm border-sidebar-border/70 bg-sidebar-accent/20 shadow-none"
             size="sm"
@@ -73,7 +76,7 @@ const gitmojiPickerOptions = computed(() =>
       </div>
 
       <MiniActionButton variant="default" class="ml-auto px-2.5" :disabled="!canCommit()" @click="$emit('commit')">
-        Commit
+        {{ t('git.actionsMenu.groups.commit') }}
       </MiniActionButton>
     </div>
   </div>

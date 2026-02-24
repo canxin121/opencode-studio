@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { RiArrowDownSLine, RiArrowRightSLine, RiGitBranchLine, RiMore2Line, RiRefreshLine } from '@remixicon/vue'
+import { useI18n } from 'vue-i18n'
 
 import MiniActionButton from '@/components/ui/MiniActionButton.vue'
 import MobileSidebarEmptyState from '@/components/ui/MobileSidebarEmptyState.vue'
@@ -46,6 +47,7 @@ const props = defineProps({
   },
 })
 const { startDesktopSidebarResize } = useDesktopSidebarResize()
+const { t } = useI18n()
 
 // NOTE: We deliberately destructure refs/functions from ctx so the template can remain
 // close to the original GitPage.vue markup. Values are mostly refs (from parent)
@@ -515,11 +517,11 @@ const rebaseActionMenuGroups = computed<OptionMenuGroup[]>(() => {
   const items: OptionMenuItem[] = []
 
   if ((conflictPaths.value || []).length > 0) {
-    items.push({ id: 'open-conflict', label: 'Open Conflict' })
+    items.push({ id: 'open-conflict', label: t('git.ui.sequencer.openConflict') })
   }
 
-  items.push({ id: 'skip', label: 'Skip' })
-  items.push({ id: 'use-terminal', label: 'Use Terminal' })
+  items.push({ id: 'skip', label: t('git.ui.sequencer.skip') })
+  items.push({ id: 'use-terminal', label: t('common.useTerminal') })
 
   return [{ id: 'rebase-actions', items }]
 })
@@ -555,9 +557,9 @@ const mergeActionMenuQuery = ref('')
 const mergeActionMenuGroups = computed<OptionMenuGroup[]>(() => {
   const items: OptionMenuItem[] = []
   if ((conflictPaths.value || []).length > 0) {
-    items.push({ id: 'open-conflict', label: 'Open Conflict' })
+    items.push({ id: 'open-conflict', label: t('git.ui.sequencer.openConflict') })
   }
-  items.push({ id: 'use-terminal', label: 'Use Terminal' })
+  items.push({ id: 'use-terminal', label: t('common.useTerminal') })
   return [{ id: 'merge-actions', items }]
 })
 
@@ -589,11 +591,11 @@ const cherryPickActionMenuGroups = computed<OptionMenuGroup[]>(() => {
   const items: OptionMenuItem[] = []
 
   if ((conflictPaths.value || []).length > 0) {
-    items.push({ id: 'open-conflict', label: 'Open Conflict' })
+    items.push({ id: 'open-conflict', label: t('git.ui.sequencer.openConflict') })
   }
 
-  items.push({ id: 'skip', label: 'Skip' })
-  items.push({ id: 'use-terminal', label: 'Use Terminal' })
+  items.push({ id: 'skip', label: t('git.ui.sequencer.skip') })
+  items.push({ id: 'use-terminal', label: t('common.useTerminal') })
 
   return [{ id: 'cherry-pick-actions', items }]
 })
@@ -630,11 +632,11 @@ const revertActionMenuGroups = computed<OptionMenuGroup[]>(() => {
   const items: OptionMenuItem[] = []
 
   if ((conflictPaths.value || []).length > 0) {
-    items.push({ id: 'open-conflict', label: 'Open Conflict' })
+    items.push({ id: 'open-conflict', label: t('git.ui.sequencer.openConflict') })
   }
 
-  items.push({ id: 'skip', label: 'Skip' })
-  items.push({ id: 'use-terminal', label: 'Use Terminal' })
+  items.push({ id: 'skip', label: t('git.ui.sequencer.skip') })
+  items.push({ id: 'use-terminal', label: t('common.useTerminal') })
 
   return [{ id: 'revert-actions', items }]
 })
@@ -759,20 +761,24 @@ void diffPaneRef
         @pointerdown="startDesktopSidebarResize"
       />
       <div class="oc-vscode-pane-header">
-        <div class="oc-vscode-pane-title">Source Control</div>
+        <div class="oc-vscode-pane-title">{{ t('git.ui.sourceControl') }}</div>
         <div class="oc-vscode-toolbar">
-          <SidebarIconButton title="Fetch" :disabled="!gitReady || !root || repoBusy" @click="fetchRemote">
+          <SidebarIconButton
+            :title="t('git.actions.fetch')"
+            :disabled="!gitReady || !root || repoBusy"
+            @click="fetchRemote"
+          >
             <RiRefreshLine class="h-3.5 w-3.5" :class="{ 'animate-spin': loading || repoBusy }" />
           </SidebarIconButton>
-          <SidebarIconButton title="Pull" :disabled="!gitReady || !root || repoBusy" @click="pull">
+          <SidebarIconButton :title="t('git.actions.pull')" :disabled="!gitReady || !root || repoBusy" @click="pull">
             <RiArrowDownSLine class="h-3.5 w-3.5" />
           </SidebarIconButton>
-          <SidebarIconButton title="Push" :disabled="!gitReady || !root || repoBusy" @click="push">
+          <SidebarIconButton :title="t('git.actions.push')" :disabled="!gitReady || !root || repoBusy" @click="push">
             <RiArrowRightSLine class="h-3.5 w-3.5 -rotate-45" />
           </SidebarIconButton>
           <div ref="actionsMenuAnchorEl" class="inline-flex">
             <SidebarIconButton
-              title="More Actions"
+              :title="t('git.ui.moreActions')"
               :disabled="!gitReady || !root || repoBusy"
               @mousedown.prevent
               @click.stop="actionsOpen = !actionsOpen"
@@ -792,14 +798,16 @@ void diffPaneRef
           :disabled="!projectRoot"
           @click="repoPickerOpen = true"
         >
-          <div class="min-w-0 text-left">
-            <div class="text-[10px] uppercase tracking-[0.08em] text-muted-foreground">Repository</div>
+            <div class="min-w-0 text-left">
+            <div class="text-[10px] uppercase tracking-[0.08em] text-muted-foreground">{{
+              t('git.ui.repository')
+            }}</div>
             <div class="truncate font-mono text-[11px] text-foreground" :title="selectedRepoLabel">
               {{ selectedRepoLabel }}
             </div>
           </div>
           <div class="flex items-center gap-2">
-            <div v-if="reposLoading" class="text-[10px] text-muted-foreground">Scanning...</div>
+            <div v-if="reposLoading" class="text-[10px] text-muted-foreground">{{ t('common.scanning') }}</div>
             <RiArrowDownSLine class="h-4 w-4 text-muted-foreground" />
           </div>
         </button>
@@ -824,19 +832,19 @@ void diffPaneRef
               v-if="gitState?.mergeInProgress"
               class="rounded-sm border border-sidebar-border/60 bg-sidebar-accent/20 p-2 text-[11px]"
             >
-              <div class="font-medium">Merge in progress</div>
+              <div class="font-medium">{{ t('git.ui.sequencer.mergeInProgressTitle') }}</div>
               <div class="text-[11px] text-muted-foreground mt-0.5">
-                Resolve conflicts, then commit. Or abort the merge.
+                {{ t('git.ui.sequencer.mergeInProgressDescription') }}
               </div>
               <div class="mt-2 flex flex-wrap items-center justify-end gap-2">
-                <MiniActionButton variant="destructive" @click="abortMerge">Abort</MiniActionButton>
+                <MiniActionButton variant="destructive" @click="abortMerge">{{ t('common.abort') }}</MiniActionButton>
 
                 <div class="relative">
                   <IconButton
                     size="sm"
                     class="text-muted-foreground hover:text-foreground hover:bg-primary/6"
-                    title="More merge actions"
-                    aria-label="More merge actions"
+                    :title="t('git.ui.sequencer.moreMergeActions')"
+                    :aria-label="t('git.ui.sequencer.moreMergeActions')"
                     @click.stop="openMergeActionMenu"
                   >
                     <RiMore2Line class="h-4 w-4" />
@@ -846,8 +854,8 @@ void diffPaneRef
                     :open="mergeActionMenuOpen"
                     :query="mergeActionMenuQuery"
                     :groups="mergeActionMenuGroups"
-                    title="Merge actions"
-                    mobile-title="Merge actions"
+                    :title="t('git.ui.sequencer.mergeActions')"
+                    :mobile-title="t('git.ui.sequencer.mergeActions')"
                     :searchable="false"
                     :is-mobile-pointer="ui.isMobilePointer"
                     desktop-placement="bottom-end"
@@ -864,20 +872,20 @@ void diffPaneRef
               v-else-if="gitState?.rebaseInProgress"
               class="rounded-sm border border-sidebar-border/60 bg-sidebar-accent/20 p-2 text-[11px]"
             >
-              <div class="font-medium">Rebase in progress</div>
+              <div class="font-medium">{{ t('git.ui.sequencer.rebaseInProgressTitle') }}</div>
               <div class="text-[11px] text-muted-foreground mt-0.5">
-                Continue/skip in a terminal, or abort the rebase.
+                {{ t('git.ui.sequencer.rebaseInProgressDescription') }}
               </div>
               <div class="mt-2 flex flex-wrap items-center justify-end gap-2">
-                <MiniActionButton @click="rebaseContinue">Continue</MiniActionButton>
-                <MiniActionButton variant="destructive" @click="abortRebase">Abort</MiniActionButton>
+                <MiniActionButton @click="rebaseContinue">{{ t('common.continue') }}</MiniActionButton>
+                <MiniActionButton variant="destructive" @click="abortRebase">{{ t('common.abort') }}</MiniActionButton>
 
                 <div class="relative">
                   <IconButton
                     size="sm"
                     class="text-muted-foreground hover:text-foreground hover:bg-primary/6"
-                    title="More rebase actions"
-                    aria-label="More rebase actions"
+                    :title="t('git.ui.sequencer.moreRebaseActions')"
+                    :aria-label="t('git.ui.sequencer.moreRebaseActions')"
                     @click.stop="openRebaseActionMenu"
                   >
                     <RiMore2Line class="h-4 w-4" />
@@ -887,8 +895,8 @@ void diffPaneRef
                     :open="rebaseActionMenuOpen"
                     :query="rebaseActionMenuQuery"
                     :groups="rebaseActionMenuGroups"
-                    title="Rebase actions"
-                    mobile-title="Rebase actions"
+                    :title="t('git.ui.sequencer.rebaseActions')"
+                    :mobile-title="t('git.ui.sequencer.rebaseActions')"
                     :searchable="false"
                     :is-mobile-pointer="ui.isMobilePointer"
                     desktop-placement="bottom-end"
@@ -905,20 +913,20 @@ void diffPaneRef
               v-else-if="gitState?.cherryPickInProgress"
               class="rounded-sm border border-sidebar-border/60 bg-sidebar-accent/20 p-2 text-[11px]"
             >
-              <div class="font-medium">Cherry-pick in progress</div>
+              <div class="font-medium">{{ t('git.ui.sequencer.cherryPickInProgressTitle') }}</div>
               <div class="text-[11px] text-muted-foreground mt-0.5">
-                Resolve conflicts, then continue/skip, or abort.
+                {{ t('git.ui.sequencer.cherryPickInProgressDescription') }}
               </div>
               <div class="mt-2 flex flex-wrap items-center justify-end gap-2">
-                <MiniActionButton @click="cherryPickContinue">Continue</MiniActionButton>
-                <MiniActionButton variant="destructive" @click="cherryPickAbort">Abort</MiniActionButton>
+                <MiniActionButton @click="cherryPickContinue">{{ t('common.continue') }}</MiniActionButton>
+                <MiniActionButton variant="destructive" @click="cherryPickAbort">{{ t('common.abort') }}</MiniActionButton>
 
                 <div class="relative">
                   <IconButton
                     size="sm"
                     class="text-muted-foreground hover:text-foreground hover:bg-primary/6"
-                    title="More cherry-pick actions"
-                    aria-label="More cherry-pick actions"
+                    :title="t('git.ui.sequencer.moreCherryPickActions')"
+                    :aria-label="t('git.ui.sequencer.moreCherryPickActions')"
                     @click.stop="openCherryPickActionMenu"
                   >
                     <RiMore2Line class="h-4 w-4" />
@@ -928,8 +936,8 @@ void diffPaneRef
                     :open="cherryPickActionMenuOpen"
                     :query="cherryPickActionMenuQuery"
                     :groups="cherryPickActionMenuGroups"
-                    title="Cherry-pick actions"
-                    mobile-title="Cherry-pick actions"
+                    :title="t('git.ui.sequencer.cherryPickActions')"
+                    :mobile-title="t('git.ui.sequencer.cherryPickActions')"
                     :searchable="false"
                     :is-mobile-pointer="ui.isMobilePointer"
                     desktop-placement="bottom-end"
@@ -946,20 +954,20 @@ void diffPaneRef
               v-else-if="gitState?.revertInProgress"
               class="rounded-sm border border-sidebar-border/60 bg-sidebar-accent/20 p-2 text-[11px]"
             >
-              <div class="font-medium">Revert in progress</div>
+              <div class="font-medium">{{ t('git.ui.sequencer.revertInProgressTitle') }}</div>
               <div class="text-[11px] text-muted-foreground mt-0.5">
-                Resolve conflicts, then continue/skip, or abort.
+                {{ t('git.ui.sequencer.revertInProgressDescription') }}
               </div>
               <div class="mt-2 flex flex-wrap items-center justify-end gap-2">
-                <MiniActionButton @click="revertContinue">Continue</MiniActionButton>
-                <MiniActionButton variant="destructive" @click="revertAbortSeq">Abort</MiniActionButton>
+                <MiniActionButton @click="revertContinue">{{ t('common.continue') }}</MiniActionButton>
+                <MiniActionButton variant="destructive" @click="revertAbortSeq">{{ t('common.abort') }}</MiniActionButton>
 
                 <div class="relative">
                   <IconButton
                     size="sm"
                     class="text-muted-foreground hover:text-foreground hover:bg-primary/6"
-                    title="More revert actions"
-                    aria-label="More revert actions"
+                    :title="t('git.ui.sequencer.moreRevertActions')"
+                    :aria-label="t('git.ui.sequencer.moreRevertActions')"
                     @click.stop="openRevertActionMenu"
                   >
                     <RiMore2Line class="h-4 w-4" />
@@ -969,8 +977,8 @@ void diffPaneRef
                     :open="revertActionMenuOpen"
                     :query="revertActionMenuQuery"
                     :groups="revertActionMenuGroups"
-                    title="Revert actions"
-                    mobile-title="Revert actions"
+                    :title="t('git.ui.sequencer.revertActions')"
+                    :mobile-title="t('git.ui.sequencer.revertActions')"
                     :searchable="false"
                     :is-mobile-pointer="ui.isMobilePointer"
                     desktop-placement="bottom-end"
@@ -991,9 +999,9 @@ void diffPaneRef
               "
               class="rounded-sm border border-sidebar-border/60 bg-sidebar-accent/20 p-2 text-[11px]"
             >
-              <div class="font-medium">SSH commit signing may fail</div>
+              <div class="font-medium">{{ t('git.ui.signing.sshMayFailTitle') }}</div>
               <div class="text-[11px] text-muted-foreground mt-0.5">
-                SSH agent is not available or has no keys. Use a terminal to load keys (ssh-agent/ssh-add), then retry.
+                {{ t('git.ui.signing.sshMayFailDescription') }}
               </div>
             </div>
 
@@ -1027,36 +1035,36 @@ void diffPaneRef
             v-if="!projectRoot"
             class="mx-1 rounded-sm border border-sidebar-border/60 bg-sidebar-accent/10 p-3 text-center"
           >
-            <div class="text-sm font-medium">No Project Selected</div>
-            <div class="text-xs text-muted-foreground mt-1">Open a project first to use Source Control.</div>
+            <div class="text-sm font-medium">{{ t('git.ui.noProjectSelectedTitle') }}</div>
+            <div class="text-xs text-muted-foreground mt-1">{{ t('git.ui.noProjectSelectedDescription') }}</div>
           </div>
 
           <div
             v-else-if="!gitReady && !loading"
             class="mx-1 rounded-sm border border-sidebar-border/60 bg-sidebar-accent/10 p-3 text-center"
           >
-            <div class="text-sm font-medium">No Git Repository</div>
+            <div class="text-sm font-medium">{{ t('git.ui.noGitRepositoryTitle') }}</div>
             <div class="text-xs text-muted-foreground mt-1">
-              Select a repository, or initialize one in this project.
+              {{ t('git.ui.noGitRepositoryDescription') }}
             </div>
             <div
               v-if="unsafeRepoDetected"
               class="mt-3 rounded-sm border border-amber-500/40 bg-amber-500/10 p-3 text-left"
             >
-              <div class="text-xs font-medium">Repository trust required</div>
+              <div class="text-xs font-medium">{{ t('git.ui.unsafeRepo.trustRequiredTitle') }}</div>
               <div class="mt-1 text-[11px] text-muted-foreground break-words">
-                {{ unsafeRepoHint || 'Git blocked this repository because it is not marked as safe on this machine.' }}
+                {{ unsafeRepoHint || t('git.ui.unsafeRepo.blockedDefaultHint') }}
               </div>
               <div class="mt-1 text-[11px] font-mono break-all" :title="unsafeRepoPath">{{ unsafeRepoPath }}</div>
               <div class="mt-2 flex justify-end">
                 <MiniActionButton variant="default" :disabled="unsafeRepoBusy" @click="trustUnsafeRepo">
-                  Trust this repository
+                  {{ t('git.ui.unsafeRepo.trustThisRepository') }}
                 </MiniActionButton>
               </div>
             </div>
             <div class="mt-3 flex items-center justify-center gap-2">
-              <MiniActionButton size="xs" @click="repoPickerOpen = true">Select repo</MiniActionButton>
-              <MiniActionButton variant="default" size="xs" @click="initRepoOpen = true">Initialize</MiniActionButton>
+              <MiniActionButton size="xs" @click="repoPickerOpen = true">{{ t('git.ui.selectRepo') }}</MiniActionButton>
+              <MiniActionButton variant="default" size="xs" @click="initRepoOpen = true">{{ t('git.ui.initialize') }}</MiniActionButton>
             </div>
           </div>
 
@@ -1151,9 +1159,9 @@ void diffPaneRef
     <div class="min-w-0 flex-1 overflow-hidden" v-show="!ui.isMobile || !ui.isSessionSwitcherOpen">
       <MobileSidebarEmptyState
         v-if="ui.isMobile && !selectedFile"
-        title="Select a changed file"
-        description="Pick a file from Source Control to inspect the diff."
-        action-label="Open source control panel"
+        :title="t('git.ui.dialogs.selectChangedFileTitle')"
+        :description="t('git.ui.dialogs.selectChangedFileDescription')"
+        :action-label="t('git.ui.dialogs.openSourceControlPanel')"
         :show-action="true"
         @action="ui.setSessionSwitcherOpen(true)"
       />
@@ -1202,9 +1210,9 @@ void diffPaneRef
 
     <GitBranchActionDialog
       :open="mergeDialogOpen"
-      title="Merge Branch"
-      description="Merge a branch into the current branch"
-      action-label="Merge"
+      :title="t('git.ui.dialogs.mergeBranchTitle')"
+      :description="t('git.ui.dialogs.mergeBranchDescription')"
+      :action-label="t('git.actions.merge')"
       v-model:branch="mergeTarget"
       :branches="mergeRebaseBranchOptions"
       :busy="mergeBusy"
@@ -1214,9 +1222,9 @@ void diffPaneRef
 
     <GitBranchActionDialog
       :open="rebaseDialogOpen"
-      title="Rebase Branch"
-      description="Rebase the current branch onto another"
-      action-label="Rebase"
+      :title="t('git.ui.dialogs.rebaseBranchTitle')"
+      :description="t('git.ui.dialogs.rebaseBranchDescription')"
+      :action-label="t('git.actions.rebase')"
       v-model:branch="rebaseTarget"
       :branches="mergeRebaseBranchOptions"
       :busy="rebaseBusy"

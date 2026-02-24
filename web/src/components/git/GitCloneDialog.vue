@@ -1,7 +1,11 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+
 import Button from '@/components/ui/Button.vue'
 import FormDialog from '@/components/ui/FormDialog.vue'
 import Input from '@/components/ui/Input.vue'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   open: boolean
@@ -47,37 +51,37 @@ function onUpdateRecursive(ev: Event) {
 <template>
   <FormDialog
     :open="open"
-    title="Clone Repository"
-    description="Clone a remote repository into the project"
+    :title="t('git.ui.dialogs.clone.title')"
+    :description="t('git.ui.dialogs.clone.description')"
     maxWidth="max-w-md"
     @update:open="onUpdateOpen"
   >
     <div class="space-y-3">
       <div class="space-y-1">
-        <div class="text-xs font-medium text-muted-foreground">Repository URL</div>
+        <div class="text-xs font-medium text-muted-foreground">{{ t('git.ui.dialogs.clone.fields.repositoryUrl') }}</div>
         <Input
           :model-value="url"
           class="h-9 font-mono text-xs"
-          placeholder="https://github.com/org/repo.git"
+          :placeholder="t('git.ui.dialogs.clone.placeholders.repositoryUrl')"
           @update:model-value="onUpdateUrl"
         />
       </div>
 
       <div class="space-y-1">
-        <div class="text-xs font-medium text-muted-foreground">Target path (relative to project)</div>
+        <div class="text-xs font-medium text-muted-foreground">{{ t('git.ui.dialogs.clone.fields.targetPath') }}</div>
         <Input
           :model-value="path"
           class="h-9 font-mono text-xs"
-          placeholder="(leave blank to derive from URL)"
+          :placeholder="t('git.ui.dialogs.clone.placeholders.targetPath')"
           @update:model-value="onUpdatePath"
         />
         <div class="text-[11px] text-muted-foreground">
-          Example: `repos/my-app` — defaults to the repo name if empty.
+          {{ t('git.ui.dialogs.clone.hints.targetPathExample') }}
         </div>
       </div>
 
       <div class="space-y-1">
-        <div class="text-xs font-medium text-muted-foreground">Checkout ref/branch (optional)</div>
+        <div class="text-xs font-medium text-muted-foreground">{{ t('git.ui.dialogs.clone.fields.checkoutRefOptional') }}</div>
         <Input
           :model-value="cloneRef"
           class="h-9 font-mono text-xs"
@@ -88,12 +92,12 @@ function onUpdateRecursive(ev: Event) {
 
       <label class="inline-flex items-center gap-2 text-xs text-muted-foreground">
         <input type="checkbox" class="accent-primary" :checked="recursive" @change="onUpdateRecursive" />
-        <span>Clone submodules recursively</span>
+        <span>{{ t('git.ui.dialogs.clone.cloneSubmodulesRecursively') }}</span>
       </label>
 
       <div class="flex justify-end gap-2">
-        <Button variant="secondary" size="sm" @click="$emit('update:open', false)" :disabled="busy">Cancel</Button>
-        <Button size="sm" @click="$emit('clone')" :disabled="busy || !projectRoot || !url.trim()">Clone</Button>
+        <Button variant="secondary" size="sm" @click="$emit('update:open', false)" :disabled="busy">{{ t('common.cancel') }}</Button>
+        <Button size="sm" @click="$emit('clone')" :disabled="busy || !projectRoot || !url.trim()">{{ t('git.ui.dialogs.clone.actions.clone') }}</Button>
       </div>
     </div>
   </FormDialog>

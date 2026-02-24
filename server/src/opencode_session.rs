@@ -1512,6 +1512,7 @@ mod tests {
     use axum::extract::{Query, State};
     use std::sync::{LazyLock, Mutex};
     use std::time::{SystemTime, UNIX_EPOCH};
+    use tokio::fs;
 
     static ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
@@ -1594,6 +1595,226 @@ mod tests {
                 crate::settings::Settings::default(),
             )),
         })
+    }
+
+    #[tokio::test]
+    async fn sqlite_message_page_chunks_part_queries_for_large_message_sets() {
+        let _env_lock = ENV_LOCK.lock().unwrap();
+        STORAGE_CACHE.clear();
+
+        let tmp = unique_tmp_dir("sqlite-message-page");
+        fs::create_dir_all(&tmp).await.unwrap();
+        let _xdg = EnvVarGuard::set("XDG_DATA_HOME", tmp.to_string_lossy().to_string());
+
+        let db_path = opencode_db_path();
+        if let Some(parent) = db_path.parent() {
+            fs::create_dir_all(parent).await.unwrap();
+        }
+
+        // Build a minimal sqlite database that matches the columns our DAO queries.
+        // We intentionally insert > 999 messages so the parts query must be chunked.
+        let session_id = "ses_sqlite_test";
+        let message_count = 1200usize;
+        let page_limit = 1000usize;
+
+        tokio::task::spawn_blocking({
+            let db_path = db_path.clone();
+            move || {
+                let mut conn = rusqlite::Connection::open(db_path).unwrap();
+                conn.execute_batch(
+                    "CREATE TABLE session (id TEXT PRIMARY KEY);\n\
+                     CREATE TABLE message (\
+                         id TEXT PRIMARY KEY,\
+                         session_id TEXT NOT NULL,\
+                         time_created INTEGER NOT NULL,\
+                         time_updated INTEGER NOT NULL,\
+                         data TEXT NOT NULL\
+                     );\n\
+                     CREATE TABLE part (\
+                         id TEXT PRIMARY KEY,\
+                         message_id TEXT NOT NULL,\
+                         session_id TEXT NOT NULL,\
+                         time_created INTEGER NOT NULL,\
+                         time_updated INTEGER NOT NULL,\
+                         data TEXT NOT NULL\
+                     );\n\
+                     CREATE INDEX message_session_idx ON message(session_id);\n\
+                     CREATE INDEX part_message_idx ON part(message_id);\n\
+                     CREATE INDEX part_session_idx ON part(session_id);",
+                )
+                .unwrap();
+                conn.execute("INSERT INTO session(id) VALUES (?1)", [session_id])
+                    .unwrap();
+
+                let tx = conn.transaction().unwrap();
+                {
+                    let mut msg_stmt = tx
+                        .prepare(
+                            "INSERT INTO message(id, session_id, time_created, time_updated, data) VALUES (?1, ?2, ?3, ?4, ?5)",
+                        )
+                        .unwrap();
+                    let mut part_stmt = tx
+                        .prepare(
+                            "INSERT INTO part(id, message_id, session_id, time_created, time_updated, data) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                        )
+                        .unwrap();
+
+                    for i in 0..message_count {
+                        let mid = format!("msg_{:04}", i);
+                        let pid = format!("prt_{:04}", i);
+                        let t = i as i64;
+                        let msg_data = format!(
+                            "{{\"role\":\"user\",\"time\":{{\"created\":{t}}}}}"
+                        );
+                        let part_data = "{\"type\":\"text\",\"text\":\"hello\"}";
+
+                        msg_stmt
+                            .execute(rusqlite::params![mid, session_id, t, t, msg_data])
+                            .unwrap();
+                        part_stmt
+                            .execute(rusqlite::params![pid, format!("msg_{:04}", i), session_id, t, t, part_data])
+                            .unwrap();
+                    }
+                }
+                tx.commit().unwrap();
+            }
+        })
+        .await
+        .unwrap();
+
+        let page = load_session_message_page_from_sqlite(
+            session_id,
+            0,
+            Some(page_limit),
+            true,
+        )
+        .await
+        .expect("sqlite page should load");
+
+        assert_eq!(page.total, message_count);
+        assert_eq!(page.entries.len(), page_limit);
+        for entry in page.entries.iter() {
+            let parts = entry
+                .get("parts")
+                .and_then(|v| v.as_array())
+                .expect("parts array");
+            assert_eq!(parts.len(), 1);
+        }
+    }
+
+    #[tokio::test]
+    async fn sqlite_message_page_supports_part_table_without_session_id_column() {
+        let _env_lock = ENV_LOCK.lock().unwrap();
+        STORAGE_CACHE.clear();
+
+        let tmp = unique_tmp_dir("sqlite-schema-compat");
+        fs::create_dir_all(&tmp).await.unwrap();
+        let _xdg = EnvVarGuard::set("XDG_DATA_HOME", tmp.to_string_lossy().to_string());
+
+        let db_path = opencode_db_path();
+        if let Some(parent) = db_path.parent() {
+            fs::create_dir_all(parent).await.unwrap();
+        }
+
+        tokio::task::spawn_blocking({
+            let db_path = db_path.clone();
+            move || {
+                let mut conn = rusqlite::Connection::open(db_path).unwrap();
+                // Note: `part` table intentionally omits `session_id`.
+                conn.execute_batch(
+                    "CREATE TABLE session (id TEXT PRIMARY KEY);\n\
+                     CREATE TABLE message (\
+                         id TEXT PRIMARY KEY,\
+                         session_id TEXT NOT NULL,\
+                         time_created INTEGER NOT NULL,\
+                         time_updated INTEGER NOT NULL,\
+                         data TEXT NOT NULL\
+                     );\n\
+                     CREATE TABLE part (\
+                         id TEXT PRIMARY KEY,\
+                         message_id TEXT NOT NULL,\
+                         time_created INTEGER NOT NULL,\
+                         time_updated INTEGER NOT NULL,\
+                         data TEXT NOT NULL\
+                     );\n\
+                     CREATE INDEX message_session_idx ON message(session_id);\n\
+                     CREATE INDEX part_message_idx ON part(message_id);",
+                )
+                .unwrap();
+                conn.execute("INSERT INTO session(id) VALUES (?1)", ["ses_compat"]).unwrap();
+
+                let tx = conn.transaction().unwrap();
+                {
+                    let mut msg_stmt = tx
+                        .prepare(
+                            "INSERT INTO message(id, session_id, time_created, time_updated, data) VALUES (?1, ?2, ?3, ?4, ?5)",
+                        )
+                        .unwrap();
+                    let mut part_stmt = tx
+                        .prepare(
+                            "INSERT INTO part(id, message_id, time_created, time_updated, data) VALUES (?1, ?2, ?3, ?4, ?5)",
+                        )
+                        .unwrap();
+
+                    msg_stmt
+                        .execute(rusqlite::params![
+                            "msg_1",
+                            "ses_compat",
+                            1i64,
+                            1i64,
+                            "{\"role\":\"user\",\"time\":{\"created\":1}}",
+                        ])
+                        .unwrap();
+                    part_stmt
+                        .execute(rusqlite::params![
+                            "prt_1",
+                            "msg_1",
+                            1i64,
+                            1i64,
+                            "{\"type\":\"text\",\"text\":\"hello\"}",
+                        ])
+                        .unwrap();
+                }
+                tx.commit().unwrap();
+            }
+        })
+        .await
+        .unwrap();
+
+        let page = load_session_message_page_from_sqlite("ses_compat", 0, Some(10), true)
+            .await
+            .expect("sqlite page should load");
+        assert_eq!(page.total, 1);
+        assert_eq!(page.entries.len(), 1);
+        let entry = &page.entries[0];
+        let parts = entry
+            .get("parts")
+            .and_then(|v| v.as_array())
+            .expect("parts array");
+        assert_eq!(parts.len(), 1);
+        let p0 = parts[0].as_object().expect("part object");
+        assert_eq!(p0.get("sessionID").and_then(|v| v.as_str()), Some("ses_compat"));
+        assert_eq!(p0.get("messageID").and_then(|v| v.as_str()), Some("msg_1"));
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn sqlite_message_page_reads_real_session_from_local_opencode_db() {
+        let _env_lock = ENV_LOCK.lock().unwrap();
+        STORAGE_CACHE.clear();
+
+        // Ensure we use the default HOME-based data dir.
+        let _xdg = EnvVarGuard::set("XDG_DATA_HOME", "".to_string());
+
+        let sid = std::env::var("OPENCODE_STUDIO_TEST_SESSION_ID")
+            .ok()
+            .filter(|v| !v.trim().is_empty())
+            .unwrap_or_else(|| "ses_374a79ca0ffecNaySDDSnJwFVq".to_string());
+
+        let page = load_session_message_page_from_sqlite(&sid, 0, Some(25), true)
+            .await
+            .expect("expected local opencode.db to exist and be readable");
+        assert!(page.entries.len() > 0, "expected session to have messages");
     }
 
     #[tokio::test]

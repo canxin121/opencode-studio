@@ -1,7 +1,11 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+
 import Button from '@/components/ui/Button.vue'
 import FormDialog from '@/components/ui/FormDialog.vue'
 import Input from '@/components/ui/Input.vue'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   open: boolean
@@ -30,23 +34,23 @@ function onUpdateText(key: 'from' | 'to', v: string | number) {
 <template>
   <FormDialog
     :open="open"
-    title="Rename branch"
-    description="Rename a local branch"
+    :title="t('git.ui.dialogs.renameBranch.title')"
+    :description="t('git.ui.dialogs.renameBranch.description')"
     maxWidth="max-w-md"
     @update:open="onUpdateOpen"
   >
     <div class="space-y-3">
       <div class="grid gap-1">
-        <div class="text-xs font-medium text-muted-foreground">From</div>
+        <div class="text-xs font-medium text-muted-foreground">{{ t('common.from') }}</div>
         <Input :model-value="from" class="h-9 font-mono text-xs" @update:model-value="(v) => onUpdateText('from', v)" />
       </div>
       <div class="grid gap-1">
-        <div class="text-xs font-medium text-muted-foreground">To</div>
+        <div class="text-xs font-medium text-muted-foreground">{{ t('common.to') }}</div>
         <Input :model-value="to" class="h-9 font-mono text-xs" @update:model-value="(v) => onUpdateText('to', v)" />
       </div>
       <div class="flex justify-end gap-2">
-        <Button variant="secondary" size="sm" @click="$emit('update:open', false)">Cancel</Button>
-        <Button size="sm" :disabled="!from.trim() || !to.trim()" @click="$emit('submit')">Rename</Button>
+        <Button variant="secondary" size="sm" @click="$emit('update:open', false)">{{ t('common.cancel') }}</Button>
+        <Button size="sm" :disabled="!from.trim() || !to.trim()" @click="$emit('submit')">{{ t('common.rename') }}</Button>
       </div>
     </div>
   </FormDialog>

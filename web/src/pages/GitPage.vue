@@ -5,6 +5,7 @@ import { useRouter } from 'vue-router'
 import { apiErrorBodyRecord, ApiError } from '@/lib/api'
 import { gitJson, gitWatchUrl } from '@/lib/gitApi'
 import { copyTextToClipboard } from '@/lib/clipboard'
+import { useI18n } from 'vue-i18n'
 import { useGitDiffSelection } from '@/composables/git/useGitDiffSelection'
 import { useGitStatusPaged } from '@/composables/git/useGitStatusPaged'
 import { useGitWatchSse } from '@/composables/git/useGitWatchSse'
@@ -53,6 +54,7 @@ import { useToastsStore } from '@/stores/toasts'
 // Stores & State
 const settings = useSettingsStore()
 const toasts = useToastsStore()
+const { t } = useI18n()
 const directoryStore = useDirectoryStore()
 const gitRepos = useGitReposStore()
 const ui = useUiStore()
@@ -574,7 +576,7 @@ function selectHistoryCompareCommit(commit: GitLogCommit) {
   const hash = (commit?.hash || '').trim()
   if (!hash) return
   historyCompareHash.value = hash
-  toasts.push('info', `Selected ${hash.slice(0, 7)} for compare`, 1500)
+  toasts.push('info', t('git.toasts.selectedCommitForCompare', { hash: hash.slice(0, 7) }), 1500)
 }
 
 function clearHistoryCompareCommit() {
@@ -585,7 +587,7 @@ async function compareHistoryWithParent(commit: GitLogCommit) {
   const head = (commit?.hash || '').trim()
   const parent = (commit?.parents?.[0] || '').trim()
   if (!head || !parent) {
-    toasts.push('info', 'Selected commit has no parent to compare')
+    toasts.push('info', t('git.toasts.selectedCommitHasNoParent'))
     return
   }
   const path = (historyLog.historyFilterPath.value || '').trim()
@@ -608,7 +610,7 @@ async function compareWithUpstream() {
   const current = (status.value?.current || '').trim()
   const upstream = (status.value?.tracking || '').trim()
   if (!current || !upstream) {
-    toasts.push('info', 'No upstream tracking branch')
+    toasts.push('info', t('git.toasts.noUpstreamTrackingBranch'))
     return
   }
   compareOps.compareBase.value = upstream
@@ -791,7 +793,7 @@ async function loadConflicts(directory: string) {
 function openFirstConflict() {
   const first = (conflictPaths.value || [])[0]
   if (!first) {
-    toasts.push('error', 'No conflicts found')
+    toasts.push('error', t('git.toasts.noConflictsFound'))
     return
   }
   isMergeExpanded.value = true
@@ -826,7 +828,7 @@ async function trustUnsafeRepo() {
       method: 'POST',
     })
     clearUnsafeRepo()
-    toasts.push('success', 'Repository marked as safe')
+    toasts.push('success', t('git.toasts.repositoryMarkedSafe'))
     await repoSelection.loadRepos()
     await load()
   } catch (err) {
@@ -913,9 +915,9 @@ async function copyCommitHash(hash: string) {
   if (!value) return
   const ok = await copyTextToClipboard(value)
   if (ok) {
-    toasts.push('success', 'Copied commit hash')
+    toasts.push('success', t('git.toasts.copiedCommitHash'))
   } else {
-    toasts.push('error', 'Failed to copy to clipboard')
+    toasts.push('error', t('common.failedToCopyToClipboard'))
   }
 }
 
@@ -924,9 +926,9 @@ async function copyRemoteUrl(url: string) {
   if (!value) return
   const ok = await copyTextToClipboard(value)
   if (ok) {
-    toasts.push('success', 'Copied remote URL')
+    toasts.push('success', t('git.toasts.copiedRemoteUrl'))
   } else {
-    toasts.push('error', 'Failed to copy to clipboard')
+    toasts.push('error', t('common.failedToCopyToClipboard'))
   }
 }
 
@@ -935,9 +937,9 @@ async function copyWorktreePath(path: string) {
   if (!value) return
   const ok = await copyTextToClipboard(value)
   if (ok) {
-    toasts.push('success', 'Copied worktree path')
+    toasts.push('success', t('git.toasts.copiedWorktreePath'))
   } else {
-    toasts.push('error', 'Failed to copy to clipboard')
+    toasts.push('error', t('common.failedToCopyToClipboard'))
   }
 }
 
@@ -966,7 +968,7 @@ function openWorktree(path: string) {
   const p = (path || '').trim()
   if (!base || !p) return
   if (!p.startsWith(base)) {
-    toasts.push('error', 'Worktree is outside the project root')
+    toasts.push('error', t('git.errors.worktreeOutsideProjectRoot'))
     return
   }
   const rel = p.slice(base.length).replace(/^\/+/, '') || '.'

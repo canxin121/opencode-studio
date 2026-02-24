@@ -81,51 +81,79 @@ export default defineComponent({
   <section id="commands" class="scroll-mt-24 rounded-lg border border-border bg-background p-4 space-y-4">
     <div class="flex items-start justify-between gap-3">
       <div class="min-w-0">
-        <div class="text-base font-semibold leading-snug">Custom slash commands.</div>
+        <div class="text-base font-semibold leading-snug">{{ t('settings.opencodeConfig.sections.commands.title') }}</div>
       </div>
       <div class="flex items-center gap-2">
         <Tooltip>
-          <Button size="icon" variant="ghost" class="h-8 w-8" title="Reset section" @click="resetSection('commands')">
+          <Button
+            size="icon"
+            variant="ghost"
+            class="h-8 w-8"
+            :title="t('settings.opencodeConfig.sections.common.resetSection')"
+            @click="resetSection('commands')"
+          >
             <RiRestartLine class="h-4 w-4" />
           </Button>
-          <template #content>Reset section</template>
+          <template #content>{{ t('settings.opencodeConfig.sections.common.resetSection') }}</template>
         </Tooltip>
         <Tooltip>
           <Button
             size="icon"
             variant="outline"
             class="h-8 w-8"
-            :title="isSectionOpen('commands') ? 'Collapse' : 'Expand'"
+            :title="
+              isSectionOpen('commands')
+                ? t('settings.opencodeConfig.sections.common.collapse')
+                : t('settings.opencodeConfig.sections.common.expand')
+            "
             @click="toggleSection('commands')"
           >
             <RiArrowUpSLine v-if="isSectionOpen('commands')" class="h-4 w-4" />
             <RiArrowDownSLine v-else class="h-4 w-4" />
           </Button>
-          <template #content>{{ isSectionOpen('commands') ? 'Collapse' : 'Expand' }}</template>
+          <template #content>{{
+            isSectionOpen('commands')
+              ? t('settings.opencodeConfig.sections.common.collapse')
+              : t('settings.opencodeConfig.sections.common.expand')
+          }}</template>
         </Tooltip>
       </div>
     </div>
 
     <div v-if="isSectionOpen('commands')" class="space-y-4">
       <div class="flex flex-wrap items-center gap-2">
-        <Input v-model="newCommandName" placeholder="Command name" class="max-w-xs" />
-        <Input v-model="newCommandTemplate" placeholder="Template" class="min-w-[260px]" />
+        <Input
+          v-model="newCommandName"
+          :placeholder="t('settings.opencodeConfig.sections.commands.placeholders.commandName')"
+          class="max-w-xs"
+        />
+        <Input
+          v-model="newCommandTemplate"
+          :placeholder="t('settings.opencodeConfig.sections.commands.placeholders.template')"
+          class="min-w-[260px]"
+        />
         <Tooltip>
           <Button
             size="icon"
             variant="outline"
             class="h-9 w-9"
-            title="Add command"
-            aria-label="Add command"
+            :title="t('settings.opencodeConfig.sections.commands.actions.addCommand')"
+            :aria-label="t('settings.opencodeConfig.sections.commands.actions.addCommandAria')"
             @click="addCommand"
           >
             <RiAddLine class="h-4 w-4" />
           </Button>
-          <template #content>Add command</template>
+          <template #content>{{ t('settings.opencodeConfig.sections.commands.actions.addCommand') }}</template>
         </Tooltip>
       </div>
-      <Input v-model="commandFilter" placeholder="Filter commands" class="max-w-sm" />
-      <div v-if="filteredCommandsList.length === 0" class="text-xs text-muted-foreground">No commands configured.</div>
+      <Input
+        v-model="commandFilter"
+        :placeholder="t('settings.opencodeConfig.sections.commands.placeholders.filterCommands')"
+        class="max-w-sm"
+      />
+      <div v-if="filteredCommandsList.length === 0" class="text-xs text-muted-foreground">
+        {{ t('settings.opencodeConfig.sections.commands.empty.noCommands') }}
+      </div>
       <div
         v-for="[commandId, command] in filteredCommandsList"
         :key="commandId"
@@ -139,72 +167,72 @@ export default defineComponent({
                 size="icon"
                 variant="ghost"
                 class="h-8 w-8"
-                title="Copy JSON"
-                aria-label="Copy JSON"
+                :title="t('settings.opencodeConfig.sections.commands.actions.copyJson')"
+                :aria-label="t('settings.opencodeConfig.sections.commands.actions.copyJson')"
                 @click="copyEntryJson('command', commandId)"
               >
                 <RiClipboardLine class="h-4 w-4" />
               </Button>
-              <template #content>Copy JSON</template>
+              <template #content>{{ t('settings.opencodeConfig.sections.commands.actions.copyJson') }}</template>
             </Tooltip>
             <Tooltip>
               <Button
                 size="icon"
                 variant="ghost"
                 class="h-8 w-8"
-                title="Import JSON"
-                aria-label="Import JSON"
+                :title="t('settings.opencodeConfig.sections.commands.actions.importJson')"
+                :aria-label="t('settings.opencodeConfig.sections.commands.actions.importJson')"
                 @click="importEntryJson('command', commandId)"
               >
                 <RiFileUploadLine class="h-4 w-4" />
               </Button>
-              <template #content>Import JSON</template>
+              <template #content>{{ t('settings.opencodeConfig.sections.commands.actions.importJson') }}</template>
             </Tooltip>
             <Tooltip>
               <Button
                 size="icon"
                 variant="ghost-destructive"
                 class="h-8 w-8"
-                title="Remove"
-                aria-label="Remove command"
+                :title="t('common.remove')"
+                :aria-label="t('settings.opencodeConfig.sections.commands.actions.removeCommandAria')"
                 @click="removeEntry('command', commandId)"
               >
                 <RiDeleteBinLine class="h-4 w-4" />
               </Button>
-              <template #content>Remove</template>
+              <template #content>{{ t('common.remove') }}</template>
             </Tooltip>
           </div>
         </div>
         <div class="grid gap-4 lg:grid-cols-2">
           <div class="grid gap-2">
             <div class="flex items-center justify-between">
-              <span class="text-xs text-muted-foreground">Template</span>
+              <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.commands.fields.template') }}</span>
               <div class="flex items-center gap-2">
                 <Tooltip>
                   <Button
                     size="icon"
                     variant="ghost"
                     class="h-8 w-8"
-                    title="Insert skeleton"
-                    aria-label="Insert skeleton"
+                    :title="t('settings.opencodeConfig.sections.commands.actions.insertSkeleton')"
+                    :aria-label="t('settings.opencodeConfig.sections.commands.actions.insertSkeleton')"
                     @click="insertCommandSnippet(commandId, PROMPT_SKELETON)"
                   >
                     <RiFileTextLine class="h-4 w-4" />
                   </Button>
-                  <template #content>Insert skeleton</template>
+                  <template #content>{{ t('settings.opencodeConfig.sections.commands.actions.insertSkeleton') }}</template>
                 </Tooltip>
                 <Tooltip>
                   <Button
                     size="icon"
                     variant="ghost"
                     class="h-8 w-8"
-                    title="Insert frontmatter"
-                    aria-label="Insert frontmatter"
+                    :title="t('settings.opencodeConfig.sections.commands.actions.insertFrontmatter')"
+                    :aria-label="t('settings.opencodeConfig.sections.commands.actions.insertFrontmatter')"
                     @click="insertCommandSnippet(commandId, FRONTMATTER_SKELETON)"
                   >
                     <RiFileTextLine class="h-4 w-4" />
                   </Button>
-                  <template #content>Insert frontmatter</template>
+                  <template #content>{{ t('settings.opencodeConfig.sections.commands.actions.insertFrontmatter') }}</template>
                 </Tooltip>
               </div>
             </div>
@@ -223,37 +251,37 @@ export default defineComponent({
           </div>
           <div class="grid gap-3">
             <label class="grid gap-1">
-              <span class="text-xs text-muted-foreground">Description</span>
+              <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.commands.fields.description') }}</span>
               <Input
                 :model-value="command.description || ''"
                 @update:model-value="(v) => setEntryField('command', commandId, 'description', v)"
               />
             </label>
             <label class="grid gap-1">
-              <span class="text-xs text-muted-foreground">Agent</span>
+              <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.commands.fields.agent') }}</span>
               <OptionPicker
                 :model-value="command.agent || ''"
                 @update:model-value="(v) => setEntryField('command', commandId, 'agent', normalizeAgentName(v))"
                 :options="agentNamePickerOptions"
-                title="Agent"
-                search-placeholder="Search agents"
-                empty-label="Default (use config)"
+                :title="t('settings.opencodeConfig.sections.commands.fields.agent')"
+                :search-placeholder="t('settings.opencodeConfig.sections.commands.search.searchAgents')"
+                :empty-label="t('settings.opencodeConfig.sections.commands.defaults.useConfigDefault')"
                 :icon="RiUserLine"
                 allow-custom
               />
-              <span class="text-[11px] text-muted-foreground"
-                >Uses the agent name (without @). Leave empty to use default agent.</span
-              >
+              <span class="text-[11px] text-muted-foreground">{{
+                t('settings.opencodeConfig.sections.commands.help.agentName')
+              }}</span>
             </label>
             <label class="grid gap-1">
-              <span class="text-xs text-muted-foreground">Model</span>
+              <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.commands.fields.model') }}</span>
               <OptionPicker
                 :model-value="command.model || ''"
                 @update:model-value="(v) => setEntryField('command', commandId, 'model', String(v || '').trim())"
                 :options="modelPickerOptions"
-                title="Model"
-                search-placeholder="Search models"
-                empty-label="Default (use config)"
+                :title="t('settings.opencodeConfig.sections.commands.fields.model')"
+                :search-placeholder="t('settings.opencodeConfig.sections.commands.search.searchModels')"
+                :empty-label="t('settings.opencodeConfig.sections.commands.defaults.useConfigDefault')"
                 :icon="RiStackLine"
                 allow-custom
                 monospace
@@ -277,7 +305,7 @@ export default defineComponent({
                 :checked="command.subtask === true"
                 @change="(e) => setEntryField('command', commandId, 'subtask', (e.target as HTMLInputElement).checked)"
               />
-              Subtask
+              {{ t('settings.opencodeConfig.sections.commands.fields.subtask') }}
             </label>
           </div>
         </div>

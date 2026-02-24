@@ -1,10 +1,14 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+
 import Button from '@/components/ui/Button.vue'
 import Dialog from '@/components/ui/Dialog.vue'
 import ScrollArea from '@/components/ui/ScrollArea.vue'
 import Skeleton from '@/components/ui/Skeleton.vue'
 
 import type { GitRepoEntry } from '@/types/git'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   open: boolean
@@ -36,16 +40,16 @@ function onUpdateOpen(v: boolean) {
 <template>
   <Dialog
     :open="open"
-    title="Repositories"
-    description="Select a git repository within the active project"
+    :title="t('git.ui.dialogs.repoPicker.title')"
+    :description="t('git.ui.dialogs.repoPicker.description')"
     maxWidth="max-w-xl"
     @update:open="onUpdateOpen"
   >
     <div class="space-y-3">
       <div class="flex flex-wrap items-center gap-2">
-        <Button variant="secondary" size="sm" @click="$emit('refresh')" :disabled="reposLoading">Refresh</Button>
-        <Button size="sm" @click="$emit('openInit')">Initialize repo</Button>
-        <Button size="sm" variant="secondary" @click="$emit('openClone')">Clone repo</Button>
+        <Button variant="secondary" size="sm" @click="$emit('refresh')" :disabled="reposLoading">{{ t('common.refresh') }}</Button>
+        <Button size="sm" @click="$emit('openInit')">{{ t('git.ui.dialogs.repoPicker.actions.initializeRepo') }}</Button>
+        <Button size="sm" variant="secondary" @click="$emit('openClone')">{{ t('git.ui.dialogs.repoPicker.actions.cloneRepo') }}</Button>
         <div
           class="order-last basis-full min-w-0 text-xs text-muted-foreground font-mono truncate sm:order-none sm:basis-auto sm:ml-auto"
           :title="projectRoot || ''"
@@ -66,8 +70,8 @@ function onUpdateOpen(v: boolean) {
       </div>
 
       <div v-else-if="repos.length === 0" class="rounded-md border border-border/60 bg-muted/20 p-4">
-        <div class="text-sm font-medium">No repositories found</div>
-        <div class="text-xs text-muted-foreground mt-1">Create one with “Initialize repo”.</div>
+        <div class="text-sm font-medium">{{ t('git.ui.dialogs.repoPicker.empty.title') }}</div>
+        <div class="text-xs text-muted-foreground mt-1">{{ t('git.ui.dialogs.repoPicker.empty.description') }}</div>
       </div>
 
       <ScrollArea v-else class="h-72 border rounded-md">
@@ -94,10 +98,10 @@ function onUpdateOpen(v: boolean) {
                 variant="ghost"
                 size="sm"
                 class="h-6 px-2 text-[10px]"
-                title="Close repository"
+                :title="t('git.ui.dialogs.repoPicker.actions.closeRepo')"
                 @click.stop="$emit('closeRepo', r.relative || '.')"
               >
-                Close
+                {{ t('common.close') }}
               </Button>
             </div>
           </button>
@@ -105,7 +109,7 @@ function onUpdateOpen(v: boolean) {
       </ScrollArea>
 
       <div v-if="closedRepos.length" class="space-y-2 rounded-md border border-border/60 bg-muted/10 p-3">
-        <div class="text-xs font-medium text-muted-foreground">Closed repositories</div>
+        <div class="text-xs font-medium text-muted-foreground">{{ t('git.ui.dialogs.repoPicker.sections.closedRepos') }}</div>
         <div class="space-y-1">
           <div
             v-for="r in closedRepos"
@@ -119,14 +123,14 @@ function onUpdateOpen(v: boolean) {
               </div>
             </div>
             <Button variant="secondary" size="sm" class="h-7 shrink-0" @click="$emit('reopenRepo', r.relative || '.')">
-              Reopen
+              {{ t('git.ui.dialogs.repoPicker.actions.reopenRepo') }}
             </Button>
           </div>
         </div>
       </div>
 
       <div v-if="parentRepos.length" class="space-y-2 rounded-md border border-border/60 bg-muted/10 p-3">
-        <div class="text-xs font-medium text-muted-foreground">Repositories in parent folders</div>
+        <div class="text-xs font-medium text-muted-foreground">{{ t('git.ui.dialogs.repoPicker.sections.parentRepos') }}</div>
         <div class="space-y-1">
           <button
             v-for="root in parentRepos"

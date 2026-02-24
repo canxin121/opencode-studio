@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   RiArrowDownSLine,
   RiArrowLeftSLine,
@@ -90,6 +91,8 @@ const props = defineProps<{
   copyToClipboard: (text: string) => void | Promise<void>
 }>()
 
+const { t } = useI18n()
+
 const emit = defineEmits<{
   (e: 'insertSelection'): void
 }>()
@@ -104,36 +107,40 @@ const isSelectedImage = computed(() => Boolean(props.selectedFile && isImagePath
 const viewMenuGroups = computed<OptionMenuGroup[]>(() => [
   {
     id: 'view-options',
-    title: 'View options',
+    title: t('files.viewer.viewMenu.groupTitle'),
     items: [
       {
         id: 'toggle-blame',
-        label: props.blameEnabled ? 'Disable blame' : 'Enable blame',
-        description: 'Toggle commit ownership markers',
+        label: props.blameEnabled ? t('files.viewer.viewMenu.blame.disable') : t('files.viewer.viewMenu.blame.enable'),
+        description: t('files.viewer.viewMenu.blame.description'),
         checked: props.blameEnabled,
         icon: RiUserLine,
         disabled: props.viewerMode !== 'text' || !props.selectedFile,
       },
       {
         id: 'toggle-timeline',
-        label: props.timelineEnabled ? 'Disable timeline' : 'Enable timeline',
-        description: 'Compare two commits in editor',
+        label: props.timelineEnabled
+          ? t('files.viewer.viewMenu.timeline.disable')
+          : t('files.viewer.viewMenu.timeline.enable'),
+        description: t('files.viewer.viewMenu.timeline.description'),
         checked: props.timelineEnabled,
         icon: RiHistoryLine,
         disabled: props.viewerMode !== 'text' || !props.selectedFile,
       },
       {
         id: 'toggle-wrap',
-        label: wrapLines.value ? 'Disable wrap lines' : 'Enable wrap lines',
-        description: 'Toggle line wrapping in editor',
+        label: wrapLines.value ? t('files.viewer.viewMenu.wrap.disable') : t('files.viewer.viewMenu.wrap.enable'),
+        description: t('files.viewer.viewMenu.wrap.description'),
         checked: wrapLines.value,
         icon: RiTextWrap,
         disabled: props.viewerMode !== 'text',
       },
       {
         id: 'toggle-autosave',
-        label: autoSaveEnabled.value ? 'Disable autosave' : 'Enable autosave',
-        description: 'Save text changes automatically',
+        label: autoSaveEnabled.value
+          ? t('files.viewer.viewMenu.autosave.disable')
+          : t('files.viewer.viewMenu.autosave.enable'),
+        description: t('files.viewer.viewMenu.autosave.description'),
         checked: autoSaveEnabled.value,
         icon: RiSave3Line,
         disabled: props.viewerMode !== 'text' || !props.canEdit,
@@ -141,6 +148,16 @@ const viewMenuGroups = computed<OptionMenuGroup[]>(() => [
     ],
   },
 ])
+
+const gitDiffModeLabel = computed(() =>
+  props.gitDiffMode === 'staged' ? t('files.viewer.gitDiffMode.staged') : t('files.viewer.gitDiffMode.workingTree'),
+)
+
+const gitDiffRangeLabel = computed(() =>
+  props.gitDiffMode === 'staged'
+    ? t('files.viewer.gitDiffRange.headToIndex')
+    : t('files.viewer.gitDiffRange.indexToWorkingTree'),
+)
 
 function runViewMenuAction(item: OptionMenuItem) {
   if (item.disabled) return
@@ -185,15 +202,15 @@ function formatTimelineDate(value: string): string {
 }
 
 function timelineCommitLabel(commit: GitLogCommit | null): string {
-  if (!commit) return 'Select commit'
+  if (!commit) return String(t('files.viewer.timeline.selectCommitShort'))
   const hash = shortHash(commit.hash)
-  const subject = (commit.subject || '').trim() || '(no message)'
+  const subject = (commit.subject || '').trim() || String(t('files.viewer.timeline.noMessage'))
   return `${hash} · ${subject}`
 }
 
 function timelineCommitMeta(commit: GitLogCommit | null): string {
-  if (!commit) return 'Search by hash, message, author, email, refs'
-  const author = (commit.authorName || '').trim() || 'Unknown'
+  if (!commit) return String(t('files.viewer.timeline.searchPlaceholder'))
+  const author = (commit.authorName || '').trim() || String(t('common.unknown'))
   const date = formatTimelineDate(commit.authorDate)
   return date ? `${author} · ${date}` : author
 }
@@ -960,20 +977,25 @@ function onSendSelection() {
 <template>
   <section class="flex min-h-0 h-full flex-col overflow-hidden bg-background">
     <div class="flex items-center gap-2 border-b border-border/40 px-3 py-2">
-      <IconButton v-if="isMobile && showMobileViewer" size="lg" aria-label="Back" @click="showMobileViewer = false">
+      <IconButton
+        v-if="isMobile && showMobileViewer"
+        size="lg"
+        :aria-label="t('nav.back')"
+        @click="showMobileViewer = false"
+      >
         <RiArrowLeftSLine class="h-5 w-5" />
       </IconButton>
 
       <div class="min-w-0 flex-1">
-        <div class="typography-ui-label font-semibold truncate">{{ selectedFile?.name || 'Select a file' }}</div>
+        <div class="typography-ui-label font-semibold truncate">{{ selectedFile?.name || t('files.viewer.title.selectFile') }}</div>
       </div>
 
       <OptionMenu
         :open="viewMenuOpen"
         :query="viewMenuQuery"
         :groups="viewMenuGroups"
-        title="View settings"
-        mobile-title="View settings"
+        :title="t('files.viewer.viewMenu.title')"
+        :mobile-title="t('files.viewer.viewMenu.title')"
         :searchable="true"
         :is-mobile-pointer="isMobile"
         desktop-placement="bottom-end"
@@ -997,7 +1019,7 @@ function onSendSelection() {
           size="icon"
           class="h-7 w-7"
           :disabled="!dirty || isSaving"
-          :title="dirty ? 'Save (Ctrl/Cmd+S)' : 'Saved'"
+          :title="dirty ? t('files.viewer.save.titleDirty') : t('files.viewer.save.titleSaved')"
           @click="() => save()"
         >
           <RiLoader4Line v-if="isSaving" class="h-4 w-4 animate-spin" />
@@ -1009,7 +1031,7 @@ function onSendSelection() {
           variant="ghost"
           size="icon"
           class="h-7 w-7"
-          title="Copy contents"
+          :title="t('files.viewer.actions.copyContents')"
           @click="copyToClipboard(displayedContent)"
         >
           <RiClipboardLine class="h-4 w-4" />
@@ -1021,8 +1043,8 @@ function onSendSelection() {
             size="icon"
             class="h-7 w-7"
             :class="viewMenuOpen ? 'bg-secondary/60 text-foreground' : ''"
-            title="View settings"
-            aria-label="View settings"
+            :title="t('files.viewer.viewMenu.title')"
+            :aria-label="t('files.viewer.viewMenu.title')"
             @mousedown.prevent
             @click.stop="
               () => {
@@ -1043,7 +1065,7 @@ function onSendSelection() {
     >
       <span v-if="timelineEnabled && timelineAnyLoading" class="inline-flex items-center gap-1">
         <RiLoader4Line class="h-3 w-3 animate-spin" />
-        Loading timeline commits...
+        {{ t('files.viewer.status.loadingTimelineCommits') }}
       </span>
       <span v-else-if="timelineEnabled && timelineErrorText" class="text-destructive">
         {{ timelineErrorText }}
@@ -1051,27 +1073,27 @@ function onSendSelection() {
 
       <span v-if="blameEnabled && blameLoading" class="inline-flex items-center gap-1">
         <RiLoader4Line class="h-3 w-3 animate-spin" />
-        Loading blame...
+        {{ t('files.viewer.status.loadingBlame') }}
       </span>
       <span v-else-if="blameEnabled && blameError" class="text-destructive">{{ blameError }}</span>
       <span v-else-if="blameEnabled && !blameCommitBlocks.length" class="text-muted-foreground/90">
-        No blame lines available for this file yet.
+        {{ t('files.viewer.status.noBlameYet') }}
       </span>
 
       <span v-if="blameEnabled && dirty" class="text-muted-foreground/90"
-        >Showing blame for last saved file content.</span
+        >{{ t('files.viewer.status.showingBlameLastSaved') }}</span
       >
 
       <span v-if="gitInlineEnabled && gitDiffLoading" class="inline-flex items-center gap-1">
         <RiLoader4Line class="h-3 w-3 animate-spin" />
-        Loading {{ gitDiffMode === 'staged' ? 'staged' : 'working tree' }} changes...
+        {{ t('files.viewer.status.loadingChanges', { scope: gitDiffModeLabel }) }}
       </span>
       <span v-else-if="gitInlineEnabled && gitDiffError" class="text-destructive">{{ gitDiffError }}</span>
       <span v-else-if="gitInlineEnabled && !gitHunks.length">
-        No {{ gitDiffMode === 'staged' ? 'staged' : 'working tree' }} changes.
+        {{ t('files.viewer.status.noChanges', { scope: gitDiffModeLabel }) }}
       </span>
       <span v-else-if="gitInlineEnabled">
-        {{ gitHunks.length }} hunks · {{ gitDiffMode === 'staged' ? 'HEAD -> Index' : 'Index -> Working tree' }}
+        {{ t('files.viewer.status.hunksSummary', { count: gitHunks.length, range: gitDiffRangeLabel }) }}
       </span>
     </div>
 
@@ -1079,38 +1101,38 @@ function onSendSelection() {
       <template v-if="!selectedFile">
         <MobileSidebarEmptyState
           v-if="isMobile"
-          title="Select a file"
-          description="Pick a file from the files panel to inspect or edit."
-          action-label="Open files panel"
+          :title="t('files.viewer.title.selectFile')"
+          :description="t('files.viewer.empty.mobileDescription')"
+          :action-label="t('header.openFilesPanel')"
           :show-action="true"
           @action="props.openSidebar"
         />
         <div v-else class="h-full grid place-items-center text-muted-foreground typography-meta">
-          Pick a file from the tree.
+          {{ t('files.viewer.empty.desktopDescription') }}
         </div>
       </template>
 
       <div v-else-if="fileLoading" class="p-3 flex items-center gap-2 text-muted-foreground typography-meta">
         <RiLoader4Line class="h-4 w-4 animate-spin" />
-        Loading...
+        {{ t('common.loading') }}
       </div>
 
       <div v-else-if="viewerMode === 'binary'" class="p-3">
         <div class="rounded-md border border-border bg-background/40 px-3 py-2 text-muted-foreground typography-meta">
-          Binary file preview not available.
+          {{ t('files.viewer.binaryPreviewUnavailable') }}
           <div v-if="fileError" class="mt-2 text-destructive">{{ fileError }}</div>
           <div class="mt-2">
-            <Button variant="outline" size="sm" class="font-mono text-xs" @click="props.openRaw">Download raw</Button>
+            <Button variant="outline" size="sm" class="font-mono text-xs" @click="props.openRaw">{{ t('files.viewer.actions.downloadRaw') }}</Button>
           </div>
         </div>
       </div>
 
       <div v-else-if="viewerMode === 'image' || isSelectedImage" class="flex h-full items-center justify-center p-3">
-        <div v-if="!rawUrl" class="text-muted-foreground typography-meta">Loading image…</div>
+        <div v-if="!rawUrl" class="text-muted-foreground typography-meta">{{ t('files.viewer.status.loadingImage') }}</div>
         <img
           v-else
           :src="rawUrl"
-          :alt="selectedFile?.name || 'Image'"
+          :alt="selectedFile?.name || t('files.viewer.imageAltFallback')"
           class="max-w-full max-h-[70vh] object-contain rounded-md border border-border/30 bg-primary/10"
         />
       </div>
@@ -1159,7 +1181,7 @@ function onSendSelection() {
                 v-if="(!timelineLeftCommit || !timelineRightCommit) && !timelineLoading"
                 class="absolute inset-0 grid place-items-center text-xs text-muted-foreground pointer-events-none"
               >
-                Select both commits from the top dropdowns to start comparing.
+                {{ t('files.viewer.timeline.selectBothCommitsHint') }}
               </div>
             </div>
 
@@ -1167,10 +1189,10 @@ function onSendSelection() {
               :open="timelineLeftMenuOpen"
               :query="timelineLeftMenuQuery"
               :groups="timelineLeftMenuGroups"
-              title="Select commit"
-              mobile-title="Select commit"
-              search-placeholder="Search hash, message, author, email, refs"
-              empty-text="No commits match your search."
+              :title="t('files.viewer.timeline.selectCommitTitle')"
+              :mobile-title="t('files.viewer.timeline.selectCommitTitle')"
+              :search-placeholder="t('files.viewer.timeline.searchPlaceholder')"
+              :empty-text="t('files.viewer.timeline.emptyText')"
               :is-mobile-pointer="isMobile"
               desktop-placement="bottom-start"
               :desktop-fixed="true"
@@ -1189,10 +1211,10 @@ function onSendSelection() {
               :open="timelineRightMenuOpen"
               :query="timelineRightMenuQuery"
               :groups="timelineRightMenuGroups"
-              title="Select commit"
-              mobile-title="Select commit"
-              search-placeholder="Search hash, message, author, email, refs"
-              empty-text="No commits match your search."
+              :title="t('files.viewer.timeline.selectCommitTitle')"
+              :mobile-title="t('files.viewer.timeline.selectCommitTitle')"
+              :search-placeholder="t('files.viewer.timeline.searchPlaceholder')"
+              :empty-text="t('files.viewer.timeline.emptyText')"
               :is-mobile-pointer="isMobile"
               desktop-placement="bottom-start"
               :desktop-fixed="true"
@@ -1243,20 +1265,20 @@ function onSendSelection() {
         <div class="pointer-events-auto w-full max-w-xl rounded-xl border border-border bg-background/95 p-3 shadow-lg">
           <div class="flex items-center justify-between text-xs text-muted-foreground">
             <span>{{ selectedFile?.name }}:{{ selection.start }}-{{ selection.end }}</span>
-            <IconButton size="xs" aria-label="Clear selection" @click="clearSelection">
+            <IconButton size="xs" :aria-label="t('files.viewer.selection.clearAria')" @click="clearSelection">
               <RiCloseLine class="h-4 w-4" />
             </IconButton>
           </div>
           <textarea
             v-model="commentText"
             class="mt-2 w-full min-h-[60px] rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            placeholder="Add a note for chat (optional)"
+            :placeholder="t('files.viewer.selection.notePlaceholder')"
           />
           <div class="mt-2 flex items-center justify-between text-xs text-muted-foreground">
-            <span>Insert selected lines into chat composer</span>
+            <span>{{ t('files.viewer.selection.insertHint') }}</span>
             <Button size="sm" @click="onSendSelection" :disabled="!selection?.text.trim()">
               <RiFileCopy2Line class="h-4 w-4 mr-1" />
-              Insert
+              {{ t('files.viewer.selection.insertButton') }}
             </Button>
           </div>
         </div>

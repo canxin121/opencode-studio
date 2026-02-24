@@ -9,7 +9,9 @@ export type OpencodeConfigPanelContext = {
     fallback: DynamicValue,
   ) => { text: string; error: string | null }
   setOrClear: (path: string, value: DynamicValue) => void
-  [k: string]: DynamicValue
+  // This context is used as a shared bag of refs and helpers for many SFCs.
+  // Keep it flexible so UI helpers (e.g. i18n t()) can be provided.
+  [k: string]: any
 }
 
 const OpencodeConfigPanelContextKey: InjectionKey<OpencodeConfigPanelContext> = Symbol('OpencodeConfigPanelContext')

@@ -8,6 +8,7 @@ import {
   RiMore2Line,
   RiRefreshLine,
 } from '@remixicon/vue'
+import { useI18n } from 'vue-i18n'
 
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import IconButton from '@/components/ui/IconButton.vue'
@@ -123,6 +124,8 @@ const emit = defineEmits<{
   (e: 'update:sessionActionMenuQuery', v: string): void
 }>()
 
+const { t } = useI18n()
+
 function sessionsForDirectory(directory: DirectoryEntry) {
   return props.aggregatedSessionsForDirectory(directory.id, directory.path)
 }
@@ -140,15 +143,17 @@ function statusMeta(sessionId: string) {
   <div class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
     <div class="space-y-1 pb-1 pl-2.5 pr-1">
       <div v-if="directories.length === 0" class="px-2 py-6 text-center text-muted-foreground">
-        <div class="typography-ui-label font-semibold">No directories yet</div>
-        <div class="typography-meta mt-1">Add a directory path to start.</div>
+        <div class="typography-ui-label font-semibold">{{ t('chat.sidebar.directoriesList.empty.title') }}</div>
+        <div class="typography-meta mt-1">{{ t('chat.sidebar.directoriesList.empty.description') }}</div>
       </div>
 
       <div v-else>
         <div v-if="sidebarQueryNorm" class="px-1.5 pb-2">
           <div class="flex items-center justify-between gap-2">
-            <div class="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">Sessions</div>
-            <div v-if="searchWarming" class="text-[10px] font-mono text-muted-foreground/60">Loading…</div>
+            <div class="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
+              {{ t('chat.sidebar.directoriesList.search.sessionsTitle') }}
+            </div>
+            <div v-if="searchWarming" class="text-[10px] font-mono text-muted-foreground/60">{{ t('common.loading') }}</div>
           </div>
 
           <div v-if="sessionSearchHits.length" class="mt-1 space-y-1">
@@ -164,16 +169,16 @@ function statusMeta(sessionId: string) {
           </div>
 
           <div v-else class="mt-2 text-xs text-muted-foreground">
-            <div class="font-medium">No matching sessions.</div>
+            <div class="font-medium">{{ t('chat.sidebar.directoriesList.search.noMatchingSessions') }}</div>
             <div v-if="searchWarming" class="mt-1 font-mono text-[10px] text-muted-foreground/60">
-              Loading directories…
+              {{ t('chat.sidebar.directoriesList.search.loadingDirectories') }}
             </div>
           </div>
         </div>
 
         <div v-if="visibleDirectories.length === 0" class="px-2 py-6 text-center text-muted-foreground">
-          <div class="typography-ui-label font-semibold">No matching directories</div>
-          <div class="typography-meta mt-1">Try a different search.</div>
+          <div class="typography-ui-label font-semibold">{{ t('chat.sidebar.directoriesList.noMatchingDirectories.title') }}</div>
+          <div class="typography-meta mt-1">{{ t('chat.sidebar.directoriesList.noMatchingDirectories.description') }}</div>
         </div>
 
         <div v-else class="space-y-1">
@@ -190,7 +195,10 @@ function statusMeta(sessionId: string) {
                 <button
                   type="button"
                   class="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-                  :aria-label="props.isDirectoryCollapsed(directory.id) ? 'Expand directory' : 'Collapse directory'"
+                  :aria-label=
+                    "props.isDirectoryCollapsed(directory.id)
+                      ? String(t('chat.sidebar.directoriesList.expandDirectory'))
+                      : String(t('chat.sidebar.directoriesList.collapseDirectory'))"
                   @click="props.toggleDirectoryCollapse(directory.id, directory.path)"
                 >
                   <RiArrowRightSLine v-if="props.isDirectoryCollapsed(directory.id)" class="h-4 w-4" />
@@ -211,8 +219,8 @@ function statusMeta(sessionId: string) {
                       <span
                         v-if="props.directoryHasActiveOrBlocked(directory)"
                         class="inline-flex h-1.5 w-1.5 rounded-full bg-primary animate-pulse flex-shrink-0"
-                        title="Active sessions"
-                        aria-label="Active sessions"
+                        :title="String(t('chat.sidebar.directoriesList.activeSessions'))"
+                        :aria-label="String(t('chat.sidebar.directoriesList.activeSessions'))"
                       />
                     </span>
                   </div>
@@ -224,8 +232,8 @@ function statusMeta(sessionId: string) {
                     v-if="uiIsMobile"
                     size="sm"
                     class="text-muted-foreground hover:text-foreground hover:dark:bg-accent/40 hover:bg-primary/6"
-                    title="Directory actions"
-                    aria-label="Directory actions"
+                    :title="String(t('chat.sidebar.directoriesList.directoryActions'))"
+                    :aria-label="String(t('chat.sidebar.directoriesList.directoryActions'))"
                     @click.stop="props.openDirectoryActions(directory)"
                   >
                     <RiMore2Line class="h-4 w-4" />
@@ -238,8 +246,8 @@ function statusMeta(sessionId: string) {
                     <IconButton
                       size="xs"
                       class="text-muted-foreground hover:text-foreground hover:dark:bg-accent/40 hover:bg-primary/6"
-                      title="Refresh"
-                      aria-label="Refresh"
+                      :title="String(t('chat.sidebar.directoryActions.refresh.label'))"
+                      :aria-label="String(t('chat.sidebar.directoryActions.refresh.label'))"
                       :disabled="aggregateLoadingByDirectoryId[directory.id]"
                       @click.stop="props.refreshDirectoryInline(directory)"
                     >
@@ -249,8 +257,8 @@ function statusMeta(sessionId: string) {
                     <IconButton
                       size="xs"
                       class="text-muted-foreground hover:text-primary hover:dark:bg-accent/40 hover:bg-primary/6"
-                      title="New session"
-                      aria-label="New session"
+                      :title="String(t('chat.sidebar.directoryActions.newSession.label'))"
+                      :aria-label="String(t('chat.sidebar.directoryActions.newSession.label'))"
                       :disabled="props.creatingSession"
                       @click.stop="props.newSessionInline(directory)"
                     >
@@ -258,18 +266,18 @@ function statusMeta(sessionId: string) {
                     </IconButton>
 
                     <ConfirmPopover
-                      title="Remove directory?"
-                      description="Remove this directory from the sidebar."
-                      confirm-text="Remove"
-                      cancel-text="Cancel"
+                      :title="String(t('chat.sidebar.directoryActions.remove.confirmTitle'))"
+                      :description="String(t('chat.sidebar.directoryActions.remove.confirmDescription'))"
+                      :confirm-text="String(t('common.remove'))"
+                      :cancel-text="String(t('common.cancel'))"
                       variant="destructive"
                       @confirm="props.removeDirectoryInline(directory)"
                     >
                       <IconButton
                         size="xs"
                         class="text-muted-foreground hover:text-destructive hover:dark:bg-accent/40 hover:bg-primary/6"
-                        title="Remove directory"
-                        aria-label="Remove directory"
+                        :title="String(t('chat.sidebar.directoryActions.remove.label'))"
+                        :aria-label="String(t('chat.sidebar.directoryActions.remove.label'))"
                         @click.stop
                       >
                         <RiDeleteBinLine class="h-4 w-4" />
@@ -289,7 +297,7 @@ function statusMeta(sessionId: string) {
                   "
                   class="px-1.5 py-2"
                 >
-                  <div class="text-xs text-muted-foreground">Loading sessions…</div>
+                  <div class="text-xs text-muted-foreground">{{ t('chat.sidebar.directoriesList.loadingSessions') }}</div>
                   <div class="mt-2 space-y-2 animate-pulse">
                     <div class="h-3 w-3/4 rounded bg-muted/30" />
                     <div class="h-3 w-2/3 rounded bg-muted/30" />
@@ -301,13 +309,13 @@ function statusMeta(sessionId: string) {
                   v-else-if="sessionsForDirectory(directory).length === 0"
                   class="px-1.5 py-1 text-xs text-muted-foreground"
                 >
-                  No sessions yet.
+                  {{ t('chat.sidebar.directoriesList.noSessionsYet') }}
                 </div>
 
                 <template v-else>
                   <div v-if="pinnedRows(directory.id).length" class="space-y-1">
                     <div class="px-1.5 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
-                      Pinned
+                      {{ t('chat.sidebar.directoriesList.pinnedTitle') }}
                     </div>
 
                     <div
@@ -370,14 +378,16 @@ function statusMeta(sessionId: string) {
 
                   <div class="space-y-1">
                     <div class="px-1.5 flex items-center justify-between gap-2">
-                      <div class="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">Recent</div>
+                      <div class="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
+                        {{ t('chat.sidebar.directoriesList.recentTitle') }}
+                      </div>
                       <SidebarPager
                         v-if="props.sessionRootPageCount(directory.id) > 1"
                         :page="props.sessionRootPage(directory.id)"
                         :page-count="props.sessionRootPageCount(directory.id)"
                         :disabled="Boolean(aggregateLoadingByDirectoryId[directory.id])"
-                        prev-label="Previous sessions page"
-                        next-label="Next sessions page"
+                        :prev-label="String(t('chat.sidebar.directoriesList.prevSessionsPage'))"
+                        :next-label="String(t('chat.sidebar.directoriesList.nextSessionsPage'))"
                         @update:page="(next) => props.setSessionRootPage(directory.id, next)"
                       />
                     </div>

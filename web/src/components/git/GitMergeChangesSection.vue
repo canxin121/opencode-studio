@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { RiArrowGoBackLine, RiHistoryLine } from '@remixicon/vue'
+import { useI18n } from 'vue-i18n'
 
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import SectionToggleButton from '@/components/ui/SectionToggleButton.vue'
@@ -8,6 +9,8 @@ import type { OptionMenuItem } from '@/components/ui/OptionMenu.vue'
 import GitStatusListItem from '@/components/git/GitStatusListItem.vue'
 
 import type { GitStatusFile } from '@/types/git'
+
+const { t } = useI18n()
 
 type DiffSource = 'working' | 'staged'
 
@@ -38,22 +41,22 @@ function mobileActionsForFile(path: string): OptionMenuItem[] {
   return [
     {
       id: 'history',
-      label: 'History',
+      label: t('git.ui.workingTree.actions.history'),
       icon: RiHistoryLine,
       description: path,
       monospace: true,
     },
     {
       id: 'discard',
-      label: 'Discard changes',
+      label: t('git.ui.workingTree.actions.discardChanges'),
       icon: RiArrowGoBackLine,
       variant: 'destructive',
       description: path,
       monospace: true,
-      confirmTitle: 'Discard changes?',
-      confirmDescription: 'This cannot be undone.',
-      confirmText: 'Discard',
-      cancelText: 'Cancel',
+      confirmTitle: t('git.ui.workingTree.confirmDiscard.title'),
+      confirmDescription: t('git.ui.workingTree.confirmDiscard.description'),
+      confirmText: t('common.discard'),
+      cancelText: t('common.cancel'),
     },
   ]
 }
@@ -71,7 +74,13 @@ function runMobileAction(path: string, actionId: string) {
 
 <template>
   <div class="oc-vscode-section select-none">
-    <SectionToggleButton :open="expanded" label="Merge Changes" :count="count" :show-actions="false" @toggle="toggle" />
+    <SectionToggleButton
+      :open="expanded"
+      :label="t('git.ui.workingTree.sections.mergeChanges')"
+      :count="count"
+      :show-actions="false"
+      @toggle="toggle"
+    />
 
     <div v-if="expanded" class="space-y-0.5 px-1 pb-1">
       <GitStatusListItem
@@ -83,23 +92,34 @@ function runMobileAction(path: string, actionId: string) {
         status-class="oc-vscode-status-untracked"
         :is-mobile-pointer="isMobilePointer"
         :mobile-action-items="mobileActionsForFile(f.path)"
-        mobile-action-title="File actions"
+        :mobile-action-title="t('git.ui.workingTree.fileActionsTitle')"
         @select="$emit('select', f.path)"
         @mobileAction="(id) => runMobileAction(f.path, id)"
       >
         <template #actions>
-          <SidebarIconButton size="sm" title="History" aria-label="History" @click.stop="$emit('history', f.path)">
+          <SidebarIconButton
+            size="sm"
+            :title="t('git.ui.workingTree.actions.history')"
+            :aria-label="t('git.ui.workingTree.actions.history')"
+            @click.stop="$emit('history', f.path)"
+          >
             <RiHistoryLine class="h-3.5 w-3.5" />
           </SidebarIconButton>
           <ConfirmPopover
-            title="Discard changes?"
-            description="This cannot be undone."
-            confirm-text="Discard"
-            cancel-text="Cancel"
+            :title="t('git.ui.workingTree.confirmDiscard.title')"
+            :description="t('git.ui.workingTree.confirmDiscard.description')"
+            :confirm-text="t('common.discard')"
+            :cancel-text="t('common.cancel')"
             variant="destructive"
             @confirm="$emit('discard', f.path)"
           >
-            <SidebarIconButton size="sm" destructive title="Discard changes" aria-label="Discard changes" @click.stop>
+            <SidebarIconButton
+              size="sm"
+              destructive
+              :title="t('git.ui.workingTree.actions.discardChanges')"
+              :aria-label="t('git.ui.workingTree.actions.discardChanges')"
+              @click.stop
+            >
               <RiArrowGoBackLine class="h-3.5 w-3.5" />
             </SidebarIconButton>
           </ConfirmPopover>
@@ -113,7 +133,7 @@ function runMobileAction(path: string, actionId: string) {
         :disabled="loading"
         @click="$emit('showMore')"
       >
-        Show more ({{ files.length }}/{{ count }})
+        {{ t('git.ui.workingTree.showMoreCount', { shown: files.length, total: count }) }}
       </button>
     </div>
   </div>

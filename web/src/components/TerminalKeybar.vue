@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 const props = defineProps<{
   disabled?: boolean
 }>()
+
+const { t } = useI18n()
 
 const emit = defineEmits<{
   (e: 'send', data: string): void
@@ -107,10 +110,10 @@ const KEY_CLASSES = 'oc-terminal-keybar__key select-none font-mono text-[12px] l
         :disabled="props.disabled"
         :aria-pressed="ctrl ? 'true' : 'false'"
         @click="toggleCtrl"
-        aria-label="Ctrl"
-        title="Ctrl (toggle)"
+        :aria-label="t('terminal.keybar.keys.ctrl')"
+        :title="t('terminal.keybar.titles.ctrlToggle')"
       >
-        Ctrl
+        {{ t('terminal.keybar.keys.ctrl') }}
       </button>
       <button
         type="button"
@@ -119,10 +122,10 @@ const KEY_CLASSES = 'oc-terminal-keybar__key select-none font-mono text-[12px] l
         :disabled="props.disabled"
         :aria-pressed="alt ? 'true' : 'false'"
         @click="toggleAlt"
-        aria-label="Alt"
-        title="Alt (toggle)"
+        :aria-label="t('terminal.keybar.keys.alt')"
+        :title="t('terminal.keybar.titles.altToggle')"
       >
-        Alt
+        {{ t('terminal.keybar.keys.alt') }}
       </button>
       <button
         type="button"
@@ -131,29 +134,53 @@ const KEY_CLASSES = 'oc-terminal-keybar__key select-none font-mono text-[12px] l
         :disabled="props.disabled"
         :aria-pressed="shift ? 'true' : 'false'"
         @click="toggleShift"
-        aria-label="Shift"
-        title="Shift (toggle)"
+        :aria-label="t('terminal.keybar.keys.shift')"
+        :title="t('terminal.keybar.titles.shiftToggle')"
       >
-        Shift
+        {{ t('terminal.keybar.keys.shift') }}
       </button>
 
       <span class="oc-terminal-keybar__sep" aria-hidden="true" />
 
-      <button type="button" :class="KEY_CLASSES" :disabled="props.disabled" @click="sendEsc">Esc</button>
-      <button type="button" :class="KEY_CLASSES" :disabled="props.disabled" @click="sendTab">Tab</button>
-      <button type="button" :class="KEY_CLASSES" :disabled="props.disabled" @click="sendBackspace">Bksp</button>
-      <button type="button" :class="KEY_CLASSES" :disabled="props.disabled" @click="sendEnter">Enter</button>
+      <button type="button" :class="KEY_CLASSES" :disabled="props.disabled" @click="sendEsc">
+        {{ t('terminal.keybar.keys.esc') }}
+      </button>
+      <button type="button" :class="KEY_CLASSES" :disabled="props.disabled" @click="sendTab">
+        {{ t('terminal.keybar.keys.tab') }}
+      </button>
+      <button type="button" :class="KEY_CLASSES" :disabled="props.disabled" @click="sendBackspace">
+        {{ t('terminal.keybar.keys.backspace') }}
+      </button>
+      <button type="button" :class="KEY_CLASSES" :disabled="props.disabled" @click="sendEnter">
+        {{ t('terminal.keybar.keys.enter') }}
+      </button>
 
       <span class="oc-terminal-keybar__sep" aria-hidden="true" />
 
-      <button type="button" :class="KEY_CLASSES" :disabled="props.disabled" @click="sendArrow('D')">Left</button>
-      <button type="button" :class="KEY_CLASSES" :disabled="props.disabled" @click="sendArrow('B')">Down</button>
-      <button type="button" :class="KEY_CLASSES" :disabled="props.disabled" @click="sendArrow('A')">Up</button>
-      <button type="button" :class="KEY_CLASSES" :disabled="props.disabled" @click="sendArrow('C')">Right</button>
-      <button type="button" :class="KEY_CLASSES" :disabled="props.disabled" @click="sendHomeEnd('home')">Home</button>
-      <button type="button" :class="KEY_CLASSES" :disabled="props.disabled" @click="sendHomeEnd('end')">End</button>
-      <button type="button" :class="KEY_CLASSES" :disabled="props.disabled" @click="sendTildeKey(5)">PgUp</button>
-      <button type="button" :class="KEY_CLASSES" :disabled="props.disabled" @click="sendTildeKey(6)">PgDn</button>
+      <button type="button" :class="KEY_CLASSES" :disabled="props.disabled" @click="sendArrow('D')">
+        {{ t('terminal.keybar.keys.left') }}
+      </button>
+      <button type="button" :class="KEY_CLASSES" :disabled="props.disabled" @click="sendArrow('B')">
+        {{ t('terminal.keybar.keys.down') }}
+      </button>
+      <button type="button" :class="KEY_CLASSES" :disabled="props.disabled" @click="sendArrow('A')">
+        {{ t('terminal.keybar.keys.up') }}
+      </button>
+      <button type="button" :class="KEY_CLASSES" :disabled="props.disabled" @click="sendArrow('C')">
+        {{ t('terminal.keybar.keys.right') }}
+      </button>
+      <button type="button" :class="KEY_CLASSES" :disabled="props.disabled" @click="sendHomeEnd('home')">
+        {{ t('terminal.keybar.keys.home') }}
+      </button>
+      <button type="button" :class="KEY_CLASSES" :disabled="props.disabled" @click="sendHomeEnd('end')">
+        {{ t('terminal.keybar.keys.end') }}
+      </button>
+      <button type="button" :class="KEY_CLASSES" :disabled="props.disabled" @click="sendTildeKey(5)">
+        {{ t('terminal.keybar.keys.pageUp') }}
+      </button>
+      <button type="button" :class="KEY_CLASSES" :disabled="props.disabled" @click="sendTildeKey(6)">
+        {{ t('terminal.keybar.keys.pageDown') }}
+      </button>
     </div>
   </div>
 </template>

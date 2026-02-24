@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 import Button from '@/components/ui/Button.vue'
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
@@ -8,6 +9,8 @@ import Input from '@/components/ui/Input.vue'
 import ScrollArea from '@/components/ui/ScrollArea.vue'
 
 import type { GitWorktreeInfo } from '@/types/git'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   open: boolean
@@ -73,23 +76,23 @@ function worktreeRelativePath(path: string): string | null {
 <template>
   <FormDialog
     :open="open"
-    title="Worktrees"
-    description="Manage git worktrees"
+    :title="t('git.ui.dialogs.worktrees.title')"
+    :description="t('git.ui.dialogs.worktrees.description')"
     maxWidth="max-w-3xl"
     @update:open="onUpdateOpen"
   >
     <div class="space-y-4">
       <div class="flex flex-wrap items-center justify-between gap-2">
-        <div class="text-xs font-medium text-muted-foreground">Add worktree</div>
+        <div class="text-xs font-medium text-muted-foreground">{{ t('git.ui.dialogs.worktrees.sections.addWorktree') }}</div>
         <div class="flex flex-wrap items-center gap-2">
-          <Button variant="secondary" size="sm" :disabled="worktreesLoading" @click="$emit('refresh')">Refresh</Button>
-          <Button variant="secondary" size="sm" :disabled="worktreesLoading" @click="$emit('prune')">Prune</Button>
+          <Button variant="secondary" size="sm" :disabled="worktreesLoading" @click="$emit('refresh')">{{ t('common.refresh') }}</Button>
+          <Button variant="secondary" size="sm" :disabled="worktreesLoading" @click="$emit('prune')">{{ t('git.ui.dialogs.worktrees.actions.prune') }}</Button>
         </div>
       </div>
 
       <div class="grid gap-2">
         <div class="text-[11px] text-muted-foreground">
-          Path is relative to the repository root and must stay inside it.
+          {{ t('git.ui.dialogs.worktrees.hints.pathRelativeToRepoRoot') }}
         </div>
         <Input
           :model-value="newWorktreePath"
@@ -101,13 +104,13 @@ function worktreeRelativePath(path: string): string | null {
           <Input
             :model-value="newWorktreeBranch"
             class="h-9 font-mono text-xs"
-            placeholder="Branch name"
+            :placeholder="t('git.ui.dialogs.worktrees.placeholders.branchName')"
             @update:model-value="(v) => onUpdateText('newWorktreeBranch', v)"
           />
           <Input
             :model-value="newWorktreeStartPoint"
             class="h-9 font-mono text-xs"
-            placeholder="Start point (HEAD)"
+            :placeholder="t('git.ui.dialogs.worktrees.placeholders.startPoint')"
             @update:model-value="(v) => onUpdateText('newWorktreeStartPoint', v)"
           />
         </div>
@@ -118,7 +121,7 @@ function worktreeRelativePath(path: string): string | null {
             :checked="newWorktreeCreateBranch"
             @change="onUpdateCreateBranch"
           />
-          Create new branch
+          {{ t('git.ui.dialogs.worktrees.createNewBranch') }}
         </label>
         <div class="flex justify-end">
           <Button
@@ -126,16 +129,16 @@ function worktreeRelativePath(path: string): string | null {
             :disabled="!newWorktreePath.trim() || (newWorktreeCreateBranch && !newWorktreeBranch.trim())"
             @click="$emit('add')"
           >
-            Add worktree
+            {{ t('git.ui.dialogs.worktrees.actions.addWorktree') }}
           </Button>
         </div>
       </div>
 
       <div class="rounded-md border border-border/50 overflow-hidden">
         <div v-if="worktreesError" class="p-3 text-xs text-red-500">{{ worktreesError }}</div>
-        <div v-else-if="worktreesLoading" class="p-3 text-xs text-muted-foreground">Loading...</div>
+        <div v-else-if="worktreesLoading" class="p-3 text-xs text-muted-foreground">{{ t('common.loading') }}</div>
         <ScrollArea v-else class="h-64">
-          <div v-if="!worktrees.length" class="p-3 text-xs text-muted-foreground">No worktrees</div>
+          <div v-if="!worktrees.length" class="p-3 text-xs text-muted-foreground">{{ t('git.ui.dialogs.worktrees.empty') }}</div>
           <div v-else class="divide-y divide-border/40">
             <div v-for="wt in worktrees" :key="wt.worktree" class="p-3 space-y-1">
               <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -143,15 +146,15 @@ function worktreeRelativePath(path: string): string | null {
                   <div class="text-xs font-mono truncate">{{ wt.worktree }}</div>
                   <div class="text-[11px] text-muted-foreground">
                     <span v-if="wt.branch" class="font-mono">{{ wt.branch }}</span>
-                    <span v-else class="font-mono">(detached)</span>
+                    <span v-else class="font-mono">{{ t('git.ui.dialogs.worktrees.detached') }}</span>
                     <span v-if="wt.head" class="ml-2 font-mono">{{ wt.head.slice(0, 8) }}</span>
                   </div>
                   <div v-if="worktreeRelativePath(wt.worktree)" class="text-[11px] text-muted-foreground">
                     {{ worktreeRelativePath(wt.worktree) }}
                   </div>
                   <div v-if="wt.locked || wt.prunable" class="text-[10px] text-muted-foreground">
-                    <span v-if="wt.locked">Locked</span>
-                    <span v-if="wt.prunable" :class="wt.locked ? 'ml-2' : ''">Prunable</span>
+                    <span v-if="wt.locked">{{ t('git.ui.dialogs.worktrees.status.locked') }}</span>
+                    <span v-if="wt.prunable" :class="wt.locked ? 'ml-2' : ''">{{ t('git.ui.dialogs.worktrees.status.prunable') }}</span>
                   </div>
                 </div>
                 <div class="flex flex-wrap items-center gap-2 sm:justify-end">
@@ -162,16 +165,14 @@ function worktreeRelativePath(path: string): string | null {
                     :disabled="!worktreeRelativePath(wt.worktree)"
                     @click="$emit('openWorktree', wt.worktree)"
                   >
-                    Open
+                    {{ t('common.open') }}
                   </Button>
-                  <Button variant="secondary" size="sm" class="h-7" @click="$emit('copyPath', wt.worktree)">
-                    Copy path
-                  </Button>
+                  <Button variant="secondary" size="sm" class="h-7" @click="$emit('copyPath', wt.worktree)">{{ t('common.copyPath') }}</Button>
                   <ConfirmPopover
-                    title="Migrate changes here?"
-                    description="Move local changes from this worktree into the current one."
-                    confirm-text="Migrate"
-                    cancel-text="Cancel"
+                    :title="t('git.ui.dialogs.worktrees.confirmMigrate.title')"
+                    :description="t('git.ui.dialogs.worktrees.confirmMigrate.description')"
+                    :confirm-text="t('git.ui.dialogs.worktrees.actions.migrate')"
+                    :cancel-text="t('common.cancel')"
                     @confirm="$emit('migrate', wt.worktree)"
                   >
                     <Button
@@ -181,18 +182,18 @@ function worktreeRelativePath(path: string): string | null {
                       :disabled="isCurrentWorktree(wt.worktree)"
                       @click="() => {}"
                     >
-                      Migrate changes
+                      {{ t('git.ui.dialogs.worktrees.actions.migrateChanges') }}
                     </Button>
                   </ConfirmPopover>
                   <ConfirmPopover
-                    title="Remove worktree?"
-                    description="This removes the worktree directory."
-                    confirm-text="Remove"
-                    cancel-text="Cancel"
+                    :title="t('git.ui.dialogs.worktrees.confirmRemove.title')"
+                    :description="t('git.ui.dialogs.worktrees.confirmRemove.description')"
+                    :confirm-text="t('common.remove')"
+                    :cancel-text="t('common.cancel')"
                     variant="destructive"
                     @confirm="$emit('remove', wt.worktree)"
                   >
-                    <Button variant="secondary" size="sm" class="h-7" @click="() => {}">Remove</Button>
+                    <Button variant="secondary" size="sm" class="h-7" @click="() => {}">{{ t('common.remove') }}</Button>
                   </ConfirmPopover>
                 </div>
               </div>

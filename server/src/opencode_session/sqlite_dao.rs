@@ -276,86 +276,87 @@ pub(super) async fn load_session_message_page_from_sqlite(
 
         let mut parts_by_message_id = std::collections::HashMap::<String, Vec<Value>>::new();
         if !message_rows.is_empty() {
+            // SQLite can enforce a relatively small cap on the number of bound variables.
+            // Large sessions (or large requested history windows) can exceed that cap when
+            // we try to fetch parts for N message IDs in a single `IN (...)` query.
+            //
+            // Chunk the message IDs and issue multiple queries to keep this robust.
+            // Keep the chunk size comfortably below the common 999-variable limit.
+            const PART_QUERY_CHUNK: usize = 450;
+
             let message_ids = message_rows
                 .iter()
                 .map(|(id, _, _)| id.as_str())
                 .collect::<Vec<_>>();
-            let sql = format!(
-                "SELECT id, message_id, session_id, data FROM part WHERE message_id IN ({}) ORDER BY message_id ASC, id ASC",
-                sqlite_placeholders(message_ids.len())
-            );
 
-            match conn.prepare(&sql) {
-                Ok(mut stmt) => {
-                    let mut rows =
-                        match stmt.query(rusqlite::params_from_iter(message_ids.iter())) {
-                            Ok(rows) => rows,
-                            Err(_) => {
-                                return None;
-                            }
-                        };
+            for chunk in message_ids.chunks(PART_QUERY_CHUNK) {
+                if chunk.is_empty() {
+                    continue;
+                }
 
-                    loop {
-                        match rows.next() {
-                            Ok(Some(row)) => {
-                                let id = match row.get::<_, String>(0) {
-                                    Ok(v) if !v.trim().is_empty() => v,
-                                    _ => {
-                                        consistency.note_parse_skip();
-                                        continue;
-                                    }
-                                };
-                                let message_id = match row.get::<_, String>(1) {
-                                    Ok(v) if !v.trim().is_empty() => v,
-                                    _ => {
-                                        consistency.note_parse_skip();
-                                        continue;
-                                    }
-                                };
-                                let row_session_id = match row.get::<_, String>(2) {
-                                    Ok(v) if !v.trim().is_empty() => v,
-                                    _ => {
-                                        consistency.note_parse_skip();
-                                        continue;
-                                    }
-                                };
-                                let data_raw = match row.get::<_, String>(3) {
-                                    Ok(v) => v,
-                                    Err(_) => {
-                                        consistency.note_parse_skip();
-                                        continue;
-                                    }
-                                };
+                // Be conservative about schema assumptions: some historical databases
+                // may not have `part.session_id` populated (or even present). We only
+                // need `message_id` to associate parts with the selected messages.
+                let sql = format!(
+                    "SELECT id, message_id, data FROM part WHERE message_id IN ({}) ORDER BY message_id ASC, id ASC",
+                    sqlite_placeholders(chunk.len())
+                );
 
-                                let mut part = match serde_json::from_str::<Value>(&data_raw) {
-                                    Ok(value) => value,
-                                    Err(_) => {
-                                        consistency.note_parse_skip();
-                                        continue;
-                                    }
-                                };
-                                let Some(obj) = part.as_object_mut() else {
+                let mut stmt = match conn.prepare(&sql) {
+                    Ok(stmt) => stmt,
+                    Err(_) => return None,
+                };
+
+                let mut rows = match stmt.query(rusqlite::params_from_iter(chunk.iter())) {
+                    Ok(rows) => rows,
+                    Err(_) => return None,
+                };
+
+                loop {
+                    match rows.next() {
+                        Ok(Some(row)) => {
+                            let id = match row.get::<_, String>(0) {
+                                Ok(v) if !v.trim().is_empty() => v,
+                                _ => {
                                     consistency.note_parse_skip();
                                     continue;
-                                };
-                                obj.insert("id".to_string(), Value::String(id.clone()));
-                                obj.insert(
-                                    "sessionID".to_string(),
-                                    Value::String(row_session_id.clone()),
-                                );
-                                obj.insert("messageID".to_string(), Value::String(message_id.clone()));
+                                }
+                            };
+                            let message_id = match row.get::<_, String>(1) {
+                                Ok(v) if !v.trim().is_empty() => v,
+                                _ => {
+                                    consistency.note_parse_skip();
+                                    continue;
+                                }
+                            };
+                            let data_raw = match row.get::<_, String>(2) {
+                                Ok(v) => v,
+                                Err(_) => {
+                                    consistency.note_parse_skip();
+                                    continue;
+                                }
+                            };
 
-                                parts_by_message_id.entry(message_id).or_default().push(part);
-                            }
-                            Ok(None) => break,
-                            Err(_) => {
-                                return None;
-                            }
+                            let mut part = match serde_json::from_str::<Value>(&data_raw) {
+                                Ok(value) => value,
+                                Err(_) => {
+                                    consistency.note_parse_skip();
+                                    continue;
+                                }
+                            };
+                            let Some(obj) = part.as_object_mut() else {
+                                consistency.note_parse_skip();
+                                continue;
+                            };
+                            obj.insert("id".to_string(), Value::String(id.clone()));
+                            obj.insert("sessionID".to_string(), Value::String(session_id.clone()));
+                            obj.insert("messageID".to_string(), Value::String(message_id.clone()));
+
+                            parts_by_message_id.entry(message_id).or_default().push(part);
                         }
+                        Ok(None) => break,
+                        Err(_) => return None,
                     }
-                }
-                Err(_) => {
-                    return None;
                 }
             }
         }
@@ -421,9 +422,11 @@ pub(super) async fn load_session_message_part_from_sqlite(
         info_obj.insert("id".to_string(), Value::String(message_id.clone()));
         info_obj.insert("sessionID".to_string(), Value::String(session_id.clone()));
 
+        // Avoid relying on `part.session_id` for compatibility with historical schemas.
+        // Validate session ownership via the `message` table instead.
         let part_raw = conn
             .query_row(
-                "SELECT data FROM part WHERE id = ?1 AND message_id = ?2 AND session_id = ?3",
+                "SELECT p.data FROM part p JOIN message m ON p.message_id = m.id WHERE p.id = ?1 AND p.message_id = ?2 AND m.session_id = ?3",
                 rusqlite::params![part_id.as_str(), message_id.as_str(), session_id.as_str()],
                 |row| row.get::<_, String>(0),
             )

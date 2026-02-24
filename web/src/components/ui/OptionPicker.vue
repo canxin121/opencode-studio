@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch, type Component } from 'vue'
 import { RiArrowDownSLine } from '@remixicon/vue'
+import { useI18n } from 'vue-i18n'
 
 import OptionMenu, { type OptionMenuGroup, type OptionMenuItem } from '@/components/ui/OptionMenu.vue'
 import { cn } from '@/lib/utils'
@@ -57,6 +58,8 @@ const emit = defineEmits<{
   (e: 'update:modelValue', value: string): void
 }>()
 
+const { t } = useI18n()
+
 const triggerEl = ref<HTMLElement | null>(null)
 const menuRef = ref<OptionMenuExpose | null>(null)
 const open = ref(false)
@@ -65,10 +68,22 @@ const query = ref('')
 const selected = computed(() => String(props.modelValue || '').trim())
 const q = computed(() => query.value.trim().toLowerCase())
 
+const effectiveSearchPlaceholder = computed(() => {
+  const raw = String(props.searchPlaceholder || '').trim()
+  if (!raw || raw === 'Search...') return t('common.optionPicker.searchPlaceholder')
+  return raw
+})
+
 const selectedDisplayLabel = computed(() => {
   if (!selected.value) {
-    if (!props.includeEmpty) return props.placeholder || ''
-    return props.emptyLabel || props.placeholder || ''
+    const placeholder = String(props.placeholder || '').trim()
+    const emptyLabel = String(props.emptyLabel || '').trim()
+    const effectivePlaceholder =
+      !placeholder || placeholder === 'Select...' ? t('common.optionPicker.selectPlaceholder') : placeholder
+    const effectiveEmptyLabel =
+      !emptyLabel || emptyLabel === 'Auto (OpenCode default)' ? t('chat.composer.model.autoDefault') : emptyLabel
+    if (!props.includeEmpty) return effectivePlaceholder
+    return effectiveEmptyLabel || effectivePlaceholder
   }
 
   const opt = (Array.isArray(props.options) ? props.options : []).find((o) => o.value === selected.value)
@@ -101,14 +116,17 @@ const canOfferCustom = computed(() => {
 
 const helperText = computed(() => {
   if (isTruncated.value) {
-    return `Type to search. Showing ${showOptions.value.length} of ${filteredOptions.value.length}.`
+    return t('common.optionPicker.truncatedHelper', {
+      shown: showOptions.value.length,
+      total: filteredOptions.value.length,
+    })
   }
   return ''
 })
 
 const emptyText = computed(() => {
-  if (canOfferCustom.value) return 'No preset matches. Use custom value below.'
-  return 'No matches.'
+  if (canOfferCustom.value) return t('common.optionPicker.emptyNoPresetMatches')
+  return t('common.optionPicker.emptyNoMatches')
 })
 
 const menuGroups = computed<OptionMenuGroup[]>(() => {
@@ -133,12 +151,12 @@ const menuGroups = computed<OptionMenuGroup[]>(() => {
   if (canOfferCustom.value) {
     groups.push({
       id: 'custom',
-      title: 'Custom',
+      title: t('common.optionPicker.customGroupTitle'),
       items: [
         {
           id: '__custom__',
-          label: `Use "${query.value.trim()}"`,
-          description: 'Set a custom value',
+          label: t('common.optionPicker.useValue', { value: query.value.trim() }),
+          description: t('common.optionPicker.setCustomValue'),
           keywords: query.value,
           monospace: props.monospace,
         },
@@ -275,7 +293,7 @@ function optionLabel(opt: PickerOption): string {
       :groups="menuGroups"
       :title="title"
       :searchable="true"
-      :search-placeholder="searchPlaceholder"
+      :search-placeholder="effectiveSearchPlaceholder"
       :empty-text="emptyText"
       :helper-text="helperText"
       :is-mobile-pointer="isMobilePointer"

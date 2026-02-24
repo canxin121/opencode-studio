@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { RiArrowLeftRightLine } from '@remixicon/vue'
+import { useI18n } from 'vue-i18n'
 
 import Button from '@/components/ui/Button.vue'
 import FormDialog from '@/components/ui/FormDialog.vue'
 import Input from '@/components/ui/Input.vue'
 import DiffViewer from '@/components/DiffViewer.vue'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   open: boolean
@@ -40,8 +43,8 @@ function onUpdateText(key: 'base' | 'head' | 'path', v: string | number) {
 <template>
   <FormDialog
     :open="open"
-    title="Compare"
-    description="Compare two refs or branches"
+    :title="t('git.ui.dialogs.compare.title')"
+    :description="t('git.ui.dialogs.compare.description')"
     maxWidth="max-w-5xl"
     @update:open="onUpdateOpen"
   >
@@ -50,34 +53,40 @@ function onUpdateText(key: 'base' | 'head' | 'path', v: string | number) {
         <Input
           :model-value="base"
           class="h-9 font-mono text-xs"
-          placeholder="Base (e.g. main)"
+          :placeholder="t('git.ui.dialogs.compare.placeholders.base')"
           @update:model-value="(v) => onUpdateText('base', v)"
         />
         <Input
           :model-value="head"
           class="h-9 font-mono text-xs"
-          placeholder="Head (e.g. feature/foo)"
+          :placeholder="t('git.ui.dialogs.compare.placeholders.head')"
           @update:model-value="(v) => onUpdateText('head', v)"
         />
-        <Button variant="secondary" size="sm" :disabled="loading" title="Swap refs" @click="$emit('swap')">
+        <Button
+          variant="secondary"
+          size="sm"
+          :disabled="loading"
+          :title="t('git.ui.dialogs.compare.actions.swapRefs')"
+          @click="$emit('swap')"
+        >
           <RiArrowLeftRightLine class="h-4 w-4" />
         </Button>
         <Button size="sm" :disabled="!base.trim() || !head.trim() || loading" @click="$emit('compare')">
-          Compare
+          {{ t('git.ui.dialogs.compare.actions.compare') }}
         </Button>
       </div>
 
       <Input
         :model-value="path"
         class="h-9 font-mono text-xs"
-        placeholder="Optional path filter (e.g. src/app.ts)"
+        :placeholder="t('git.ui.dialogs.compare.placeholders.pathOptional')"
         @update:model-value="(v) => onUpdateText('path', v)"
       />
 
       <div class="rounded-md border border-border/50 bg-background/40 p-3 min-h-[20rem]">
         <div v-if="error" class="text-xs text-red-500">{{ error }}</div>
-        <div v-else-if="loading" class="text-xs text-muted-foreground">Loading diff...</div>
-        <div v-else-if="!diff" class="text-xs text-muted-foreground">No diff to show.</div>
+        <div v-else-if="loading" class="text-xs text-muted-foreground">{{ t('git.ui.diffViewer.loading') }}</div>
+        <div v-else-if="!diff" class="text-xs text-muted-foreground">{{ t('git.ui.dialogs.compare.empty') }}</div>
         <div v-else class="h-[420px] min-h-0">
           <DiffViewer :diff="diff" :output-format="'side-by-side'" :draw-file-list="false" />
         </div>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, useSlots } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   DialogContent,
   DialogDescription,
@@ -61,6 +62,7 @@ const emit = defineEmits<{
 
 const ui = useUiStore()
 const slots = useSlots()
+const { t } = useI18n()
 
 const hasTrigger = computed(() => Boolean(slots.default))
 const useDialog = computed(() => props.forceDialog || ui.isMobilePointer || !hasTrigger.value)
@@ -77,6 +79,20 @@ const openModel = computed({
 
 const confirmButtonVariant = computed(() => (props.variant === 'destructive' ? 'destructive' : 'default'))
 const confirmButtonDisabled = computed(() => props.confirmDisabled || props.busy)
+
+const effectiveConfirmText = computed(() => {
+  const raw = String(props.confirmText || '').trim()
+  // Backwards-compatible: map old defaults to i18n.
+  if (!raw || raw === 'Confirm') return t('common.confirm')
+  return raw
+})
+
+const effectiveCancelText = computed(() => {
+  const raw = String(props.cancelText || '').trim()
+  // Backwards-compatible: map old defaults to i18n.
+  if (!raw || raw === 'Cancel') return t('common.cancel')
+  return raw
+})
 
 const anchorRect = ref<DOMRect | null>(null)
 const virtualRef = computed(() => {
@@ -187,13 +203,13 @@ function onConfirm() {
         <div class="grid gap-2">
           <Button variant="secondary" class="w-full" :disabled="cancelDisabled" @click="onCancel">
             <RiCloseLine class="h-4 w-4 mr-2" />
-            {{ cancelText }}
+            {{ effectiveCancelText }}
           </Button>
           <Button :variant="confirmButtonVariant" class="w-full" :disabled="confirmButtonDisabled" @click="onConfirm">
             <RiLoader4Line v-if="busy" class="h-4 w-4 mr-2 animate-spin" />
             <RiDeleteBinLine v-else-if="variant === 'destructive'" class="h-4 w-4 mr-2" />
             <RiCheckLine v-else class="h-4 w-4 mr-2" />
-            {{ confirmText }}
+            {{ effectiveConfirmText }}
           </Button>
         </div>
       </DialogContent>
@@ -253,7 +269,7 @@ function onConfirm() {
             <RiLoader4Line v-if="busy" class="h-4 w-4 animate-spin" />
             <RiDeleteBinLine v-else-if="variant === 'destructive'" class="h-4 w-4" />
             <RiCheckLine v-else class="h-4 w-4" />
-            {{ confirmText }}
+            {{ effectiveConfirmText }}
           </button>
 
           <button
@@ -263,7 +279,7 @@ function onConfirm() {
             @click="onCancel"
           >
             <RiCloseLine class="h-4 w-4" />
-            {{ cancelText }}
+            {{ effectiveCancelText }}
           </button>
         </div>
       </PopoverContent>

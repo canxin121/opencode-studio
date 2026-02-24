@@ -1,5 +1,5 @@
 <script lang="ts">
-import { defineComponent, ref } from 'vue'
+import { computed, defineComponent, ref } from 'vue'
 import { RiArrowDownSLine, RiArrowUpSLine, RiRestartLine } from '@remixicon/vue'
 
 import Button from '@/components/ui/Button.vue'
@@ -21,13 +21,14 @@ export default defineComponent({
   },
   setup() {
     const ctx = useOpencodeConfigPanelContext()
+    const t = ctx.t as unknown as (key: string, params?: Record<string, unknown>) => string
     const showAdvancedPrimaryTools = ref(false)
 
-    const triStatePickerOptions: PickerOption[] = [
-      { value: 'default', label: 'default' },
-      { value: 'true', label: 'true' },
-      { value: 'false', label: 'false' },
-    ]
+    const triStatePickerOptions = computed<PickerOption[]>(() => [
+      { value: 'default', label: t('settings.opencodeConfig.sections.common.options.triState.default') },
+      { value: 'true', label: t('settings.opencodeConfig.sections.common.options.triState.true') },
+      { value: 'false', label: t('settings.opencodeConfig.sections.common.options.triState.false') },
+    ])
 
     return Object.assign(ctx, { showAdvancedPrimaryTools, triStatePickerOptions })
   },
@@ -38,7 +39,7 @@ export default defineComponent({
   <section id="experimental" class="scroll-mt-24 rounded-lg border border-border bg-background p-4 space-y-4">
     <div class="flex items-start justify-between gap-3">
       <div class="min-w-0">
-        <div class="text-base font-semibold leading-snug">Unstable settings.</div>
+        <div class="text-base font-semibold leading-snug">{{ t('settings.opencodeConfig.sections.experimental.title') }}</div>
       </div>
       <div class="flex items-center gap-2">
         <Tooltip>
@@ -46,25 +47,33 @@ export default defineComponent({
             size="icon"
             variant="ghost"
             class="h-8 w-8"
-            title="Reset section"
+            :title="t('settings.opencodeConfig.sections.common.resetSection')"
             @click="resetSection('experimental')"
           >
             <RiRestartLine class="h-4 w-4" />
           </Button>
-          <template #content>Reset section</template>
+          <template #content>{{ t('settings.opencodeConfig.sections.common.resetSection') }}</template>
         </Tooltip>
         <Tooltip>
           <Button
             size="icon"
             variant="outline"
             class="h-8 w-8"
-            :title="isSectionOpen('experimental') ? 'Collapse' : 'Expand'"
+            :title="
+              isSectionOpen('experimental')
+                ? t('settings.opencodeConfig.sections.common.collapse')
+                : t('settings.opencodeConfig.sections.common.expand')
+            "
             @click="toggleSection('experimental')"
           >
             <RiArrowUpSLine v-if="isSectionOpen('experimental')" class="h-4 w-4" />
             <RiArrowDownSLine v-else class="h-4 w-4" />
           </Button>
-          <template #content>{{ isSectionOpen('experimental') ? 'Collapse' : 'Expand' }}</template>
+          <template #content>{{
+            isSectionOpen('experimental')
+              ? t('settings.opencodeConfig.sections.common.collapse')
+              : t('settings.opencodeConfig.sections.common.expand')
+          }}</template>
         </Tooltip>
       </div>
     </div>
@@ -72,47 +81,47 @@ export default defineComponent({
     <div v-if="isSectionOpen('experimental')" class="space-y-4">
       <div class="grid gap-4 lg:grid-cols-3">
         <label class="grid gap-1">
-          <span class="text-xs text-muted-foreground">Disable paste summary</span>
+          <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.experimental.fields.disablePasteSummary') }}</span>
           <OptionPicker
             v-model="experimentalDisablePasteSummary"
             :options="triStatePickerOptions"
-            title="Disable paste summary"
-            search-placeholder="Search"
+            :title="t('settings.opencodeConfig.sections.experimental.fields.disablePasteSummary')"
+            :search-placeholder="t('common.search')"
             :include-empty="false"
           />
         </label>
         <label class="grid gap-1">
-          <span class="text-xs text-muted-foreground">Batch tool</span>
+          <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.experimental.fields.batchTool') }}</span>
           <OptionPicker
             v-model="experimentalBatchTool"
             :options="triStatePickerOptions"
-            title="Batch tool"
-            search-placeholder="Search"
+            :title="t('settings.opencodeConfig.sections.experimental.fields.batchTool')"
+            :search-placeholder="t('common.search')"
             :include-empty="false"
           />
         </label>
         <label class="grid gap-1">
-          <span class="text-xs text-muted-foreground">OpenTelemetry</span>
+          <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.experimental.fields.openTelemetry') }}</span>
           <OptionPicker
             v-model="experimentalOpenTelemetry"
             :options="triStatePickerOptions"
-            title="OpenTelemetry"
-            search-placeholder="Search"
+            :title="t('settings.opencodeConfig.sections.experimental.fields.openTelemetry')"
+            :search-placeholder="t('common.search')"
             :include-empty="false"
           />
         </label>
         <label class="grid gap-1">
-          <span class="text-xs text-muted-foreground">Continue loop on deny</span>
+          <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.experimental.fields.continueLoopOnDeny') }}</span>
           <OptionPicker
             v-model="experimentalContinueLoop"
             :options="triStatePickerOptions"
-            title="Continue loop on deny"
-            search-placeholder="Search"
+            :title="t('settings.opencodeConfig.sections.experimental.fields.continueLoopOnDeny')"
+            :search-placeholder="t('common.search')"
             :include-empty="false"
           />
         </label>
         <label class="grid gap-1">
-          <span class="text-xs text-muted-foreground">MCP timeout (ms)</span>
+          <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.experimental.fields.mcpTimeoutMs') }}</span>
           <input
             v-model="experimentalMcpTimeout"
             type="number"
@@ -125,16 +134,24 @@ export default defineComponent({
       <div class="grid gap-4 lg:grid-cols-2">
         <div class="grid gap-2">
           <div class="flex items-center justify-between">
-            <span class="text-xs text-muted-foreground">Primary tools</span>
+            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.experimental.primaryTools.title') }}</span>
             <button
               type="button"
               class="text-[11px] text-muted-foreground hover:text-foreground"
               @click="showAdvancedPrimaryTools = !showAdvancedPrimaryTools"
             >
-              {{ showAdvancedPrimaryTools ? 'Hide advanced text' : 'Show advanced text' }}
+              {{
+                showAdvancedPrimaryTools
+                  ? t('settings.opencodeConfig.sections.common.hideAdvancedText')
+                  : t('settings.opencodeConfig.sections.common.showAdvancedText')
+              }}
             </button>
           </div>
-          <Input v-model="toolFilter" placeholder="Filter tools (e.g. bash)" class="max-w-sm" />
+          <Input
+            v-model="toolFilter"
+            :placeholder="t('settings.opencodeConfig.sections.experimental.primaryTools.placeholders.filterTools')"
+            class="max-w-sm"
+          />
           <div class="rounded-md border border-border p-3">
             <div class="grid gap-2 max-h-44 overflow-auto pr-1">
               <label v-for="id in filteredToolIdOptions" :key="`primary:${id}`" class="flex items-center gap-2 text-sm">
@@ -142,20 +159,20 @@ export default defineComponent({
                 <span class="font-mono text-xs break-all">{{ id }}</span>
               </label>
               <div v-if="filteredToolIdOptions.length === 0" class="text-xs text-muted-foreground">
-                No matching tools.
+                {{ t('settings.opencodeConfig.sections.experimental.primaryTools.empty') }}
               </div>
             </div>
           </div>
-          <div class="text-[11px] text-muted-foreground">If set, OpenCode prefers these tools when planning.</div>
+          <div class="text-[11px] text-muted-foreground">{{ t('settings.opencodeConfig.sections.experimental.primaryTools.help') }}</div>
           <div v-if="toolIdsError" class="text-[11px] text-muted-foreground break-all">
-            Tool IDs unavailable: {{ toolIdsError }}
+            {{ t('settings.opencodeConfig.sections.experimental.primaryTools.toolIdsUnavailable', { error: toolIdsError }) }}
           </div>
           <textarea
             v-if="showAdvancedPrimaryTools"
             v-model="experimentalPrimaryTools"
             rows="4"
             class="w-full rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs"
-            placeholder="bash\nread"
+            :placeholder="t('settings.opencodeConfig.sections.experimental.primaryTools.placeholders.advanced')"
           />
         </div>
       </div>

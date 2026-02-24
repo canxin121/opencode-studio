@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { computed, type ComponentPublicInstance } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 import OptionMenu, { type OptionMenuGroup, type OptionMenuItem } from '@/components/ui/OptionMenu.vue'
 import type { SessionActionItem } from '@/layout/chatSidebar/useSessionActionMenu'
+
+const { t } = useI18n()
 
 const props = withDefaults(
   defineProps<{
@@ -41,8 +44,8 @@ const groups = computed<OptionMenuGroup[]>(() => [
     :query="query"
     :groups="groups"
     :searchable="true"
-    search-placeholder="Search actions"
-    empty-text="No actions found."
+    :search-placeholder="String(t('common.searchActions'))"
+    :empty-text="String(t('common.noActionsFound'))"
     :is-mobile-pointer="false"
     :desktop-fixed="true"
     :desktop-anchor-el="anchorEl"

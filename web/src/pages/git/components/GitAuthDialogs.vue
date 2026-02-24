@@ -3,6 +3,7 @@ import Button from '@/components/ui/Button.vue'
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import FormDialog from '@/components/ui/FormDialog.vue'
 import Input from '@/components/ui/Input.vue'
+import { useI18n } from 'vue-i18n'
 
 type PendingRemoteAction = 'fetch' | 'pull' | 'push'
 
@@ -48,6 +49,8 @@ const props = defineProps<{
   disableRepoGpgSigning: () => void
 }>()
 
+const { t } = useI18n()
+
 const credDialogOpen = defineModel<boolean>('credDialogOpen', { required: true })
 const credAction = defineModel<PendingRemoteAction | null>('credAction', { required: true })
 const credUsername = defineModel<string>('credUsername', { required: true })
@@ -83,8 +86,8 @@ function repoDirOrEmpty(): string {
   <!-- Git Credentials Dialog (HTTPS Basic / token) -->
   <FormDialog
     :open="credDialogOpen"
-    title="Git Authentication"
-    description="Enter credentials to continue"
+    :title="t('git.authDialogs.credentials.title')"
+    :description="t('git.authDialogs.credentials.description')"
     maxWidth="max-w-md"
     @update:open="
       (v: boolean) => {
@@ -106,14 +109,14 @@ function repoDirOrEmpty(): string {
       </div>
 
       <div v-if="githubRemote" class="rounded-md border border-border/60 bg-muted/10 p-3 text-xs text-muted-foreground">
-        <div class="font-medium text-foreground/80">GitHub token (optional)</div>
-        <div class="mt-1">If you save a token here, Fetch/Pull/Push can auto-auth like VS Code.</div>
+        <div class="font-medium text-foreground/80">{{ t('git.authDialogs.credentials.githubTokenOptionalTitle') }}</div>
+        <div class="mt-1">{{ t('git.authDialogs.credentials.githubTokenOptionalDescription') }}</div>
         <div class="mt-2 flex gap-2">
           <Input v-model="githubToken" class="h-9 font-mono text-xs" placeholder="ghp_..." />
         </div>
         <label class="mt-2 inline-flex items-center gap-2 select-none">
           <input v-model="githubTokenRemember" type="checkbox" class="accent-primary" />
-          <span>Remember for this repo (localStorage)</span>
+          <span>{{ t('git.authDialogs.credentials.rememberForRepo') }}</span>
         </label>
         <div class="mt-2 flex justify-end gap-2">
           <Button
@@ -125,28 +128,28 @@ function repoDirOrEmpty(): string {
                 props.saveGithubTokenForRepo()
               }
             "
-            >Clear</Button
+            >{{ t('common.clear') }}</Button
           >
           <Button
             size="sm"
             @click="
               () => {
                 props.saveGithubTokenForRepo()
-                props.toasts.push('success', 'Token saved')
+                props.toasts.push('success', t('git.toasts.tokenSaved'))
               }
             "
-            >Save</Button
+            >{{ t('common.save') }}</Button
           >
         </div>
       </div>
 
       <div class="grid gap-3">
         <div class="grid gap-1">
-          <div class="text-xs font-medium text-muted-foreground">Username</div>
+          <div class="text-xs font-medium text-muted-foreground">{{ t('git.authDialogs.credentials.username') }}</div>
           <Input v-model="credUsername" class="h-9 font-mono text-xs" placeholder="x-access-token" />
         </div>
         <div class="grid gap-1">
-          <div class="text-xs font-medium text-muted-foreground">Password / Token</div>
+          <div class="text-xs font-medium text-muted-foreground">{{ t('git.authDialogs.credentials.passwordOrToken') }}</div>
           <Input v-model="credPassword" type="password" class="h-9 font-mono text-xs" placeholder="••••••••" />
         </div>
       </div>
@@ -161,7 +164,7 @@ function repoDirOrEmpty(): string {
               credAction = null
             }
           "
-          >Cancel</Button
+          >{{ t('common.cancel') }}</Button
         >
         <Button
           variant="secondary"
@@ -180,7 +183,7 @@ function repoDirOrEmpty(): string {
           Use Terminal
         </Button>
         <Button size="sm" :disabled="!credUsername.trim() || !credPassword.trim()" @click="props.submitCredentials"
-          >Continue</Button
+          >{{ t('common.continue') }}</Button
         >
       </div>
     </div>
@@ -190,7 +193,7 @@ function repoDirOrEmpty(): string {
   <FormDialog
     :open="gitBusyDialogOpen"
     :title="gitBusyTitle"
-    description="Another git operation is running"
+    :description="t('git.authDialogs.gitBusy.description')"
     maxWidth="max-w-md"
     @update:open="
       (v: boolean) => {
@@ -210,8 +213,8 @@ function repoDirOrEmpty(): string {
         {{ gitBusyExplain }}
       </div>
       <div class="flex justify-end gap-2">
-        <Button variant="secondary" size="sm" @click="props.dismissGitBusyDialog">Close</Button>
-        <Button size="sm" @click="props.retryGitBusy">Retry</Button>
+        <Button variant="secondary" size="sm" @click="props.dismissGitBusyDialog">{{ t('common.close') }}</Button>
+        <Button size="sm" @click="props.retryGitBusy">{{ t('common.retry') }}</Button>
       </div>
     </div>
   </FormDialog>
@@ -219,8 +222,8 @@ function repoDirOrEmpty(): string {
   <!-- SSO authorization required -->
   <FormDialog
     :open="ssoDialogOpen"
-    title="SSO authorization required"
-    description="Your organization requires SSO for this remote"
+    :title="t('git.authDialogs.sso.title')"
+    :description="t('git.authDialogs.sso.description')"
     maxWidth="max-w-md"
     @update:open="
       (v: boolean) => {
@@ -248,7 +251,7 @@ function repoDirOrEmpty(): string {
         {{ props.terminalCommandForRemoteAction(ssoAction || 'fetch') }}
       </div>
       <div class="flex justify-end gap-2">
-        <Button variant="secondary" size="sm" @click="props.dismissGitSsoDialog">Close</Button>
+        <Button variant="secondary" size="sm" @click="props.dismissGitSsoDialog">{{ t('common.close') }}</Button>
         <Button
           variant="secondary"
           size="sm"
@@ -264,7 +267,7 @@ function repoDirOrEmpty(): string {
         >
           Use Terminal
         </Button>
-        <Button size="sm" @click="props.retryGitSso">Retry</Button>
+        <Button size="sm" @click="props.retryGitSso">{{ t('common.retry') }}</Button>
       </div>
     </div>
   </FormDialog>
@@ -273,7 +276,7 @@ function repoDirOrEmpty(): string {
   <FormDialog
     :open="terminalHelpOpen"
     :title="terminalHelpTitle"
-    description="This action requires an interactive terminal"
+    :description="t('git.authDialogs.terminalHelp.description')"
     maxWidth="max-w-md"
     @update:open="
       (v: boolean) => {
@@ -296,7 +299,7 @@ function repoDirOrEmpty(): string {
       </div>
 
       <div class="flex justify-end gap-2">
-        <Button variant="secondary" size="sm" @click="terminalHelpOpen = false">Cancel</Button>
+        <Button variant="secondary" size="sm" @click="terminalHelpOpen = false">{{ t('common.cancel') }}</Button>
         <Button
           size="sm"
           @click="
@@ -306,7 +309,7 @@ function repoDirOrEmpty(): string {
             }
           "
         >
-          Open Terminal
+          {{ t('common.openTerminal') }}
         </Button>
       </div>
     </div>
@@ -315,8 +318,8 @@ function repoDirOrEmpty(): string {
   <!-- GPG Passphrase Dialog -->
   <FormDialog
     :open="gpgDialogOpen"
-    title="GPG Passphrase"
-    description="Enter your GPG key passphrase to sign the commit"
+    :title="t('git.authDialogs.gpgPassphrase.title')"
+    :description="t('git.authDialogs.gpgPassphrase.description')"
     maxWidth="max-w-md"
     @update:open="
       (v: boolean) => {
@@ -332,11 +335,11 @@ function repoDirOrEmpty(): string {
         {{ gpgExplain }}
       </div>
       <div class="grid gap-1">
-        <div class="text-xs font-medium text-muted-foreground">Passphrase</div>
+        <div class="text-xs font-medium text-muted-foreground">{{ t('git.authDialogs.gpgPassphrase.passphraseLabel') }}</div>
         <Input v-model="gpgPassphrase" type="password" class="h-9 font-mono text-xs" placeholder="••••••••" />
       </div>
       <div class="flex justify-end gap-2">
-        <Button variant="secondary" size="sm" @click="gpgDialogOpen = false">Cancel</Button>
+        <Button variant="secondary" size="sm" @click="gpgDialogOpen = false">{{ t('common.cancel') }}</Button>
         <Button
           variant="secondary"
           size="sm"
@@ -350,10 +353,10 @@ function repoDirOrEmpty(): string {
             }
           "
         >
-          Use Terminal
+          {{ t('common.useTerminal') }}
         </Button>
         <Button size="sm" :disabled="!gpgPassphrase.trim() || committing" @click="props.submitGpgPassphrase"
-          >Sign & Commit</Button
+          >{{ t('git.authDialogs.gpgPassphrase.signAndCommit') }}</Button
         >
       </div>
     </div>
@@ -363,9 +366,9 @@ function repoDirOrEmpty(): string {
   <ConfirmPopover
     :open="gpgEnableDialogOpen"
     force-dialog
-    title="Enable GPG Passphrase Preset?"
-    description="This updates your gpg-agent configuration"
-    confirm-text="Enable & Retry"
+    :title="t('git.authDialogs.gpgEnablePreset.title')"
+    :description="t('git.authDialogs.gpgEnablePreset.description')"
+    :confirm-text="t('git.authDialogs.gpgEnablePreset.confirmEnableRetry')"
     cancel-text="Cancel"
     :busy="gpgEnableBusy"
     :confirm-disabled="gpgEnableBusy"
@@ -382,8 +385,7 @@ function repoDirOrEmpty(): string {
   >
     <template #content>
       <div class="rounded-md border border-border/60 bg-muted/30 p-3 text-xs text-muted-foreground whitespace-pre-wrap">
-        Your gpg-agent is not allowing passphrase presetting. To let OpenCode Studio sign commits after you enter the
-        passphrase in the UI, we can add `allow-preset-passphrase` to `~/.gnupg/gpg-agent.conf` and restart gpg-agent.
+        {{ t('git.authDialogs.gpgEnablePreset.body') }}
       </div>
 
       <div
@@ -398,8 +400,8 @@ function repoDirOrEmpty(): string {
   <!-- GPG missing key dialog -->
   <FormDialog
     :open="gpgMissingDialogOpen"
-    title="No GPG Signing Key"
-    description="Signing is enabled but no secret key is available"
+    :title="t('git.authDialogs.gpgMissingKey.title')"
+    :description="t('git.authDialogs.gpgMissingKey.description')"
     maxWidth="max-w-md"
     @update:open="
       (v: boolean) => {
@@ -409,12 +411,16 @@ function repoDirOrEmpty(): string {
   >
     <div class="space-y-4">
       <div class="rounded-md border border-border/60 bg-muted/30 p-3 text-xs text-muted-foreground whitespace-pre-wrap">
-        {{ gpgMissingExplain || 'No GPG secret key found for signing.' }}
+        {{ gpgMissingExplain || t('git.authDialogs.gpgMissingKey.defaultExplain') }}
       </div>
 
       <div class="space-y-2">
-        <div class="text-xs font-medium text-muted-foreground">Set `user.signingkey` (local)</div>
-        <Input v-model="gpgSigningKeyInput" class="h-9 font-mono text-xs" placeholder="KEYID or fingerprint" />
+        <div class="text-xs font-medium text-muted-foreground">{{ t('git.authDialogs.gpgMissingKey.setSigningKeyLocal') }}</div>
+        <Input
+          v-model="gpgSigningKeyInput"
+          class="h-9 font-mono text-xs"
+          :placeholder="t('git.authDialogs.gpgMissingKey.placeholderKeyIdOrFingerprint')"
+        />
         <div class="flex justify-end">
           <Button
             size="sm"
@@ -422,17 +428,17 @@ function repoDirOrEmpty(): string {
             :disabled="gpgMissingBusy || !gpgSigningKeyInput.trim()"
             @click="props.setRepoSigningKey"
           >
-            Set signing key
+            {{ t('git.authDialogs.gpgMissingKey.setSigningKeyButton') }}
           </Button>
         </div>
       </div>
 
       <div class="flex justify-between gap-2">
         <Button variant="destructive" size="sm" :disabled="gpgMissingBusy" @click="props.disableRepoGpgSigning">
-          Disable signing
+          {{ t('git.authDialogs.gpgMissingKey.disableSigningButton') }}
         </Button>
         <Button variant="secondary" size="sm" @click="gpgMissingDialogOpen = false" :disabled="gpgMissingBusy"
-          >Close</Button
+          >{{ t('common.close') }}</Button
         >
       </div>
     </div>

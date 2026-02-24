@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 type JsonValue = unknown
 type JsonObject = Record<string, JsonValue>
@@ -28,6 +29,8 @@ export function useOpenCodeConfigPanelProviderHealth(opts: {
   // ToastKind is wider than just 'success'/'error' in this repo.
   toasts: { push: (kind: 'success' | 'error', message: string, timeoutMs?: number) => void }
 }) {
+  const { t } = useI18n()
+
   const providerEnvPresent = ref<Record<string, boolean>>({})
   const providerEnvError = ref<string | null>(null)
   const providerSources = ref<Record<string, JsonValue>>({})
@@ -129,7 +132,7 @@ export function useOpenCodeConfigPanelProviderHealth(opts: {
       await navigator.clipboard.writeText(value)
       opts.toasts.push('success', okMsg)
     } catch {
-      opts.toasts.push('error', 'Failed to copy to clipboard')
+      opts.toasts.push('error', t('settings.opencodeConfig.toasts.failedToCopyToClipboard'))
     }
   }
 
@@ -141,10 +144,10 @@ export function useOpenCodeConfigPanelProviderHealth(opts: {
   function copyProviderApiKey(providerId: string) {
     const v = String(opts.getProviderOption(providerId, 'apiKey') || '')
     if (!v.trim()) {
-      opts.toasts.push('error', 'API key is empty')
+      opts.toasts.push('error', t('settings.opencodeConfig.providerHealth.apiKeyEmpty'))
       return
     }
-    void copyText(v, 'Copied API key')
+    void copyText(v, t('settings.opencodeConfig.providerHealth.copiedApiKey'))
   }
 
   return {

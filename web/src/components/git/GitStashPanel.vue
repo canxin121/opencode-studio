@@ -1,9 +1,13 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import MiniActionButton from '@/components/ui/MiniActionButton.vue'
 import SectionToggleButton from '@/components/ui/SectionToggleButton.vue'
 
 import type { GitStashEntry } from '@/types/git'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   expanded: boolean
@@ -32,7 +36,7 @@ function toggle() {
   <div class="oc-vscode-section select-none">
     <SectionToggleButton
       :open="expanded"
-      label="Stash"
+      :label="t('git.actions.stash')"
       :count="stashes.length"
       :show-actions="false"
       @toggle="toggle"
@@ -41,21 +45,21 @@ function toggle() {
     <div v-if="expanded" class="space-y-1 px-1 pb-1">
       <div class="flex justify-end gap-1">
         <ConfirmPopover
-          title="Drop all stashes?"
-          description="This permanently removes every stash entry."
-          confirm-text="Drop all"
-          cancel-text="Cancel"
+          :title="t('git.ui.stashPanel.confirmDropAll.title')"
+          :description="t('git.ui.stashPanel.confirmDropAll.description')"
+          :confirm-text="t('git.ui.stashPanel.actions.dropAll')"
+          :cancel-text="t('common.cancel')"
           variant="destructive"
           @confirm="$emit('dropAll')"
         >
-          <MiniActionButton :disabled="loading || !stashes.length" @click="() => {}">Drop all</MiniActionButton>
+          <MiniActionButton :disabled="loading || !stashes.length" @click="() => {}">{{ t('git.ui.stashPanel.actions.dropAll') }}</MiniActionButton>
         </ConfirmPopover>
         <MiniActionButton variant="default" :disabled="!canOperate" @click="$emit('openCreate')"
-          >Stash...</MiniActionButton
+          >{{ t('git.ui.stashPanel.actions.stashEllipsis') }}</MiniActionButton
         >
       </div>
 
-      <div v-if="!stashes.length" class="oc-vscode-empty">No stashes</div>
+      <div v-if="!stashes.length" class="oc-vscode-empty">{{ t('git.ui.stashPanel.empty') }}</div>
       <div v-else class="space-y-1">
         <div
           v-for="s in stashes"
@@ -65,11 +69,11 @@ function toggle() {
           <div class="text-[11px] font-mono truncate" :title="s.ref">{{ s.ref }}</div>
           <div class="text-[11px] text-muted-foreground truncate" :title="s.title">{{ s.title }}</div>
           <div class="mt-1 flex flex-wrap justify-end gap-1">
-            <MiniActionButton @click="$emit('view', s.ref)">View</MiniActionButton>
-            <MiniActionButton @click="$emit('apply', s.ref)">Apply</MiniActionButton>
-            <MiniActionButton @click="$emit('pop', s.ref)">Pop</MiniActionButton>
-            <MiniActionButton @click="$emit('branch', s.ref)">Branch</MiniActionButton>
-            <MiniActionButton variant="destructive" @click="$emit('drop', s.ref)">Drop</MiniActionButton>
+            <MiniActionButton @click="$emit('view', s.ref)">{{ t('common.view') }}</MiniActionButton>
+            <MiniActionButton @click="$emit('apply', s.ref)">{{ t('common.apply') }}</MiniActionButton>
+            <MiniActionButton @click="$emit('pop', s.ref)">{{ t('git.ui.stashPanel.actions.pop') }}</MiniActionButton>
+            <MiniActionButton @click="$emit('branch', s.ref)">{{ t('git.fields.branch') }}</MiniActionButton>
+            <MiniActionButton variant="destructive" @click="$emit('drop', s.ref)">{{ t('git.ui.stashPanel.actions.drop') }}</MiniActionButton>
           </div>
         </div>
       </div>

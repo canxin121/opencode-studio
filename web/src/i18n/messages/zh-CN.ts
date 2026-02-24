@@ -3,16 +3,203 @@ export default {
     title: 'OpenCode Studio',
   },
   common: {
+    add: '添加',
     cancel: '取消',
     close: '关闭',
+    clear: '清除',
+    create: '创建',
+    delete: '删除',
+    checkout: '检出',
+    default: '默认',
+    other: '其他',
     save: '保存',
     saving: '保存中...',
+    saveFailed: '保存失败',
     edit: '编辑',
+    open: '打开',
+    hide: '隐藏',
+    from: '从',
+    to: '到',
     remove: '移除',
+    rename: '重命名',
+    confirm: '确认',
+    working: '处理中...',
+    reloading: '重新加载中...',
+    search: '搜索',
+    searching: '搜索中...',
+    searchOptions: '搜索选项',
+    all: '全部',
+    selectAll: '全选',
+    replace: '替换',
+    discard: '丢弃',
+    undo: '撤销',
+    clean: '清理',
+    retry: '重试',
     connecting: '连接中...',
+    loading: '加载中...',
+    loadMore: '加载更多',
+    refresh: '刷新',
+    reset: '重置',
+    reload: '重新加载',
     unlock: '解锁',
     continue: '继续',
+    abort: '中止',
+    later: '稍后',
+    nextSteps: '下一步',
+    useTerminal: '使用终端',
+    openTerminal: '打开终端',
+    scanning: '扫描中...',
     useProject: '使用项目',
+    use: '使用',
+    searchActions: '搜索操作',
+    select: '选择',
+    noActionsFound: '未找到操作。',
+    noOptionsFound: '未找到选项。',
+    options: '选项',
+    copied: '已复制',
+    copyPath: '复制路径',
+    view: '查看',
+    apply: '应用',
+    ignore: '忽略',
+    yes: '是',
+    no: '否',
+    copyFailed: '复制失败',
+    failedToCopyToClipboard: '复制到剪贴板失败',
+    downloadFailed: '下载失败',
+    previousPage: '上一页',
+    nextPage: '下一页',
+    previous: '上一项',
+    next: '下一项',
+    unknown: '未知',
+    moveUp: '上移',
+    moveDown: '下移',
+    empty: '空',
+    on: '开启',
+    key: '键',
+    value: '值',
+    integer: '整数',
+    number: '数字',
+    optionPicker: {
+      searchPlaceholder: '搜索...',
+      selectPlaceholder: '请选择...',
+      truncatedHelper: '输入以搜索。当前显示 {shown}/{total}。',
+      emptyNoMatches: '无匹配项。',
+      emptyNoPresetMatches: '没有预设匹配项。可在下方使用自定义值。',
+      customGroupTitle: '自定义',
+      useValue: '使用 "{value}"',
+      setCustomValue: '设置自定义值',
+    },
+  },
+  codeBlock: {
+    copy: '复制',
+    hide: '隐藏',
+    reveal: '显示',
+    notSet: '（未设置）',
+    copyAria: '复制代码',
+    copyDiagramSourceAria: '复制图表源码',
+    expand: '展开',
+    collapse: '收起',
+    expandLines: '展开（{lines} 行）',
+    expandAria: '展开代码块',
+    collapseAria: '收起代码块',
+    toggleCodeAria: '切换代码块展开状态',
+    toggleDiagramAria: '切换图表展开状态',
+    expandDiagramAria: '展开图表',
+  },
+  markdown: {
+    tableOfContents: '目录',
+  },
+  plugins: {
+    mountHost: {
+      loadingAria: '加载插件界面中',
+      errors: {
+        iframeLoadFailed: '插件界面 iframe 加载失败',
+      },
+    },
+  },
+  help: {
+    dialog: {
+      title: '帮助',
+      description: '键盘快捷键与常用操作',
+      quickActions: {
+        title: '快捷操作',
+        badge: '操作',
+        reloadConfig: '重新加载 OpenCode 配置',
+        themeLight: '主题：浅色',
+        themeDark: '主题：深色',
+        themeSystem: '主题：跟随系统',
+      },
+      sections: {
+        navigationCommands: '导航与命令',
+        sessionManagement: '会话管理',
+        interface: '界面',
+      },
+      shortcuts: {
+        showKeyboardShortcuts: '显示键盘快捷键',
+        toggleSessionSidebar: '切换会话侧边栏',
+        openModelSelector: '打开模型选择器',
+        cycleThinkingVariant: '切换思考变体',
+        createNewSession: '新建会话',
+        sendMessage: '发送消息',
+        focusChatInput: '聚焦聊天输入框',
+        abortActiveRunDouble: '中止当前运行（连按两次）',
+        cycleTheme: '切换主题（浅色 → 深色 → 系统）',
+        openDiffPanel: '打开 Diff 面板',
+        openFiles: '打开文件',
+        openTerminal: '打开终端',
+        openGitPanel: '打开 Git 面板',
+        openTimeline: '打开时间线',
+        openSettings: '打开设置',
+      },
+    },
+  },
+  mcp: {
+    dialog: {
+      title: 'MCP 服务器',
+      description: '管理 Model Context Protocol 连接',
+      loading: '正在加载 MCP 状态...',
+      empty: '未配置 MCP 服务器。',
+      actions: {
+        connect: '连接',
+        disconnect: '断开连接',
+        authenticate: '认证',
+        retry: '重试',
+        refreshing: '刷新中...',
+      },
+    },
+    status: {
+      connected: '已连接',
+      disabled: '未连接',
+      needsAuth: '需要认证',
+      needsClientRegistration: '需要客户端注册',
+      failed: '失败',
+    },
+  },
+  ui: {
+    pathPicker: {
+      actions: {
+        browse: '浏览',
+        go: '前往',
+        foldersOnly: '仅文件夹',
+      },
+      titles: {
+        hiddenShown: '隐藏项：显示',
+        hiddenHidden: '隐藏项：隐藏',
+        gitignoredShown: 'Gitignored：显示',
+        gitignoredHidden: 'Gitignored：隐藏',
+      },
+      aria: {
+        toggleHidden: '切换隐藏项显示',
+        toggleGitignored: '切换 gitignored 显示',
+      },
+      placeholders: {
+        path: '/path/to/folder',
+        filter: '筛选...',
+      },
+      empty: {
+        noMatches: '无匹配项',
+      },
+    },
   },
   nav: {
     chat: '聊天',
@@ -78,6 +265,7 @@ export default {
     title: '设置',
     refresh: '刷新',
     refreshAria: '刷新设置',
+    unknownTab: '未知的设置标签页。',
     emptyPlugins: '没有插件提供设置项。',
     tabs: {
       opencode: 'OpenCode',
@@ -85,6 +273,948 @@ export default {
       backends: '后端',
       troubleshooting: '排障',
       appearance: '外观',
+    },
+    backendsPanel: {
+      title: '后端',
+      description: '管理 Studio 后端地址。切换活动后端会重新加载应用。',
+      activeBackend: '当前后端',
+      backendFallback: '后端',
+      activeBadge: '当前',
+      noBackends: '未配置后端。',
+      dialogs: {
+        add: {
+          title: '添加后端',
+          description: '添加一个 Studio 后端 URL，并可选设为当前后端。',
+          label: '名称',
+          labelPlaceholder: '例如：本地 Studio',
+          baseUrl: '基础 URL',
+          baseUrlPlaceholder: 'http://127.0.0.1:3000',
+          examples: '示例：`http://127.0.0.1:3000` 或 `https://studio.example.com`',
+          setActive: '设为当前（将重新加载）',
+        },
+        edit: {
+          title: '编辑后端',
+          description: '更新后端名称或 URL。修改当前后端 URL 会重新加载应用。',
+          label: '名称',
+          baseUrl: '基础 URL',
+        },
+      },
+      confirmRemove: {
+        title: '移除后端？',
+      },
+      toasts: {
+        failedToAdd: '添加后端失败',
+        added: '后端已添加',
+        addedAndActivated: '后端已添加并设为当前',
+        failedToUpdate: '更新后端失败',
+        updated: '后端已更新',
+        switching: '正在切换后端...',
+        failedToRemove: '移除后端失败',
+        removed: '后端已移除',
+        refreshed: '后端列表已刷新',
+      },
+    },
+    pluginSettings: {
+      title: '插件设置',
+      subtitle: '配置由各插件分别持久化',
+      noSchemaPublished: '暂无插件发布 `settingsSchema`。',
+      fields: {
+        plugin: '插件',
+      },
+      searchPlugins: '搜索插件',
+      loadingConfig: '插件配置加载中...',
+      noFieldsDeclared: '该插件未声明任何设置字段。',
+      toasts: {
+        saved: '插件配置已保存',
+      },
+    },
+    opencodeConfig: {
+      scope: {
+        title: '配置范围',
+        searchPlaceholder: '搜索范围',
+        user: '用户配置',
+        project: '项目配置',
+        custom: '自定义（OPENCODE_CONFIG）',
+        projectRequiresDirectory: '项目范围需要选择一个活动目录。',
+      },
+      actions: {
+        reloadOpenCode: '重载 OpenCode',
+      },
+      reloadConfirm: {
+        title: '现在重载 OpenCode？',
+        description: '将更新后的配置应用到正在运行的 OpenCode 进程。',
+      },
+      jsoncConfirm: {
+        title: '将 .jsonc 重写为 JSON？',
+        description: '从该界面保存会把 .jsonc 重写为 JSON，并移除注释/末尾逗号。',
+      },
+      toasts: {
+        failedToCopyToClipboard: '复制到剪贴板失败',
+        openCodeReloaded: 'OpenCode 已重载',
+      },
+      providerHealth: {
+        apiKeyEmpty: 'API key 为空',
+        copiedApiKey: '已复制 API key',
+      },
+      errors: {
+        commandTemplateRequired: '命令模板不能为空',
+        invalidJson: 'JSON 无效',
+        expectedJsonObjectForEntry: '期望 {kind} 条目为 JSON 对象',
+        fixJsonErrorsBeforeSaving: '保存前请先修复 JSON 错误',
+        openCodeConfigSaved: 'OpenCode 配置已保存',
+        refreshedAgentModelLists: '已刷新 agent/model 列表',
+        failedToRefreshAgentModelLists: '刷新 agent/model 列表失败',
+        noToolsSelectedForBulkApply: '批量应用时未选择任何工具',
+        noCommitTemplateConfigured: '未配置提交模板',
+        fixValidationErrorsBeforeSavingCount: '保存前请先修复校验错误（{count}）',
+        copiedKindJson: '已复制 {kind} JSON',
+        pasteKindJsonPrompt: "粘贴 {kind} JSON 以导入到 '{id}'",
+        importedKindJsonInto: '已将 {kind} JSON 导入到 {id}',
+        setPermissionWildcard: '已设置 permission.* = {action}',
+        appliedActionToToolsCount: '已对 {count} 个工具应用 {action}',
+      },
+
+      validation: {
+        title: '校验',
+        issueCounts: '{errors} 个错误，{warnings} 个警告',
+        moreIssues: '... (还有 {count} 条)',
+      },
+
+      stringListEditor: {
+        advancedLabel: '高级文本',
+        itemsCount: '{count} 项',
+      },
+
+      sections: {
+        common: {
+          resetSection: '重置本节',
+          collapse: '收起',
+          expand: '展开',
+          search: '搜索',
+          options: {
+            triState: {
+              default: 'default',
+              true: 'true',
+              false: 'false',
+            },
+          },
+          showAdvancedText: '显示高级文本',
+          hideAdvancedText: '隐藏高级文本',
+          none: '无',
+          enabled: '启用',
+          disabled: '禁用',
+          applyJson: '应用 JSON',
+        },
+        providers: {
+          title: '允许/拒绝列表，以及 provider 覆盖与模型配置。',
+          actions: {
+            refreshHealth: '刷新健康状态',
+            refreshHealthAria: '刷新 provider 健康状态',
+            addProvider: '添加 provider',
+            addProviderAria: '添加 provider',
+          },
+          placeholders: {
+            newProviderId: '新的 provider id',
+          },
+          empty: '未配置 provider。',
+          allowDeny: {
+            title: 'Provider 允许/拒绝列表',
+            actions: {
+              showBrowse: '浏览列表',
+              hideBrowse: '隐藏浏览列表',
+            },
+            enabled: {
+              title: '启用',
+              help: '如果非空，则仅使用这些 provider。',
+              clearAria: '清除启用的 provider',
+              toggleTitle: '切换启用的 provider',
+              advancedLabel: '启用的 provider（高级）',
+            },
+            disabled: {
+              title: '禁用',
+              help: '这些 provider 将被排除。',
+              clearAria: '清除禁用的 provider',
+              toggleTitle: '切换禁用的 provider',
+              advancedLabel: '禁用的 provider（高级）',
+            },
+            picker: {
+              panelTitle: 'Providers',
+              placeholder: '添加 provider id',
+            },
+            placeholders: {
+              filterProviders: '筛选 provider（例如 openai）',
+              enabledAdvanced: 'anthropic\nopenai',
+              disabledAdvanced: 'openrouter',
+            },
+            empty: {
+              noMatchingProviders: '没有匹配的 provider。',
+            },
+            errors: {
+              conflicts: '冲突：{conflicts}（不能同时启用和禁用）',
+            },
+          },
+          bulkActions: {
+            title: '批量操作',
+            help: '使用选择快速设置允许/拒绝列表。',
+            fields: {
+              conflictPolicy: '冲突策略',
+              selection: '选择',
+            },
+            search: {
+              searchPolicies: '搜索策略',
+            },
+            picker: {
+              panelTitle: 'Providers',
+              placeholder: '添加 provider id（支持粘贴）',
+            },
+            actions: {
+              clearSelectionAria: '清除选择',
+              enableOnly: '仅启用所选项',
+              disableAllExcept: '除所选项外全部禁用',
+            },
+            errors: {
+              envCheck: '环境检查：{error}',
+            },
+          },
+          providerCard: {
+            actions: {
+              expandProviderAria: '展开 provider',
+              collapseProviderAria: '收起 provider',
+              removeProviderAria: '移除 provider',
+            },
+            sections: {
+              optionsTitle: '选项',
+            },
+            fields: {
+              displayName: '显示名称',
+              apiBaseUrl: 'API 基础 URL',
+              idOverride: 'ID 覆盖',
+              npmPackage: 'NPM 包',
+              environmentVariables: '环境变量',
+              modelSlugs: '模型 slugs',
+              whitelistModels: '模型白名单',
+              blacklistModels: '模型黑名单',
+              apiKey: 'API key',
+              baseUrl: 'Base URL',
+              enterpriseUrl: 'Enterprise URL',
+              setCacheKey: '设置 cache key',
+              includeUsage: '包含 usage',
+              useCompletionUrls: '使用 completion URLs',
+              timeout: '超时',
+              timeoutMs: '超时（毫秒）',
+              region: '区域',
+              profile: 'Profile',
+              endpoint: 'Endpoint',
+              project: 'Project',
+              location: 'Location',
+              deploymentId: 'Deployment ID',
+              resourceGroup: 'Resource group',
+              gitlabInstanceUrl: 'GitLab 实例 URL',
+            },
+            search: {
+              searchTimeoutModes: '搜索模式',
+            },
+            timeoutModes: {
+              default: 'default',
+              disabled: 'disabled',
+              custom: 'custom',
+            },
+            placeholders: {
+              envVar: 'OPENAI_API_KEY',
+              modelSlugExampleA: 'gpt-4.1',
+              modelSlugExampleB: 'gpt-3.5',
+            },
+          },
+          modelsEditor: {
+            title: '模型',
+            placeholders: {
+              modelId: '模型 id',
+            },
+            actions: {
+              addModel: '添加模型',
+              expandModelAria: '展开模型',
+              collapseModelAria: '收起模型',
+              removeModelAria: '移除模型',
+            },
+            empty: {
+              noModels: '未配置模型。',
+            },
+            options: {
+              status: {
+                default: 'default',
+                alpha: 'alpha',
+                beta: 'beta',
+                deprecated: 'deprecated',
+              },
+              interleaved: {
+                default: 'default',
+                true: 'true',
+                reasoningContent: 'reasoning_content',
+                reasoningDetails: 'reasoning_details',
+              },
+            },
+          },
+          mapsEditor: {
+            title: '映射',
+            actions: {
+              showJson: '显示 JSON',
+              hideJson: '隐藏 JSON',
+            },
+            headers: {
+              title: 'Headers',
+              notObjectWarning: '当前 headers 不是对象；使用表格编辑会覆盖该值。',
+              placeholders: {
+                header: 'Header',
+                newHeader: '新 header',
+                value: '值',
+              },
+              actions: {
+                removeHeaderAria: '移除 header',
+                addHeaderAria: '添加 header',
+              },
+            },
+            featureFlags: {
+              title: 'Feature flags',
+              notObjectWarning: '当前 featureFlags 不是对象；使用表格编辑会覆盖该值。',
+              placeholders: {
+                flag: 'Flag',
+                newFlag: '新 flag',
+              },
+              actions: {
+                removeFlagAria: '移除 flag',
+                addFlagAria: '添加 flag',
+              },
+            },
+            optionsExtra: {
+              title: '选项（额外）',
+              help: 'provider.options 中未被已知字段覆盖的键值对。',
+              placeholders: {
+                newKey: '新键',
+                jsonValue: '"value"',
+              },
+              actions: {
+                removeEntryAria: '移除条目',
+                addEntryAria: '添加条目',
+              },
+            },
+            json: {
+              headers: 'Headers（JSON）',
+              featureFlags: 'Feature flags（JSON）',
+              optionsExtra: 'Options JSON（额外）',
+            },
+          },
+        },
+        agents: {
+          title: 'Agent 默认值与覆盖配置。',
+          actions: {
+            addAgent: '添加 Agent',
+            addAgentAria: '添加 Agent',
+          },
+          placeholders: {
+            agentName: 'Agent 名称',
+            filterAgents: '筛选 Agent',
+          },
+          picker: {
+            count: '{count} 个 Agent',
+            empty: '未配置 Agent。',
+            badges: {
+              disabled: '禁用',
+              hidden: '隐藏',
+            },
+          },
+          editor: {
+            empty: '从列表中选择一个 Agent 进行编辑。',
+            help: {
+              singleEdit: '一次只编辑一个 Agent，以保持界面响应。',
+            },
+            actions: {
+              copyJson: '复制 JSON',
+              importJson: '导入 JSON',
+              showAdvanced: '显示高级项',
+              hideAdvanced: '隐藏高级项',
+              toggleAdvancedAria: '切换高级项',
+              removeAgentAria: '移除 Agent',
+            },
+            tabs: {
+              basics: '基础',
+              prompt: 'Prompt',
+              permissions: '权限',
+              json: 'JSON',
+            },
+            fields: {
+              model: '模型',
+              variant: '变体',
+              temperature: '温度',
+              topP: 'Top-p',
+              description: '描述',
+              mode: '模式',
+              color: '颜色',
+              steps: '步数',
+            },
+            search: {
+              searchModels: '搜索模型',
+              searchModes: '搜索模式',
+            },
+            defaults: {
+              modelInherit: '默认（继承）',
+            },
+            placeholders: {
+              variant: '默认模型变体',
+              color: '#FF5733',
+            },
+            toggles: {
+              disabled: '禁用',
+              hidden: '隐藏',
+            },
+            prompt: {
+              actions: {
+                insertSkeleton: '插入骨架',
+                insertFrontmatter: '插入 frontmatter',
+              },
+            },
+            permissions: {
+              title: '权限覆盖',
+              help: {
+                inherit: '未设置的键将继承全局权限。',
+              },
+            },
+            json: {
+              optionsTitle: '选项（JSON）',
+              permissionAdvancedTitle: '权限（高级 JSON）',
+            },
+            modeOptions: {
+              default: 'default',
+              primary: 'primary',
+              subagent: 'subagent',
+              all: 'all',
+            },
+          },
+        },
+        general: {
+          title: '顶层身份、默认值与 schema。',
+          common: {
+            all: '全部',
+          },
+          options: {
+            modelStatusFilter: {
+              active: 'active',
+              beta: 'beta',
+              alpha: 'alpha',
+              deprecated: 'deprecated',
+            },
+            logLevel: {
+              default: 'default',
+              DEBUG: 'DEBUG',
+              INFO: 'INFO',
+              WARN: 'WARN',
+              ERROR: 'ERROR',
+            },
+            shareMode: {
+              default: 'default',
+              manual: 'manual',
+              auto: 'auto',
+              disabled: 'disabled',
+            },
+            autoUpdate: {
+              default: 'default',
+              notify: 'notify',
+              true: 'true',
+              false: 'false',
+            },
+            snapshotTracking: {
+              default: 'default',
+              true: 'true',
+              false: 'false',
+            },
+          },
+          help: {
+            discovery: '模型/Agent 来自正在运行的 OpenCode server 自动发现。',
+            schemaUrl: '通常保持默认值；它会启用校验与编辑器提示。',
+            theme: 'OpenCode（TUI/Web）中的主题名称。',
+            username: '显示在对话中；默认使用系统用户名。',
+            defaultAgentRequirement: '必须是主 Agent（subagent/hidden 无效）。',
+            smallModel: '用于轻量任务（例如生成标题）。',
+          },
+          fields: {
+            schemaUrl: 'Schema URL',
+            theme: '主题',
+            username: '用户名',
+            defaultAgent: '默认 Agent',
+            defaultModel: '默认模型',
+            smallModel: '小模型',
+            logLevel: '日志级别',
+            shareMode: '分享模式',
+            autoUpdate: '自动更新',
+            snapshotTracking: '快照跟踪',
+          },
+          placeholders: {
+            schemaUrl: 'https://opencode.ai/config.json',
+            theme: 'opencode',
+            username: '你的名字',
+          },
+          search: {
+            searchAgents: '搜索 Agent',
+            searchModels: '搜索模型',
+            searchProviders: '搜索 provider',
+            searchStatuses: '搜索状态',
+            searchFamilies: '搜索 family',
+            searchSorts: '搜索排序',
+            searchLogLevels: '搜索日志级别',
+            searchShareModes: '搜索分享模式',
+            searchUpdateModes: '搜索更新模式',
+            searchSnapshotModes: '搜索快照模式',
+          },
+          actions: {
+            refreshOptionLists: '刷新 Agent/模型列表',
+            browseModels: '浏览模型',
+            hideModelBrowser: '隐藏模型浏览器',
+          },
+          defaultAgent: {
+            options: {
+              subagentSuffix: '（subagent）',
+              hiddenSuffix: '（hidden）',
+            },
+          },
+          modelBrowser: {
+            title: '模型浏览器',
+            fields: {
+              search: '搜索',
+              provider: 'Provider',
+              status: '状态',
+              family: 'Family',
+              minContext: '最小上下文',
+              minOutput: '最小输出',
+              sort: '排序',
+            },
+            sortOptions: {
+              alpha: '按名称',
+              contextDesc: '上下文 ↓',
+              outputDesc: '输出 ↓',
+              costTotalAsc: '成本（入+出）↑',
+              costInputAsc: '输入成本 ↑',
+              costOutputAsc: '输出成本 ↑',
+              releaseDesc: '发布日期 ↓',
+            },
+            placeholders: {
+              search: 'openai/gpt 或名称',
+            },
+            filters: {
+              tools: '工具',
+              reasoning: '推理',
+              imageInput: '图片输入',
+              pdfInput: 'PDF 输入',
+            },
+            actions: {
+              closeAria: '关闭模型浏览器',
+              setDefaultModel: '设为默认模型',
+              setSmallModel: '设为小模型',
+              defaultLabel: '默认',
+              smallLabel: '小模型',
+            },
+            help: {
+              countLine: '显示 {count} 个模型。点击一行设置默认模型或小模型。',
+            },
+            empty: '没有匹配的模型。',
+          },
+        },
+        compaction: {
+          title: '上下文压缩默认值。',
+          fields: {
+            autoCompact: '自动压缩',
+            pruneToolOutput: '裁剪工具输出',
+          },
+        },
+        tui: {
+          title: '滚动行为与 diff 渲染。',
+          fields: {
+            scrollSpeed: '滚动速度',
+            scrollAcceleration: '滚动加速度',
+            diffStyle: 'Diff 样式',
+          },
+          options: {
+            diffStyle: {
+              default: 'default',
+              auto: 'auto',
+              stacked: 'stacked',
+            },
+          },
+        },
+        keybinds: {
+          title: '按名称覆盖快捷键。',
+        },
+        enterprise: {
+          title: 'Enterprise URL 覆盖配置。',
+          fields: {
+            enterpriseUrl: 'Enterprise URL',
+          },
+          placeholders: {
+            enterpriseUrl: 'https://github.example.com',
+          },
+        },
+        permissions: {
+          title: '全局工具权限。',
+          presets: {
+            title: '预设',
+            fields: {
+              preset: '预设',
+              applyMode: '应用模式',
+            },
+            search: {
+              searchPresets: '搜索预设',
+              searchModes: '搜索模式',
+            },
+            options: {
+              safeDefault: '安全默认',
+              powerUser: '高权限',
+              readOnly: '只读',
+              merge: '合并',
+              replace: '替换',
+            },
+            actions: {
+              applyPreset: '应用预设',
+            },
+            tip: '提示：使用“合并”以保留已有自定义规则。',
+          },
+          bulk: {
+            title: '批量操作',
+            fields: {
+              action: '动作',
+              target: '目标',
+              tag: '标签',
+              clearOthers: '清除其他项',
+              clearNonTargetKeys: '清除非目标键',
+              selection: '选择',
+            },
+            search: {
+              searchActions: '搜索动作',
+              searchTargets: '搜索目标',
+              searchTags: '搜索标签',
+            },
+            picker: {
+              panelTitle: '工具',
+              placeholder: '添加工具 id（支持粘贴）',
+              emptyText: '未选择',
+            },
+            selectionCount: '已选择 {count} 项',
+            toolsCount: '{count} 个工具',
+            help: '批量操作只写入字符串规则；除非被覆盖，pattern map 会保持不变。',
+            actions: {
+              selectByTag: '按标签选择工具',
+              applyBulk: '应用批量操作',
+            },
+            options: {
+              allow: 'allow',
+              ask: 'ask',
+              deny: 'deny',
+              targetSelection: 'selection',
+              targetByTag: '按标签',
+              targetAllKnown: '所有已知工具',
+              targetStarOnly: '仅设置 *',
+              tagFilesystem: 'filesystem',
+              tagExec: 'exec',
+              tagNetwork: 'network',
+              tagOther: 'other',
+            },
+          },
+          test: {
+            title: '测试权限',
+            fields: {
+              tool: '工具',
+              input: '输入（路径/命令）',
+            },
+            search: {
+              searchTools: '搜索工具',
+            },
+            placeholders: {
+              input: 'src/app.ts 或 curl https://...',
+            },
+            result: {
+              label: '结果：',
+              summary: '{action}（来源：{source}，匹配：{matched}）',
+            },
+            steps: {
+              noRule: '（无规则）',
+              matchWord: '匹配',
+              noneAction: '（无）',
+              stepLine: '{kind}{matchedText} -> {action}',
+            },
+          },
+          rules: {
+            title: '全局权限规则',
+            fields: {
+              permission: '权限',
+              action: '动作',
+            },
+            search: {
+              searchRules: '搜索规则',
+              searchActions: '搜索动作',
+            },
+            actions: {
+              editPatterns: '编辑匹配规则',
+              addPattern: '添加匹配',
+              applyPatterns: '应用匹配规则',
+            },
+            rulesCount: '{count} 条规则',
+            patternMapTitle: '{key} 匹配表',
+            patternMapLabel: '匹配表',
+            placeholders: {
+              pattern: '**/*.ts',
+            },
+            help: {
+              orderMatters: '顺序很重要（以最后一次匹配为准）。',
+            },
+            options: {
+              default: 'default',
+              allow: 'allow',
+              ask: 'ask',
+              deny: 'deny',
+              patternMap: 'pattern map',
+            },
+          },
+          customRules: {
+            title: '自定义工具规则',
+            fields: {
+              toolId: '工具 id',
+              action: '动作',
+            },
+            search: {
+              searchTools: '搜索工具',
+              searchActions: '搜索动作',
+            },
+            placeholders: {
+              selectTool: '选择工具 id...',
+            },
+            actions: {
+              addRule: '添加规则',
+            },
+            toolIdsUnavailable: '无法获取工具 ID：{error}',
+            empty: '未配置自定义规则。',
+          },
+          jsonEditors: {
+            title: '权限规则（高级 JSON）',
+          },
+        },
+        experimental: {
+          title: '不稳定设置。',
+          fields: {
+            disablePasteSummary: '禁用粘贴总结',
+            batchTool: '批量工具',
+            openTelemetry: 'OpenTelemetry',
+            continueLoopOnDeny: '拒绝时继续循环',
+            mcpTimeoutMs: 'MCP 超时（毫秒）',
+          },
+          primaryTools: {
+            title: '主要工具',
+            help: '如果设置了，OpenCode 在规划时会优先选择这些工具。',
+            empty: '没有匹配的工具。',
+            toolIdsUnavailable: '无法获取工具 ID：{error}',
+            placeholders: {
+              filterTools: '筛选工具（例如 bash）',
+              advanced: 'bash\nread',
+            },
+          },
+        },
+        instructions: {
+          title: '指令来源、技能与插件。',
+          panels: {
+            instructionsTitle: '指令',
+            instructionsHelp: '以额外指令加载的文件/URL。',
+            skillsPathsTitle: '技能路径',
+            skillsPathsHelp: '包含可复用 OpenCode skills 的额外文件夹。',
+            pluginsTitle: '插件',
+            pluginsHelp: 'NPM 说明符或本地文件 URL（例如 file:./plugin.js）。',
+          },
+          empty: {
+            instructions: '未添加指令。',
+            skillsPaths: '未添加技能路径。',
+            plugins: '未添加插件。',
+          },
+          placeholders: {
+            instructions: '/path/to/instructions.md 或 https://...',
+            skillsPath: '/path/to/skills',
+            plugin: "{'@scope/name@version 或 file:...'}",
+          },
+          actions: {
+            clearInstructionsAria: '清除指令',
+            addInstructionAria: '添加指令',
+            clearSkillsPathsAria: '清除技能路径',
+            addSkillsPathAria: '添加技能路径',
+            clearPluginsAria: '清除插件',
+            addPluginAria: '添加插件',
+          },
+        },
+        server: {
+          title: '服务器选项与文件监视忽略。',
+          fields: {
+            port: '端口',
+            hostname: '主机名',
+            mdns: 'mDNS',
+            mdnsDomain: 'mDNS 域名',
+          },
+          placeholders: {
+            hostname: '127.0.0.1',
+            mdnsDomain: 'opencode.local',
+            corsOrigin: 'https://example.com',
+            watcherIgnoreGlob: '**/dist',
+            watcherIgnoreAdvanced: '**/dist\n**/.git',
+          },
+          listsTitle: '列表',
+          cors: {
+            title: 'CORS 来源',
+            help: '每项一个 origin（精确匹配）。',
+            panelTitle: 'CORS',
+            advancedLabel: 'CORS 来源（高级文本）',
+            clearAria: '清除 CORS 来源',
+          },
+          watcherIgnore: {
+            title: '监视忽略规则',
+            help: '文件监视需要忽略的 glob 模式。',
+            panelTitle: '忽略 globs',
+            advancedLabel: '监视忽略规则（高级文本）',
+            clearAria: '清除监视忽略规则',
+          },
+        },
+        commands: {
+          title: '自定义斜杠命令。',
+          placeholders: {
+            commandName: '命令名称',
+            template: '模板',
+            filterCommands: '筛选命令',
+          },
+          actions: {
+            addCommand: '添加命令',
+            addCommandAria: '添加命令',
+            removeCommandAria: '移除命令',
+            copyJson: '复制 JSON',
+            importJson: '导入 JSON',
+            insertSkeleton: '插入骨架',
+            insertFrontmatter: '插入 Frontmatter',
+          },
+          empty: {
+            noCommands: '未配置命令。',
+          },
+          fields: {
+            template: '模板',
+            description: '描述',
+            agent: 'Agent',
+            model: '模型',
+            subtask: '子任务',
+          },
+          help: {
+            agentName: "{'使用 Agent 名称（不含 @）。留空则使用默认 Agent。'}",
+          },
+          search: {
+            searchAgents: '搜索 Agent',
+            searchModels: '搜索模型',
+          },
+          defaults: {
+            useConfigDefault: '默认（使用配置）',
+          },
+        },
+        formatter: {
+          title: '格式化器与语言服务器配置。',
+          fields: {
+            command: '命令',
+            extensions: '扩展名',
+            environmentJson: '环境变量（JSON）',
+          },
+          formatters: {
+            disableAll: '禁用所有格式化器',
+            placeholders: {
+              formatterId: '格式化器 ID',
+            },
+            actions: {
+              add: '添加格式化器',
+              addAria: '添加格式化器',
+              removeAria: '移除格式化器',
+            },
+            empty: '未配置格式化器。',
+            command: {
+              panelTitle: '格式化命令',
+              placeholder: 'prettier',
+              advancedPlaceholder: 'prettier\n--write\n$FILE',
+            },
+            extensions: {
+              placeholder: '.ts',
+              advancedPlaceholder: '.ts\n.tsx',
+            },
+          },
+          lsp: {
+            disableAll: '禁用所有 LSP 服务',
+            placeholders: {
+              lspId: 'LSP ID',
+            },
+            actions: {
+              add: '添加 LSP',
+              addAria: '添加 LSP',
+              removeAria: '移除 LSP',
+            },
+            empty: '未配置 LSP 服务。',
+            fields: {
+              mode: '模式',
+              initializationJson: '初始化（JSON）',
+            },
+            search: {
+              searchModes: '搜索模式',
+            },
+            command: {
+              panelTitle: 'LSP 命令',
+              placeholder: 'typescript-language-server',
+              advancedPlaceholder: 'typescript-language-server\n--stdio',
+            },
+          },
+        },
+        mcp: {
+          title: 'Model Context Protocol（MCP）服务器。',
+          actions: {
+            connections: '连接',
+            connectionsHelp: '连接、断开并认证 MCP 服务器',
+            manageConnectionsAria: '管理 MCP 连接',
+            addServer: '添加 MCP 服务器',
+            addServerAria: '添加 MCP 服务器',
+            removeServerAria: '移除 MCP 服务器',
+          },
+          placeholders: {
+            serverName: '服务器名称',
+          },
+          empty: '未配置 MCP 服务器。',
+          fields: {
+            type: '类型',
+            command: '命令',
+            timeoutMs: '超时（毫秒）',
+            environmentJson: '环境变量（JSON）',
+            url: 'URL',
+            headersJson: '请求头（JSON）',
+            oauth: 'OAuth',
+          },
+          search: {
+            searchTypes: '搜索类型',
+            searchOauth: '搜索 OAuth',
+          },
+          command: {
+            panelTitle: 'MCP 启动命令',
+            placeholder: 'npx',
+            advancedPlaceholder: "npx\n{'@modelcontextprotocol/server-filesystem'}",
+          },
+          oauth: {
+            clientId: '客户端 ID',
+            clientSecret: '客户端密钥',
+            scope: 'Scope',
+          },
+          options: {
+            types: {
+              toggle: 'toggle',
+              local: 'local',
+              remote: 'remote',
+            },
+            oauth: {
+              default: 'default',
+              config: 'config',
+              disabled: 'disabled',
+            },
+          },
+        },
+      },
     },
     troubleshooting: {
       title: '故障排查',
@@ -133,7 +1263,1693 @@ export default {
           transport: '传输',
           expand: '展开',
         },
+        toolDetails: '工具详情',
+        toolDetailsTable: {
+          tool: '工具',
+          transport: '传输',
+          expand: '展开',
+        },
+        toolDetailsHint: '工具展开默认值按工具分别配置。',
+        activityTransportHelp:
+          'Transport 控制是否请求活动数据。Expand 控制默认展开状态，并在 Transport 始终开启时决定初始数据是否包含完整详情。',
       },
+    },
+  },
+  terminal: {
+    defaults: {
+      defaultFolder: '默认',
+      gitFolder: 'Git',
+      gitTerminal: 'Git 终端',
+    },
+    keybar: {
+      titles: {
+        ctrlToggle: 'Ctrl（切换）',
+        altToggle: 'Alt（切换）',
+        shiftToggle: 'Shift（切换）',
+      },
+      keys: {
+        ctrl: 'Ctrl',
+        alt: 'Alt',
+        shift: 'Shift',
+        esc: 'Esc',
+        tab: 'Tab',
+        backspace: '退格',
+        enter: '回车',
+        left: '左',
+        down: '下',
+        up: '上',
+        right: '右',
+        home: 'Home',
+        end: 'End',
+        pageUp: 'PgUp',
+        pageDown: 'PgDn',
+      },
+    },
+    emptyState: {
+      title: '选择一个终端会话',
+      description: '使用终端面板选择现有会话或创建新会话。',
+      actionLabel: '打开终端面板',
+    },
+    sidebar: {
+      title: '终端',
+      newFolder: '新建文件夹',
+      refreshSessions: '刷新会话',
+      searchPlaceholder: '搜索文件夹和会话',
+      searchAria: '搜索终端文件夹和会话',
+      clearSearch: '清除搜索',
+      emptyTitle: '没有匹配的文件夹或会话',
+      emptyHint: '试试其他关键字。',
+      expandFolder: '展开文件夹',
+      collapseFolder: '收起文件夹',
+      pinned: '置顶',
+      recent: '最近',
+    },
+    folder: {
+      new: '新建文件夹',
+      namePlaceholder: '文件夹名称',
+      create: '创建文件夹',
+      saveName: '保存文件夹名称',
+      rename: '重命名文件夹',
+      delete: '删除文件夹',
+      newTerminalInFolder: '在文件夹中新建终端',
+      newTerminalInThisFolder: '在此文件夹中新建终端',
+      deleteConfirmTitle: '删除文件夹？',
+      deleteConfirmDescription: '此文件夹中的会话将移动到其他文件夹。',
+      deleteConfirmText: '删除',
+    },
+    active: {
+      noneSelected: '未选择终端',
+    },
+    session: {
+      namePlaceholder: '终端名称',
+      create: '创建',
+      creating: '创建中...',
+      cancelRename: '取消重命名',
+      saveRename: '保存重命名',
+    },
+    connection: {
+      connectLabel: '连接终端',
+      disconnectLabel: '断开终端连接',
+      disconnectDescription: '你可以随时重新连接。终端会话本身不会被删除。',
+    },
+    dialogs: {
+      newTerminal: {
+        title: '新建终端',
+        description: '在 {folder} 中创建终端',
+      },
+      renameTerminal: {
+        title: '重命名终端',
+        description: '更新终端名称',
+      },
+    },
+    actions: {
+      title: '终端操作',
+      titleWithName: '终端操作：{name}',
+      rename: '重命名终端',
+      disconnectStream: '断开连接',
+      disconnectConfirmTitle: '断开终端连接？',
+      disconnectConfirmDescription: '终端会话会保留，稍后可重新连接。',
+      disconnect: '断开',
+      pin: '置顶终端',
+      unpin: '取消置顶',
+      delete: '删除终端',
+      deleteConfirmTitle: '删除终端会话？',
+      deleteConfirmDescription: '这将停止并移除此终端会话。',
+      deleteConfirmText: '删除',
+    },
+    errors: {
+      deleteAllInFolder: '无法删除此文件夹下的所有终端',
+      streamRecoveredPartialHistory: '终端连接已恢复，但历史记录不完整；较早的输出可能缺失',
+      terminalExited: '终端已退出',
+      sessionNoLongerExists: '终端会话已不存在',
+      failedToSendInput: '发送终端输入失败',
+      failedToResize: '调整终端大小失败',
+      failedToCloseSession: '关闭终端会话失败',
+      failedToRemoveSession: '移除终端会话失败',
+    },
+  },
+  chat: {
+    toasts: {
+      noSessionErrorToCopy: '没有可复制的会话错误',
+      copiedErrorDetails: '已复制错误详情',
+      failedToCopyErrorDetails: '复制错误详情失败',
+      titleCannotBeEmpty: '标题不能为空',
+      sessionRenamed: '会话已重命名',
+      noTranscriptAvailable: '没有可用的转录',
+      transcriptCopied: '转录已复制',
+      transcriptExportedAs: '转录已导出为 {filename}',
+      sharingDisabledInConfig: '配置中已禁用分享',
+      shareLinkCopied: '分享链接已复制',
+      sessionShared: '会话已分享',
+      sessionUnshared: '会话已取消分享',
+      selectModelToCompact: '请选择一个模型来压缩该会话',
+      compactionStarted: '压缩已开始',
+      abortedRun: '已中止运行',
+      failedToAbortRun: '中止运行失败',
+      pressEscAgainToAbort: '再次按 Esc 以中止（{modKey}+.）查看快捷键',
+      answerAllQuestions: '请回答所有问题',
+      answerSent: '答案已发送',
+      questionRejected: '问题已拒绝',
+    },
+    attention: {
+      title: {
+        permissionRequired: '需要授权',
+        question: '问题',
+      },
+      subtitle: {
+        answerAllToEnableSend: '回答所有问题后才能发送。',
+        blocksUntilRespond: '在你回应前，Agent 会被阻塞。',
+      },
+      ui: {
+        rejectPermission: '拒绝权限',
+        allowOnce: '允许一次',
+        alwaysAllow: '始终允许',
+        rejectQuestion: '拒绝问题',
+        sendAnswers: '发送答案',
+        permissionLabel: '权限',
+        patternsLabel: '匹配模式',
+        rememberedForLabel: '将为以下项记住',
+        previousQuestion: '上一个问题',
+        nextQuestion: '下一个问题',
+        questionPager: '问题 {current} / {total}',
+        multiple: '多选',
+        single: '单选',
+        custom: '自定义',
+        typeYourOwnAnswer: '输入你自己的答案',
+        customOnlySentHint: '仅在选择自定义选项时发送。',
+        noQuestionsAvailable: '没有可用的问题。',
+      },
+      toasts: {
+        pleaseAnswerAllQuestions: '请回答所有问题',
+        answerSent: '答案已发送',
+        questionRejected: '问题已拒绝',
+        permissionRejected: '权限已拒绝',
+        permissionGranted: '权限已授权',
+      },
+    },
+    composer: {
+      actions: {
+        compact: {
+          label: '压缩会话',
+          description: '使用所选模型进行总结',
+        },
+        init: {
+          label: '初始化 AGENTS.md',
+          description: '将 /init 命令插入到聊天输入框',
+        },
+        review: {
+          label: '审查改动',
+          description: '将 /review 命令插入到聊天输入框',
+        },
+      },
+      picker: {
+        modelTitle: '模型',
+        agentTitle: 'Agent',
+        variantTitle: '思考',
+        optionsTitle: '选项',
+        searchModels: '搜索模型',
+        searchAgents: '搜索 Agent',
+        searchVariants: '搜索思考变体',
+        searchOptions: '搜索选项',
+        emptyModels: '未找到模型。',
+        emptyAgents: '未找到 Agent。',
+        emptyVariants: '未找到思考变体。',
+        emptyOptions: '未找到选项。',
+      },
+      model: {
+        autoDefault: '自动（OpenCode 默认）',
+        autoDefaultDescription: '让 OpenCode 自动选择默认模型',
+      },
+      editor: {
+        open: '打开编辑器',
+        collapse: '收起编辑器',
+      },
+      input: {
+        placeholder: '输入消息…',
+      },
+    },
+
+    page: {
+      nav: {
+        previousUserMessage: '上一条用户消息',
+        nextUserMessage: '下一条用户消息',
+        bottom: '底部',
+      },
+      attachments: '附件',
+      attachmentsWithCount: '附件 ({count})',
+      tools: '工具',
+      usage: {
+        tokensSuffix: '{value} tokens',
+      },
+      primary: {
+        send: '发送',
+        sendMessage: '发送消息',
+        stop: '停止',
+        stopRun: '停止运行',
+      },
+    },
+
+    attachments: {
+      title: '附件',
+      attaching: '正在附加…',
+      countLabelOne: '1 个文件',
+      countLabelMany: '{count} 个文件',
+      repo: 'repo',
+      removeAttachmentAria: '移除附件',
+      actions: {
+        addFromComputer: '从电脑添加',
+        addFromProject: '从项目添加',
+        clearAll: '清除全部',
+        clear: '清除',
+      },
+      empty: {
+        title: '无附件',
+        description: '使用上方按钮添加文件。',
+      },
+    },
+
+    attachProjectDialog: {
+      title: '附加项目文件',
+      description: '从当前项目选择要附加的文件',
+      pathPlaceholder: '选择文件',
+      attachedCount: '已附加：{count} 个文件',
+    },
+
+    renameSessionDialog: {
+      title: '重命名会话',
+      description: '更新会话标题',
+    },
+
+    messages: {
+      empty: {
+        title: '选择会话',
+        description: '使用会话面板选择或创建会话。',
+        actionLabel: '打开会话面板',
+        desktopDescription: '使用左侧面板选择或创建会话。',
+      },
+      loadingOlder: '正在加载更早的消息...',
+      activity: {
+        moreCount: '+{count} 条更多...',
+        hide: '隐藏',
+      },
+      optimistic: {
+        sending: '发送中...',
+        sent: '已发送',
+      },
+    },
+
+    revertMarker: {
+      revertedMessageCountOne: '已撤销 1 条消息',
+      revertedMessageCountMany: '已撤销 {count} 条消息',
+      boundaryLine: 'revert 边界：{id}',
+      redoTitle: '重做 / 恢复已撤销消息',
+      redo: '重做',
+      restoreAllTitle: '恢复所有已撤销消息',
+      restoreAll: '恢复',
+    },
+
+    roles: {
+      activity: '活动',
+      user: '用户',
+      assistant: '助手',
+      system: '系统',
+    },
+
+    sessionError: {
+      classification: {
+        contextOverflow: '上下文溢出',
+        providerAuth: '认证错误',
+        network: '网络错误',
+        providerApi: 'Provider 错误',
+        sessionError: '会话错误',
+      },
+      body: {
+        withCode: '[{code}] 会话错误',
+        default: '会话错误',
+      },
+      actions: {
+        copyDetails: '复制详情',
+        dismiss: '关闭',
+      },
+    },
+
+    messageItem: {
+      interrupted: '已中断',
+      errorDetails: '错误详情',
+      fileFallback: '文件',
+      attachmentFallback: '附件',
+      fork: {
+        confirmTitle: 'Fork 会话？',
+        confirmDescription: '从该消息 Fork 一个新会话。',
+        confirmAction: 'Fork',
+        actionTitle: '从此处 Fork',
+      },
+      revert: {
+        confirmTitle: '回滚会话？',
+        confirmDescription: '将会话回滚到此处。之后的轮次将被丢弃。',
+        confirmAction: '回滚',
+        actionTitle: '从此处回滚',
+      },
+      copy: {
+        actionTitle: '复制消息',
+      },
+    },
+    sidebar: {
+      errors: {
+        failedToLoadSessions: '加载会话失败',
+      },
+      addDirectoryDialog: {
+        title: '添加目录',
+        description: '添加一个目录路径以显示会话。',
+        placeholders: {
+          path: '/path/to/project',
+        },
+      },
+      header: {
+        directoriesTitle: '目录',
+        prevPage: '上一页目录',
+        nextPage: '下一页目录',
+        addDirectory: '添加目录',
+        refresh: '刷新',
+        searchPlaceholder: '搜索目录或会话',
+        searchAria: '搜索目录或会话',
+        clearSearch: '清除搜索',
+      },
+      directoriesList: {
+        empty: {
+          title: '还没有目录',
+          description: '添加一个目录路径开始使用。',
+        },
+        search: {
+          sessionsTitle: '会话',
+          noMatchingSessions: '没有匹配的会话。',
+          loadingDirectories: '目录加载中...',
+        },
+        noMatchingDirectories: {
+          title: '没有匹配的目录',
+          description: '试试其他搜索。',
+        },
+        expandDirectory: '展开目录',
+        collapseDirectory: '收起目录',
+        activeSessions: '活跃会话',
+        directoryActions: '目录操作',
+        loadingSessions: '会话加载中...',
+        noSessionsYet: '还没有会话。',
+        pinnedTitle: '置顶',
+        recentTitle: '最近',
+        prevSessionsPage: '上一页会话',
+        nextSessionsPage: '下一页会话',
+      },
+      directoryActions: {
+        menuTitle: '目录操作',
+        refresh: {
+          label: '刷新',
+          description: '重新加载此目录的会话',
+        },
+        newSession: {
+          label: '新建会话',
+          description: '在此目录中新建会话',
+        },
+        remove: {
+          label: '移除目录',
+          description: '从侧边栏移除此目录',
+          confirmTitle: '移除目录？',
+          confirmDescription: '从侧边栏移除此目录。',
+        },
+      },
+      sessionActions: {
+        menuTitle: '会话操作',
+        rename: {
+          label: '重命名会话',
+          description: '修改会话标题',
+        },
+        copyTranscript: {
+          label: '复制对话内容',
+          description: '复制完整对话',
+        },
+        exportTranscript: {
+          label: '导出对话内容',
+          description: '下载 Markdown 对话记录',
+        },
+        share: {
+          label: '分享会话',
+          description: '创建公开链接',
+        },
+        unshare: {
+          label: '取消分享',
+          description: '移除公开链接',
+        },
+        copyShareLink: {
+          label: '复制分享链接',
+          description: '复制当前分享链接',
+        },
+        openShareLink: {
+          label: '打开分享链接',
+          description: '在新标签页打开分享链接',
+        },
+        pin: {
+          label: '置顶会话',
+          description: '保持在列表顶部',
+        },
+        unpin: {
+          label: '取消置顶',
+          description: '从置顶列表移除',
+        },
+        delete: {
+          label: '删除会话',
+          description: '此操作无法撤销',
+          confirmTitle: '删除会话？',
+          confirmDescription: '此操作无法撤销。',
+          confirmText: '删除',
+        },
+      },
+      footers: {
+        recent: {
+          toggleAria: '切换最近会话',
+          title: '最近',
+          prevPage: '上一页最近会话',
+          nextPage: '下一页最近会话',
+          empty: '没有最近会话。',
+        },
+        pinned: {
+          toggleAria: '切换置顶会话',
+          title: '置顶',
+          prevPage: '上一页置顶会话',
+          nextPage: '下一页置顶会话',
+          empty: '没有置顶会话。',
+        },
+        running: {
+          toggleAria: '切换运行中会话',
+          title: '运行中',
+          prevPage: '上一页运行中会话',
+          nextPage: '下一页运行中会话',
+          empty: '没有运行中会话。',
+        },
+      },
+      sessionRow: {
+        status: {
+          idle: '空闲',
+        },
+        threadToggle: {
+          expand: '展开线程',
+          collapse: '收起线程',
+        },
+        loading: {
+          session: '加载会话中',
+          directory: '加载目录中',
+        },
+        attention: {
+          questionAsked: '已提问',
+        },
+        placeholders: {
+          sessionTitle: '会话标题',
+        },
+        rename: {
+          cancel: '取消重命名',
+          save: '保存重命名',
+          saving: '保存重命名中...',
+        },
+      },
+    },
+  },
+  git: {
+    actions: {
+      fetch: '获取',
+      pull: '拉取',
+      push: '推送',
+      sync: '同步',
+      merge: '合并',
+      rebase: '变基',
+      stash: 'Stash',
+    },
+    ui: {
+      sourceControl: '源代码管理',
+      sourceControlActions: '源代码管理操作',
+      repository: '仓库',
+      moreActions: '更多操作',
+      noProjectSelectedTitle: '未选择项目',
+      noProjectSelectedDescription: '请先打开一个项目以使用源代码管理。',
+      noGitRepositoryTitle: '没有 Git 仓库',
+      noGitRepositoryDescription: '选择一个仓库，或在该项目中初始化一个。',
+      selectRepo: '选择仓库',
+      initialize: '初始化',
+
+      branchAction: {
+        branchNamePlaceholder: '分支名称',
+      },
+
+      unsafeRepo: {
+        trustRequiredTitle: '需要信任仓库',
+        blockedDefaultHint: 'Git 已阻止此仓库，因为该机器上尚未将其标记为 safe。',
+        trustThisRepository: '信任此仓库',
+      },
+
+      signing: {
+        sshMayFailTitle: 'SSH 提交签名可能失败',
+        sshMayFailDescription:
+          'SSH agent 不可用或没有密钥。可使用终端加载密钥（ssh-agent/ssh-add）后重试。',
+      },
+
+      sequencer: {
+        mergeInProgressTitle: '正在合并',
+        mergeInProgressDescription: '解决冲突后提交，或中止合并。',
+        rebaseInProgressTitle: '正在变基',
+        rebaseInProgressDescription: '可在终端继续/跳过，或中止变基。',
+        cherryPickInProgressTitle: '正在 cherry-pick',
+        cherryPickInProgressDescription: '解决冲突后继续/跳过，或中止。',
+        revertInProgressTitle: '正在 revert',
+        revertInProgressDescription: '解决冲突后继续/跳过，或中止。',
+        openConflict: '打开冲突',
+        skip: '跳过',
+        mergeActions: '合并操作',
+        rebaseActions: '变基操作',
+        cherryPickActions: 'Cherry-pick 操作',
+        revertActions: 'Revert 操作',
+        moreMergeActions: '更多合并操作',
+        moreRebaseActions: '更多变基操作',
+        moreCherryPickActions: '更多 cherry-pick 操作',
+        moreRevertActions: '更多 revert 操作',
+      },
+
+      dialogs: {
+        selectChangedFileTitle: '选择一个已更改的文件',
+        selectChangedFileDescription: '从源代码管理中选择文件以查看差异。',
+        openSourceControlPanel: '打开源代码管理面板',
+        mergeBranchTitle: '合并分支',
+        mergeBranchDescription: '将一个分支合并到当前分支',
+        rebaseBranchTitle: '变基分支',
+        rebaseBranchDescription: '将当前分支变基到另一个分支',
+        commitErrorDescription: 'Git 返回错误',
+
+        remotes: {
+          title: '远端',
+          description: '管理仓库远端',
+          sections: {
+            addRemote: '添加远端',
+            manageRemote: '管理远端',
+          },
+          selectRemote: '请选择远端',
+          placeholders: {
+            newRemoteName: '新的远端名称',
+            newRemoteUrl: '新的远端 URL',
+          },
+          actions: {
+            setUrl: '设置 URL',
+            copyUrl: '复制 URL',
+          },
+          confirmRemove: {
+            title: '移除远端？',
+            description: '这将移除远端配置。',
+          },
+          empty: '没有远端',
+        },
+
+        tags: {
+          title: '标签',
+          description: '创建并管理标签',
+          sections: {
+            createTag: '创建标签',
+            remoteForDeletingTags: '用于删除标签的远端',
+            existingTags: '现有标签',
+          },
+          placeholders: {
+            annotatedMessageOptional: '（可选）注释信息',
+          },
+          actions: {
+            deleteRemote: '删除远端',
+          },
+          confirmDeleteLocal: {
+            title: '删除本地标签？',
+            description: '只会在本地删除该标签。',
+          },
+          confirmDeleteRemote: {
+            title: '删除远端标签？',
+            description: '将向远端推送删除操作。',
+          },
+          empty: '没有标签',
+        },
+
+        worktrees: {
+          title: '工作树',
+          description: '管理 Git 工作树',
+          sections: {
+            addWorktree: '添加工作树',
+          },
+          actions: {
+            prune: '修剪',
+            addWorktree: '添加工作树',
+            migrate: '迁移',
+            migrateChanges: '迁移更改',
+          },
+          hints: {
+            pathRelativeToRepoRoot: '路径相对仓库根目录，且必须位于其中。',
+          },
+          placeholders: {
+            branchName: '分支名',
+            startPoint: '起点（HEAD）',
+          },
+          createNewBranch: '创建新分支',
+          detached: '（分离）',
+          status: {
+            locked: '已锁定',
+            prunable: '可修剪',
+          },
+          confirmMigrate: {
+            title: '迁移更改到这里？',
+            description: '将该工作树的本地更改迁移到当前工作树。',
+          },
+          confirmRemove: {
+            title: '移除工作树？',
+            description: '这将删除工作树目录。',
+          },
+          empty: '没有工作树',
+        },
+
+        repoPicker: {
+          title: '仓库',
+          description: '选择当前项目中的 Git 仓库',
+          actions: {
+            initializeRepo: '初始化仓库',
+            cloneRepo: '克隆仓库',
+            closeRepo: '关闭仓库',
+            reopenRepo: '重新打开',
+          },
+          empty: {
+            title: '未找到仓库',
+            description: '使用“初始化仓库”创建一个。',
+          },
+          sections: {
+            closedRepos: '已关闭的仓库',
+            parentRepos: '父文件夹中的仓库',
+          },
+        },
+
+        autoFetchSync: {
+          title: '自动获取 / 同步',
+          description: '后台 Git 更新',
+          autoFetch: '自动获取',
+          fetchIntervalMinutes: '获取间隔（分钟）',
+          autoSync: '自动同步（拉取 + 推送）',
+          syncWarning: '谨慎使用 - 若有本地更改或冲突，同步可能失败。',
+          syncIntervalMinutes: '同步间隔（分钟）',
+          postCommitAction: '提交后操作',
+          postCommitHint: '提交后，当分支已设置上游且领先时执行操作。',
+        },
+
+        history: {
+          title: '历史',
+          description: '最近提交',
+          sections: {
+            commits: '提交',
+            files: '文件',
+          },
+          compareBase: '对比基准：',
+          noMessage: '（无提交信息）',
+          emptyCommits: '没有提交',
+          selectCommitToViewDiff: '请选择提交以查看 diff。',
+          fields: {
+            refType: '引用类型',
+            ref: '引用',
+            resetMode: '重置模式',
+          },
+          search: {
+            refTypes: '搜索类型',
+            refs: '搜索引用',
+            resetModes: '搜索模式',
+          },
+          placeholders: {
+            tagName: '标签名',
+            branchName: '分支名',
+            authorContains: '作者包含',
+            messageContains: '信息包含',
+          },
+          allTags: '全部标签',
+          allBranches: '全部分支',
+          refType: {
+            branch: '分支',
+            tag: '标签',
+          },
+          resetModes: {
+            soft: '重置（soft）',
+            mixed: '重置（mixed）',
+            hard: '重置（hard）',
+          },
+          actions: {
+            copyHash: '复制哈希',
+            checkout: '检出',
+            createBranch: '创建分支',
+            selectForCompare: '选择用于对比',
+            compareSelected: '已选择（{hash}）',
+            compareWithParent: '与父提交对比',
+            compareWithSelected: '与已选择项对比',
+            reset: '重置',
+            cherryPick: 'Cherry-pick',
+            revert: 'Revert',
+            allFiles: '所有文件',
+          },
+          confirmReset: {
+            title: '重置到该提交？',
+            description: '将移动 HEAD 并根据模式更新工作区。',
+          },
+          confirmCherryPick: {
+            title: 'Cherry-pick 该提交？',
+            description: '将把该提交应用到当前分支之上。',
+          },
+          confirmRevert: {
+            title: 'Revert 该提交？',
+            description: '将创建一个新提交以回滚这些更改。',
+          },
+          loadingFiles: '文件加载中...',
+          emptyFiles: '没有文件更改。',
+          diffTitleFile: 'Diff - {file}',
+          diffTitleAllFiles: 'Diff - 所有文件',
+          loadingDiff: 'Diff 加载中...',
+          emptyDiff: '无 diff 内容。',
+          confirmHardReset: {
+            title: '确认硬重置',
+            description: '这将重写工作区并丢弃本地更改。',
+            confirmText: '确认硬重置',
+            typeResetHintPrefix: '输入',
+            typeResetHintSuffix: '以确认硬重置。',
+          },
+        },
+
+        stashDiff: {
+          title: 'Stash Diff',
+          titleWithRef: 'Stash Diff：{ref}',
+          description: '查看 stash patch 内容',
+          loading: 'Stash diff 加载中...',
+          empty: '没有 diff 输出。',
+        },
+
+        createBranchFrom: {
+          title: '从...创建分支',
+          description: '在指定 ref 上创建分支',
+          fields: {
+            branchName: '分支名',
+            startPoint: '起点',
+          },
+          checkoutAfterCreate: '创建后检出该分支',
+        },
+
+        renameBranch: {
+          title: '重命名分支',
+          description: '重命名本地分支',
+        },
+
+        branches: {
+          title: '分支',
+          description: '管理仓库分支',
+          sections: {
+            branches: '分支',
+          },
+          placeholders: {
+            newBranchName: '新分支名...',
+          },
+          actions: {
+            checkout: '检出',
+            deleteBranch: '删除',
+            deleteRemote: '删除远端',
+          },
+          confirmDeleteLocal: {
+            title: '删除分支？',
+            description: '此操作无法撤销。',
+          },
+          confirmDeleteRemote: {
+            title: '删除远端分支？',
+            description: '这将从远端删除该分支。',
+          },
+        },
+
+        lfs: {
+          title: 'Git LFS',
+          description: '大文件存储（LFS）',
+          sections: {
+            status: '状态',
+            trackPatterns: '跟踪模式',
+            locks: '锁',
+          },
+          installedLabel: '已安装：',
+          actions: {
+            installForRepo: '为仓库安装',
+            track: '跟踪',
+            lock: '加锁',
+            unlock: '解锁',
+            forceUnlock: '强制解锁',
+          },
+          placeholders: {
+            trackPattern: '*.psd',
+            lockPath: 'path/to/file.bin',
+          },
+          emptyTrackedPatterns: '没有跟踪模式',
+          emptyLocks: '没有锁',
+        },
+
+        submodules: {
+          title: '子模块',
+          description: '管理 Git 子模块',
+          sections: {
+            addSubmodule: '添加子模块',
+          },
+          placeholders: {
+            url: 'https://github.com/org/repo.git',
+            path: 'path/to/submodule',
+            branchOptional: '（可选）分支',
+          },
+          empty: '没有子模块',
+          branchLine: '分支：{branch}',
+          actions: {
+            init: '初始化',
+            update: '更新',
+            updateInitRecursive: '更新（init+recursive）',
+          },
+        },
+
+        clone: {
+          title: '克隆仓库',
+          description: '将远程仓库克隆到项目中',
+          fields: {
+            repositoryUrl: '仓库 URL',
+            targetPath: '目标路径（相对项目）',
+            checkoutRefOptional: '检出 ref/分支（可选）',
+          },
+          placeholders: {
+            repositoryUrl: 'https://github.com/org/repo.git',
+            targetPath: '（留空则从 URL 推导）',
+          },
+          hints: {
+            targetPathExample: '示例：`repos/my-app` - 留空时默认使用仓库名。',
+          },
+          cloneSubmodulesRecursively: '递归克隆子模块',
+          actions: {
+            clone: '克隆',
+          },
+        },
+
+        initRepo: {
+          title: '初始化 Git 仓库',
+          description: '创建新的 .git 目录',
+          fields: {
+            path: '路径（相对项目）',
+            defaultBranchOptional: '默认分支（可选）',
+          },
+          placeholders: {
+            path: '.（项目根目录）',
+          },
+          hints: {
+            pathExamples: '示例：`.` 或 `packages/api`',
+            initialBranchFlag: '提供后将使用 `git init --initial-branch`。',
+          },
+          actions: {
+            initialize: '初始化',
+          },
+        },
+
+        compare: {
+          title: '对比',
+          description: '对比两个 ref 或分支',
+          placeholders: {
+            base: '基准（例如 main）',
+            head: '目标（例如 feature/foo）',
+            pathOptional: '可选路径过滤（例如 src/app.ts）',
+          },
+          actions: {
+            swapRefs: '交换 refs',
+            compare: '对比',
+          },
+          empty: '没有可展示的 diff。',
+        },
+
+        renameFile: {
+          title: '重命名',
+          description: '重命名仓库中的文件',
+        },
+
+        checkoutDetached: {
+          title: '检出（分离）',
+          description: '以分离 HEAD 状态检出一个 ref',
+          placeholders: {
+            ref: 'HEAD~1',
+          },
+        },
+      },
+
+      postCommit: {
+        description: '下一步',
+        globalDefault: '全局默认：{label}',
+        rememberChoice: '为该仓库记住此选择',
+        prompt: '提示',
+      },
+      searchRemotes: '搜索远端',
+
+      diffViewer: {
+        labels: {
+          index: 'Index',
+          workingTree: '工作区',
+        },
+        noOriginal: '（无原始内容）',
+        noModified: '（无修改内容）',
+        loading: 'Diff 加载中...',
+        actions: {
+          openFile: '打开文件',
+          revealInFiles: '在文件中定位',
+        },
+      },
+
+      diffPane: {
+        selectFileHint: '选择文件以查看更改',
+        openConflictEditor: '打开冲突编辑器',
+      },
+
+      conflictEditor: {
+        title: '解决冲突',
+        actions: {
+          takeOurs: '采用我们的',
+          oursAndNext: '采用我们的并下一个',
+          takeTheirs: '采用他们的',
+          theirsAndNext: '采用他们的并下一个',
+          takeBase: '采用基线',
+          takeBoth: '采用两者',
+          applyAndNext: '应用并下一个',
+          openDiff: '打开 Diff',
+        },
+        blockCount: {
+          one: '{count} 个块',
+          many: '{count} 个块',
+        },
+        unmergedWithoutMarkers: '未合并（无文本标记）',
+        empty: {
+          noMarkersTitle: '未找到文本冲突标记',
+          unmergedNote: '该冲突没有标记（通常为二进制）。你仍可通过“采用我们的/他们的”解决，或打开标准 diff。',
+          resolvedNote: '该文件可能已解决。打开标准 diff 以验证最终状态。',
+        },
+        blockTitle: '块 #{index}',
+        labels: {
+          ours: '我们的',
+          theirs: '他们的',
+          base: '基线',
+          both: '两者',
+        },
+      },
+
+      stashPanel: {
+        actions: {
+          dropAll: '全部丢弃',
+          stashEllipsis: 'Stash...',
+          pop: 'Pop',
+          drop: '丢弃',
+        },
+        confirmDropAll: {
+          title: '丢弃所有 stash？',
+          description: '这将永久移除每一条 stash。',
+        },
+        empty: '没有 stash',
+      },
+
+      commitBox: {
+        messagePlaceholder: '提交信息（Cmd+Enter 提交）',
+        gitmojiTitle: 'Gitmoji',
+        searchEmojis: '搜索表情',
+        emojiEmptyLabel: '表情',
+      },
+
+      workingTree: {
+        fileActionsTitle: '文件操作',
+        showMoreCount: '显示更多（{shown}/{total}）',
+        sections: {
+          changes: '更改',
+          stagedChanges: '已暂存更改',
+          untracked: '未跟踪',
+          mergeChanges: '合并更改',
+        },
+        actions: {
+          stageAll: '全部暂存',
+          stage: '暂存',
+          unstageAll: '全部取消暂存',
+          unstage: '取消暂存',
+          history: '历史',
+          ignore: '忽略',
+          discardChanges: '丢弃更改',
+          deleteFile: '删除文件',
+        },
+        confirmDiscard: {
+          title: '丢弃更改？',
+          description: '此操作无法撤销。',
+        },
+        confirmDeleteTracked: {
+          title: '删除文件？',
+          description: '已跟踪文件将被移除并暂存（git rm）。',
+        },
+        confirmDeleteUntracked: {
+          title: '删除文件？',
+          description: '此操作无法撤销。',
+        },
+      },
+    },
+    fields: {
+      remote: '远端',
+      branch: '分支',
+      refspecOptional: 'Refspec（可选）',
+      messageOptional: '消息（可选）',
+    },
+    remoteTargetDialogs: {
+      chooseRemoteAndBranch: '选择远端与分支',
+      push: {
+        title: '推送到...',
+        advancedHint: '或在下方提供 refspec（高级推送）。',
+        tipTerminal: '提示：如需认证/签名交互，请使用终端。',
+        setUpstream: '设置 upstream（-u）',
+      },
+      pull: {
+        title: '从...拉取',
+        advancedHint: '或在下方提供 refspec（高级拉取）。',
+      },
+      fetch: {
+        title: '从...获取',
+        description: '选择远端与分支进行获取',
+        advancedHint: '或在下方提供 refspec（高级获取）。',
+      },
+      loadingRemoteBranches: '远端分支加载中...',
+      stash: {
+        title: 'Stash 更改',
+        description: '保存本地更改以便稍后恢复',
+        stagedOnly: '仅暂存',
+        includeUntracked: '包含未跟踪',
+        keepIndex: '保留已暂存（keep index）',
+      },
+    },
+    authDialogs: {
+      credentials: {
+        title: 'Git 认证',
+        description: '输入凭据以继续',
+        githubTokenOptionalTitle: 'GitHub token（可选）',
+        githubTokenOptionalDescription: '在这里保存 token 后，Fetch/Pull/Push 可像 VS Code 一样自动认证。',
+        rememberForRepo: '为该仓库记住（localStorage）',
+        username: '用户名',
+        passwordOrToken: '密码 / Token',
+      },
+      gitBusy: {
+        description: '另一个 git 操作正在运行',
+      },
+      sso: {
+        title: '需要 SSO 授权',
+        description: '你的组织对此远端要求 SSO',
+      },
+      terminalHelp: {
+        description: '该操作需要交互式终端',
+      },
+      gpgPassphrase: {
+        title: 'GPG 口令',
+        description: '输入 GPG 密钥口令以签名提交',
+        passphraseLabel: '口令',
+        signAndCommit: '签名并提交',
+      },
+      gpgEnablePreset: {
+        title: '启用 GPG 口令预设？',
+        description: '这会更新你的 gpg-agent 配置',
+        confirmEnableRetry: '启用并重试',
+        body:
+          '你的 gpg-agent 不允许预设口令。为了让 OpenCode Studio 在你在界面中输入口令后也能对提交进行签名，我们可以把 `allow-preset-passphrase` 写入 `~/.gnupg/gpg-agent.conf` 并重启 gpg-agent。',
+      },
+      gpgMissingKey: {
+        title: '缺少 GPG 签名密钥',
+        description: '已启用签名，但没有可用的私钥',
+        defaultExplain: '未找到用于签名的 GPG 私钥。',
+        setSigningKeyLocal: '设置 `user.signingkey`（本地）',
+        placeholderKeyIdOrFingerprint: 'KEYID 或指纹',
+        setSigningKeyButton: '设置签名密钥',
+        disableSigningButton: '禁用签名',
+      },
+    },
+    actionsMenu: {
+      groups: {
+        commit: '提交',
+        stage: '暂存',
+        sync: '同步',
+        inspect: '查看',
+        branching: '分支',
+        cleanup: '清理',
+      },
+      commit: {
+        noVerify: {
+          label: '不验证',
+          description: '跳过 pre-commit hooks',
+        },
+        signoff: {
+          label: 'Sign-off',
+          description: '添加 Signed-off-by 尾注',
+        },
+        amend: {
+          label: 'Amend',
+          description: '修改最近一次提交',
+        },
+        noGpgSign: {
+          label: '不签名',
+          description: '本次提交跳过 GPG 签名',
+        },
+        restoreTemplate: {
+          label: '恢复模板',
+          description: '恢复提交信息模板',
+        },
+        discardMessage: {
+          label: '丢弃提交信息',
+          description: '清空当前提交信息',
+          confirmTitle: '丢弃提交信息？',
+          confirmDescription: '这会清空当前提交信息草稿。',
+        },
+        undoLastCommit: {
+          label: '撤销上次提交',
+          description: '运行 git reset --soft HEAD~1',
+          confirmTitle: '撤销上次提交？',
+          confirmDescription: '保留文件更改，但移除最新提交。',
+        },
+        commitAll: {
+          label: '提交全部',
+          description: '提交已跟踪与未跟踪的更改',
+        },
+        commitEmpty: {
+          label: '空提交',
+          description: '使用当前信息创建空提交',
+        },
+      },
+      stage: {
+        stageAll: {
+          label: '全部暂存',
+          description: '暂存已跟踪与未跟踪的所有更改',
+        },
+        stageAllTracked: {
+          label: '暂存已跟踪',
+          description: '仅暂存已跟踪文件的更改',
+        },
+        stageAllUntracked: {
+          label: '暂存未跟踪',
+          description: '仅暂存未跟踪文件',
+        },
+        stageAllMerge: {
+          label: '暂存合并结果',
+          description: '暂存合并冲突的解决结果',
+        },
+      },
+      sync: {
+        fetch: {
+          label: '获取',
+          description: '从远端获取更新',
+        },
+        fetchFrom: {
+          label: '从...获取',
+          description: '选择远端与分支进行获取',
+        },
+        fetchPrune: {
+          label: '获取（Prune）',
+          description: '获取并清理已删除的 refs',
+        },
+        fetchAll: {
+          label: '获取（All）',
+          description: '从所有远端获取',
+        },
+        pull: {
+          label: '拉取',
+          description: '拉取远端更改',
+        },
+        pullRebase: {
+          label: '拉取（Rebase）',
+          description: '拉取并变基当前分支',
+        },
+        pullFrom: {
+          label: '从...拉取',
+          description: '选择远端与分支进行拉取',
+        },
+        push: {
+          label: '推送',
+          description: '推送本地提交到远端',
+        },
+        pushForce: {
+          label: '推送（Force）',
+          description: '强制推送远端分支历史',
+          confirmTitle: '强制推送？',
+          confirmDescription: '这可能覆盖远端历史。',
+          confirmText: '强制推送',
+        },
+        pushForceWithLease: {
+          label: '推送（Force with lease）',
+          description: '强制推送并防止覆盖过期的远端 refs',
+          confirmTitle: '强制推送（with lease）？',
+          confirmDescription: '这可能覆盖远端历史。',
+          confirmText: '强制推送',
+        },
+        pushTags: {
+          label: '推送标签',
+          description: '推送本地标签到远端',
+        },
+        pushFollowTags: {
+          label: '推送（Follow tags）',
+          description: '推送提交及可达标签',
+        },
+        pushTo: {
+          label: '推送到...',
+          description: '选择远端与分支进行推送',
+        },
+        syncNow: {
+          label: '同步',
+          description: '一次性完成获取与推送',
+        },
+        syncRebase: {
+          label: '同步（Rebase）',
+          description: 'pull --rebase 后再 push',
+        },
+      },
+      inspect: {
+        branches: {
+          label: '分支...',
+          description: '浏览并切换分支',
+        },
+        remotes: {
+          label: '远端...',
+          description: '管理 git 远端',
+        },
+        worktrees: {
+          label: '工作树...',
+          description: '管理链接的工作树',
+        },
+        history: {
+          label: '历史...',
+          description: '查看提交历史',
+        },
+        compare: {
+          label: '对比...',
+          description: '对比 refs 与分支',
+        },
+        compareUpstream: {
+          label: '与上游对比',
+          description: '对比当前分支与其跟踪分支',
+        },
+        tags: {
+          label: '标签...',
+          description: '创建并管理标签',
+        },
+        submodules: {
+          label: '子模块...',
+          description: '查看子模块状态',
+        },
+        lfs: {
+          label: 'Git LFS...',
+          description: '查看 Git LFS 状态',
+        },
+        autoFetch: {
+          label: '自动获取...',
+          description: '配置后台获取',
+        },
+        stash: {
+          label: 'Stash...',
+          description: '打开 stash 操作',
+        },
+        stashStagedOnly: {
+          label: 'Stash（仅暂存）',
+          description: '仅 stash 已暂存更改',
+        },
+        stashKeepIndex: {
+          label: 'Stash（保留 index）',
+          description: '仅 stash 未暂存更改',
+        },
+        stashIncludeUntracked: {
+          label: 'Stash（包含未跟踪）',
+          description: 'stash 已跟踪与未跟踪的更改',
+        },
+        stashDropAll: {
+          label: 'Stash（删除全部）',
+          description: '删除所有 stash 条目',
+          confirmTitle: '删除所有 stash？',
+          confirmDescription: '这会永久删除所有 stash 条目。',
+          confirmText: '删除全部',
+        },
+      },
+      branching: {
+        mergeBranch: {
+          label: '合并分支...',
+          description: '将其他分支合并到当前分支',
+        },
+        rebaseBranch: {
+          label: '变基分支...',
+          description: '将当前分支变基到另一个分支',
+        },
+        createBranchFrom: {
+          label: '从...创建分支',
+          description: '从所选 ref 创建分支',
+        },
+        checkoutDetached: {
+          label: '分离检出...',
+          description: '检出一个分离的提交或 ref',
+        },
+      },
+      cleanup: {
+        cleanUntracked: {
+          label: '清理未跟踪',
+          description: '删除未跟踪的文件与文件夹',
+          confirmTitle: '清理未跟踪？',
+          confirmDescription: '这将删除未跟踪的文件与文件夹。',
+        },
+        cleanAll: {
+          label: '清理全部（含忽略）',
+          description: '删除未跟踪与已忽略文件',
+          confirmTitle: '清理全部（包含忽略）？',
+          confirmDescription: '这将删除未跟踪与已忽略文件。',
+        },
+        discardAllTracked: {
+          label: '丢弃全部已跟踪',
+          description: '重置已跟踪文件的 index 与工作区',
+          confirmTitle: '丢弃全部已跟踪更改？',
+          confirmDescription: '这会重置已跟踪文件的 index 与工作区。',
+        },
+      },
+    },
+    toasts: {
+      copiedCommitHash: '已复制提交哈希',
+      copiedRemoteUrl: '已复制远程地址',
+      copiedWorktreePath: '已复制工作树路径',
+      selectedCommitForCompare: '已选择 {hash} 用于对比',
+      selectedCommitHasNoParent: '所选提交没有父提交可对比',
+      noUpstreamTrackingBranch: '没有上游跟踪分支',
+      noConflictsFound: '未发现冲突',
+      repositoryMarkedSafe: '仓库已标记为安全',
+
+      fetched: '已获取',
+      fetchedPrune: '已获取（prune）',
+      fetchedAll: '已获取（all）',
+      pulled: '已拉取',
+      pulledRebase: '已拉取（rebase）',
+      pushed: '已推送',
+      pushedTags: '已推送标签',
+      pushedFollowTags: '已推送（follow tags）',
+      pushedForce: '已推送（force）',
+      pushedForceWithLease: '已推送（force-with-lease）',
+      synced: '已同步',
+      syncedRebase: '已同步（rebase）',
+
+      committed: '已提交',
+      committedAll: '已提交（all）',
+      committedEmpty: '已提交（empty）',
+      changesDiscarded: '更改已丢弃',
+      alreadyIgnored: '已忽略',
+      stashedChanges: '更改已暂存到 stash',
+      prunedWorktrees: '工作树已修剪',
+      migratedWorktreeChanges: '工作树更改已迁移',
+      initializedGitRepository: 'Git 仓库已初始化',
+      clonedRepository: '仓库已克隆',
+      noDifferencesFound: '未发现差异',
+      undidLastCommit: '已撤销上一次提交',
+      mergeAborted: '合并已中止',
+      rebaseAborted: '变基已中止',
+      cherryPickContinued: 'cherry-pick 已继续',
+      cherryPickSkipped: 'cherry-pick 已跳过',
+      cherryPickAborted: 'cherry-pick 已中止',
+      revertContinued: 'revert 已继续',
+      revertSkipped: 'revert 已跳过',
+      revertAborted: 'revert 已中止',
+      rebaseContinued: '变基已继续',
+      rebaseSkipped: '变基已跳过',
+      gitLfsInstalled: 'Git LFS 已为仓库安装',
+      renamed: '已重命名',
+      deleted: '已删除',
+      tokenSaved: 'Token 已保存',
+      disabledGpgSigningForRepo: '已为该仓库禁用 GPG 签名',
+      updatedUserSigningKeyLocal: '已更新 user.signingkey（本地）',
+      preparedGpgAgentConfig: 'gpg-agent 配置已更新',
+
+      trackedPattern: '已跟踪 {pattern}',
+      lockedPath: '已锁定 {path}',
+      unlockedPath: '已解锁 {path}',
+      cherryPickedShortHash: '已 cherry-pick {hash}',
+      revertedShortHash: '已 revert {hash}',
+      resetToShortHashWithMode: '已重置到 {hash}（{mode}）',
+      closedRepository: '已关闭仓库 {relative}',
+      reopenedRepository: '已重新打开仓库 {relative}',
+      addedWorktree: '已添加工作树 {path}',
+      removedWorktree: '已移除工作树 {path}',
+      switchedToBranch: '已切换到 {branch}',
+      repositoryBusy: '仓库正忙（{op}）',
+      stashActionRef: 'stash {action} {ref}',
+      ignoredPath: '已忽略 {path}',
+      pushedToRemoteTarget: '已推送到 {remote}/{target}',
+      fetchedRemoteTarget: '已获取 {remote}/{target}',
+      pulledFromRemoteTarget: '已从 {remote}/{target} 拉取',
+      createdBranch: '已创建分支 {name}',
+      checkedOutBranch: '已检出 {name}',
+      deletedBranch: '已删除分支 {name}',
+      deletedRemoteBranch: '已删除远程分支 {name}',
+      renamedFromTo: '已重命名 {from} -> {to}',
+      detachedHeadAt: '已在 {ref} 分离 HEAD',
+      addedRemote: '已添加远程 {name}',
+      updatedRemoteUrl: '已更新 {name} URL',
+      removedRemote: '已移除远程 {name}',
+      mergedTarget: '已合并 {target}',
+      rebasedOntoTarget: '已变基到 {target}',
+      createdTag: '已创建标签 {name}',
+      deletedTag: '已删除标签 {name}',
+      deletedRemoteTag: '已删除远程标签 {name}',
+      addedSubmodule: '已添加子模块 {path}',
+      initializedItem: '已初始化 {name}',
+      updatedSubmodule: '已更新 {path}',
+      updatedSubmodules: '已更新子模块',
+    },
+    errors: {
+      worktreeOutsideProjectRoot: '工作树不在项目根目录下',
+      forcePushDisabledByPolicy: '策略已禁用强制推送',
+      commitsWithoutVerificationDisabledByPolicy: '策略已禁用未验证提交',
+      nowOnNewBranchCommitAgain: '已切换到新分支。请再次提交以继续。',
+      blockedTerminalUnsupportedRepoPath: '已阻止终端命令：不支持的仓库路径',
+      blockedTerminalOutsideAllowlist: '已阻止终端命令：不在可信允许列表中',
+      failedToPrepareTerminalHandoff: '准备终端命令接力失败',
+    },
+  },
+  files: {
+    errors: {
+      noProjectSelected: '未选择项目',
+    },
+    actions: {
+      download: '下载',
+      copyPath: '复制路径',
+    },
+    confirmDiscard: {
+      title: '有未保存的更改',
+      description: '继续前要先保存你的修改吗？',
+      discard: '丢弃',
+      saveChanges: '保存更改',
+    },
+    dialog: {
+      namePlaceholder: '名称',
+      title: {
+        createFile: '新建文件',
+        createFolder: '新建文件夹',
+        rename: '重命名',
+      },
+      rootFallback: '根目录',
+      description: {
+        createFile: '在 {base} 中新建文件',
+        createFolder: '在 {base} 中新建文件夹',
+        rename: '重命名 {name}',
+      },
+    },
+    empty: {
+      noProject: {
+        title: '未选择项目',
+        mobileDescription: '请先选择项目文件夹，然后文件树会显示在这里。',
+        desktopDescription: '选择一个项目（或会话）来浏览文件。',
+      },
+    },
+    search: {
+      mode: {
+        files: '文件',
+        content: '内容',
+      },
+      files: {
+        placeholder: '搜索文件',
+        hint: '输入以搜索文件名和路径。',
+        noQuery: '没有搜索关键字。',
+        noFilesFound: '未找到文件。',
+      },
+      content: {
+        placeholder: '搜索',
+        hint: '输入以搜索文件内容。',
+        noMatchesFound: '未找到匹配项。',
+        showReplace: '显示替换',
+        hideReplace: '隐藏替换',
+        replacePlaceholder: '替换为',
+        matchCase: '区分大小写',
+        matchWholeWord: '全词匹配',
+        useRegex: '使用正则表达式',
+        matchSingle: '处匹配',
+        matchPlural: '处匹配',
+        fileSingle: '个文件',
+        filePlural: '个文件',
+        resultSummary: '{files} {fileWord}中有 {matches} {matchWord}',
+        resultSummaryLimited: '{text}（已限制）',
+      },
+    },
+    scope: {
+      workspaceRoot: '工作区根目录',
+      options: {
+        workspace: {
+          label: '工作区',
+        },
+        selected: {
+          label: '已选文件夹',
+          emptyDescription: '请先在资源管理器中选择一个文件夹',
+        },
+        activeFile: {
+          label: '当前文件所在文件夹',
+          emptyDescription: '请先打开一个文件',
+        },
+      },
+    },
+    timeline: {
+      errors: {
+        onlyTextFiles: '时间线对比仅支持文本文件',
+        cannotOpen: '无法为此条目打开时间线',
+        missingInCommit: '此提交中该文件不存在。',
+        binaryUnavailable: '所选提交中该文件为二进制文件，无法进行文本对比。',
+      },
+      info: {
+        truncated: '提交内容过大，已截断用于预览。',
+      },
+    },
+    viewer: {
+      title: {
+        selectFile: '选择文件',
+      },
+      viewMenu: {
+        title: '查看设置',
+        groupTitle: '查看选项',
+        blame: {
+          enable: '启用 blame',
+          disable: '禁用 blame',
+          description: '切换提交归属标记',
+        },
+        timeline: {
+          enable: '启用时间线',
+          disable: '禁用时间线',
+          description: '在编辑器中对比两个提交',
+        },
+        wrap: {
+          enable: '启用自动换行',
+          disable: '禁用自动换行',
+          description: '切换编辑器自动换行',
+        },
+        autosave: {
+          enable: '启用自动保存',
+          disable: '禁用自动保存',
+          description: '自动保存文本更改',
+        },
+      },
+      save: {
+        titleDirty: '保存（Ctrl/Cmd+S）',
+        titleSaved: '已保存',
+      },
+      actions: {
+        copyContents: '复制内容',
+        downloadRaw: '下载原始文件',
+      },
+      status: {
+        loadingTimelineCommits: '正在加载时间线提交...',
+        loadingBlame: '正在加载 blame...',
+        noBlameYet: '该文件暂时没有 blame 行。',
+        showingBlameLastSaved: '显示的是上次保存的文件内容的 blame。',
+        loadingChanges: '正在加载{scope}改动...',
+        noChanges: '没有{scope}改动。',
+        hunksSummary: '{count} 个 hunk · {range}',
+        loadingImage: '图片加载中…',
+      },
+      gitDiffMode: {
+        staged: '暂存区',
+        workingTree: '工作区',
+      },
+      gitDiffRange: {
+        headToIndex: 'HEAD -> Index',
+        indexToWorkingTree: 'Index -> Working tree',
+      },
+      empty: {
+        mobileDescription: '从文件面板选择一个文件以查看或编辑。',
+        desktopDescription: '从树中选择一个文件。',
+      },
+      binaryPreviewUnavailable: '不支持预览二进制文件。',
+      imageAltFallback: '图片',
+      timeline: {
+        selectCommitTitle: '选择提交',
+        selectCommitShort: '选择提交',
+        searchPlaceholder: '搜索 hash、message、author、email、refs',
+        emptyText: '没有匹配的提交。',
+        selectBothCommitsHint: '从上方下拉框选择两个提交开始对比。',
+        noMessage: '（无消息）',
+      },
+      selection: {
+        clearAria: '清除选择',
+        notePlaceholder: '为聊天添加备注（可选）',
+        insertHint: '将所选行插入到聊天输入框',
+        insertButton: '插入',
+      },
+    },
+    toasts: {
+      saveFileBeforeGitHunkActions: '应用 Git hunk 操作前请先保存文件',
+      saveCurrentFileBeforeReplaceAcrossFiles: '跨文件替换前请先保存当前文件',
+      replaceAcrossFiles: {
+        replacedMatch: '已替换 {count} 处匹配{suffix}',
+        replacedMatches: '已替换 {count} 处匹配{suffix}',
+        skippedFileSuffix: '，跳过 {count} 个文件',
+        skippedFilesSuffix: '，跳过 {count} 个文件',
+      },
+      matchReplaced: '匹配项已替换',
+      noMatchesReplaced: '没有替换任何匹配项',
+      uploadedFile: '已上传 {count} 个文件',
+      uploadedFiles: '已上传 {count} 个文件',
+      savedFile: '文件已保存',
+      fileCreated: '文件已创建',
+      folderCreated: '文件夹已创建',
+      renamed: '已重命名',
+      deleted: '已删除',
+      selectSomeLinesToInsert: '请选择一些行以插入',
+      selectChatSessionFirst: '请先选择一个聊天会话',
+      insertedIntoChatComposer: '已插入到聊天输入框',
+    },
+    explorer: {
+      title: '资源管理器',
+      toolbar: {
+        newFile: '新建文件',
+        newFolder: '新建文件夹',
+        refreshTree: '刷新树',
+        actions: '资源管理器操作',
+      },
+      view: {
+        tree: '树',
+        search: '搜索',
+      },
+      actionMenu: {
+        groups: {
+          actions: '资源管理器操作',
+          visibility: '可见性',
+        },
+        uploadFiles: '上传文件',
+        uploading: '上传中...',
+        collapseFolders: '折叠文件夹',
+        collapseFoldersDescription: '折叠所有已展开的目录',
+        showHiddenFiles: '显示隐藏文件',
+        showHiddenFilesDescription: '在资源管理器中包含点文件',
+        showGitignoredFiles: '显示被 gitignore 的文件',
+        showGitignoredFilesDescription: '禁用 gitignore 过滤',
+      },
+      actions: {
+        actions: '操作',
+        fileActions: '文件操作',
+        folderActions: '文件夹操作',
+        rename: '重命名',
+        delete: '删除',
+        deleteFileTitle: '删除文件？',
+        deleteFolderTitle: '删除文件夹？',
+        deleteDescription: '删除 {name}？此操作无法撤销。',
+      },
+      inlineCreate: {
+        folderName: '文件夹名称',
+        fileName: '文件名',
+      },
+      searchUnavailable: '无法使用搜索。',
     },
   },
 } as const

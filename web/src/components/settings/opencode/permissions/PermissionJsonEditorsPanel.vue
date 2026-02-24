@@ -21,7 +21,7 @@ export default defineComponent({
 
 <template>
   <div class="grid gap-2">
-    <span class="text-xs text-muted-foreground">Permission rules (advanced JSON)</span>
+    <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.permissions.jsonEditors.title') }}</span>
     <textarea
       v-model="
         ensureJsonBuffer(
@@ -40,13 +40,13 @@ export default defineComponent({
           size="icon"
           variant="outline"
           class="h-8 w-8"
-          title="Apply"
-          aria-label="Apply JSON"
+          :title="t('common.apply')"
+          :aria-label="t('settings.opencodeConfig.sections.common.applyJson')"
           @click="applyJsonBuffer('permission')"
         >
           <RiCheckLine class="h-4 w-4" />
         </Button>
-        <template #content>Apply</template>
+        <template #content>{{ t('common.apply') }}</template>
       </Tooltip>
       <span
         v-if="

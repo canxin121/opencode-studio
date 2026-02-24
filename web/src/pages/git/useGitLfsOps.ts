@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { i18n } from '@/i18n'
 
 import type { GitLfsLockInfo, GitLfsLocksResponse, GitLfsStatusResponse } from '@/types/git'
 import type { JsonValue } from '@/types/json'
@@ -89,7 +90,7 @@ export function useGitLfsOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ force: false }),
         })
-        toasts.push('success', 'Git LFS installed for repo')
+        toasts.push('success', i18n.global.t('git.toasts.gitLfsInstalled'))
         await loadLfsStatus()
       } catch (err) {
         if (handleGitBusy(err, 'LFS install', installLfs)) return
@@ -110,7 +111,7 @@ export function useGitLfsOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ pattern }),
         })
-        toasts.push('success', `Tracked ${pattern}`)
+        toasts.push('success', i18n.global.t('git.toasts.trackedPattern', { pattern }))
         lfsTrackPattern.value = ''
         await loadLfsStatus()
       } catch (err) {
@@ -132,7 +133,7 @@ export function useGitLfsOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ path }),
         })
-        toasts.push('success', `Locked ${path}`)
+        toasts.push('success', i18n.global.t('git.toasts.lockedPath', { path }))
         lfsLockPath.value = ''
         await loadLfsLocks()
       } catch (err) {
@@ -154,7 +155,7 @@ export function useGitLfsOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ path: p, force }),
         })
-        toasts.push('success', `Unlocked ${p}`)
+        toasts.push('success', i18n.global.t('git.toasts.unlockedPath', { path: p }))
         await loadLfsLocks()
       } catch (err) {
         if (handleGitBusy(err, 'LFS unlock', () => unlockLfsPath(p, force))) return

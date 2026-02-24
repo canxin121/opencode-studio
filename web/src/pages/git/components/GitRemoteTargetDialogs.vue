@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 import FormDialog from '@/components/ui/FormDialog.vue'
 import Input from '@/components/ui/Input.vue'
 import MiniActionButton from '@/components/ui/MiniActionButton.vue'
 import OptionPicker, { type PickerOption } from '@/components/ui/OptionPicker.vue'
+
+const { t } = useI18n()
 
 type RemoteInfo = {
   remotes?: Array<{ name: string; protocol?: string | null; host?: string | null }>
@@ -60,8 +63,8 @@ const remotePickerOptions = computed<PickerOption[]>(() => {
   <!-- Push To... Dialog -->
   <FormDialog
     :open="pushToOpen"
-    title="Push To..."
-    description="Choose a remote and branch"
+    :title="t('git.remoteTargetDialogs.push.title')"
+    :description="t('git.remoteTargetDialogs.chooseRemoteAndBranch')"
     maxWidth="max-w-md"
     @update:open="
       (v: boolean) => {
@@ -72,12 +75,12 @@ const remotePickerOptions = computed<PickerOption[]>(() => {
     <div class="space-y-3">
       <div class="grid gap-3">
         <div class="grid gap-1">
-          <div class="text-xs font-medium text-muted-foreground">Remote</div>
+          <div class="text-xs font-medium text-muted-foreground">{{ t('git.fields.remote') }}</div>
           <OptionPicker
             v-model="targetRemote"
             :options="remotePickerOptions"
-            title="Remote"
-            search-placeholder="Search remotes"
+            :title="t('git.fields.remote')"
+            :search-placeholder="t('git.ui.searchRemotes')"
             :include-empty="false"
             trigger-class="rounded border bg-background text-xs px-2"
             size="sm"
@@ -85,7 +88,7 @@ const remotePickerOptions = computed<PickerOption[]>(() => {
         </div>
 
         <div class="grid gap-1">
-          <div class="text-xs font-medium text-muted-foreground">Branch</div>
+          <div class="text-xs font-medium text-muted-foreground">{{ t('git.fields.branch') }}</div>
           <Input
             v-model="targetBranch"
             class="h-9 font-mono text-xs"
@@ -99,7 +102,9 @@ const remotePickerOptions = computed<PickerOption[]>(() => {
             @blur="props.hideBranchPickSoon"
             @keydown="props.onBranchPickKeydown"
           />
-          <div v-if="remoteBranchLoading" class="text-[11px] text-muted-foreground">Loading remote branches...</div>
+          <div v-if="remoteBranchLoading" class="text-[11px] text-muted-foreground">{{
+            t('git.remoteTargetDialogs.loadingRemoteBranches')
+          }}</div>
           <div
             v-else-if="branchPickVisible && filteredRemoteBranchOptions.length"
             class="mt-1 max-h-28 overflow-auto rounded-md border border-border/50 bg-background/40"
@@ -121,28 +126,28 @@ const remotePickerOptions = computed<PickerOption[]>(() => {
               {{ b }}
             </button>
           </div>
-          <div class="text-[11px] text-muted-foreground">Or provide a refspec below (for advanced push).</div>
+          <div class="text-[11px] text-muted-foreground">{{ t('git.remoteTargetDialogs.push.advancedHint') }}</div>
         </div>
 
         <div class="grid gap-1">
-          <div class="text-xs font-medium text-muted-foreground">Refspec (optional)</div>
+          <div class="text-xs font-medium text-muted-foreground">{{ t('git.fields.refspecOptional') }}</div>
           <Input v-model="targetRef" class="h-9 font-mono text-xs" placeholder="HEAD:refs/heads/main" />
         </div>
 
         <label class="inline-flex items-center gap-2 text-xs text-muted-foreground select-none">
           <input v-model="targetSetUpstream" type="checkbox" class="accent-primary" />
-          <span>Set upstream (-u)</span>
+          <span>{{ t('git.remoteTargetDialogs.push.setUpstream') }}</span>
         </label>
-        <div class="text-[11px] text-muted-foreground">Tip: if auth/signing prompts are needed, use Terminal.</div>
+        <div class="text-[11px] text-muted-foreground">{{ t('git.remoteTargetDialogs.push.tipTerminal') }}</div>
       </div>
 
       <div class="flex justify-end gap-2">
-        <MiniActionButton @click="pushToOpen = false">Cancel</MiniActionButton>
+        <MiniActionButton @click="pushToOpen = false">{{ t('common.cancel') }}</MiniActionButton>
         <MiniActionButton
           variant="default"
           :disabled="!targetRemote.trim() || (!targetBranch.trim() && !targetRef.trim())"
           @click="props.pushToTarget"
-          >Push</MiniActionButton
+          >{{ t('git.actions.push') }}</MiniActionButton
         >
       </div>
     </div>
@@ -151,8 +156,8 @@ const remotePickerOptions = computed<PickerOption[]>(() => {
   <!-- Pull From... Dialog -->
   <FormDialog
     :open="pullFromOpen"
-    title="Pull From..."
-    description="Choose a remote and branch"
+    :title="t('git.remoteTargetDialogs.pull.title')"
+    :description="t('git.remoteTargetDialogs.chooseRemoteAndBranch')"
     maxWidth="max-w-md"
     @update:open="
       (v: boolean) => {
@@ -163,12 +168,12 @@ const remotePickerOptions = computed<PickerOption[]>(() => {
     <div class="space-y-3">
       <div class="grid gap-3">
         <div class="grid gap-1">
-          <div class="text-xs font-medium text-muted-foreground">Remote</div>
+          <div class="text-xs font-medium text-muted-foreground">{{ t('git.fields.remote') }}</div>
           <OptionPicker
             v-model="targetRemote"
             :options="remotePickerOptions"
-            title="Remote"
-            search-placeholder="Search remotes"
+            :title="t('git.fields.remote')"
+            :search-placeholder="t('git.ui.searchRemotes')"
             :include-empty="false"
             trigger-class="rounded border bg-background text-xs px-2"
             size="sm"
@@ -176,7 +181,7 @@ const remotePickerOptions = computed<PickerOption[]>(() => {
         </div>
 
         <div class="grid gap-1">
-          <div class="text-xs font-medium text-muted-foreground">Branch</div>
+          <div class="text-xs font-medium text-muted-foreground">{{ t('git.fields.branch') }}</div>
           <Input
             v-model="targetBranch"
             class="h-9 font-mono text-xs"
@@ -190,7 +195,9 @@ const remotePickerOptions = computed<PickerOption[]>(() => {
             @blur="props.hideBranchPickSoon"
             @keydown="props.onBranchPickKeydown"
           />
-          <div v-if="remoteBranchLoading" class="text-[11px] text-muted-foreground">Loading remote branches...</div>
+          <div v-if="remoteBranchLoading" class="text-[11px] text-muted-foreground">{{
+            t('git.remoteTargetDialogs.loadingRemoteBranches')
+          }}</div>
           <div
             v-else-if="branchPickVisible && filteredRemoteBranchOptions.length"
             class="mt-1 max-h-28 overflow-auto rounded-md border border-border/50 bg-background/40"
@@ -212,22 +219,22 @@ const remotePickerOptions = computed<PickerOption[]>(() => {
               {{ b }}
             </button>
           </div>
-          <div class="text-[11px] text-muted-foreground">Or provide a refspec below (for advanced pull).</div>
+          <div class="text-[11px] text-muted-foreground">{{ t('git.remoteTargetDialogs.pull.advancedHint') }}</div>
         </div>
 
         <div class="grid gap-1">
-          <div class="text-xs font-medium text-muted-foreground">Refspec (optional)</div>
+          <div class="text-xs font-medium text-muted-foreground">{{ t('git.fields.refspecOptional') }}</div>
           <Input v-model="targetRef" class="h-9 font-mono text-xs" placeholder="refs/heads/main" />
         </div>
       </div>
 
       <div class="flex justify-end gap-2">
-        <MiniActionButton @click="pullFromOpen = false">Cancel</MiniActionButton>
+        <MiniActionButton @click="pullFromOpen = false">{{ t('common.cancel') }}</MiniActionButton>
         <MiniActionButton
           variant="default"
           :disabled="!targetRemote.trim() || (!targetBranch.trim() && !targetRef.trim())"
           @click="props.pullFromTarget"
-          >Pull</MiniActionButton
+          >{{ t('git.actions.pull') }}</MiniActionButton
         >
       </div>
     </div>
@@ -236,8 +243,8 @@ const remotePickerOptions = computed<PickerOption[]>(() => {
   <!-- Fetch From... Dialog -->
   <FormDialog
     :open="fetchFromOpen"
-    title="Fetch From..."
-    description="Choose a remote and branch to fetch"
+    :title="t('git.remoteTargetDialogs.fetch.title')"
+    :description="t('git.remoteTargetDialogs.fetch.description')"
     maxWidth="max-w-md"
     @update:open="
       (v: boolean) => {
@@ -248,12 +255,12 @@ const remotePickerOptions = computed<PickerOption[]>(() => {
     <div class="space-y-3">
       <div class="grid gap-3">
         <div class="grid gap-1">
-          <div class="text-xs font-medium text-muted-foreground">Remote</div>
+          <div class="text-xs font-medium text-muted-foreground">{{ t('git.fields.remote') }}</div>
           <OptionPicker
             v-model="targetRemote"
             :options="remotePickerOptions"
-            title="Remote"
-            search-placeholder="Search remotes"
+            :title="t('git.fields.remote')"
+            :search-placeholder="t('git.ui.searchRemotes')"
             :include-empty="false"
             trigger-class="rounded border bg-background text-xs px-2"
             size="sm"
@@ -261,7 +268,7 @@ const remotePickerOptions = computed<PickerOption[]>(() => {
         </div>
 
         <div class="grid gap-1">
-          <div class="text-xs font-medium text-muted-foreground">Branch</div>
+          <div class="text-xs font-medium text-muted-foreground">{{ t('git.fields.branch') }}</div>
           <Input
             v-model="targetBranch"
             class="h-9 font-mono text-xs"
@@ -275,7 +282,9 @@ const remotePickerOptions = computed<PickerOption[]>(() => {
             @blur="props.hideBranchPickSoon"
             @keydown="props.onBranchPickKeydown"
           />
-          <div v-if="remoteBranchLoading" class="text-[11px] text-muted-foreground">Loading remote branches...</div>
+          <div v-if="remoteBranchLoading" class="text-[11px] text-muted-foreground">{{
+            t('git.remoteTargetDialogs.loadingRemoteBranches')
+          }}</div>
           <div
             v-else-if="branchPickVisible && filteredRemoteBranchOptions.length"
             class="mt-1 max-h-28 overflow-auto rounded-md border border-border/50 bg-background/40"
@@ -297,11 +306,11 @@ const remotePickerOptions = computed<PickerOption[]>(() => {
               {{ b }}
             </button>
           </div>
-          <div class="text-[11px] text-muted-foreground">Or provide a refspec below (for advanced fetch).</div>
+          <div class="text-[11px] text-muted-foreground">{{ t('git.remoteTargetDialogs.fetch.advancedHint') }}</div>
         </div>
 
         <div class="grid gap-1">
-          <div class="text-xs font-medium text-muted-foreground">Refspec (optional)</div>
+          <div class="text-xs font-medium text-muted-foreground">{{ t('git.fields.refspecOptional') }}</div>
           <Input
             v-model="targetRef"
             class="h-9 font-mono text-xs"
@@ -311,12 +320,12 @@ const remotePickerOptions = computed<PickerOption[]>(() => {
       </div>
 
       <div class="flex justify-end gap-2">
-        <MiniActionButton @click="fetchFromOpen = false">Cancel</MiniActionButton>
+        <MiniActionButton @click="fetchFromOpen = false">{{ t('common.cancel') }}</MiniActionButton>
         <MiniActionButton
           variant="default"
           :disabled="!targetRemote.trim() || (!targetBranch.trim() && !targetRef.trim())"
           @click="props.fetchFromTarget"
-          >Fetch</MiniActionButton
+          >{{ t('git.actions.fetch') }}</MiniActionButton
         >
       </div>
     </div>
@@ -325,8 +334,8 @@ const remotePickerOptions = computed<PickerOption[]>(() => {
   <!-- Stash Dialog -->
   <FormDialog
     :open="stashDialogOpen"
-    title="Stash Changes"
-    description="Save local changes for later"
+    :title="t('git.remoteTargetDialogs.stash.title')"
+    :description="t('git.remoteTargetDialogs.stash.description')"
     maxWidth="max-w-md"
     @update:open="
       (v: boolean) => {
@@ -336,30 +345,30 @@ const remotePickerOptions = computed<PickerOption[]>(() => {
   >
     <div class="space-y-3">
       <div class="grid gap-1">
-        <div class="text-xs font-medium text-muted-foreground">Message (optional)</div>
+        <div class="text-xs font-medium text-muted-foreground">{{ t('git.fields.messageOptional') }}</div>
         <Input v-model="stashMessage" class="h-9 font-mono text-xs" placeholder="wip" />
       </div>
       <label class="inline-flex items-center gap-2 text-xs text-muted-foreground select-none">
         <input v-model="stashStaged" type="checkbox" class="accent-primary" />
-        <span>Staged only</span>
+        <span>{{ t('git.remoteTargetDialogs.stash.stagedOnly') }}</span>
       </label>
       <label
         class="inline-flex items-center gap-2 text-xs text-muted-foreground select-none"
         :class="stashStaged ? 'opacity-60' : ''"
       >
         <input v-model="stashIncludeUntracked" type="checkbox" class="accent-primary" :disabled="stashStaged" />
-        <span>Include untracked</span>
+        <span>{{ t('git.remoteTargetDialogs.stash.includeUntracked') }}</span>
       </label>
       <label
         class="inline-flex items-center gap-2 text-xs text-muted-foreground select-none"
         :class="stashStaged ? 'opacity-60' : ''"
       >
         <input v-model="stashKeepIndex" type="checkbox" class="accent-primary" :disabled="stashStaged" />
-        <span>Keep staged (keep index)</span>
+        <span>{{ t('git.remoteTargetDialogs.stash.keepIndex') }}</span>
       </label>
       <div class="flex justify-end gap-2">
-        <MiniActionButton @click="stashDialogOpen = false">Cancel</MiniActionButton>
-        <MiniActionButton variant="default" @click="props.stashPush">Stash</MiniActionButton>
+        <MiniActionButton @click="stashDialogOpen = false">{{ t('common.cancel') }}</MiniActionButton>
+        <MiniActionButton variant="default" @click="props.stashPush">{{ t('git.actions.stash') }}</MiniActionButton>
       </div>
     </div>
   </FormDialog>

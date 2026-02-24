@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 import Button from '@/components/ui/Button.vue'
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
@@ -10,6 +11,8 @@ import ScrollArea from '@/components/ui/ScrollArea.vue'
 import DiffViewer from '@/components/DiffViewer.vue'
 
 import type { GitCommitFile, GitLogCommit } from '@/types/git'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   open: boolean
@@ -89,7 +92,7 @@ const selectedMeta = computed(() => {
   const c = props.selected
   if (!c) return ''
   const date = formatDate(c.authorDate)
-  const author = c.authorName || 'Unknown'
+  const author = c.authorName || t('common.unknown')
   return `${author}${date ? ` · ${date}` : ''}`
 })
 
@@ -97,10 +100,10 @@ const selectedRefs = computed(() => props.selected?.refs || [])
 const selectedFileLabel = computed(() => props.selectedFile?.path || '')
 const refOptions = computed(() => (props.filterRefType === 'tag' ? props.tagOptions : props.branchOptions))
 
-const filterRefTypePickerOptions: PickerOption[] = [
-  { value: 'branch', label: 'Branch' },
-  { value: 'tag', label: 'Tag' },
-]
+const filterRefTypePickerOptions = computed<PickerOption[]>(() => [
+  { value: 'branch', label: t('git.ui.dialogs.history.refType.branch') },
+  { value: 'tag', label: t('git.ui.dialogs.history.refType.tag') },
+])
 
 const refPickerOptions = computed<PickerOption[]>(() => {
   const list = Array.isArray(refOptions.value) ? refOptions.value : []
@@ -109,11 +112,11 @@ const refPickerOptions = computed<PickerOption[]>(() => {
 
 const resetMode = ref<'soft' | 'mixed' | 'hard'>('mixed')
 
-const resetModePickerOptions: PickerOption[] = [
-  { value: 'soft', label: 'Reset soft' },
-  { value: 'mixed', label: 'Reset mixed' },
-  { value: 'hard', label: 'Reset hard' },
-]
+const resetModePickerOptions = computed<PickerOption[]>(() => [
+  { value: 'soft', label: t('git.ui.dialogs.history.resetModes.soft') },
+  { value: 'mixed', label: t('git.ui.dialogs.history.resetModes.mixed') },
+  { value: 'hard', label: t('git.ui.dialogs.history.resetModes.hard') },
+])
 const hardResetOpen = ref(false)
 const hardResetText = ref('')
 const hardResetTarget = ref<GitLogCommit | null>(null)
@@ -159,16 +162,16 @@ function onFilterRefTypeChange(value: string | number) {
 <template>
   <FormDialog
     :open="open"
-    title="History"
-    description="Recent commits"
+    :title="t('git.ui.dialogs.history.title')"
+    :description="t('git.ui.dialogs.history.description')"
     maxWidth="max-w-6xl"
     @update:open="onUpdateOpen"
   >
     <div class="grid gap-4 lg:grid-cols-[300px_minmax(0,1fr)]">
       <div class="space-y-3">
         <div class="flex items-center justify-between">
-          <div class="text-xs font-medium text-muted-foreground">Commits</div>
-          <Button variant="secondary" size="sm" :disabled="loading" @click="$emit('refresh')">Refresh</Button>
+          <div class="text-xs font-medium text-muted-foreground">{{ t('git.ui.dialogs.history.sections.commits') }}</div>
+          <Button variant="secondary" size="sm" :disabled="loading" @click="$emit('refresh')">{{ t('common.refresh') }}</Button>
         </div>
 
         <div
@@ -176,10 +179,10 @@ function onFilterRefTypeChange(value: string | number) {
           class="flex items-center justify-between rounded-md border border-border/50 bg-muted/20 px-2 py-1"
         >
           <div class="text-[11px] text-muted-foreground">
-            Compare base:
+            {{ t('git.ui.dialogs.history.compareBase') }}
             <span class="font-mono">{{ compareSelectionShort }}</span>
           </div>
-          <Button variant="ghost" size="sm" class="h-6" @click="$emit('clearCompare')">Clear</Button>
+          <Button variant="ghost" size="sm" class="h-6" @click="$emit('clearCompare')">{{ t('common.clear') }}</Button>
         </div>
 
         <div
@@ -187,17 +190,17 @@ function onFilterRefTypeChange(value: string | number) {
           class="flex items-center justify-between rounded-md border border-border/50 bg-muted/20 px-2 py-1"
         >
           <div class="text-[11px] text-muted-foreground font-mono truncate">{{ filterPath }}</div>
-          <Button variant="ghost" size="sm" class="h-6" @click="$emit('clearFilter')">Clear</Button>
+          <Button variant="ghost" size="sm" class="h-6" @click="$emit('clearFilter')">{{ t('common.clear') }}</Button>
         </div>
 
         <div class="grid gap-2 rounded-md border border-border/50 bg-muted/10 p-2">
-          <div class="text-[11px] font-medium text-muted-foreground">Search</div>
+          <div class="text-[11px] font-medium text-muted-foreground">{{ t('common.search') }}</div>
           <div class="grid gap-2 lg:grid-cols-[120px_1fr]">
             <OptionPicker
               :model-value="filterRefType"
               :options="filterRefTypePickerOptions"
-              title="Ref type"
-              search-placeholder="Search types"
+              :title="t('git.ui.dialogs.history.fields.refType')"
+              :search-placeholder="t('git.ui.dialogs.history.search.refTypes')"
               :include-empty="false"
               trigger-class="h-8 rounded border border-input bg-background text-xs px-2"
               size="sm"
@@ -206,7 +209,11 @@ function onFilterRefTypeChange(value: string | number) {
             <Input
               :model-value="filterRef"
               class="h-8 font-mono text-xs"
-              :placeholder="filterRefType === 'tag' ? 'Tag name' : 'Branch name'"
+              :placeholder="
+                filterRefType === 'tag'
+                  ? t('git.ui.dialogs.history.placeholders.tagName')
+                  : t('git.ui.dialogs.history.placeholders.branchName')
+              "
               @update:model-value="(v) => $emit('update:filterRef', String(v))"
             />
           </div>
@@ -215,9 +222,9 @@ function onFilterRefTypeChange(value: string | number) {
             :model-value="filterRef"
             @update:model-value="(v) => $emit('update:filterRef', String(v || ''))"
             :options="refPickerOptions"
-            title="Ref"
-            search-placeholder="Search refs"
-            :empty-label="`All ${filterRefType === 'tag' ? 'tags' : 'branches'}`"
+            :title="t('git.ui.dialogs.history.fields.ref')"
+            :search-placeholder="t('git.ui.dialogs.history.search.refs')"
+            :empty-label="filterRefType === 'tag' ? t('git.ui.dialogs.history.allTags') : t('git.ui.dialogs.history.allBranches')"
             trigger-class="h-8 rounded border border-input bg-background text-xs px-2"
             size="sm"
             monospace
@@ -225,26 +232,26 @@ function onFilterRefTypeChange(value: string | number) {
           <Input
             :model-value="filterAuthor"
             class="h-8 font-mono text-xs"
-            placeholder="Author contains"
+            :placeholder="t('git.ui.dialogs.history.placeholders.authorContains')"
             @update:model-value="(v) => $emit('update:filterAuthor', String(v))"
           />
           <Input
             :model-value="filterMessage"
             class="h-8 font-mono text-xs"
-            placeholder="Message contains"
+            :placeholder="t('git.ui.dialogs.history.placeholders.messageContains')"
             @update:model-value="(v) => $emit('update:filterMessage', String(v))"
           />
           <div class="flex items-center gap-2">
-            <Button size="sm" class="h-7" @click="$emit('applyFilters')">Search</Button>
-            <Button variant="secondary" size="sm" class="h-7" @click="$emit('clearFilters')">Clear</Button>
+            <Button size="sm" class="h-7" @click="$emit('applyFilters')">{{ t('common.search') }}</Button>
+            <Button variant="secondary" size="sm" class="h-7" @click="$emit('clearFilters')">{{ t('common.clear') }}</Button>
           </div>
         </div>
 
         <div class="rounded-md border border-border/50 overflow-hidden">
           <div v-if="error" class="p-3 text-xs text-red-500">{{ error }}</div>
-          <div v-else-if="loading && !commits.length" class="p-3 text-xs text-muted-foreground">Loading...</div>
+          <div v-else-if="loading && !commits.length" class="p-3 text-xs text-muted-foreground">{{ t('common.loading') }}</div>
           <ScrollArea v-else class="h-72">
-            <div v-if="!commits.length" class="p-3 text-xs text-muted-foreground">No commits</div>
+            <div v-if="!commits.length" class="p-3 text-xs text-muted-foreground">{{ t('git.ui.dialogs.history.emptyCommits') }}</div>
             <div v-else class="divide-y divide-border/40">
               <button
                 v-for="c in commits"
@@ -260,7 +267,7 @@ function onFilterRefTypeChange(value: string | number) {
                   </span>
                   <div class="min-w-0">
                     <div class="text-xs font-medium text-foreground truncate">
-                      {{ c.subject || '(no message)' }}
+                      {{ c.subject || t('git.ui.dialogs.history.noMessage') }}
                     </div>
                     <div class="text-[11px] text-muted-foreground mt-1">
                       <span class="font-mono">{{ c.shortHash }}</span>
@@ -282,16 +289,16 @@ function onFilterRefTypeChange(value: string | number) {
             :disabled="!hasMore || loading"
             @click="$emit('loadMore')"
           >
-            Load more
+            {{ t('common.loadMore') }}
           </Button>
         </div>
       </div>
 
       <div class="rounded-md border border-border/50 bg-background/40 p-3 min-h-[20rem]">
-        <div v-if="!selected" class="text-xs text-muted-foreground">Select a commit to view diff.</div>
+        <div v-if="!selected" class="text-xs text-muted-foreground">{{ t('git.ui.dialogs.history.selectCommitToViewDiff') }}</div>
         <div v-else class="space-y-3">
           <div class="space-y-1">
-            <div class="text-sm font-semibold text-foreground">{{ selected.subject || '(no message)' }}</div>
+            <div class="text-sm font-semibold text-foreground">{{ selected.subject || t('git.ui.dialogs.history.noMessage') }}</div>
             <div class="text-[11px] text-muted-foreground">{{ selectedMeta }}</div>
             <div class="text-[11px] text-muted-foreground font-mono">{{ selected.hash }}</div>
             <div v-if="selected.body" class="text-[11px] text-muted-foreground whitespace-pre-wrap">
@@ -307,9 +314,9 @@ function onFilterRefTypeChange(value: string | number) {
               </span>
             </div>
             <div class="flex flex-wrap gap-2 pt-1">
-              <Button variant="secondary" size="sm" @click="$emit('copyHash', selected.hash)">Copy hash</Button>
-              <Button variant="secondary" size="sm" @click="$emit('checkout', selected)">Checkout</Button>
-              <Button variant="secondary" size="sm" @click="$emit('createBranch', selected)">Create branch</Button>
+              <Button variant="secondary" size="sm" @click="$emit('copyHash', selected.hash)">{{ t('git.ui.dialogs.history.actions.copyHash') }}</Button>
+              <Button variant="secondary" size="sm" @click="$emit('checkout', selected)">{{ t('git.ui.dialogs.history.actions.checkout') }}</Button>
+              <Button variant="secondary" size="sm" @click="$emit('createBranch', selected)">{{ t('git.ui.dialogs.history.actions.createBranch') }}</Button>
               <Button
                 variant="secondary"
                 size="sm"
@@ -317,7 +324,9 @@ function onFilterRefTypeChange(value: string | number) {
                 @click="$emit('selectCompare', selected)"
               >
                 {{
-                  compareSelectedHash === selected.hash ? `Selected (${compareSelectionShort})` : 'Select for compare'
+                  compareSelectedHash === selected.hash
+                    ? t('git.ui.dialogs.history.actions.compareSelected', { hash: compareSelectionShort })
+                    : t('git.ui.dialogs.history.actions.selectForCompare')
                 }}
               </Button>
               <Button
@@ -326,7 +335,7 @@ function onFilterRefTypeChange(value: string | number) {
                 size="sm"
                 @click="$emit('compareWithParent', selected)"
               >
-                Compare with parent
+                {{ t('git.ui.dialogs.history.actions.compareWithParent') }}
               </Button>
               <Button
                 v-if="compareSelectedHash && compareSelectedHash !== selected.hash"
@@ -334,66 +343,66 @@ function onFilterRefTypeChange(value: string | number) {
                 size="sm"
                 @click="$emit('compareWithSelected', selected)"
               >
-                Compare with selected
+                {{ t('git.ui.dialogs.history.actions.compareWithSelected') }}
               </Button>
               <div class="flex items-center gap-1">
                 <div class="w-[140px]">
                   <OptionPicker
                     v-model="resetMode"
                     :options="resetModePickerOptions"
-                    title="Reset mode"
-                    search-placeholder="Search modes"
+                    :title="t('git.ui.dialogs.history.fields.resetMode')"
+                    :search-placeholder="t('git.ui.dialogs.history.search.resetModes')"
                     :include-empty="false"
                     trigger-class="h-7 rounded border border-input bg-background text-[11px] px-2"
                     size="sm"
                   />
                 </div>
                 <ConfirmPopover
-                  title="Reset to this commit?"
-                  description="This will move HEAD and update the working tree based on mode."
-                  confirm-text="Reset"
-                  cancel-text="Cancel"
+                  :title="t('git.ui.dialogs.history.confirmReset.title')"
+                  :description="t('git.ui.dialogs.history.confirmReset.description')"
+                  :confirm-text="t('git.ui.dialogs.history.actions.reset')"
+                  :cancel-text="t('common.cancel')"
                   variant="destructive"
                   @confirm="requestReset(selected)"
                 >
-                  <Button variant="secondary" size="sm" @click="() => {}">Reset</Button>
+                  <Button variant="secondary" size="sm" @click="() => {}">{{ t('git.ui.dialogs.history.actions.reset') }}</Button>
                 </ConfirmPopover>
               </div>
               <ConfirmPopover
-                title="Cherry-pick this commit?"
-                description="This will apply the commit on top of the current branch."
-                confirm-text="Cherry-pick"
-                cancel-text="Cancel"
+                :title="t('git.ui.dialogs.history.confirmCherryPick.title')"
+                :description="t('git.ui.dialogs.history.confirmCherryPick.description')"
+                :confirm-text="t('git.ui.dialogs.history.actions.cherryPick')"
+                :cancel-text="t('common.cancel')"
                 variant="destructive"
                 @confirm="$emit('cherryPick', selected)"
               >
-                <Button variant="secondary" size="sm" @click="() => {}">Cherry-pick</Button>
+                <Button variant="secondary" size="sm" @click="() => {}">{{ t('git.ui.dialogs.history.actions.cherryPick') }}</Button>
               </ConfirmPopover>
               <ConfirmPopover
-                title="Revert this commit?"
-                description="This will create a new commit that reverts the changes."
-                confirm-text="Revert"
-                cancel-text="Cancel"
+                :title="t('git.ui.dialogs.history.confirmRevert.title')"
+                :description="t('git.ui.dialogs.history.confirmRevert.description')"
+                :confirm-text="t('git.ui.dialogs.history.actions.revert')"
+                :cancel-text="t('common.cancel')"
                 variant="destructive"
                 @confirm="$emit('revert', selected)"
               >
-                <Button variant="secondary" size="sm" @click="() => {}">Revert</Button>
+                <Button variant="secondary" size="sm" @click="() => {}">{{ t('git.ui.dialogs.history.actions.revert') }}</Button>
               </ConfirmPopover>
             </div>
           </div>
 
           <div class="border-t border-border/60 pt-3 space-y-2">
             <div class="flex items-center justify-between">
-              <div class="text-xs font-medium text-muted-foreground">Files</div>
+              <div class="text-xs font-medium text-muted-foreground">{{ t('git.ui.dialogs.history.sections.files') }}</div>
               <Button variant="ghost" size="sm" class="h-6" :disabled="!selectedFile" @click="$emit('clearFile')">
-                All files
+                {{ t('git.ui.dialogs.history.actions.allFiles') }}
               </Button>
             </div>
             <div class="rounded-md border border-border/40 overflow-hidden">
               <div v-if="filesError" class="p-2 text-xs text-red-500">{{ filesError }}</div>
-              <div v-else-if="filesLoading" class="p-2 text-xs text-muted-foreground">Loading files...</div>
+              <div v-else-if="filesLoading" class="p-2 text-xs text-muted-foreground">{{ t('git.ui.dialogs.history.loadingFiles') }}</div>
               <ScrollArea v-else class="h-36">
-                <div v-if="!files.length" class="p-2 text-xs text-muted-foreground">No file changes.</div>
+                <div v-if="!files.length" class="p-2 text-xs text-muted-foreground">{{ t('git.ui.dialogs.history.emptyFiles') }}</div>
                 <div v-else class="divide-y divide-border/40">
                   <button
                     v-for="f in files"
@@ -419,20 +428,24 @@ function onFilterRefTypeChange(value: string | number) {
 
             <div class="pt-2">
               <div class="text-xs font-medium text-muted-foreground mb-1">
-                {{ selectedFileLabel ? `Diff — ${selectedFileLabel}` : 'Diff — All files' }}
+                {{
+                  selectedFileLabel
+                    ? t('git.ui.dialogs.history.diffTitleFile', { file: selectedFileLabel })
+                    : t('git.ui.dialogs.history.diffTitleAllFiles')
+                }}
               </div>
               <div v-if="selectedFileLabel">
                 <div v-if="fileDiffError" class="text-xs text-red-500">{{ fileDiffError }}</div>
-                <div v-else-if="fileDiffLoading" class="text-xs text-muted-foreground">Loading diff...</div>
-                <div v-else-if="!fileDiff" class="text-xs text-muted-foreground">No diff content.</div>
+                <div v-else-if="fileDiffLoading" class="text-xs text-muted-foreground">{{ t('git.ui.dialogs.history.loadingDiff') }}</div>
+                <div v-else-if="!fileDiff" class="text-xs text-muted-foreground">{{ t('git.ui.dialogs.history.emptyDiff') }}</div>
                 <div v-else class="h-[320px] min-h-0">
                   <DiffViewer :diff="fileDiff" :output-format="'side-by-side'" :draw-file-list="false" />
                 </div>
               </div>
               <div v-else>
                 <div v-if="diffError" class="text-xs text-red-500">{{ diffError }}</div>
-                <div v-else-if="diffLoading" class="text-xs text-muted-foreground">Loading diff...</div>
-                <div v-else-if="!diff" class="text-xs text-muted-foreground">No diff content.</div>
+                <div v-else-if="diffLoading" class="text-xs text-muted-foreground">{{ t('git.ui.dialogs.history.loadingDiff') }}</div>
+                <div v-else-if="!diff" class="text-xs text-muted-foreground">{{ t('git.ui.dialogs.history.emptyDiff') }}</div>
                 <div v-else class="h-[320px] min-h-0">
                   <DiffViewer :diff="diff" :output-format="'side-by-side'" :draw-file-list="false" />
                 </div>
@@ -447,10 +460,10 @@ function onFilterRefTypeChange(value: string | number) {
   <ConfirmPopover
     :open="hardResetOpen"
     force-dialog
-    title="Confirm hard reset"
-    description="This will rewrite the working tree and discard local changes."
-    confirm-text="Confirm hard reset"
-    cancel-text="Cancel"
+    :title="t('git.ui.dialogs.history.confirmHardReset.title')"
+    :description="t('git.ui.dialogs.history.confirmHardReset.description')"
+    :confirm-text="t('git.ui.dialogs.history.confirmHardReset.confirmText')"
+    :cancel-text="t('common.cancel')"
     variant="destructive"
     :confirm-disabled="!hardResetReady"
     max-width="max-w-md"
@@ -467,7 +480,11 @@ function onFilterRefTypeChange(value: string | number) {
     @confirm="confirmHardReset"
   >
     <template #content>
-      <div class="text-xs text-muted-foreground">Type <span class="font-mono">RESET</span> to confirm hard reset.</div>
+      <div class="text-xs text-muted-foreground">
+        {{ t('git.ui.dialogs.history.confirmHardReset.typeResetHintPrefix') }}
+        <span class="font-mono">RESET</span>
+        {{ t('git.ui.dialogs.history.confirmHardReset.typeResetHintSuffix') }}
+      </div>
       <Input v-model="hardResetText" class="h-8 font-mono text-xs" placeholder="RESET" />
     </template>
   </ConfirmPopover>

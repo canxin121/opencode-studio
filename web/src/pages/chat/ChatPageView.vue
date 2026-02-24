@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, unref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   RiArrowDownLine,
   RiArrowDownDoubleLine,
@@ -35,6 +36,8 @@ import { hasDisplayableAssistantError } from './assistantError'
 // Keep it "dumb" so we can aggressively split ChatPage logic into composables.
 const props = defineProps<{ ctx: ChatPageViewContext }>()
 const ctx = props.ctx
+
+const { t } = useI18n()
 
 const {
   // Template refs (these are refs created in ChatPage).
@@ -343,24 +346,24 @@ void sessionActionsMenuRef
             v-if="navigableMessageIds.length > 1 || (navigableMessageIds.length > 0 && !chat.selectedHistory.exhausted)"
             size="icon"
             variant="outline"
-            class="h-8 w-8 rounded-full bg-background/80 backdrop-blur"
-            title="Previous user message"
-            aria-label="Previous user message"
-            @click="navPrev"
-            :disabled="(navIndex <= 0 && chat.selectedHistory.exhausted) || loadingOlder"
-          >
+             class="h-8 w-8 rounded-full bg-background/80 backdrop-blur"
+             :aria-label="t('chat.page.nav.previousUserMessage')"
+             :title="t('chat.page.nav.previousUserMessage')"
+             @click="navPrev"
+             :disabled="(navIndex <= 0 && chat.selectedHistory.exhausted) || loadingOlder"
+           >
             <RiArrowUpLine class="h-4 w-4" />
           </Button>
-          <Button
+           <Button
             v-if="navigableMessageIds.length > 1"
             size="icon"
             variant="outline"
             class="h-8 w-8 rounded-full bg-background/80 backdrop-blur"
-            title="Next user message"
-            aria-label="Next user message"
-            @click="navNext"
-            :disabled="navIndex >= navigableMessageIds.length - 1"
-          >
+             :title="t('chat.page.nav.nextUserMessage')"
+             :aria-label="t('chat.page.nav.nextUserMessage')"
+             @click="navNext"
+             :disabled="navIndex >= navigableMessageIds.length - 1"
+           >
             <RiArrowDownLine class="h-4 w-4" />
           </Button>
 
@@ -372,15 +375,15 @@ void sessionActionsMenuRef
           </div>
 
           <!-- Keep this slot fixed so other controls don't move -->
-          <Button
+           <Button
             size="icon"
             variant="outline"
             class="h-8 w-8 rounded-full bg-background/80 backdrop-blur"
-            title="Bottom"
-            aria-label="Bottom"
-            :class="!isAtBottom && chat.messages.length ? '' : 'invisible pointer-events-none'"
-            @click="scrollToBottom('smooth')"
-          >
+             :title="t('chat.page.nav.bottom')"
+             :aria-label="t('chat.page.nav.bottom')"
+             :class="!isAtBottom && chat.messages.length ? '' : 'invisible pointer-events-none'"
+             @click="scrollToBottom('smooth')"
+           >
             <RiArrowDownDoubleLine class="h-4 w-4" />
           </Button>
         </div>
@@ -469,8 +472,8 @@ void sessionActionsMenuRef
                           <ToolbarChipButton
                             ref="attachmentsTriggerRef"
                             :active="attachmentsPanelOpen"
-                            title="Attachments"
-                            aria-label="Attachments"
+                            :title="t('chat.page.attachments')"
+                            :aria-label="t('chat.page.attachments')"
                             @mousedown.prevent
                             @click.stop="toggleAttachmentsPanel"
                           >
@@ -491,7 +494,11 @@ void sessionActionsMenuRef
                             </span>
                           </ToolbarChipButton>
                           <template #content>
-                            {{ attachmentsCount > 0 ? `Attachments (${attachmentsCount})` : 'Attachments' }}
+                            {{
+                              attachmentsCount > 0
+                                ? t('chat.page.attachmentsWithCount', { count: attachmentsCount })
+                                : t('chat.page.attachments')
+                            }}
                           </template>
                         </Tooltip>
 
@@ -499,8 +506,8 @@ void sessionActionsMenuRef
                           v-else
                           ref="attachmentsTriggerRef"
                           :active="attachmentsPanelOpen"
-                          title="Attachments"
-                          aria-label="Attachments"
+                          :title="t('chat.page.attachments')"
+                          :aria-label="t('chat.page.attachments')"
                           @mousedown.prevent
                           @click.stop="toggleAttachmentsPanel"
                         >
@@ -524,8 +531,8 @@ void sessionActionsMenuRef
                         <IconButton
                           class="text-muted-foreground hover:text-foreground hover:bg-secondary/40"
                           :class="composerActionMenuOpen ? 'bg-secondary/60 text-foreground' : ''"
-                          title="Tools"
-                          aria-label="Tools"
+                          :title="t('chat.page.tools')"
+                          :aria-label="t('chat.page.tools')"
                           @mousedown.prevent
                           @click.stop="toggleComposerActionMenu"
                         >
@@ -537,11 +544,11 @@ void sessionActionsMenuRef
                           :open="composerActionMenuOpen"
                           v-model:query="composerActionMenuQuery"
                           :groups="composerActionMenuGroups"
-                          title="Tools"
-                          mobile-title="Tools"
+                          :title="t('chat.page.tools')"
+                          :mobile-title="t('chat.page.tools')"
                           :searchable="true"
-                          search-placeholder="Search actions"
-                          empty-text="No actions found."
+                          :search-placeholder="t('common.searchActions')"
+                          :empty-text="t('common.noActionsFound')"
                           :is-mobile-pointer="ui.isMobilePointer"
                           desktop-placement="top-start"
                           desktop-class="w-64"
@@ -554,8 +561,8 @@ void sessionActionsMenuRef
                         <Tooltip v-if="!ui.isMobilePointer && modelHint">
                           <ToolbarChipButton
                             :active="composerPickerOpen === 'model'"
-                            title="Model"
-                            aria-label="Model"
+                            :title="t('chat.composer.picker.modelTitle')"
+                            :aria-label="t('chat.composer.picker.modelTitle')"
                             ref="modelTriggerRef"
                             @mousedown.prevent
                             @click.stop="toggleComposerPicker('model')"
@@ -571,8 +578,8 @@ void sessionActionsMenuRef
                         <ToolbarChipButton
                           v-else
                           :active="composerPickerOpen === 'model'"
-                          title="Model"
-                          aria-label="Model"
+                          :title="t('chat.composer.picker.modelTitle')"
+                          :aria-label="t('chat.composer.picker.modelTitle')"
                           ref="modelTriggerRef"
                           @mousedown.prevent
                           @click.stop="toggleComposerPicker('model')"
@@ -587,8 +594,8 @@ void sessionActionsMenuRef
                         <Tooltip v-if="hasVariantsForSelection && !ui.isMobilePointer && variantHint">
                           <ToolbarChipButton
                             :active="composerPickerOpen === 'variant'"
-                            title="Variant"
-                            aria-label="Variant"
+                            :title="t('chat.composer.picker.variantTitle')"
+                            :aria-label="t('chat.composer.picker.variantTitle')"
                             ref="variantTriggerRef"
                             @mousedown.prevent
                             @click.stop="toggleComposerPicker('variant')"
@@ -604,8 +611,8 @@ void sessionActionsMenuRef
                         <ToolbarChipButton
                           v-else-if="hasVariantsForSelection"
                           :active="composerPickerOpen === 'variant'"
-                          title="Variant"
-                          aria-label="Variant"
+                          :title="t('chat.composer.picker.variantTitle')"
+                          :aria-label="t('chat.composer.picker.variantTitle')"
                           ref="variantTriggerRef"
                           @mousedown.prevent
                           @click.stop="toggleComposerPicker('variant')"
@@ -620,8 +627,8 @@ void sessionActionsMenuRef
                         <Tooltip v-if="!ui.isMobilePointer && agentHint">
                           <ToolbarChipButton
                             :active="composerPickerOpen === 'agent'"
-                            title="Agent"
-                            aria-label="Agent"
+                            :title="t('chat.composer.picker.agentTitle')"
+                            :aria-label="t('chat.composer.picker.agentTitle')"
                             ref="agentTriggerRef"
                             @mousedown.prevent
                             @click.stop="toggleComposerPicker('agent')"
@@ -636,8 +643,8 @@ void sessionActionsMenuRef
                         <ToolbarChipButton
                           v-else
                           :active="composerPickerOpen === 'agent'"
-                          title="Agent"
-                          aria-label="Agent"
+                          :title="t('chat.composer.picker.agentTitle')"
+                          :aria-label="t('chat.composer.picker.agentTitle')"
                           ref="agentTriggerRef"
                           @mousedown.prevent
                           @click.stop="toggleComposerPicker('agent')"
@@ -654,7 +661,7 @@ void sessionActionsMenuRef
                           v-if="sessionUsage"
                           class="hidden sm:flex items-center gap-2 mr-2 text-[10px] text-muted-foreground font-mono select-none"
                         >
-                          <span>{{ sessionUsage.tokensLabel }} tokens</span>
+                          <span>{{ t('chat.page.usage.tokensSuffix', { value: sessionUsage.tokensLabel }) }}</span>
                           <span v-if="sessionUsage.percentUsed !== null" class="opacity-80"
                             >{{ sessionUsage.percentUsed }}%</span
                           >
@@ -681,8 +688,12 @@ void sessionActionsMenuRef
                             data-oc-keyboard-tap="blur"
                             :variant="composerPrimaryAction === 'stop' ? 'outline' : undefined"
                             :class="composerPrimaryAction === 'stop' ? 'text-destructive hover:text-destructive' : ''"
-                            :title="composerPrimaryAction === 'stop' ? 'Stop' : 'Send'"
-                            :aria-label="composerPrimaryAction === 'stop' ? 'Stop run' : 'Send message'"
+                            :title="composerPrimaryAction === 'stop' ? t('chat.page.primary.stop') : t('chat.page.primary.send')"
+                            :aria-label="
+                              composerPrimaryAction === 'stop'
+                                ? t('chat.page.primary.stopRun')
+                                : t('chat.page.primary.sendMessage')
+                            "
                             :disabled="composerPrimaryDisabled"
                             @click="handleComposerPrimaryAction"
                           >
@@ -696,7 +707,7 @@ void sessionActionsMenuRef
                             <RiStopCircleLine v-else-if="composerPrimaryAction === 'stop'" class="h-4 w-4" />
                             <RiSendPlane2Line v-else class="h-4 w-4" />
                           </Button>
-                          <template #content>{{ composerPrimaryAction === 'stop' ? 'Stop run' : 'Send' }}</template>
+                          <template #content>{{ composerPrimaryAction === 'stop' ? t('chat.page.primary.stopRun') : t('chat.page.primary.send') }}</template>
                         </Tooltip>
                       </div>
                     </div>

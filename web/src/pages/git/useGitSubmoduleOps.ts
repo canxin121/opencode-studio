@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { i18n } from '@/i18n'
 
 import type { GitSubmoduleInfo, GitSubmoduleListResponse } from '@/types/git'
 import type { JsonValue } from '@/types/json'
@@ -69,7 +70,7 @@ export function useGitSubmoduleOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ url, path, branch: branch || null }),
         })
-        toasts.push('success', `Added submodule ${path}`)
+        toasts.push('success', i18n.global.t('git.toasts.addedSubmodule', { path }))
         newSubmoduleUrl.value = ''
         newSubmodulePath.value = ''
         newSubmoduleBranch.value = ''
@@ -93,7 +94,7 @@ export function useGitSubmoduleOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ path: p }),
         })
-        toasts.push('success', `Initialized ${p}`)
+        toasts.push('success', i18n.global.t('git.toasts.initializedItem', { name: p }))
       } catch (err) {
         if (handleGitBusy(err, 'Init submodule', () => initSubmodule(p))) return
         toasts.push('error', err instanceof Error ? err.message : String(err))
@@ -112,7 +113,10 @@ export function useGitSubmoduleOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ path: p || null, recursive, init }),
         })
-        toasts.push('success', p ? `Updated ${p}` : 'Updated submodules')
+        toasts.push(
+          'success',
+          p ? i18n.global.t('git.toasts.updatedSubmodule', { path: p }) : i18n.global.t('git.toasts.updatedSubmodules'),
+        )
       } catch (err) {
         if (handleGitBusy(err, 'Update submodule', () => updateSubmodule(p, recursive, init))) return
         toasts.push('error', err instanceof Error ? err.message : String(err))

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { DialogRoot, DialogContent, DialogOverlay, DialogPortal, DialogTitle, DialogDescription } from 'radix-vue'
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { cn } from '@/lib/utils'
 import Button from '@/components/ui/Button.vue'
 
@@ -22,6 +23,8 @@ function close() {
   emit('update:open', false)
 }
 
+const { t } = useI18n()
+
 const contentClass = computed(() =>
   cn(
     props.mobileFullscreen
@@ -40,7 +43,7 @@ const contentClass = computed(() =>
       />
       <DialogContent :class="contentClass">
         <div class="absolute right-3 top-3">
-          <Button variant="ghost" size="icon" class="h-8 w-8" aria-label="Close" @click="close">
+          <Button variant="ghost" size="icon" class="h-8 w-8" :aria-label="t('common.close')" @click="close">
             <svg
               xmlns="http://www.w3.org/2000/svg"
               width="18"

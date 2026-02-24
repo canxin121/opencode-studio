@@ -1,4 +1,5 @@
 import { ref, type Ref } from 'vue'
+import { i18n } from '@/i18n'
 
 import type { GitTagInfo, GitTagsListResponse } from '@/types/git'
 import type { JsonValue } from '@/types/json'
@@ -70,7 +71,7 @@ export function useGitTags(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ name, ref: rf || undefined, message: message || undefined }),
         })
-        toasts.push('success', `Created tag ${name}`)
+        toasts.push('success', i18n.global.t('git.toasts.createdTag', { name }))
         newTagName.value = ''
         newTagMessage.value = ''
         await loadTags()
@@ -94,7 +95,7 @@ export function useGitTags(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ name: n }),
         })
-        toasts.push('success', `Deleted tag ${n}`)
+        toasts.push('success', i18n.global.t('git.toasts.deletedTag', { name: n }))
         await loadTags()
       } catch (err) {
         if (handleGitBusy(err, 'Delete tag', () => deleteTag(name))) return
@@ -117,7 +118,7 @@ export function useGitTags(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ remote, name: n }),
         })
-        toasts.push('success', `Deleted remote tag ${remote}/${n}`)
+        toasts.push('success', i18n.global.t('git.toasts.deletedRemoteTag', { name: `${remote}/${n}` }))
       } catch (err) {
         if (handleGitBusy(err, 'Delete remote tag', () => deleteRemoteTag(name))) return
         toasts.push('error', err instanceof Error ? err.message : String(err))

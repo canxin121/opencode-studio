@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { ComponentPublicInstance } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 import {
   RiArrowUpLine,
@@ -78,6 +79,8 @@ const inlineCreateParentPath = ref('')
 const inlineCreateName = ref('')
 const inlineCreateBusy = ref(false)
 const inlineCreateInputRef = ref<HTMLInputElement | null>(null)
+
+const { t } = useI18n()
 const inlineRenamePath = ref('')
 const inlineRenameName = ref('')
 const inlineRenameBusy = ref(false)
@@ -293,37 +296,37 @@ async function handleTreeNodeClick(node: FileNode) {
 const explorerActionGroups = computed<OptionMenuGroup[]>(() => [
   {
     id: 'actions',
-    title: 'Explorer actions',
+    title: t('files.explorer.actionMenu.groups.actions'),
     items: [
       {
         id: 'upload',
-        label: props.uploading ? 'Uploading...' : 'Upload files',
+        label: props.uploading ? t('files.explorer.actionMenu.uploading') : t('files.explorer.actionMenu.uploadFiles'),
         disabled: props.uploading,
         icon: props.uploading ? RiLoader4Line : RiUpload2Line,
       },
       {
         id: 'collapse',
-        label: 'Collapse folders',
-        description: 'Fold all expanded directories',
+        label: t('files.explorer.actionMenu.collapseFolders'),
+        description: t('files.explorer.actionMenu.collapseFoldersDescription'),
         icon: RiArrowUpLine,
       },
     ],
   },
   {
     id: 'visibility',
-    title: 'Visibility',
+    title: t('files.explorer.actionMenu.groups.visibility'),
     items: [
       {
         id: 'toggle-hidden',
-        label: 'Show hidden files',
-        description: 'Include dotfiles in explorer',
+        label: t('files.explorer.actionMenu.showHiddenFiles'),
+        description: t('files.explorer.actionMenu.showHiddenFilesDescription'),
         checked: showHidden.value,
         icon: showHidden.value ? RiEyeLine : RiEyeOffLine,
       },
       {
         id: 'toggle-gitignored',
-        label: 'Show gitignored files',
-        description: 'Disable gitignore filtering',
+        label: t('files.explorer.actionMenu.showGitignoredFiles'),
+        description: t('files.explorer.actionMenu.showGitignoredFilesDescription'),
         checked: showGitignored.value,
         icon: RiGitBranchLine,
       },
@@ -335,14 +338,14 @@ const fileActionGroups: OptionMenuGroup[] = [
   {
     id: 'file-actions',
     items: [
-      { id: 'download', label: 'Download', icon: RiDownload2Line },
-      { id: 'copy-path', label: 'Copy path', icon: RiFileCopy2Line },
+      { id: 'download', label: t('files.actions.download'), icon: RiDownload2Line },
+      { id: 'copy-path', label: t('files.actions.copyPath'), icon: RiFileCopy2Line },
     ],
   },
 ]
 
 function rowActionMenuTitle(node: FileNode): string {
-  return node.type === 'directory' ? 'Folder actions' : 'File actions'
+  return node.type === 'directory' ? t('files.explorer.actions.folderActions') : t('files.explorer.actions.fileActions')
 }
 
 function rowActionMenuGroups(node: FileNode): OptionMenuGroup[] {
@@ -350,22 +353,23 @@ function rowActionMenuGroups(node: FileNode): OptionMenuGroup[] {
 
   if (node.type === 'file') {
     items.push(
-      { id: 'download', label: 'Download', icon: RiDownload2Line },
-      { id: 'copy-path', label: 'Copy path', icon: RiFileCopy2Line },
+      { id: 'download', label: t('files.actions.download'), icon: RiDownload2Line },
+      { id: 'copy-path', label: t('files.actions.copyPath'), icon: RiFileCopy2Line },
     )
   }
 
-  items.push({ id: 'rename', label: 'Rename', icon: RiEditLine })
+  items.push({ id: 'rename', label: t('files.explorer.actions.rename'), icon: RiEditLine })
   items.push({
     id: 'delete',
-    label: node.type === 'directory' ? 'Delete folder' : 'Delete file',
+    label: t('files.explorer.actions.delete'),
     icon: RiDeleteBinLine,
     variant: 'destructive',
     disabled: props.deletingPaths.has(node.path),
-    confirmTitle: node.type === 'directory' ? 'Delete folder?' : 'Delete file?',
-    confirmDescription: `Delete ${node.name}? This cannot be undone.`,
-    confirmText: 'Delete',
-    cancelText: 'Cancel',
+    confirmTitle:
+      node.type === 'directory' ? t('files.explorer.actions.deleteFolderTitle') : t('files.explorer.actions.deleteFileTitle'),
+    confirmDescription: t('files.explorer.actions.deleteDescription', { name: node.name }),
+    confirmText: t('files.explorer.actions.delete'),
+    cancelText: t('common.cancel'),
   })
 
   return [
@@ -577,24 +581,24 @@ onBeforeUnmount(() => {
 <template>
   <section class="oc-vscode-pane" :class="isMobile ? 'border-0 rounded-none' : ''">
     <div class="oc-vscode-pane-header">
-      <div class="oc-vscode-pane-title">Explorer</div>
+      <div class="oc-vscode-pane-title">{{ t('files.explorer.title') }}</div>
       <div class="flex items-center gap-1">
-        <SidebarIconButton title="New file" @click="startCreate('createFile')">
+        <SidebarIconButton :title="t('files.explorer.toolbar.newFile')" @click="startCreate('createFile')">
           <RiFileAddLine class="h-3.5 w-3.5" />
         </SidebarIconButton>
-        <SidebarIconButton title="New folder" @click="startCreate('createFolder')">
+        <SidebarIconButton :title="t('files.explorer.toolbar.newFolder')" @click="startCreate('createFolder')">
           <RiFolderAddLine class="h-3.5 w-3.5" />
         </SidebarIconButton>
 
-        <SidebarIconButton title="Refresh tree" aria-label="Refresh tree" @click="refreshRoot">
+        <SidebarIconButton :title="t('files.explorer.toolbar.refreshTree')" :aria-label="t('files.explorer.toolbar.refreshTree')" @click="refreshRoot">
           <RiRefreshLine class="h-3.5 w-3.5" />
         </SidebarIconButton>
 
         <div class="relative">
           <SidebarIconButton
             :active="actionMenuOpen"
-            title="Explorer actions"
-            aria-label="Explorer actions"
+            :title="t('files.explorer.toolbar.actions')"
+            :aria-label="t('files.explorer.toolbar.actions')"
             @mousedown.prevent
             @click.stop="actionMenuOpen = !actionMenuOpen"
           >
@@ -604,8 +608,8 @@ onBeforeUnmount(() => {
             :open="actionMenuOpen"
             :query="actionMenuQuery"
             :groups="explorerActionGroups"
-            title="Explorer actions"
-            mobile-title="Explorer actions"
+            :title="t('files.explorer.toolbar.actions')"
+            :mobile-title="t('files.explorer.toolbar.actions')"
             :searchable="true"
             filter-mode="internal"
             :is-mobile-pointer="isMobile"
@@ -622,8 +626,8 @@ onBeforeUnmount(() => {
 
     <div class="border-b border-sidebar-border/60 px-1.5 py-1">
       <SegmentedControl class="grid-cols-2">
-        <SegmentedButton :active="viewMode === 'tree'" @click="viewMode = 'tree'">Tree</SegmentedButton>
-        <SegmentedButton :active="viewMode === 'search'" @click="viewMode = 'search'">Search</SegmentedButton>
+        <SegmentedButton :active="viewMode === 'tree'" @click="viewMode = 'tree'">{{ t('files.explorer.view.tree') }}</SegmentedButton>
+        <SegmentedButton :active="viewMode === 'search'" @click="viewMode = 'search'">{{ t('files.explorer.view.search') }}</SegmentedButton>
       </SegmentedControl>
     </div>
 
@@ -638,7 +642,7 @@ onBeforeUnmount(() => {
         @drop="onExplorerDrop"
       >
         <div class="px-1 pb-2 pt-1">
-          <div v-if="!hasRootChildren" class="oc-vscode-empty">Loading...</div>
+          <div v-if="!hasRootChildren" class="oc-vscode-empty">{{ t('common.loading') }}</div>
 
           <ul v-else class="space-y-0.5">
             <li v-for="entry in treeRows" :key="entry.key">
@@ -675,7 +679,7 @@ onBeforeUnmount(() => {
                     :ref="setInlineRenameInputRef"
                     v-model="inlineRenameName"
                     class="h-5 min-w-0 flex-1 bg-transparent font-mono text-[12px] text-foreground outline-none placeholder:text-muted-foreground"
-                    placeholder="name"
+                    :placeholder="t('files.dialog.namePlaceholder')"
                     :disabled="inlineRenameBusy"
                     @keydown.enter.prevent="submitInlineRename(entry.row.node)"
                     @keydown.esc.prevent="resetInlineRename"
@@ -684,8 +688,8 @@ onBeforeUnmount(() => {
                   <template #actions>
                     <SidebarIconButton
                       size="sm"
-                      title="Cancel"
-                      aria-label="Cancel"
+                      :title="t('common.cancel')"
+                      :aria-label="t('common.cancel')"
                       :disabled="inlineRenameBusy"
                       @click.stop="resetInlineRename"
                     >
@@ -693,8 +697,8 @@ onBeforeUnmount(() => {
                     </SidebarIconButton>
                     <SidebarIconButton
                       size="sm"
-                      title="Rename"
-                      aria-label="Rename"
+                      :title="t('files.explorer.actions.rename')"
+                      :aria-label="t('files.explorer.actions.rename')"
                       :disabled="inlineRenameBusy || !inlineRenameName.trim()"
                       @click.stop="submitInlineRename(entry.row.node)"
                     >
@@ -740,7 +744,7 @@ onBeforeUnmount(() => {
                     <div v-if="isMobile" class="relative" data-file-action-root="true">
                       <SidebarIconButton
                         size="sm"
-                        title="Actions"
+                        :title="t('files.explorer.actions.actions')"
                         :active="fileActionMenuPath === entry.row.node.path"
                         @click.stop="toggleFileActionMenu(entry.row.node.path)"
                       >
@@ -768,7 +772,7 @@ onBeforeUnmount(() => {
                       <div v-if="entry.row.node.type === 'file'" class="relative" data-file-action-root="true">
                         <SidebarIconButton
                           size="sm"
-                          title="File actions"
+                          :title="t('files.explorer.actions.fileActions')"
                           :active="fileActionMenuPath === entry.row.node.path"
                           @click.stop="toggleFileActionMenu(entry.row.node.path)"
                         >
@@ -778,8 +782,8 @@ onBeforeUnmount(() => {
                           :open="fileActionMenuPath === entry.row.node.path"
                           :query="fileActionMenuQuery"
                           :groups="fileActionGroups"
-                          title="File actions"
-                          mobile-title="File actions"
+                          :title="t('files.explorer.actions.fileActions')"
+                          :mobile-title="t('files.explorer.actions.fileActions')"
                           :searchable="true"
                           filter-mode="internal"
                           :is-mobile-pointer="isMobile"
@@ -792,22 +796,30 @@ onBeforeUnmount(() => {
                         />
                       </div>
 
-                      <SidebarIconButton size="sm" title="Rename" @click.stop="startRename(entry.row.node)">
+                      <SidebarIconButton
+                        size="sm"
+                        :title="t('files.explorer.actions.rename')"
+                        @click.stop="startRename(entry.row.node)"
+                      >
                         <RiEditLine class="h-3 w-3" />
                       </SidebarIconButton>
                       <ConfirmPopover
-                        :title="entry.row.node.type === 'directory' ? 'Delete folder?' : 'Delete file?'"
-                        :description="`Delete ${entry.row.node.name}? This cannot be undone.`"
-                        confirm-text="Delete"
-                        cancel-text="Cancel"
+                        :title="
+                          entry.row.node.type === 'directory'
+                            ? t('files.explorer.actions.deleteFolderTitle')
+                            : t('files.explorer.actions.deleteFileTitle')
+                        "
+                        :description="t('files.explorer.actions.deleteDescription', { name: entry.row.node.name })"
+                        :confirm-text="t('files.explorer.actions.delete')"
+                        :cancel-text="t('common.cancel')"
                         variant="destructive"
                         @confirm="deleteNode(entry.row.node)"
                       >
                         <SidebarIconButton
                           size="sm"
                           destructive
-                          title="Delete"
-                          aria-label="Delete"
+                          :title="t('files.explorer.actions.delete')"
+                          :aria-label="t('files.explorer.actions.delete')"
                           :disabled="deletingPaths.has(entry.row.node.path)"
                           @click.stop
                         >
@@ -839,7 +851,11 @@ onBeforeUnmount(() => {
                   :ref="setInlineCreateInputRef"
                   v-model="inlineCreateName"
                   class="h-5 min-w-0 flex-1 bg-transparent font-mono text-[12px] text-foreground outline-none placeholder:text-muted-foreground"
-                  :placeholder="entry.createKind === 'createFolder' ? 'folder name' : 'file name'"
+                  :placeholder="
+                    entry.createKind === 'createFolder'
+                      ? t('files.explorer.inlineCreate.folderName')
+                      : t('files.explorer.inlineCreate.fileName')
+                  "
                   :disabled="inlineCreateBusy"
                   @keydown.enter.prevent="submitInlineCreate"
                   @keydown.esc.prevent="resetInlineCreate"
@@ -847,8 +863,8 @@ onBeforeUnmount(() => {
                 <template #actions>
                   <SidebarIconButton
                     size="sm"
-                    title="Create"
-                    aria-label="Create"
+                    :title="t('common.create')"
+                    :aria-label="t('common.create')"
                     :disabled="inlineCreateBusy || !inlineCreateName.trim()"
                     @click.stop="submitInlineCreate"
                   >
@@ -857,8 +873,8 @@ onBeforeUnmount(() => {
                   </SidebarIconButton>
                   <SidebarIconButton
                     size="sm"
-                    title="Cancel"
-                    aria-label="Cancel"
+                    :title="t('common.cancel')"
+                    :aria-label="t('common.cancel')"
                     :disabled="inlineCreateBusy"
                     @click.stop="resetInlineCreate"
                   >
@@ -874,7 +890,7 @@ onBeforeUnmount(() => {
 
     <div v-else class="oc-vscode-section flex min-h-0 flex-1 flex-col border-b-0">
       <slot name="search">
-        <div class="oc-vscode-empty">Search is unavailable.</div>
+        <div class="oc-vscode-empty">{{ t('files.explorer.searchUnavailable') }}</div>
       </slot>
     </div>
   </section>

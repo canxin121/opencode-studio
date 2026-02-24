@@ -13,6 +13,7 @@ import {
   RiStarFill,
   RiStarLine,
 } from '@remixicon/vue'
+import { useI18n } from 'vue-i18n'
 
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import IconButton from '@/components/ui/IconButton.vue'
@@ -28,6 +29,8 @@ type SessionLike = {
   slug?: string | null
   time?: { updated?: number | string | null } | null
 }
+
+const { t } = useI18n()
 
 const props = withDefaults(
   defineProps<{
@@ -77,7 +80,7 @@ const props = withDefaults(
     isParent: false,
     isExpanded: false,
     showThreadPlaceholder: false,
-    statusLabel: 'Idle',
+    statusLabel: '',
     statusDotClass: '',
     attention: null,
     pinned: false,
@@ -110,6 +113,11 @@ const emit = defineEmits<{
 
 const hasSessionContext = computed(() => Boolean(props.session && props.directory))
 const rowRootEl = ref<HTMLElement | null>(null)
+
+const statusLabelText = computed(() => {
+  const next = String(props.statusLabel || '').trim()
+  return next.length > 0 ? next : String(t('chat.sidebar.sessionRow.status.idle'))
+})
 
 const canShowActions = computed(() => props.actionsEnabled && hasSessionContext.value)
 const renameInputEl = ref<HTMLInputElement | null>(null)
@@ -186,7 +194,11 @@ function setMenuRef(el: Element | ComponentPublicInstance | null) {
             v-if="isParent"
             role="button"
             class="h-3.5 w-3.5 flex-shrink-0 inline-flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:dark:bg-accent/40 hover:bg-primary/6 cursor-pointer active:scale-95 transition"
-            :aria-label="isExpanded ? 'Collapse thread' : 'Expand thread'"
+            :aria-label="
+              String(
+                t(isExpanded ? 'chat.sidebar.sessionRow.threadToggle.collapse' : 'chat.sidebar.sessionRow.threadToggle.expand'),
+              )
+            "
             @click.stop="emit('toggle-thread')"
           >
             <RiArrowDownSLine v-if="isExpanded" class="h-3 w-3" />
@@ -198,8 +210,8 @@ function setMenuRef(el: Element | ComponentPublicInstance | null) {
             v-if="statusDotClass"
             class="inline-flex h-1.5 w-1.5 rounded-full flex-shrink-0"
             :class="statusDotClass"
-            :title="statusLabel"
-            :aria-label="statusLabel"
+            :title="statusLabelText"
+            :aria-label="statusLabelText"
           />
         </div>
       </template>
@@ -214,11 +226,14 @@ function setMenuRef(el: Element | ComponentPublicInstance | null) {
           </div>
 
           <div v-else class="flex-1 min-w-0 flex flex-col justify-center">
-            <div class="h-3 w-36 rounded bg-muted/30 animate-pulse" aria-label="Loading session" />
+            <div
+              class="h-3 w-36 rounded bg-muted/30 animate-pulse"
+              :aria-label="String(t('chat.sidebar.sessionRow.loading.session'))"
+            />
             <div
               v-if="showDirectory"
               class="mt-1 h-2.5 w-24 rounded bg-muted/20 animate-pulse"
-              aria-label="Loading directory"
+              :aria-label="String(t('chat.sidebar.sessionRow.loading.directory'))"
             />
           </div>
 
@@ -226,14 +241,14 @@ function setMenuRef(el: Element | ComponentPublicInstance | null) {
           <span
             v-if="attention === 'permission'"
             class="inline-flex items-center gap-1 rounded bg-destructive/10 px-1 py-0.5 text-[10px] text-destructive shrink-0"
-            title="Permission required"
+            :title="String(t('chat.attention.title.permissionRequired'))"
           >
             <RiShieldLine class="h-3 w-3" />
           </span>
           <span
             v-else-if="attention === 'question'"
             class="inline-flex items-center gap-1 rounded bg-amber-500/10 px-1 py-0.5 text-[10px] text-amber-600 dark:text-amber-400 shrink-0"
-            title="Question asked"
+            :title="String(t('chat.sidebar.sessionRow.attention.questionAsked'))"
           >
             <RiQuestionLine class="h-3 w-3" />
           </span>
@@ -253,7 +268,7 @@ function setMenuRef(el: Element | ComponentPublicInstance | null) {
             type="text"
             :value="renameDraftText"
             class="h-7 min-w-0 flex-1 rounded-md border border-input bg-background/95 px-2 text-xs text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            placeholder="Session title"
+            :placeholder="String(t('chat.sidebar.sessionRow.placeholders.sessionTitle'))"
             @click.stop
             @input="onRenameInput"
             @keydown.enter.prevent.stop="emit('rename-save')"
@@ -267,8 +282,8 @@ function setMenuRef(el: Element | ComponentPublicInstance | null) {
           <IconButton
             size="xs"
             class="text-muted-foreground hover:text-foreground hover:bg-primary/6"
-            title="Cancel rename"
-            aria-label="Cancel rename"
+            :title="String(t('chat.sidebar.sessionRow.rename.cancel'))"
+            :aria-label="String(t('chat.sidebar.sessionRow.rename.cancel'))"
             :disabled="renameBusy"
             @click.stop="emit('rename-cancel')"
           >
@@ -277,8 +292,8 @@ function setMenuRef(el: Element | ComponentPublicInstance | null) {
           <IconButton
             size="xs"
             class="text-primary hover:bg-primary/12"
-            :title="renameBusy ? 'Saving rename' : 'Save rename'"
-            :aria-label="renameBusy ? 'Saving rename' : 'Save rename'"
+            :title="String(t(renameBusy ? 'chat.sidebar.sessionRow.rename.saving' : 'chat.sidebar.sessionRow.rename.save'))"
+            :aria-label="String(t(renameBusy ? 'chat.sidebar.sessionRow.rename.saving' : 'chat.sidebar.sessionRow.rename.save'))"
             :disabled="!canSaveRename"
             @click.stop="emit('rename-save')"
           >
@@ -291,8 +306,8 @@ function setMenuRef(el: Element | ComponentPublicInstance | null) {
           <IconButton
             size="sm"
             class="text-muted-foreground hover:text-foreground hover:dark:bg-accent/40 hover:bg-primary/6"
-            title="Session actions"
-            aria-label="Session actions"
+            :title="String(t('chat.sidebar.sessionActions.menuTitle'))"
+            :aria-label="String(t('chat.sidebar.sessionActions.menuTitle'))"
             @click.stop="emit('open-actions')"
           >
             <RiMore2Line class="h-4 w-4" />
@@ -303,8 +318,8 @@ function setMenuRef(el: Element | ComponentPublicInstance | null) {
           <IconButton
             size="xs"
             class="text-muted-foreground hover:text-foreground hover:dark:bg-accent/40 hover:bg-primary/6"
-            title="Session actions"
-            aria-label="Session actions"
+            :title="String(t('chat.sidebar.sessionActions.menuTitle'))"
+            :aria-label="String(t('chat.sidebar.sessionActions.menuTitle'))"
             @click.stop="emit('open-action-menu', $event)"
           >
             <RiMore2Line class="h-4 w-4" />
@@ -315,7 +330,8 @@ function setMenuRef(el: Element | ComponentPublicInstance | null) {
             size="xs"
             class="hover:dark:bg-accent/40 hover:bg-primary/6"
             :class="pinned ? 'text-amber-500' : 'text-muted-foreground hover:text-amber-500'"
-            :title="pinned ? 'Unpin' : 'Pin'"
+            :title="String(t(pinned ? 'chat.sidebar.sessionActions.unpin.label' : 'chat.sidebar.sessionActions.pin.label'))"
+            :aria-label="String(t(pinned ? 'chat.sidebar.sessionActions.unpin.label' : 'chat.sidebar.sessionActions.pin.label'))"
             @click.stop="emit('toggle-pin')"
           >
             <component :is="pinned ? RiStarFill : RiStarLine" class="h-4 w-4" />
@@ -323,18 +339,18 @@ function setMenuRef(el: Element | ComponentPublicInstance | null) {
 
           <ConfirmPopover
             v-if="canDelete"
-            title="Delete session?"
-            description="This cannot be undone."
-            confirm-text="Delete"
-            cancel-text="Cancel"
+            :title="String(t('chat.sidebar.sessionActions.delete.confirmTitle'))"
+            :description="String(t('chat.sidebar.sessionActions.delete.confirmDescription'))"
+            :confirm-text="String(t('chat.sidebar.sessionActions.delete.confirmText'))"
+            :cancel-text="String(t('common.cancel'))"
             variant="destructive"
             @confirm="emit('delete')"
           >
             <IconButton
               size="xs"
               class="text-muted-foreground hover:text-destructive hover:dark:bg-accent/40 hover:bg-primary/6"
-              title="Delete"
-              aria-label="Delete"
+              :title="String(t('chat.sidebar.sessionActions.delete.label'))"
+              :aria-label="String(t('chat.sidebar.sessionActions.delete.label'))"
               @click.stop
             >
               <RiDeleteBinLine class="h-4 w-4" />

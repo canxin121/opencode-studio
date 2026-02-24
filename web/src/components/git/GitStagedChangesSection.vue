@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { RiDeleteBinLine, RiHistoryLine, RiPencilLine, RiSubtractLine } from '@remixicon/vue'
+import { useI18n } from 'vue-i18n'
 
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import SectionToggleButton from '@/components/ui/SectionToggleButton.vue'
@@ -8,6 +9,8 @@ import type { OptionMenuItem } from '@/components/ui/OptionMenu.vue'
 import GitStatusListItem from '@/components/git/GitStatusListItem.vue'
 
 import type { GitStatusFile } from '@/types/git'
+
+const { t } = useI18n()
 
 type DiffSource = 'working' | 'staged'
 
@@ -50,36 +53,36 @@ function mobileActionsForFile(path: string): OptionMenuItem[] {
   return [
     {
       id: 'unstage',
-      label: 'Unstage',
+      label: t('git.ui.workingTree.actions.unstage'),
       icon: RiSubtractLine,
       description: path,
       monospace: true,
     },
     {
       id: 'history',
-      label: 'History',
+      label: t('git.ui.workingTree.actions.history'),
       icon: RiHistoryLine,
       description: path,
       monospace: true,
     },
     {
       id: 'rename',
-      label: 'Rename',
+      label: t('common.rename'),
       icon: RiPencilLine,
       description: path,
       monospace: true,
     },
     {
       id: 'delete',
-      label: 'Delete',
+      label: t('common.delete'),
       icon: RiDeleteBinLine,
       variant: 'destructive',
       description: path,
       monospace: true,
-      confirmTitle: 'Delete file?',
-      confirmDescription: 'Tracked files will be removed and staged (git rm).',
-      confirmText: 'Delete',
-      cancelText: 'Cancel',
+      confirmTitle: t('git.ui.workingTree.confirmDeleteTracked.title'),
+      confirmDescription: t('git.ui.workingTree.confirmDeleteTracked.description'),
+      confirmText: t('git.ui.workingTree.actions.deleteFile'),
+      cancelText: t('common.cancel'),
     },
   ]
 }
@@ -105,9 +108,14 @@ function runMobileAction(path: string, actionId: string) {
 
 <template>
   <div class="oc-vscode-section select-none">
-    <SectionToggleButton :open="expanded" label="Staged Changes" :count="count" @toggle="toggle">
+    <SectionToggleButton :open="expanded" :label="t('git.ui.workingTree.sections.stagedChanges')" :count="count" @toggle="toggle">
       <template #actions>
-        <SidebarIconButton size="sm" title="Unstage all" aria-label="Unstage all" @click.stop="$emit('unstageAll')">
+        <SidebarIconButton
+          size="sm"
+          :title="t('git.ui.workingTree.actions.unstageAll')"
+          :aria-label="t('git.ui.workingTree.actions.unstageAll')"
+          @click.stop="$emit('unstageAll')"
+        >
           <RiSubtractLine class="h-3.5 w-3.5" />
         </SidebarIconButton>
       </template>
@@ -125,29 +133,39 @@ function runMobileAction(path: string, actionId: string) {
         :deletions="f.deletions ?? 0"
         :is-mobile-pointer="isMobilePointer"
         :mobile-action-items="mobileActionsForFile(f.path)"
-        mobile-action-title="File actions"
+        :mobile-action-title="t('git.ui.workingTree.fileActionsTitle')"
         @select="$emit('select', f.path)"
         @mobileAction="(id) => runMobileAction(f.path, id)"
       >
         <template #actions>
-          <SidebarIconButton size="sm" title="Unstage" aria-label="Unstage" @click.stop="$emit('unstage', f.path)">
+          <SidebarIconButton
+            size="sm"
+            :title="t('git.ui.workingTree.actions.unstage')"
+            :aria-label="t('git.ui.workingTree.actions.unstage')"
+            @click.stop="$emit('unstage', f.path)"
+          >
             <RiSubtractLine class="h-3.5 w-3.5" />
           </SidebarIconButton>
-          <SidebarIconButton size="sm" title="History" aria-label="History" @click.stop="$emit('history', f.path)">
+          <SidebarIconButton
+            size="sm"
+            :title="t('git.ui.workingTree.actions.history')"
+            :aria-label="t('git.ui.workingTree.actions.history')"
+            @click.stop="$emit('history', f.path)"
+          >
             <RiHistoryLine class="h-3.5 w-3.5" />
           </SidebarIconButton>
-          <SidebarIconButton size="sm" title="Rename" aria-label="Rename" @click.stop="$emit('rename', f.path)">
+          <SidebarIconButton size="sm" :title="t('common.rename')" :aria-label="t('common.rename')" @click.stop="$emit('rename', f.path)">
             <RiPencilLine class="h-3.5 w-3.5" />
           </SidebarIconButton>
           <ConfirmPopover
-            title="Delete file?"
-            description="Tracked files will be removed and staged (git rm)."
-            confirm-text="Delete"
-            cancel-text="Cancel"
+            :title="t('git.ui.workingTree.confirmDeleteTracked.title')"
+            :description="t('git.ui.workingTree.confirmDeleteTracked.description')"
+            :confirm-text="t('git.ui.workingTree.actions.deleteFile')"
+            :cancel-text="t('common.cancel')"
             variant="destructive"
             @confirm="$emit('delete', f.path)"
           >
-            <SidebarIconButton size="sm" destructive title="Delete" aria-label="Delete" @click.stop>
+            <SidebarIconButton size="sm" destructive :title="t('common.delete')" :aria-label="t('common.delete')" @click.stop>
               <RiDeleteBinLine class="h-3.5 w-3.5" />
             </SidebarIconButton>
           </ConfirmPopover>
@@ -161,7 +179,7 @@ function runMobileAction(path: string, actionId: string) {
         :disabled="loading"
         @click="$emit('showMore')"
       >
-        Show more ({{ files.length }}/{{ count }})
+        {{ t('git.ui.workingTree.showMoreCount', { shown: files.length, total: count }) }}
       </button>
     </div>
   </div>

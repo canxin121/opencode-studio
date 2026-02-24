@@ -1,6 +1,7 @@
 import { ApiError } from '@/lib/api'
 import type { Ref } from 'vue'
 import type { JsonValue } from '@/types/json'
+import { i18n } from '@/i18n'
 
 type QueryValue = string | number | boolean | null | undefined
 type GitValue = unknown
@@ -106,7 +107,7 @@ export function useGitRemoteTargetOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(payload),
         })
-        toasts.push('success', `Pushed to ${remote}/${targetLabel}`)
+        toasts.push('success', i18n.global.t('git.toasts.pushedToRemoteTarget', { remote, target: targetLabel }))
         pushToOpen.value = false
         await load()
       } catch (err) {
@@ -168,7 +169,7 @@ export function useGitRemoteTargetOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(payload),
         })
-        toasts.push('success', `Fetched ${remote}/${targetLabel}`)
+        toasts.push('success', i18n.global.t('git.toasts.fetchedRemoteTarget', { remote, target: targetLabel }))
         fetchFromOpen.value = false
         await load()
       } catch (err) {
@@ -206,7 +207,7 @@ export function useGitRemoteTargetOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(payload),
         })
-        toasts.push('success', `Pulled from ${remote}/${targetLabel}`)
+        toasts.push('success', i18n.global.t('git.toasts.pulledFromRemoteTarget', { remote, target: targetLabel }))
         pullFromOpen.value = false
         await load()
       } catch (err) {

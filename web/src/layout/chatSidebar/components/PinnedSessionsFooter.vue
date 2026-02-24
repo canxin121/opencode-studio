@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { computed, type ComponentPublicInstance } from 'vue'
 import { RiArrowDownSLine, RiArrowRightSLine } from '@remixicon/vue'
+import { useI18n } from 'vue-i18n'
 
 import type { DirectoryEntry } from '@/features/sessions/model/types'
 import type { SessionActionItem } from '@/layout/chatSidebar/useSessionActionMenu'
 import type { JsonValue } from '@/types/json'
 import SidebarPager from '@/layout/chatSidebar/components/SidebarPager.vue'
 import SessionRow from '@/layout/chatSidebar/components/SessionRow.vue'
+
+const { t } = useI18n()
 
 type SessionLike = {
   id: string
@@ -90,11 +93,11 @@ function statusMeta(sessionId: string) {
         type="button"
         class="flex-1 h-full min-w-0 flex items-center gap-2 text-left hover:bg-secondary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
         :aria-expanded="open"
-        aria-label="Toggle pinned sessions"
+        :aria-label="String(t('chat.sidebar.footers.pinned.toggleAria'))"
         @click="emit('update:open', !open)"
       >
         <component :is="open ? RiArrowDownSLine : RiArrowRightSLine" class="h-4 w-4 text-muted-foreground" />
-        <span class="typography-ui-label font-medium text-muted-foreground">Pinned sessions</span>
+        <span class="typography-ui-label font-medium text-muted-foreground">{{ t('chat.sidebar.footers.pinned.title') }}</span>
       </button>
       <div class="flex items-center gap-2 flex-shrink-0">
         <span class="text-[11px] font-mono text-muted-foreground/70">{{ count }}</span>
@@ -103,15 +106,15 @@ function statusMeta(sessionId: string) {
           :page="page"
           :page-count="pinnedSessionsPageCount"
           :disabled="Boolean(paging)"
-          prev-label="Previous pinned sessions page"
-          next-label="Next pinned sessions page"
+          :prev-label="String(t('chat.sidebar.footers.pinned.prevPage'))"
+          :next-label="String(t('chat.sidebar.footers.pinned.nextPage'))"
           @update:page="(v) => emit('update:page', v)"
         />
       </div>
     </div>
 
     <div v-if="open" class="px-2 pb-2">
-      <div v-if="count === 0" class="px-2 py-2 text-xs text-muted-foreground">No pinned sessions.</div>
+      <div v-if="count === 0" class="px-2 py-2 text-xs text-muted-foreground">{{ t('chat.sidebar.footers.pinned.empty') }}</div>
       <div v-else class="space-y-1">
         <SessionRow
           v-for="item in pinnedSessionRows"

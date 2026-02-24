@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import type { JsonValue } from '@/types/json'
+import { i18n } from '@/i18n'
 
 type QueryValue = string | number | boolean | null | undefined
 
@@ -45,7 +46,7 @@ export function useGitCheckoutOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ ref: rf }),
         })
-        toasts.push('success', `Detached HEAD at ${rf}`)
+        toasts.push('success', i18n.global.t('git.toasts.detachedHeadAt', { ref: rf }))
         await load()
         await loadBranches()
       } catch (err) {
@@ -69,7 +70,7 @@ export function useGitCheckoutOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ name, startPoint, checkout: branchFromCheckout.value }),
         })
-        toasts.push('success', `Created branch ${name}`)
+        toasts.push('success', i18n.global.t('git.toasts.createdBranch', { name }))
         branchFromName.value = ''
         await load()
         await loadBranches()

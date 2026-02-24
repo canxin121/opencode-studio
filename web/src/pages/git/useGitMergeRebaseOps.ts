@@ -2,6 +2,7 @@ import { ref } from 'vue'
 
 import { ApiError } from '@/lib/api'
 import type { JsonValue } from '@/types/json'
+import { i18n } from '@/i18n'
 
 type QueryValue = string | number | boolean | null | undefined
 
@@ -62,7 +63,7 @@ export function useGitMergeRebaseOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ branch: target }),
         })
-        toasts.push('success', `Merged ${target}`)
+        toasts.push('success', i18n.global.t('git.toasts.mergedTarget', { target }))
         await load()
       } catch (err) {
         if (handleGitBusy(err, 'Merge', startMerge)) return
@@ -96,7 +97,7 @@ export function useGitMergeRebaseOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ branch: target }),
         })
-        toasts.push('success', `Rebased onto ${target}`)
+        toasts.push('success', i18n.global.t('git.toasts.rebasedOntoTarget', { target }))
         await load()
       } catch (err) {
         if (handleGitBusy(err, 'Rebase', startRebase)) return

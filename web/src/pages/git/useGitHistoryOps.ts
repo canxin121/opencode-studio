@@ -1,6 +1,7 @@
 import { apiErrorBodyRecord, ApiError } from '@/lib/api'
 import type { Ref } from 'vue'
 import type { JsonValue } from '@/types/json'
+import { i18n } from '@/i18n'
 
 type QueryValue = string | number | boolean | null | undefined
 
@@ -53,7 +54,7 @@ export function useGitHistoryOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ mode: 'soft' }),
         })
-        toasts.push('success', 'Undid last commit')
+        toasts.push('success', i18n.global.t('git.toasts.undidLastCommit'))
         await load()
       } catch (err) {
         if (handleGitBusy(err, 'Undo commit', undoLastCommit)) return
@@ -85,7 +86,7 @@ export function useGitHistoryOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ commit: hash }),
         })
-        toasts.push('success', `Cherry-picked ${hash.slice(0, 7)}`)
+        toasts.push('success', i18n.global.t('git.toasts.cherryPickedShortHash', { hash: hash.slice(0, 7) }))
         await load()
       } catch (err) {
         if (handleGitBusy(err, 'Cherry-pick', () => cherryPickCommit(hash))) return
@@ -110,7 +111,7 @@ export function useGitHistoryOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ commit: hash }),
         })
-        toasts.push('success', `Reverted ${hash.slice(0, 7)}`)
+        toasts.push('success', i18n.global.t('git.toasts.revertedShortHash', { hash: hash.slice(0, 7) }))
         await load()
       } catch (err) {
         if (handleGitBusy(err, 'Revert commit', () => revertCommit(hash))) return
@@ -135,7 +136,10 @@ export function useGitHistoryOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ commit: hash, mode }),
         })
-        toasts.push('success', `Reset to ${hash.slice(0, 7)} (${mode})`)
+        toasts.push(
+          'success',
+          i18n.global.t('git.toasts.resetToShortHashWithMode', { hash: hash.slice(0, 7), mode }),
+        )
         await load()
       } catch (err) {
         if (handleGitBusy(err, 'Reset', () => resetCommit(hash, mode))) return
@@ -154,7 +158,7 @@ export function useGitHistoryOps(opts: {
       )
       const tpl = (resp?.template || '').trimEnd()
       if (!tpl) {
-        toasts.push('info', 'No commit template configured')
+        toasts.push('info', i18n.global.t('settings.opencodeConfig.errors.noCommitTemplateConfigured'))
         return
       }
       commitMessage.value = tpl

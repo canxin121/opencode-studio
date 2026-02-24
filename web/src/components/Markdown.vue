@@ -2,7 +2,8 @@
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { onClickOutside } from '@vueuse/core'
 import { RiListUnordered } from '@remixicon/vue'
-import { renderMarkdown } from '@/lib/markdown'
+import { useI18n } from 'vue-i18n'
+import { renderMarkdown, type MarkdownUiLabels } from '@/lib/markdown'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import { useToastsStore } from '@/stores/toasts'
 
@@ -69,6 +70,21 @@ function scrollToHeading(id: string) {
 }
 
 const toasts = useToastsStore()
+const { t } = useI18n()
+
+function buildMarkdownLabels(): Partial<MarkdownUiLabels> {
+  return {
+    copyTitle: t('codeBlock.copy'),
+    copyCodeAria: t('codeBlock.copyAria'),
+    copyDiagramSourceAria: t('codeBlock.copyDiagramSourceAria'),
+    toggleCodeAria: t('codeBlock.toggleCodeAria'),
+    toggleDiagramAria: t('codeBlock.toggleDiagramAria'),
+    expandTitle: t('codeBlock.expand'),
+    expandCodeAria: t('codeBlock.expandAria'),
+    expandDiagramAria: t('codeBlock.expandDiagramAria'),
+    expandLinesTitle: (lines: number) => t('codeBlock.expandLines', { lines }),
+  }
+}
 
 function clearTimer() {
   if (timer !== null) {
@@ -78,7 +94,7 @@ function clearTimer() {
 }
 
 function updateNow() {
-  html.value = renderMarkdown(props.content)
+  html.value = renderMarkdown(props.content, buildMarkdownLabels())
   // Scan TOC after rendering
   nextTick(() => scanToc())
 }
@@ -269,7 +285,7 @@ async function handleRootClick(event: MouseEvent) {
     const code = mermaidSrcEl?.textContent ?? codeEl?.textContent ?? ''
     const ok = await copyTextToClipboard(code)
     if (!ok) {
-      toasts.push('error', 'Copy failed')
+      toasts.push('error', t('common.copyFailed'))
       return
     }
 
@@ -339,7 +355,7 @@ onBeforeUnmount(() => {
             type="button"
             class="inline-flex items-center justify-center w-8 h-8 rounded-md border border-border bg-background/80 backdrop-blur shadow-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
             @click="showToc = !showToc"
-            title="Table of Contents"
+            :title="t('markdown.tableOfContents')"
           >
             <RiListUnordered class="w-4 h-4" />
           </button>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { RiArrowDownLine, RiEditLine } from '@remixicon/vue'
+import { useI18n } from 'vue-i18n'
 
 import AttachmentPicker from '@/components/chat/AttachmentPicker.vue'
 
@@ -22,6 +23,8 @@ const emit = defineEmits<{
 const shellEl = ref<HTMLDivElement | null>(null)
 const textareaEl = ref<HTMLTextAreaElement | null>(null)
 const attachmentPickerRef = ref<InstanceType<typeof AttachmentPicker> | null>(null)
+
+const { t } = useI18n()
 
 function updateDraft(ev: Event) {
   const el = ev.target as HTMLTextAreaElement | null
@@ -49,8 +52,8 @@ defineExpose({ shellEl, textareaEl, openFilePicker })
         type="button"
         :data-oc-keyboard-tap="fullscreen ? 'blur' : 'keep'"
         class="h-6 w-6 rounded-md text-muted-foreground/80 hover:text-foreground hover:bg-secondary/60 flex items-center justify-center backdrop-blur bg-background/40 shadow-sm"
-        :title="fullscreen ? 'Collapse editor' : 'Open editor'"
-        :aria-label="fullscreen ? 'Collapse editor' : 'Open editor'"
+        :title="fullscreen ? t('chat.composer.editor.collapse') : t('chat.composer.editor.open')"
+        :aria-label="fullscreen ? t('chat.composer.editor.collapse') : t('chat.composer.editor.open')"
         @pointerdown.prevent
         @click="$emit('toggleFullscreen')"
       >
@@ -64,7 +67,7 @@ defineExpose({ shellEl, textareaEl, openFilePicker })
       data-chat-input="true"
       class="w-full min-h-[84px] resize-none border-0 bg-transparent px-3 py-2 text-sm shadow-none placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-0 flex-1 min-h-0"
       :class="fullscreen ? 'composer-textarea-full' : 'max-h-none'"
-      placeholder="Type a message…"
+      :placeholder="t('chat.composer.input.placeholder')"
       spellcheck="false"
       @input="
         (ev) => {

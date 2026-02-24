@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { RiCheckLine, RiFileLine, RiLoader4Line, RiSparkling2Line } from '@remixicon/vue'
+import { useI18n } from 'vue-i18n'
 
 import Markdown from '@/components/Markdown.vue'
 import ToolInvocation from '@/components/ui/ToolInvocation.vue'
@@ -122,13 +123,15 @@ const emit = defineEmits<{
   (e: 'clearSessionError'): void
 }>()
 
+const { t } = useI18n()
+
 function sessionErrorClassificationLabel(): string {
   const classification = String(props.sessionError?.error?.classification || '').trim()
-  if (classification === 'context_overflow') return 'Context overflow'
-  if (classification === 'provider_auth') return 'Auth error'
-  if (classification === 'network') return 'Network error'
-  if (classification === 'provider_api') return 'Provider error'
-  return 'Session error'
+  if (classification === 'context_overflow') return String(t('chat.sessionError.classification.contextOverflow'))
+  if (classification === 'provider_auth') return String(t('chat.sessionError.classification.providerAuth'))
+  if (classification === 'network') return String(t('chat.sessionError.classification.network'))
+  if (classification === 'provider_api') return String(t('chat.sessionError.classification.providerApi'))
+  return String(t('chat.sessionError.classification.sessionError'))
 }
 
 function sessionErrorBody(): string {
@@ -138,8 +141,8 @@ function sessionErrorBody(): string {
   const message = typeof detail?.message === 'string' ? detail.message.trim() : ''
   if (message) return message
   const code = typeof detail?.code === 'string' ? detail.code.trim() : ''
-  if (code) return `[${code}] Session error`
-  return 'Session error'
+  if (code) return String(t('chat.sessionError.body.withCode', { code }))
+  return String(t('chat.sessionError.body.default'))
 }
 
 function sessionErrorAtLabel(): string {
@@ -157,16 +160,16 @@ function sessionErrorAtLabel(): string {
   <div v-if="!selectedSessionId" :class="isMobile ? 'h-full min-h-[240px]' : 'py-16 text-center text-muted-foreground'">
     <MobileSidebarEmptyState
       v-if="isMobile"
-      title="Select a session"
-      description="Use the sessions panel to pick or create one."
-      action-label="Open sessions panel"
+      :title="t('chat.messages.empty.title')"
+      :description="t('chat.messages.empty.description')"
+      :action-label="t('chat.messages.empty.actionLabel')"
       :show-action="true"
       @action="openMobileSidebar?.()"
     />
     <template v-else>
       <RiSparkling2Line class="mx-auto h-10 w-10 opacity-25" />
-      <div class="typography-ui-label font-semibold mt-3">Select a session</div>
-      <div class="typography-meta mt-1">Use the left panel to pick or create one.</div>
+      <div class="typography-ui-label font-semibold mt-3">{{ t('chat.messages.empty.title') }}</div>
+      <div class="typography-meta mt-1">{{ t('chat.messages.empty.desktopDescription') }}</div>
     </template>
   </div>
 
@@ -181,7 +184,7 @@ function sessionErrorAtLabel(): string {
   <template v-else>
     <div v-if="loadingOlder" class="mb-2 px-1 text-[11px] text-muted-foreground/70 flex items-center gap-2">
       <RiLoader4Line class="h-3.5 w-3.5 animate-spin" />
-      Loading older messages...
+      {{ t('chat.messages.loadingOlder') }}
     </div>
 
     <TransitionGroup
@@ -213,10 +216,14 @@ function sessionErrorAtLabel(): string {
                 <div class="flex items-start justify-between gap-3">
                   <div class="min-w-0">
                     <div class="text-sm font-medium text-muted-foreground">
-                      {{ b.revert.revertedUserCount }} message reverted
+                      {{
+                        b.revert.revertedUserCount === 1
+                          ? t('chat.revertMarker.revertedMessageCountOne')
+                          : t('chat.revertMarker.revertedMessageCountMany', { count: b.revert.revertedUserCount })
+                      }}
                     </div>
                     <div class="mt-0.5 text-[11px] text-muted-foreground/70 font-mono">
-                      revert boundary: {{ b.revert.messageID }}
+                      {{ t('chat.revertMarker.boundaryLine', { id: b.revert.messageID }) }}
                     </div>
                   </div>
 
@@ -225,20 +232,20 @@ function sessionErrorAtLabel(): string {
                       variant="ghost"
                       size="sm"
                       :disabled="revertMarkerBusy"
-                      title="Redo / restore reverted messages"
+                      :title="t('chat.revertMarker.redoTitle')"
                       @click="$emit('redoFromRevert')"
                     >
                       <RiLoader4Line v-if="revertMarkerBusy" class="h-4 w-4 animate-spin" />
-                      <span v-else>Redo</span>
+                      <span v-else>{{ t('chat.revertMarker.redo') }}</span>
                     </Button>
                     <Button
                       variant="ghost"
                       size="sm"
                       :disabled="revertMarkerBusy"
-                      title="Restore all reverted messages"
+                      :title="t('chat.revertMarker.restoreAllTitle')"
                       @click="$emit('unrevertFromRevert')"
                     >
-                      Restore
+                      {{ t('chat.revertMarker.restoreAll') }}
                     </Button>
                   </div>
                 </div>
@@ -265,7 +272,7 @@ function sessionErrorAtLabel(): string {
           <div class="flex">
             <div class="w-full min-w-0">
               <div class="flex items-center gap-2 px-1 mb-1 text-[11px] text-muted-foreground/70">
-                <span class="font-semibold uppercase tracking-wider">activity</span>
+                <span class="font-semibold uppercase tracking-wider">{{ t('chat.roles.activity') }}</span>
                 <span v-if="showTimestamps && b.timeLabel">{{ b.timeLabel }}</span>
                 <span
                   v-if="
@@ -277,7 +284,7 @@ function sessionErrorAtLabel(): string {
                   class="inline-flex items-center gap-1"
                 >
                   <RiLoader4Line class="h-3.5 w-3.5 animate-spin" />
-                  working...
+                  {{ t('common.working') }}
                 </span>
                 <button
                   v-if="!isActivityExpanded(b.key) && b.parts.length > maxVisibleActivityCollapsed"
@@ -285,7 +292,7 @@ function sessionErrorAtLabel(): string {
                   class="ml-1 text-[11px] text-muted-foreground/70 hover:text-muted-foreground"
                   @click="setActivityExpanded(b.key, true)"
                 >
-                  +{{ b.parts.length - maxVisibleActivityCollapsed }} more...
+                  {{ t('chat.messages.activity.moreCount', { count: b.parts.length - maxVisibleActivityCollapsed }) }}
                 </button>
                 <button
                   v-else-if="isActivityExpanded(b.key) && b.parts.length > maxVisibleActivityCollapsed"
@@ -293,7 +300,7 @@ function sessionErrorAtLabel(): string {
                   class="ml-1 text-[11px] text-muted-foreground/70 hover:text-muted-foreground"
                   @click="setActivityExpanded(b.key, false)"
                 >
-                  Hide
+                  {{ t('chat.messages.activity.hide') }}
                 </button>
               </div>
 
@@ -348,16 +355,16 @@ function sessionErrorAtLabel(): string {
         <div class="flex">
           <div class="w-full min-w-0">
             <div class="flex items-center gap-2 px-1 mb-1 text-[11px] text-muted-foreground/70">
-              <span class="font-semibold uppercase tracking-wider">user</span>
+              <span class="font-semibold uppercase tracking-wider">{{ t('chat.roles.user') }}</span>
               <span v-if="showTimestamps">{{ formatTime(optimisticUser.createdAt) }}</span>
               <span class="inline-flex items-center gap-1">
                 <template v-if="optimisticUser.status === 'sending'">
                   <RiLoader4Line class="h-3.5 w-3.5 animate-spin" />
-                  sending...
+                  {{ t('chat.messages.optimistic.sending') }}
                 </template>
                 <template v-else>
                   <RiCheckLine class="h-3.5 w-3.5 text-emerald-500" />
-                  sent
+                  {{ t('chat.messages.optimistic.sent') }}
                 </template>
               </span>
             </div>
@@ -401,10 +408,10 @@ function sessionErrorAtLabel(): string {
         <div class="flex justify-start">
           <div class="max-w-[86%] min-w-0">
             <div class="flex items-center gap-2 px-1 text-[11px] text-muted-foreground/70">
-              <span class="font-semibold uppercase tracking-wider">assistant</span>
+              <span class="font-semibold uppercase tracking-wider">{{ t('chat.roles.assistant') }}</span>
               <span class="inline-flex items-center gap-1">
                 <RiLoader4Line class="h-3.5 w-3.5 animate-spin" />
-                working...
+                {{ t('common.working') }}
               </span>
             </div>
           </div>
@@ -412,12 +419,12 @@ function sessionErrorAtLabel(): string {
       </div>
     </TransitionGroup>
 
-    <div v-if="sessionError" class="group mt-4">
-      <div class="flex">
-        <div class="w-full min-w-0">
-          <div class="flex items-center gap-2 px-1 mb-1 text-[11px] text-muted-foreground/70">
-            <span class="font-semibold uppercase tracking-wider text-rose-700 dark:text-rose-300">system</span>
-          </div>
+      <div v-if="sessionError" class="group mt-4">
+        <div class="flex">
+          <div class="w-full min-w-0">
+            <div class="flex items-center gap-2 px-1 mb-1 text-[11px] text-muted-foreground/70">
+              <span class="font-semibold uppercase tracking-wider text-rose-700 dark:text-rose-300">{{ t('chat.roles.system') }}</span>
+            </div>
 
           <div
             class="rounded-lg border border-rose-300/70 bg-rose-50/70 px-4 py-3 text-sm leading-relaxed text-rose-950 dark:border-rose-500/45 dark:bg-rose-950/25 dark:text-rose-100 relative"
@@ -436,8 +443,8 @@ function sessionErrorAtLabel(): string {
             <div class="mt-1 break-words">{{ sessionErrorBody() }}</div>
 
             <div class="mt-2 flex flex-wrap items-center gap-2">
-              <Button size="sm" variant="outline" class="h-7" @click="$emit('copySessionError')">Copy details</Button>
-              <Button size="sm" variant="outline" class="h-7" @click="$emit('clearSessionError')">Dismiss</Button>
+              <Button size="sm" variant="outline" class="h-7" @click="$emit('copySessionError')">{{ t('chat.sessionError.actions.copyDetails') }}</Button>
+              <Button size="sm" variant="outline" class="h-7" @click="$emit('clearSessionError')">{{ t('chat.sessionError.actions.dismiss') }}</Button>
             </div>
           </div>
         </div>

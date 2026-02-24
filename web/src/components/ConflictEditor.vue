@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 import Button from '@/components/ui/Button.vue'
 import Skeleton from '@/components/ui/Skeleton.vue'
 import { apiErrorBodyRecord, apiJson, ApiError } from '@/lib/api'
+
+const { t } = useI18n()
 
 type ConflictBlock = {
   id: number
@@ -149,7 +152,7 @@ onMounted(() => void load())
   <div class="ce">
     <div class="ce-header">
       <div class="ce-title">
-        <div class="ce-kicker">Resolve conflicts</div>
+        <div class="ce-kicker">{{ t('git.ui.conflictEditor.title') }}</div>
         <div class="ce-path" :title="path">{{ path }}</div>
       </div>
       <div class="ce-actions">
@@ -161,7 +164,7 @@ onMounted(() => void load())
             :disabled="loading || conflictIndex < 0"
             @click="selectRelativeConflict(-1)"
           >
-            Prev
+            {{ t('common.previous') }}
           </Button>
           <div class="ce-nav-label">{{ Math.max(conflictIndex + 1, 1) }} / {{ conflictTotal }}</div>
           <Button
@@ -171,17 +174,17 @@ onMounted(() => void load())
             :disabled="loading || conflictIndex < 0"
             @click="selectRelativeConflict(1)"
           >
-            Next
+            {{ t('common.next') }}
           </Button>
         </div>
-        <Button variant="secondary" size="sm" class="h-8" :disabled="loading" @click="load">Refresh</Button>
+        <Button variant="secondary" size="sm" class="h-8" :disabled="loading" @click="load">{{ t('common.refresh') }}</Button>
         <Button
           variant="secondary"
           size="sm"
           class="h-8"
           :disabled="loading || !canCheckoutResolve"
           @click="resolve('ours')"
-          >Take Ours</Button
+          >{{ t('git.ui.conflictEditor.actions.takeOurs') }}</Button
         >
         <Button
           v-if="conflictTotal > 1"
@@ -190,7 +193,7 @@ onMounted(() => void load())
           class="h-8"
           :disabled="loading || !canCheckoutResolve"
           @click="resolve('ours', true)"
-          >Ours & Next</Button
+          >{{ t('git.ui.conflictEditor.actions.oursAndNext') }}</Button
         >
         <Button
           variant="secondary"
@@ -198,7 +201,7 @@ onMounted(() => void load())
           class="h-8"
           :disabled="loading || !canCheckoutResolve"
           @click="resolve('theirs')"
-          >Take Theirs</Button
+          >{{ t('git.ui.conflictEditor.actions.takeTheirs') }}</Button
         >
         <Button
           v-if="conflictTotal > 1"
@@ -207,7 +210,7 @@ onMounted(() => void load())
           class="h-8"
           :disabled="loading || !canCheckoutResolve"
           @click="resolve('theirs', true)"
-          >Theirs & Next</Button
+          >{{ t('git.ui.conflictEditor.actions.theirsAndNext') }}</Button
         >
         <Button
           v-if="hasBase"
@@ -216,29 +219,33 @@ onMounted(() => void load())
           class="h-8"
           :disabled="loading || !hasMarkers"
           @click="resolve('base')"
-          >Take Base</Button
+          >{{ t('git.ui.conflictEditor.actions.takeBase') }}</Button
         >
-        <Button variant="secondary" size="sm" class="h-8" :disabled="loading || !hasMarkers" @click="resolve('both')"
-          >Take Both</Button
-        >
-        <Button size="sm" class="h-8" :disabled="loading || !hasMarkers" @click="resolve('manual')">Apply</Button>
+        <Button variant="secondary" size="sm" class="h-8" :disabled="loading || !hasMarkers" @click="resolve('both')">
+          {{ t('git.ui.conflictEditor.actions.takeBoth') }}
+        </Button>
+        <Button size="sm" class="h-8" :disabled="loading || !hasMarkers" @click="resolve('manual')">{{ t('common.apply') }}</Button>
         <Button
           v-if="conflictTotal > 1"
           size="sm"
           class="h-8"
           :disabled="loading || !hasMarkers"
           @click="resolve('manual', true)"
-          >Apply & Next</Button
+          >{{ t('git.ui.conflictEditor.actions.applyAndNext') }}</Button
         >
-        <Button variant="secondary" size="sm" class="h-8" :disabled="loading" @click="$emit('fallbackDiff')"
-          >Open Diff</Button
-        >
+        <Button variant="secondary" size="sm" class="h-8" :disabled="loading" @click="$emit('fallbackDiff')">{{ t('git.ui.conflictEditor.actions.openDiff') }}</Button>
       </div>
     </div>
 
     <div class="ce-subhead">
-      <span>{{ blocks.length }} block{{ blocks.length === 1 ? '' : 's' }}</span>
-      <span v-if="isUnmerged && !hasMarkers">Unmerged without text markers</span>
+      <span>
+        {{
+          blocks.length === 1
+            ? t('git.ui.conflictEditor.blockCount.one', { count: blocks.length })
+            : t('git.ui.conflictEditor.blockCount.many', { count: blocks.length })
+        }}
+      </span>
+      <span v-if="isUnmerged && !hasMarkers">{{ t('git.ui.conflictEditor.unmergedWithoutMarkers') }}</span>
     </div>
 
     <div v-if="error" class="ce-error">{{ error }}</div>
@@ -249,43 +256,40 @@ onMounted(() => void load())
     </div>
 
     <div v-else-if="!hasMarkers" class="ce-empty">
-      <div class="ce-empty-title">No text conflict markers found</div>
+      <div class="ce-empty-title">{{ t('git.ui.conflictEditor.empty.noMarkersTitle') }}</div>
       <div class="ce-empty-note">
         <template v-if="isUnmerged">
-          This conflict is marker-free (often binary). You can still resolve with "Take Ours/Theirs", or open the
-          standard diff.
+          {{ t('git.ui.conflictEditor.empty.unmergedNote') }}
         </template>
         <template v-else>
-          This file may already be resolved. Open the standard diff to verify its final state.
+          {{ t('git.ui.conflictEditor.empty.resolvedNote') }}
         </template>
       </div>
       <div class="ce-empty-actions">
-        <Button variant="secondary" size="sm" class="h-8" :disabled="loading" @click="$emit('fallbackDiff')"
-          >Open Diff</Button
-        >
+        <Button variant="secondary" size="sm" class="h-8" :disabled="loading" @click="$emit('fallbackDiff')">{{ t('git.ui.conflictEditor.actions.openDiff') }}</Button>
       </div>
     </div>
 
     <div v-else class="ce-blocks">
       <div v-for="b in blocks" :key="b.id" class="ce-block">
         <div class="ce-block-head">
-          <div class="ce-block-id">Block #{{ b.id + 1 }}</div>
+          <div class="ce-block-id">{{ t('git.ui.conflictEditor.blockTitle', { index: b.id + 1 }) }}</div>
           <div class="ce-pick">
             <label class="ce-radio">
               <input v-model="choices[b.id]" type="radio" value="ours" />
-              <span>Ours</span>
+              <span>{{ t('git.ui.conflictEditor.labels.ours') }}</span>
             </label>
             <label class="ce-radio">
               <input v-model="choices[b.id]" type="radio" value="theirs" />
-              <span>Theirs</span>
+              <span>{{ t('git.ui.conflictEditor.labels.theirs') }}</span>
             </label>
             <label v-if="hasBase" class="ce-radio">
               <input v-model="choices[b.id]" type="radio" value="base" />
-              <span>Base</span>
+              <span>{{ t('git.ui.conflictEditor.labels.base') }}</span>
             </label>
             <label class="ce-radio">
               <input v-model="choices[b.id]" type="radio" value="both" />
-              <span>Both</span>
+              <span>{{ t('git.ui.conflictEditor.labels.both') }}</span>
             </label>
           </div>
         </div>
@@ -293,19 +297,19 @@ onMounted(() => void load())
         <div class="ce-cols" :class="{ 'ce-cols--three': hasBase }">
           <div class="ce-col">
             <div class="ce-col-title">
-              Ours <span v-if="b.oursLabel" class="ce-col-label">{{ b.oursLabel }}</span>
+              {{ t('git.ui.conflictEditor.labels.ours') }} <span v-if="b.oursLabel" class="ce-col-label">{{ b.oursLabel }}</span>
             </div>
             <pre class="ce-code">{{ b.ours }}</pre>
           </div>
           <div v-if="hasBase" class="ce-col">
             <div class="ce-col-title">
-              Base <span v-if="b.baseLabel" class="ce-col-label">{{ b.baseLabel }}</span>
+              {{ t('git.ui.conflictEditor.labels.base') }} <span v-if="b.baseLabel" class="ce-col-label">{{ b.baseLabel }}</span>
             </div>
             <pre class="ce-code">{{ b.base }}</pre>
           </div>
           <div class="ce-col">
             <div class="ce-col-title">
-              Theirs <span v-if="b.theirsLabel" class="ce-col-label">{{ b.theirsLabel }}</span>
+              {{ t('git.ui.conflictEditor.labels.theirs') }} <span v-if="b.theirsLabel" class="ce-col-label">{{ b.theirsLabel }}</span>
             </div>
             <pre class="ce-code">{{ b.theirs }}</pre>
           </div>

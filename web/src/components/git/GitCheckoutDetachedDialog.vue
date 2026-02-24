@@ -1,7 +1,11 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+
 import Button from '@/components/ui/Button.vue'
 import FormDialog from '@/components/ui/FormDialog.vue'
 import Input from '@/components/ui/Input.vue'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   open: boolean
@@ -26,8 +30,8 @@ function onUpdateRef(v: string | number) {
 <template>
   <FormDialog
     :open="open"
-    title="Checkout Detached"
-    description="Checkout a ref in detached HEAD state"
+    :title="t('git.ui.dialogs.checkoutDetached.title')"
+    :description="t('git.ui.dialogs.checkoutDetached.description')"
     maxWidth="max-w-md"
     @update:open="onUpdateOpen"
   >
@@ -35,12 +39,12 @@ function onUpdateRef(v: string | number) {
       <Input
         :model-value="detachedRef"
         class="h-9 font-mono text-xs"
-        placeholder="HEAD~1"
+        :placeholder="t('git.ui.dialogs.checkoutDetached.placeholders.ref')"
         @update:model-value="onUpdateRef"
       />
       <div class="flex justify-end gap-2">
-        <Button variant="secondary" size="sm" @click="$emit('update:open', false)">Cancel</Button>
-        <Button size="sm" :disabled="!detachedRef.trim()" @click="$emit('checkout')">Checkout</Button>
+        <Button variant="secondary" size="sm" @click="$emit('update:open', false)">{{ t('common.cancel') }}</Button>
+        <Button size="sm" :disabled="!detachedRef.trim()" @click="$emit('checkout')">{{ t('common.checkout') }}</Button>
       </div>
     </div>
   </FormDialog>

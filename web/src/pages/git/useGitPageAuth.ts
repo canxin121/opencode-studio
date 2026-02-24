@@ -5,6 +5,7 @@ import { ApiError } from '@/lib/api'
 import { stageTrustedTerminalHandoff } from '@/lib/terminalHandoff'
 import { useGitCredentialsDialogs } from '@/composables/git/useGitCredentialsDialogs'
 import type { JsonValue } from '@/types/json'
+import { i18n } from '@/i18n'
 
 type PendingRemoteAction = 'fetch' | 'pull' | 'push'
 
@@ -256,7 +257,7 @@ export function useGitPageAuth(opts: {
   async function withRepoBusy(op: string, fn: () => Promise<void>) {
     if (repoBusy.value) {
       const cur = (repoBusyOp.value || '').trim() || 'git operation'
-      toasts.push('info', `Repository busy (${cur})`, 2000)
+      toasts.push('info', i18n.global.t('git.toasts.repositoryBusy', { op: cur }), 2000)
       return
     }
     repoBusy.value = true
@@ -376,18 +377,18 @@ export function useGitPageAuth(opts: {
     const cmd = (gitCmd || '').trim()
     if (!dir || !cmd) return
     if (/\r|\n/.test(dir)) {
-      toasts.push('error', 'Blocked terminal command: unsupported repository path')
+      toasts.push('error', i18n.global.t('git.errors.blockedTerminalUnsupportedRepoPath'))
       return
     }
     if (!isWhitelistedGitTerminalCommand(cmd)) {
-      toasts.push('error', 'Blocked terminal command outside trusted allowlist')
+      toasts.push('error', i18n.global.t('git.errors.blockedTerminalOutsideAllowlist'))
       return
     }
 
     const send = `cd '${shellEscapeSingleQuotes(dir)}'\n${cmd}`
     const sendToken = stageTrustedTerminalHandoff(send, { target: 'git' })
     if (!sendToken) {
-      toasts.push('error', 'Failed to prepare terminal command handoff')
+      toasts.push('error', i18n.global.t('git.errors.failedToPrepareTerminalHandoff'))
       return
     }
 
@@ -422,7 +423,7 @@ export function useGitPageAuth(opts: {
         headers: { 'content-type': 'application/json' },
         body: '{}',
       })
-      toasts.push('success', 'Disabled GPG signing for this repository')
+      toasts.push('success', i18n.global.t('git.toasts.disabledGpgSigningForRepo'))
       gpgMissingDialogOpen.value = false
       await load()
     } catch (err) {
@@ -443,7 +444,7 @@ export function useGitPageAuth(opts: {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ signingKey: key }),
       })
-      toasts.push('success', 'Updated user.signingkey (local)')
+      toasts.push('success', i18n.global.t('git.toasts.updatedUserSigningKeyLocal'))
       await load()
       // After setting a key, bring back the passphrase dialog so the user can retry.
       gpgMissingDialogOpen.value = false
@@ -478,21 +479,21 @@ export function useGitPageAuth(opts: {
             headers: { 'content-type': 'application/json' },
             body,
           })
-          toasts.push('success', 'Fetched')
+          toasts.push('success', i18n.global.t('git.toasts.fetched'))
         } else if (action === 'pull') {
           await gitJson('pull', dir, undefined, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body,
           })
-          toasts.push('success', 'Pulled')
+          toasts.push('success', i18n.global.t('git.toasts.pulled'))
         } else if (action === 'push') {
           await gitJson('push', dir, undefined, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body,
           })
-          toasts.push('success', 'Pushed')
+          toasts.push('success', i18n.global.t('git.toasts.pushed'))
         }
         credPassword.value = ''
         credAction.value = null
@@ -533,7 +534,7 @@ export function useGitPageAuth(opts: {
             noGpgSign: commitNoGpgSign.value,
           }),
         })
-        toasts.push('success', 'Committed')
+        toasts.push('success', i18n.global.t('git.toasts.committed'))
         onCommitSuccess?.(msg)
         gpgPassphrase.value = ''
         pendingCommitMessage.value = ''
@@ -578,7 +579,7 @@ export function useGitPageAuth(opts: {
         body: '{}',
       })
       gpgEnableDialogOpen.value = false
-      toasts.push('success', 'Updated gpg-agent config')
+      toasts.push('success', i18n.global.t('git.toasts.preparedGpgAgentConfig'))
       // Retry immediately with the same pending message + passphrase.
       gpgDialogOpen.value = false
       await submitGpgPassphrase()

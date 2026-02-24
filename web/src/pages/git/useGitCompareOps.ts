@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { i18n } from '@/i18n'
 
 import type { GitCompareResponse } from '@/types/git'
 import type { JsonValue } from '@/types/json'
@@ -67,7 +68,7 @@ export function useGitCompareOps(opts: { repoRoot: { value: string | null }; git
       })
       compareDiff.value = resp?.diff || ''
       if (!compareDiff.value.trim()) {
-        toasts.push('info', 'No differences found')
+        toasts.push('info', i18n.global.t('git.toasts.noDifferencesFound'))
       }
     } catch (err) {
       compareError.value = err instanceof Error ? err.message : String(err)

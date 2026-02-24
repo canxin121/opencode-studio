@@ -2,6 +2,7 @@
 import Button from '@/components/ui/Button.vue'
 import FormDialog from '@/components/ui/FormDialog.vue'
 import PathPicker from '@/components/ui/PathPicker.vue'
+import { useI18n } from 'vue-i18n'
 
 const props = defineProps<{
   open: boolean
@@ -16,6 +17,8 @@ const emit = defineEmits<{
   (e: 'add'): void
 }>()
 
+const { t } = useI18n()
+
 function onUpdatePath(v: string | number) {
   emit('update:path', String(v))
 }
@@ -24,8 +27,8 @@ function onUpdatePath(v: string | number) {
 <template>
   <FormDialog
     :open="open"
-    title="Attach project file"
-    description="Pick a file from the current project to attach"
+    :title="t('chat.attachProjectDialog.title')"
+    :description="t('chat.attachProjectDialog.description')"
     @update:open="$emit('update:open', $event)"
   >
     <div class="space-y-3">
@@ -36,15 +39,17 @@ function onUpdatePath(v: string | number) {
         :base-path="basePath"
         :resolve-to-absolute="true"
         :show-options="true"
-        placeholder="Select a file"
+        :placeholder="t('chat.attachProjectDialog.pathPlaceholder')"
         input-class="h-9 font-mono"
         @update:model-value="onUpdatePath"
       />
       <div class="flex items-center justify-end gap-2">
-        <Button variant="ghost" @click="$emit('update:open', false)">Close</Button>
-        <Button @click="$emit('add')" :disabled="!path.trim()">Add</Button>
+        <Button variant="ghost" @click="$emit('update:open', false)">{{ t('common.close') }}</Button>
+        <Button @click="$emit('add')" :disabled="!path.trim()">{{ t('common.add') }}</Button>
       </div>
-      <div v-if="attachedCount" class="text-xs text-muted-foreground">Attached: {{ attachedCount }} file(s)</div>
+      <div v-if="attachedCount" class="text-xs text-muted-foreground">
+        {{ t('chat.attachProjectDialog.attachedCount', { count: attachedCount }) }}
+      </div>
     </div>
   </FormDialog>
 </template>

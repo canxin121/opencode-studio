@@ -1,4 +1,5 @@
 import { computed, type ComputedRef, ref, type Ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 import { formatTranscript } from '@/lib/transcript'
 import type { JsonObject, JsonValue } from '@/types/json'
@@ -48,6 +49,8 @@ export function useChatSessionActions(opts: {
 
   copyToClipboard: (text: string) => Promise<void>
 }) {
+  const { t } = useI18n()
+
   const {
     chat,
     toasts,
@@ -77,14 +80,14 @@ export function useChatSessionActions(opts: {
     const next = renameDraft.value.trim()
     if (!sid) return
     if (!next) {
-      toasts.push('error', 'Title cannot be empty')
+      toasts.push('error', t('chat.toasts.titleCannotBeEmpty'))
       return
     }
     renameBusy.value = true
     try {
       await chat.renameSession(sid, next)
       renameDialogOpen.value = false
-      toasts.push('success', 'Session renamed')
+      toasts.push('success', t('chat.toasts.sessionRenamed'))
     } catch (err) {
       toasts.push('error', err instanceof Error ? err.message : String(err))
     } finally {
@@ -120,14 +123,14 @@ export function useChatSessionActions(opts: {
   async function copyTranscript() {
     const text = buildTranscriptText()
     if (!text) {
-      toasts.push('error', 'No transcript available')
+      toasts.push('error', t('chat.toasts.noTranscriptAvailable'))
       return
     }
     try {
       await copyToClipboard(text)
-      toasts.push('success', 'Transcript copied')
+      toasts.push('success', t('chat.toasts.transcriptCopied'))
     } catch (err) {
-      toasts.push('error', err instanceof Error ? err.message : 'Copy failed')
+      toasts.push('error', err instanceof Error ? err.message : t('common.copyFailed'))
     }
   }
 
@@ -146,20 +149,20 @@ export function useChatSessionActions(opts: {
   async function exportTranscript() {
     const text = buildTranscriptText()
     if (!text) {
-      toasts.push('error', 'No transcript available')
+      toasts.push('error', t('chat.toasts.noTranscriptAvailable'))
       return
     }
     const sid = chat.selectedSessionId || 'session'
     const filename = `session-${String(sid).slice(0, 8)}.md`
     downloadTranscript(filename, text)
-    toasts.push('success', `Transcript exported as ${filename}`)
+    toasts.push('success', t('chat.toasts.transcriptExportedAs', { filename }))
   }
 
   async function handleShareSession() {
     const sid = chat.selectedSessionId
     if (!sid) return
     if (modelSelection.shareDisabled.value) {
-      toasts.push('error', 'Sharing is disabled in config')
+      toasts.push('error', t('chat.toasts.sharingDisabledInConfig'))
       return
     }
     shareBusy.value = true
@@ -169,9 +172,9 @@ export function useChatSessionActions(opts: {
       const url = typeof share.url === 'string' ? share.url : sessionShareUrl.value
       if (url) {
         await copyToClipboard(url)
-        toasts.push('success', 'Share link copied')
+        toasts.push('success', t('chat.toasts.shareLinkCopied'))
       } else {
-        toasts.push('success', 'Session shared')
+        toasts.push('success', t('chat.toasts.sessionShared'))
       }
     } catch (err) {
       toasts.push('error', err instanceof Error ? err.message : String(err))
@@ -184,9 +187,9 @@ export function useChatSessionActions(opts: {
     if (!sessionShareUrl.value) return
     try {
       await copyToClipboard(sessionShareUrl.value)
-      toasts.push('success', 'Share link copied')
+      toasts.push('success', t('chat.toasts.shareLinkCopied'))
     } catch (err) {
-      toasts.push('error', err instanceof Error ? err.message : 'Copy failed')
+      toasts.push('error', err instanceof Error ? err.message : t('common.copyFailed'))
     }
   }
 
@@ -201,7 +204,7 @@ export function useChatSessionActions(opts: {
     unshareBusy.value = true
     try {
       await chat.unshareSession(sid)
-      toasts.push('success', 'Session unshared')
+      toasts.push('success', t('chat.toasts.sessionUnshared'))
     } catch (err) {
       toasts.push('error', err instanceof Error ? err.message : String(err))
     } finally {
@@ -219,13 +222,13 @@ export function useChatSessionActions(opts: {
     ).trim()
     const model = (modelSelection.selectedModelId.value || modelSelection.effectiveDefaults.value.model || '').trim()
     if (!provider || !model) {
-      toasts.push('error', 'Select a model to compact this session')
+      toasts.push('error', t('chat.toasts.selectModelToCompact'))
       return
     }
     compactBusy.value = true
     try {
       await chat.summarizeSession(sid, provider, model)
-      toasts.push('success', 'Compaction started')
+      toasts.push('success', t('chat.toasts.compactionStarted'))
     } catch (err) {
       toasts.push('error', err instanceof Error ? err.message : String(err))
     } finally {

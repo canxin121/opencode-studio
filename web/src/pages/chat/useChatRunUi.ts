@@ -1,6 +1,7 @@
 import { computed, onBeforeUnmount, ref, watch, type ComputedRef, type Ref } from 'vue'
 import type { AttachedFile } from './useChatAttachments'
 import type { RenderBlock } from './useChatRenderBlocks'
+import { i18n } from '@/i18n'
 
 type ToastsStore = { push: (kind: 'success' | 'error', message: string) => void }
 
@@ -398,9 +399,9 @@ export function useChatRunUi(opts: {
     try {
       const ok = await chat.abortSession(sid)
       if (ok) {
-        toasts.push('success', 'Aborted run')
+        toasts.push('success', i18n.global.t('chat.toasts.abortedRun'))
       } else {
-        toasts.push('error', 'Failed to abort run')
+        toasts.push('error', i18n.global.t('chat.toasts.failedToAbortRun'))
       }
     } catch (err) {
       toasts.push('error', err instanceof Error ? err.message : String(err))
