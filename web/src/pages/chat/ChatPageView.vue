@@ -32,7 +32,7 @@ import ToolbarChipButton from '@/components/ui/ToolbarChipButton.vue'
 import Tooltip from '@/components/ui/Tooltip.vue'
 import type { ChatPageViewContext } from './chatPageViewContext'
 import { hasDisplayableAssistantError } from './assistantError'
-import { shouldWrapComposerToolbar } from './composerToolbarLayout'
+import { resolveComposerToolbarLayout } from './composerToolbarLayout'
 
 // This view is template-only: it takes a context bag from ChatPage.
 // Keep it "dumb" so we can aggressively split ChatPage logic into composables.
@@ -198,7 +198,7 @@ const {
 const attachmentsTriggerRef = ref<HTMLElement | null>(null)
 const { width: viewportWidth } = useWindowSize()
 
-const wrapComposerToolbar = computed(() => shouldWrapComposerToolbar(ui.isMobilePointer, viewportWidth.value))
+const composerToolbarLayout = computed(() => resolveComposerToolbarLayout(ui.isMobilePointer, viewportWidth.value))
 
 const attachmentsCount = computed(() => {
   const list = unref(attachedFiles)
@@ -461,14 +461,19 @@ void sessionActionsMenuRef
                     />
 
                     <div
-                      class="composer-controls-surface w-full overflow-hidden flex items-center justify-between gap-2 rounded-b-xl border-t border-border/60 bg-background/60"
-                      :class="ui.isMobilePointer ? 'px-2 py-1.5' : 'px-2.5 py-2'"
+                      class="composer-controls-surface w-full flex gap-2 rounded-b-xl border-t border-border/60 bg-background/60"
+                      :class="[
+                        composerToolbarLayout.stackActionsRow
+                          ? 'flex-wrap items-start justify-start overflow-visible'
+                          : 'items-center justify-between overflow-hidden',
+                        ui.isMobilePointer ? 'px-2 py-1.5' : 'px-2.5 py-2',
+                      ]"
                     >
                       <div
                         class="min-w-0 flex-1 flex items-center gap-1.5 oc-scrollbar-hidden"
                         :class="
-                          wrapComposerToolbar
-                            ? 'flex-wrap overflow-visible'
+                          composerToolbarLayout.wrapChips
+                            ? 'basis-full flex-wrap overflow-visible'
                             : 'flex-nowrap overflow-x-auto sm:flex-wrap sm:overflow-visible'
                         "
                         data-oc-keyboard-tap="blur"
@@ -659,7 +664,7 @@ void sessionActionsMenuRef
 
                       <div
                         class="flex items-center gap-1.5"
-                        :class="wrapComposerToolbar ? 'w-full justify-end pt-1' : 'flex-shrink-0'"
+                        :class="composerToolbarLayout.stackActionsRow ? 'w-full flex-none justify-end pt-0.5' : 'flex-shrink-0'"
                       >
                         <div
                           v-if="sessionUsage"
