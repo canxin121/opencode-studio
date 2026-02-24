@@ -187,6 +187,7 @@ export default {
       actions: {
         browse: 'Browse',
         go: 'Go',
+        createFolder: 'Create folder',
         foldersOnly: 'Folders only',
       },
       titles: {
@@ -202,6 +203,12 @@ export default {
       placeholders: {
         path: '/path/to/folder',
         filter: 'Filter...',
+        newFolderName: 'New folder name',
+      },
+      errors: {
+        invalidFolderName: 'Enter a valid folder name (without / or \\).',
+        selectDirectoryFirst: 'Open a parent directory first.',
+        createFolderFailed: 'Failed to create folder: {error}',
       },
       empty: {
         noMatches: 'No matches',
@@ -1106,6 +1113,17 @@ export default {
         },
         instructions: {
           title: 'Instruction sources, skills, and plugins.',
+          groups: {
+            sourcesTitle: 'Instruction sources',
+            sourcesHelp: 'Edit as plain text. One source per line.',
+            extensionsTitle: 'Skills and plugins',
+            extensionsHelp: 'Keep paths and plugin specifiers editable in multiline text blocks.',
+          },
+          labels: {
+            instructionsAdvanced: 'Instruction sources (one per line)',
+            skillsPathsAdvanced: 'Skills paths (one per line)',
+            pluginsAdvanced: 'Plugins (one per line)',
+          },
           panels: {
             instructionsTitle: 'Instructions',
             instructionsHelp: 'Files/URLs loaded as extra instructions.',

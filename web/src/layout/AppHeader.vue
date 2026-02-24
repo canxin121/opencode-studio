@@ -413,6 +413,7 @@ function openHelpDialog() {
         :base-path="directoryStore.currentDirectory || ''"
         :show-options="true"
         :show-gitignored="true"
+        :allow-create-directory="true"
         input-class="h-9 font-mono"
         browser-class="flex max-h-[52vh] min-h-[14rem] flex-col"
       />

@@ -24,7 +24,12 @@ const props = withDefaults(
     advancedLabel?: string
     advancedPlaceholder?: string
     advancedRows?: number
+    advancedDefaultOpen?: boolean
+    advancedAlwaysVisible?: boolean
+    advancedFirst?: boolean
     showAdvancedToggle?: boolean
+    showInlineAdder?: boolean
+    showItemsPreview?: boolean
     splitMode?: SplitMode
   }>(),
   {
@@ -36,7 +41,12 @@ const props = withDefaults(
     advancedLabel: '',
     advancedPlaceholder: '',
     advancedRows: 4,
+    advancedDefaultOpen: false,
+    advancedAlwaysVisible: false,
+    advancedFirst: false,
     showAdvancedToggle: true,
+    showInlineAdder: true,
+    showItemsPreview: true,
     splitMode: 'tags',
   },
 )
@@ -45,7 +55,9 @@ const emit = defineEmits<{
   (e: 'update:modelValue', value: string[]): void
 }>()
 
-const advancedOpen = ref(false)
+const advancedOpen = ref(
+  Boolean(props.advancedDefaultOpen) || Boolean(props.advancedAlwaysVisible) || !Boolean(props.showAdvancedToggle),
+)
 
 const items = computed(() => normalizeStringList(props.modelValue || []))
 
@@ -62,6 +74,12 @@ const advancedLabelText = computed(() => {
 const itemsCountLabel = computed(() =>
   String(t('settings.opencodeConfig.stringListEditor.itemsCount', { count: items.value.length })),
 )
+
+const showAdvancedEditor = computed(
+  () => Boolean(props.advancedAlwaysVisible) || !Boolean(props.showAdvancedToggle) || advancedOpen.value,
+)
+
+const showAdvancedToggleButton = computed(() => Boolean(props.showAdvancedToggle) && !Boolean(props.advancedAlwaysVisible))
 
 const pickerOptions = computed<PickerOption[]>(() => {
   const out: PickerOption[] = []
@@ -127,7 +145,7 @@ function clearAll() {
         {{ items.length ? itemsCountLabel : emptyTextLabel }}
       </div>
       <div class="flex items-center gap-2">
-        <TextActionButton v-if="showAdvancedToggle" @click="advancedOpen = !advancedOpen">
+        <TextActionButton v-if="showAdvancedToggleButton" @click="advancedOpen = !advancedOpen">
           {{
             advancedOpen
               ? t('settings.opencodeConfig.sections.common.hideAdvancedText')
@@ -148,7 +166,17 @@ function clearAll() {
       </div>
     </div>
 
-    <div class="flex flex-wrap gap-2">
+    <label v-if="advancedFirst && showAdvancedEditor" class="grid gap-1">
+      <span class="text-xs text-muted-foreground">{{ advancedLabelText }}</span>
+      <textarea
+        v-model="advancedText"
+        :rows="advancedRows"
+        class="w-full rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs"
+        :placeholder="advancedPlaceholder"
+      />
+    </label>
+
+    <div v-if="showItemsPreview" class="flex flex-wrap gap-2">
       <span
         v-for="value in items"
         :key="`list-item:${value}`"
@@ -163,6 +191,7 @@ function clearAll() {
     </div>
 
     <InlineSearchAdd
+      v-if="showInlineAdder"
       :options="pickerOptions"
       :panel-title="panelTitle"
       :placeholder="placeholder"
@@ -173,7 +202,7 @@ function clearAll() {
       @backspace-empty="removeLast"
     />
 
-    <label v-if="showAdvancedToggle && advancedOpen" class="grid gap-1">
+    <label v-if="!advancedFirst && showAdvancedEditor" class="grid gap-1">
       <span class="text-xs text-muted-foreground">{{ advancedLabelText }}</span>
       <textarea
         v-model="advancedText"

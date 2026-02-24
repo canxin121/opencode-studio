@@ -187,6 +187,7 @@ export default {
       actions: {
         browse: '浏览',
         go: '前往',
+        createFolder: '新建文件夹',
         foldersOnly: '仅文件夹',
       },
       titles: {
@@ -202,6 +203,12 @@ export default {
       placeholders: {
         path: '/path/to/folder',
         filter: '筛选...',
+        newFolderName: '新文件夹名称',
+      },
+      errors: {
+        invalidFolderName: '请输入有效的文件夹名称（不能包含 / 或 \\）。',
+        selectDirectoryFirst: '请先打开目标父目录。',
+        createFolderFailed: '创建文件夹失败：{error}',
       },
       empty: {
         noMatches: '无匹配项',
@@ -1106,6 +1113,17 @@ export default {
         },
         instructions: {
           title: '指令来源、技能与插件。',
+          groups: {
+            sourcesTitle: '指令来源',
+            sourcesHelp: '直接编辑多行文本，每行一个来源。',
+            extensionsTitle: '技能与插件',
+            extensionsHelp: '用多行文本维护技能路径与插件说明符，编辑更直观。',
+          },
+          labels: {
+            instructionsAdvanced: '指令来源（每行一项）',
+            skillsPathsAdvanced: '技能路径（每行一项）',
+            pluginsAdvanced: '插件（每行一项）',
+          },
           panels: {
             instructionsTitle: '指令',
             instructionsHelp: '以额外指令加载的文件/URL。',
