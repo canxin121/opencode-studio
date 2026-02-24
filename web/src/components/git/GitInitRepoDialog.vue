@@ -56,7 +56,9 @@ function onUpdateDefaultBranch(v: string | number) {
       </div>
 
       <div class="space-y-1">
-        <div class="text-xs font-medium text-muted-foreground">{{ t('git.ui.dialogs.initRepo.fields.defaultBranchOptional') }}</div>
+        <div class="text-xs font-medium text-muted-foreground">
+          {{ t('git.ui.dialogs.initRepo.fields.defaultBranchOptional') }}
+        </div>
         <Input
           :model-value="defaultBranch"
           class="h-9 font-mono text-xs"
@@ -67,8 +69,12 @@ function onUpdateDefaultBranch(v: string | number) {
       </div>
 
       <div class="flex justify-end gap-2">
-        <Button variant="secondary" size="sm" @click="$emit('update:open', false)" :disabled="busy">{{ t('common.cancel') }}</Button>
-        <Button size="sm" @click="$emit('initialize')" :disabled="busy || !projectRoot">{{ t('git.ui.dialogs.initRepo.actions.initialize') }}</Button>
+        <Button variant="secondary" size="sm" @click="$emit('update:open', false)" :disabled="busy">{{
+          t('common.cancel')
+        }}</Button>
+        <Button size="sm" @click="$emit('initialize')" :disabled="busy || !projectRoot">{{
+          t('git.ui.dialogs.initRepo.actions.initialize')
+        }}</Button>
       </div>
     </div>
   </FormDialog>

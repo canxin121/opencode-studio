@@ -2254,7 +2254,9 @@ watch(el, () => {
 
       <div v-if="folderCreateOpen" class="flex-shrink-0 px-3 pb-2">
         <div class="rounded-md border border-sidebar-border/70 bg-sidebar/95 p-2">
-          <div class="text-[10px] uppercase tracking-[0.08em] text-muted-foreground">{{ t('terminal.folder.new') }}</div>
+          <div class="text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+            {{ t('terminal.folder.new') }}
+          </div>
           <div class="mt-1 flex items-center gap-1">
             <Input
               v-model="folderCreateDraft"
@@ -2327,8 +2329,11 @@ watch(el, () => {
                   <IconButton
                     size="xs"
                     class="text-muted-foreground hover:text-foreground"
-                    :aria-label=
-                      "isFolderCollapsed(folder.id) ? String(t('terminal.sidebar.expandFolder')) : String(t('terminal.sidebar.collapseFolder'))"
+                    :aria-label="
+                      isFolderCollapsed(folder.id)
+                        ? String(t('terminal.sidebar.expandFolder'))
+                        : String(t('terminal.sidebar.collapseFolder'))
+                    "
                     @click="toggleFolderCollapsed(folder.id)"
                   >
                     <RiArrowRightSLine v-if="isFolderCollapsed(folder.id)" class="h-4 w-4" />
@@ -2407,14 +2412,14 @@ watch(el, () => {
                       </template>
 
                       <template v-if="!ui.isMobilePointer && isSessionRenaming(item.id)">
-                          <Input
-                            v-model="sessionRenameDraft"
-                            class="h-7 min-w-0 flex-1 text-xs"
-                            :placeholder="String(t('terminal.session.namePlaceholder'))"
-                            @keydown.enter.prevent="saveSessionRename"
-                            @keydown.esc.prevent="cancelSessionRename"
-                            @click.stop
-                          />
+                        <Input
+                          v-model="sessionRenameDraft"
+                          class="h-7 min-w-0 flex-1 text-xs"
+                          :placeholder="String(t('terminal.session.namePlaceholder'))"
+                          @keydown.enter.prevent="saveSessionRename"
+                          @keydown.esc.prevent="cancelSessionRename"
+                          @click.stop
+                        />
                       </template>
 
                       <template v-else>
@@ -2515,8 +2520,12 @@ watch(el, () => {
                             size="sm"
                             class="transition hover:bg-primary/6"
                             :class="item.pinned ? 'text-amber-500' : 'text-muted-foreground hover:text-amber-500'"
-                            :title="item.pinned ? String(t('terminal.actions.unpin')) : String(t('terminal.actions.pin'))"
-                            :aria-label="item.pinned ? String(t('terminal.actions.unpin')) : String(t('terminal.actions.pin'))"
+                            :title="
+                              item.pinned ? String(t('terminal.actions.unpin')) : String(t('terminal.actions.pin'))
+                            "
+                            :aria-label="
+                              item.pinned ? String(t('terminal.actions.unpin')) : String(t('terminal.actions.pin'))
+                            "
                             @click.stop="toggleSessionPinned(item.id)"
                           >
                             <component :is="item.pinned ? RiStarFill : RiStarLine" class="h-4 w-4" />
@@ -2716,8 +2725,12 @@ watch(el, () => {
                             size="sm"
                             class="transition hover:bg-primary/6"
                             :class="item.pinned ? 'text-amber-500' : 'text-muted-foreground hover:text-amber-500'"
-                            :title="item.pinned ? String(t('terminal.actions.unpin')) : String(t('terminal.actions.pin'))"
-                            :aria-label="item.pinned ? String(t('terminal.actions.unpin')) : String(t('terminal.actions.pin'))"
+                            :title="
+                              item.pinned ? String(t('terminal.actions.unpin')) : String(t('terminal.actions.pin'))
+                            "
+                            :aria-label="
+                              item.pinned ? String(t('terminal.actions.unpin')) : String(t('terminal.actions.pin'))
+                            "
                             @click.stop="toggleSessionPinned(item.id)"
                           >
                             <component :is="item.pinned ? RiStarFill : RiStarLine" class="h-4 w-4" />
@@ -2859,7 +2872,9 @@ watch(el, () => {
           @keydown.esc.prevent="cancelSessionCreate"
         />
         <div class="flex items-center justify-end gap-2">
-          <Button variant="ghost" :disabled="sessionCreateBusy" @click="cancelSessionCreate">{{ t('common.cancel') }}</Button>
+          <Button variant="ghost" :disabled="sessionCreateBusy" @click="cancelSessionCreate">{{
+            t('common.cancel')
+          }}</Button>
           <Button :disabled="sessionCreateBusy || !sessionCreateDraft.trim()" @click="saveSessionCreate">
             {{ sessionCreateBusy ? t('terminal.session.creating') : t('terminal.session.create') }}
           </Button>

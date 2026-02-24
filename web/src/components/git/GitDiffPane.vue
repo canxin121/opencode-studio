@@ -122,9 +122,9 @@ function close() {
           v-if="selectedFile && diffSource === 'working' && selectedIsConflict && !showConflictEditor"
           class="absolute top-2 right-2 z-10"
         >
-          <Button variant="secondary" size="sm" class="h-7" @click="returnToConflictEditor"
-            >{{ t('git.ui.diffPane.openConflictEditor') }}</Button
-          >
+          <Button variant="secondary" size="sm" class="h-7" @click="returnToConflictEditor">{{
+            t('git.ui.diffPane.openConflictEditor')
+          }}</Button>
         </div>
         <ConflictEditor
           v-if="showConflictEditor"

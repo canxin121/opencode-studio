@@ -149,35 +149,45 @@ const providerModelSuggestions = computed(() => {
 
       <div class="grid gap-4 lg:grid-cols-3">
         <label class="grid gap-1">
-          <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.providerCard.fields.displayName') }}</span>
+          <span class="text-xs text-muted-foreground">{{
+            t('settings.opencodeConfig.sections.providers.providerCard.fields.displayName')
+          }}</span>
           <Input
             :model-value="provider.name || ''"
             @update:model-value="(v) => setEntryField('provider', providerId, 'name', v)"
           />
         </label>
         <label class="grid gap-1">
-          <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.providerCard.fields.apiBaseUrl') }}</span>
+          <span class="text-xs text-muted-foreground">{{
+            t('settings.opencodeConfig.sections.providers.providerCard.fields.apiBaseUrl')
+          }}</span>
           <Input
             :model-value="provider.api || ''"
             @update:model-value="(v) => setEntryField('provider', providerId, 'api', v)"
           />
         </label>
         <label class="grid gap-1">
-          <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.providerCard.fields.idOverride') }}</span>
+          <span class="text-xs text-muted-foreground">{{
+            t('settings.opencodeConfig.sections.providers.providerCard.fields.idOverride')
+          }}</span>
           <Input
             :model-value="provider.id || ''"
             @update:model-value="(v) => setEntryField('provider', providerId, 'id', v)"
           />
         </label>
         <label class="grid gap-1">
-          <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.providerCard.fields.npmPackage') }}</span>
+          <span class="text-xs text-muted-foreground">{{
+            t('settings.opencodeConfig.sections.providers.providerCard.fields.npmPackage')
+          }}</span>
           <Input
             :model-value="provider.npm || ''"
             @update:model-value="(v) => setEntryField('provider', providerId, 'npm', v)"
           />
         </label>
         <label class="grid gap-1">
-          <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.providerCard.fields.environmentVariables') }}</span>
+          <span class="text-xs text-muted-foreground">{{
+            t('settings.opencodeConfig.sections.providers.providerCard.fields.environmentVariables')
+          }}</span>
           <StringListEditor
             :model-value="provider.env || []"
             :suggestions="providerEnvSuggestions"
@@ -190,7 +200,9 @@ const providerModelSuggestions = computed(() => {
           />
         </label>
         <label class="grid gap-1">
-          <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.providerCard.fields.whitelistModels') }}</span>
+          <span class="text-xs text-muted-foreground">{{
+            t('settings.opencodeConfig.sections.providers.providerCard.fields.whitelistModels')
+          }}</span>
           <StringListEditor
             :model-value="provider.whitelist || []"
             :suggestions="providerModelSuggestions"
@@ -198,12 +210,16 @@ const providerModelSuggestions = computed(() => {
             :placeholder="t('settings.opencodeConfig.sections.providers.providerCard.placeholders.modelSlugExampleA')"
             split-mode="tags"
             :advanced-rows="3"
-            :advanced-placeholder="t('settings.opencodeConfig.sections.providers.providerCard.placeholders.modelSlugExampleA')"
+            :advanced-placeholder="
+              t('settings.opencodeConfig.sections.providers.providerCard.placeholders.modelSlugExampleA')
+            "
             @update:model-value="(v) => setEntryField('provider', providerId, 'whitelist', v)"
           />
         </label>
         <label class="grid gap-1">
-          <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.providerCard.fields.blacklistModels') }}</span>
+          <span class="text-xs text-muted-foreground">{{
+            t('settings.opencodeConfig.sections.providers.providerCard.fields.blacklistModels')
+          }}</span>
           <StringListEditor
             :model-value="provider.blacklist || []"
             :suggestions="providerModelSuggestions"
@@ -211,17 +227,23 @@ const providerModelSuggestions = computed(() => {
             :placeholder="t('settings.opencodeConfig.sections.providers.providerCard.placeholders.modelSlugExampleB')"
             split-mode="tags"
             :advanced-rows="3"
-            :advanced-placeholder="t('settings.opencodeConfig.sections.providers.providerCard.placeholders.modelSlugExampleB')"
+            :advanced-placeholder="
+              t('settings.opencodeConfig.sections.providers.providerCard.placeholders.modelSlugExampleB')
+            "
             @update:model-value="(v) => setEntryField('provider', providerId, 'blacklist', v)"
           />
         </label>
       </div>
 
       <div class="grid gap-3">
-        <div class="text-sm font-semibold">{{ t('settings.opencodeConfig.sections.providers.providerCard.sections.optionsTitle') }}</div>
+        <div class="text-sm font-semibold">
+          {{ t('settings.opencodeConfig.sections.providers.providerCard.sections.optionsTitle') }}
+        </div>
         <div class="grid gap-4 lg:grid-cols-3">
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.providerCard.fields.apiKey') }}</span>
+            <span class="text-xs text-muted-foreground">{{
+              t('settings.opencodeConfig.sections.providers.providerCard.fields.apiKey')
+            }}</span>
             <div class="flex items-center gap-2">
               <Input
                 :type="providerApiKeyReveal[providerId] ? 'text' : 'password'"
@@ -243,14 +265,18 @@ const providerModelSuggestions = computed(() => {
             </div>
           </label>
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.providerCard.fields.baseUrl') }}</span>
+            <span class="text-xs text-muted-foreground">{{
+              t('settings.opencodeConfig.sections.providers.providerCard.fields.baseUrl')
+            }}</span>
             <Input
               :model-value="String(getProviderOption(providerId, 'baseURL') || '')"
               @update:model-value="(v) => setProviderOption(providerId, 'baseURL', v)"
             />
           </label>
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.providerCard.fields.enterpriseUrl') }}</span>
+            <span class="text-xs text-muted-foreground">{{
+              t('settings.opencodeConfig.sections.providers.providerCard.fields.enterpriseUrl')
+            }}</span>
             <Input
               :model-value="String(getProviderOption(providerId, 'enterpriseUrl') || '')"
               @update:model-value="(v) => setProviderOption(providerId, 'enterpriseUrl', v)"
@@ -283,18 +309,24 @@ const providerModelSuggestions = computed(() => {
             {{ t('settings.opencodeConfig.sections.providers.providerCard.fields.useCompletionUrls') }}
           </label>
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.providerCard.fields.timeout') }}</span>
+            <span class="text-xs text-muted-foreground">{{
+              t('settings.opencodeConfig.sections.providers.providerCard.fields.timeout')
+            }}</span>
             <OptionPicker
               :model-value="getProviderTimeoutMode(providerId)"
               @update:model-value="(v) => setProviderTimeoutMode(providerId, String(v || ''))"
               :options="timeoutModePickerOptions"
               :title="t('settings.opencodeConfig.sections.providers.providerCard.fields.timeout')"
-              :search-placeholder="t('settings.opencodeConfig.sections.providers.providerCard.search.searchTimeoutModes')"
+              :search-placeholder="
+                t('settings.opencodeConfig.sections.providers.providerCard.search.searchTimeoutModes')
+              "
               :include-empty="false"
             />
           </label>
           <label v-if="getProviderTimeoutMode(providerId) === 'custom'" class="grid gap-1">
-            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.providerCard.fields.timeoutMs') }}</span>
+            <span class="text-xs text-muted-foreground">{{
+              t('settings.opencodeConfig.sections.providers.providerCard.fields.timeoutMs')
+            }}</span>
             <input
               :value="getProviderTimeoutValue(providerId)"
               @input="(e) => setProviderTimeoutValue(providerId, (e.target as HTMLInputElement).value)"
@@ -307,56 +339,72 @@ const providerModelSuggestions = computed(() => {
 
         <div class="grid gap-4 lg:grid-cols-3">
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.providerCard.fields.region') }}</span>
+            <span class="text-xs text-muted-foreground">{{
+              t('settings.opencodeConfig.sections.providers.providerCard.fields.region')
+            }}</span>
             <Input
               :model-value="String(getProviderOption(providerId, 'region') || '')"
               @update:model-value="(v) => setProviderOption(providerId, 'region', v)"
             />
           </label>
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.providerCard.fields.profile') }}</span>
+            <span class="text-xs text-muted-foreground">{{
+              t('settings.opencodeConfig.sections.providers.providerCard.fields.profile')
+            }}</span>
             <Input
               :model-value="String(getProviderOption(providerId, 'profile') || '')"
               @update:model-value="(v) => setProviderOption(providerId, 'profile', v)"
             />
           </label>
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.providerCard.fields.endpoint') }}</span>
+            <span class="text-xs text-muted-foreground">{{
+              t('settings.opencodeConfig.sections.providers.providerCard.fields.endpoint')
+            }}</span>
             <Input
               :model-value="String(getProviderOption(providerId, 'endpoint') || '')"
               @update:model-value="(v) => setProviderOption(providerId, 'endpoint', v)"
             />
           </label>
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.providerCard.fields.project') }}</span>
+            <span class="text-xs text-muted-foreground">{{
+              t('settings.opencodeConfig.sections.providers.providerCard.fields.project')
+            }}</span>
             <Input
               :model-value="String(getProviderOption(providerId, 'project') || '')"
               @update:model-value="(v) => setProviderOption(providerId, 'project', v)"
             />
           </label>
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.providerCard.fields.location') }}</span>
+            <span class="text-xs text-muted-foreground">{{
+              t('settings.opencodeConfig.sections.providers.providerCard.fields.location')
+            }}</span>
             <Input
               :model-value="String(getProviderOption(providerId, 'location') || '')"
               @update:model-value="(v) => setProviderOption(providerId, 'location', v)"
             />
           </label>
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.providerCard.fields.deploymentId') }}</span>
+            <span class="text-xs text-muted-foreground">{{
+              t('settings.opencodeConfig.sections.providers.providerCard.fields.deploymentId')
+            }}</span>
             <Input
               :model-value="String(getProviderOption(providerId, 'deploymentId') || '')"
               @update:model-value="(v) => setProviderOption(providerId, 'deploymentId', v)"
             />
           </label>
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.providerCard.fields.resourceGroup') }}</span>
+            <span class="text-xs text-muted-foreground">{{
+              t('settings.opencodeConfig.sections.providers.providerCard.fields.resourceGroup')
+            }}</span>
             <Input
               :model-value="String(getProviderOption(providerId, 'resourceGroup') || '')"
               @update:model-value="(v) => setProviderOption(providerId, 'resourceGroup', v)"
             />
           </label>
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.providerCard.fields.gitlabInstanceUrl') }}</span>
+            <span class="text-xs text-muted-foreground">{{
+              t('settings.opencodeConfig.sections.providers.providerCard.fields.gitlabInstanceUrl')
+            }}</span>
             <Input
               :model-value="String(getProviderOption(providerId, 'instanceUrl') || '')"
               @update:model-value="(v) => setProviderOption(providerId, 'instanceUrl', v)"

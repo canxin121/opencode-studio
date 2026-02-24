@@ -109,7 +109,9 @@ function repoDirOrEmpty(): string {
       </div>
 
       <div v-if="githubRemote" class="rounded-md border border-border/60 bg-muted/10 p-3 text-xs text-muted-foreground">
-        <div class="font-medium text-foreground/80">{{ t('git.authDialogs.credentials.githubTokenOptionalTitle') }}</div>
+        <div class="font-medium text-foreground/80">
+          {{ t('git.authDialogs.credentials.githubTokenOptionalTitle') }}
+        </div>
         <div class="mt-1">{{ t('git.authDialogs.credentials.githubTokenOptionalDescription') }}</div>
         <div class="mt-2 flex gap-2">
           <Input v-model="githubToken" class="h-9 font-mono text-xs" placeholder="ghp_..." />
@@ -149,7 +151,9 @@ function repoDirOrEmpty(): string {
           <Input v-model="credUsername" class="h-9 font-mono text-xs" placeholder="x-access-token" />
         </div>
         <div class="grid gap-1">
-          <div class="text-xs font-medium text-muted-foreground">{{ t('git.authDialogs.credentials.passwordOrToken') }}</div>
+          <div class="text-xs font-medium text-muted-foreground">
+            {{ t('git.authDialogs.credentials.passwordOrToken') }}
+          </div>
           <Input v-model="credPassword" type="password" class="h-9 font-mono text-xs" placeholder="••••••••" />
         </div>
       </div>
@@ -182,9 +186,9 @@ function repoDirOrEmpty(): string {
         >
           Use Terminal
         </Button>
-        <Button size="sm" :disabled="!credUsername.trim() || !credPassword.trim()" @click="props.submitCredentials"
-          >{{ t('common.continue') }}</Button
-        >
+        <Button size="sm" :disabled="!credUsername.trim() || !credPassword.trim()" @click="props.submitCredentials">{{
+          t('common.continue')
+        }}</Button>
       </div>
     </div>
   </FormDialog>
@@ -335,7 +339,9 @@ function repoDirOrEmpty(): string {
         {{ gpgExplain }}
       </div>
       <div class="grid gap-1">
-        <div class="text-xs font-medium text-muted-foreground">{{ t('git.authDialogs.gpgPassphrase.passphraseLabel') }}</div>
+        <div class="text-xs font-medium text-muted-foreground">
+          {{ t('git.authDialogs.gpgPassphrase.passphraseLabel') }}
+        </div>
         <Input v-model="gpgPassphrase" type="password" class="h-9 font-mono text-xs" placeholder="••••••••" />
       </div>
       <div class="flex justify-end gap-2">
@@ -355,9 +361,9 @@ function repoDirOrEmpty(): string {
         >
           {{ t('common.useTerminal') }}
         </Button>
-        <Button size="sm" :disabled="!gpgPassphrase.trim() || committing" @click="props.submitGpgPassphrase"
-          >{{ t('git.authDialogs.gpgPassphrase.signAndCommit') }}</Button
-        >
+        <Button size="sm" :disabled="!gpgPassphrase.trim() || committing" @click="props.submitGpgPassphrase">{{
+          t('git.authDialogs.gpgPassphrase.signAndCommit')
+        }}</Button>
       </div>
     </div>
   </FormDialog>
@@ -415,7 +421,9 @@ function repoDirOrEmpty(): string {
       </div>
 
       <div class="space-y-2">
-        <div class="text-xs font-medium text-muted-foreground">{{ t('git.authDialogs.gpgMissingKey.setSigningKeyLocal') }}</div>
+        <div class="text-xs font-medium text-muted-foreground">
+          {{ t('git.authDialogs.gpgMissingKey.setSigningKeyLocal') }}
+        </div>
         <Input
           v-model="gpgSigningKeyInput"
           class="h-9 font-mono text-xs"
@@ -437,9 +445,9 @@ function repoDirOrEmpty(): string {
         <Button variant="destructive" size="sm" :disabled="gpgMissingBusy" @click="props.disableRepoGpgSigning">
           {{ t('git.authDialogs.gpgMissingKey.disableSigningButton') }}
         </Button>
-        <Button variant="secondary" size="sm" @click="gpgMissingDialogOpen = false" :disabled="gpgMissingBusy"
-          >{{ t('common.close') }}</Button
-        >
+        <Button variant="secondary" size="sm" @click="gpgMissingDialogOpen = false" :disabled="gpgMissingBusy">{{
+          t('common.close')
+        }}</Button>
       </div>
     </div>
   </FormDialog>

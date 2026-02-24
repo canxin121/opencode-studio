@@ -346,24 +346,24 @@ void sessionActionsMenuRef
             v-if="navigableMessageIds.length > 1 || (navigableMessageIds.length > 0 && !chat.selectedHistory.exhausted)"
             size="icon"
             variant="outline"
-             class="h-8 w-8 rounded-full bg-background/80 backdrop-blur"
-             :aria-label="t('chat.page.nav.previousUserMessage')"
-             :title="t('chat.page.nav.previousUserMessage')"
-             @click="navPrev"
-             :disabled="(navIndex <= 0 && chat.selectedHistory.exhausted) || loadingOlder"
-           >
+            class="h-8 w-8 rounded-full bg-background/80 backdrop-blur"
+            :aria-label="t('chat.page.nav.previousUserMessage')"
+            :title="t('chat.page.nav.previousUserMessage')"
+            @click="navPrev"
+            :disabled="(navIndex <= 0 && chat.selectedHistory.exhausted) || loadingOlder"
+          >
             <RiArrowUpLine class="h-4 w-4" />
           </Button>
-           <Button
+          <Button
             v-if="navigableMessageIds.length > 1"
             size="icon"
             variant="outline"
             class="h-8 w-8 rounded-full bg-background/80 backdrop-blur"
-             :title="t('chat.page.nav.nextUserMessage')"
-             :aria-label="t('chat.page.nav.nextUserMessage')"
-             @click="navNext"
-             :disabled="navIndex >= navigableMessageIds.length - 1"
-           >
+            :title="t('chat.page.nav.nextUserMessage')"
+            :aria-label="t('chat.page.nav.nextUserMessage')"
+            @click="navNext"
+            :disabled="navIndex >= navigableMessageIds.length - 1"
+          >
             <RiArrowDownLine class="h-4 w-4" />
           </Button>
 
@@ -375,15 +375,15 @@ void sessionActionsMenuRef
           </div>
 
           <!-- Keep this slot fixed so other controls don't move -->
-           <Button
+          <Button
             size="icon"
             variant="outline"
             class="h-8 w-8 rounded-full bg-background/80 backdrop-blur"
-             :title="t('chat.page.nav.bottom')"
-             :aria-label="t('chat.page.nav.bottom')"
-             :class="!isAtBottom && chat.messages.length ? '' : 'invisible pointer-events-none'"
-             @click="scrollToBottom('smooth')"
-           >
+            :title="t('chat.page.nav.bottom')"
+            :aria-label="t('chat.page.nav.bottom')"
+            :class="!isAtBottom && chat.messages.length ? '' : 'invisible pointer-events-none'"
+            @click="scrollToBottom('smooth')"
+          >
             <RiArrowDownDoubleLine class="h-4 w-4" />
           </Button>
         </div>
@@ -688,7 +688,11 @@ void sessionActionsMenuRef
                             data-oc-keyboard-tap="blur"
                             :variant="composerPrimaryAction === 'stop' ? 'outline' : undefined"
                             :class="composerPrimaryAction === 'stop' ? 'text-destructive hover:text-destructive' : ''"
-                            :title="composerPrimaryAction === 'stop' ? t('chat.page.primary.stop') : t('chat.page.primary.send')"
+                            :title="
+                              composerPrimaryAction === 'stop'
+                                ? t('chat.page.primary.stop')
+                                : t('chat.page.primary.send')
+                            "
                             :aria-label="
                               composerPrimaryAction === 'stop'
                                 ? t('chat.page.primary.stopRun')
@@ -707,7 +711,11 @@ void sessionActionsMenuRef
                             <RiStopCircleLine v-else-if="composerPrimaryAction === 'stop'" class="h-4 w-4" />
                             <RiSendPlane2Line v-else class="h-4 w-4" />
                           </Button>
-                          <template #content>{{ composerPrimaryAction === 'stop' ? t('chat.page.primary.stopRun') : t('chat.page.primary.send') }}</template>
+                          <template #content>{{
+                            composerPrimaryAction === 'stop'
+                              ? t('chat.page.primary.stopRun')
+                              : t('chat.page.primary.send')
+                          }}</template>
                         </Tooltip>
                       </div>
                     </div>

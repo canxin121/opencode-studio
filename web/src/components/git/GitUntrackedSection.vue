@@ -99,7 +99,12 @@ function runMobileAction(path: string, actionId: string) {
 
 <template>
   <div class="oc-vscode-section select-none">
-    <SectionToggleButton :open="expanded" :label="t('git.ui.workingTree.sections.untracked')" :count="count" @toggle="toggle">
+    <SectionToggleButton
+      :open="expanded"
+      :label="t('git.ui.workingTree.sections.untracked')"
+      :count="count"
+      @toggle="toggle"
+    >
       <template #actions>
         <SidebarIconButton
           size="sm"
@@ -136,7 +141,12 @@ function runMobileAction(path: string, actionId: string) {
           >
             <RiAddLine class="h-3.5 w-3.5" />
           </SidebarIconButton>
-          <SidebarIconButton size="sm" :title="t('common.rename')" :aria-label="t('common.rename')" @click.stop="$emit('rename', f.path)">
+          <SidebarIconButton
+            size="sm"
+            :title="t('common.rename')"
+            :aria-label="t('common.rename')"
+            @click.stop="$emit('rename', f.path)"
+          >
             <RiPencilLine class="h-3.5 w-3.5" />
           </SidebarIconButton>
           <SidebarIconButton

@@ -146,7 +146,9 @@ const assistantHasError = () => role() === 'assistant' && Boolean(assistantError
             <span v-if="showTimestamps">{{ formatTime(message.info.time?.created) }}</span>
             <span v-if="message.info.agent" class="font-mono truncate">{{ message.info.agent }}</span>
             <span v-if="message.info.modelID" class="font-mono truncate">{{ message.info.modelID }}</span>
-            <span v-if="assistantInterrupted()" class="text-muted-foreground">{{ t('chat.messageItem.interrupted') }}</span>
+            <span v-if="assistantInterrupted()" class="text-muted-foreground">{{
+              t('chat.messageItem.interrupted')
+            }}</span>
           </div>
 
           <div class="flex-1" />

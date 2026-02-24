@@ -1682,14 +1682,9 @@ mod tests {
         .await
         .unwrap();
 
-        let page = load_session_message_page_from_sqlite(
-            session_id,
-            0,
-            Some(page_limit),
-            true,
-        )
-        .await
-        .expect("sqlite page should load");
+        let page = load_session_message_page_from_sqlite(session_id, 0, Some(page_limit), true)
+            .await
+            .expect("sqlite page should load");
 
         assert_eq!(page.total, message_count);
         assert_eq!(page.entries.len(), page_limit);
@@ -1793,7 +1788,10 @@ mod tests {
             .expect("parts array");
         assert_eq!(parts.len(), 1);
         let p0 = parts[0].as_object().expect("part object");
-        assert_eq!(p0.get("sessionID").and_then(|v| v.as_str()), Some("ses_compat"));
+        assert_eq!(
+            p0.get("sessionID").and_then(|v| v.as_str()),
+            Some("ses_compat")
+        );
         assert_eq!(p0.get("messageID").and_then(|v| v.as_str()), Some("msg_1"));
     }
 
@@ -1814,7 +1812,10 @@ mod tests {
         let page = load_session_message_page_from_sqlite(&sid, 0, Some(25), true)
             .await
             .expect("expected local opencode.db to exist and be readable");
-        assert!(page.entries.len() > 0, "expected session to have messages");
+        assert!(
+            !page.entries.is_empty(),
+            "expected session to have messages"
+        );
     }
 
     #[tokio::test]

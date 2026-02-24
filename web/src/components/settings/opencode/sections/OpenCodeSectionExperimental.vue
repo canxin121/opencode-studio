@@ -39,7 +39,9 @@ export default defineComponent({
   <section id="experimental" class="scroll-mt-24 rounded-lg border border-border bg-background p-4 space-y-4">
     <div class="flex items-start justify-between gap-3">
       <div class="min-w-0">
-        <div class="text-base font-semibold leading-snug">{{ t('settings.opencodeConfig.sections.experimental.title') }}</div>
+        <div class="text-base font-semibold leading-snug">
+          {{ t('settings.opencodeConfig.sections.experimental.title') }}
+        </div>
       </div>
       <div class="flex items-center gap-2">
         <Tooltip>
@@ -81,7 +83,9 @@ export default defineComponent({
     <div v-if="isSectionOpen('experimental')" class="space-y-4">
       <div class="grid gap-4 lg:grid-cols-3">
         <label class="grid gap-1">
-          <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.experimental.fields.disablePasteSummary') }}</span>
+          <span class="text-xs text-muted-foreground">{{
+            t('settings.opencodeConfig.sections.experimental.fields.disablePasteSummary')
+          }}</span>
           <OptionPicker
             v-model="experimentalDisablePasteSummary"
             :options="triStatePickerOptions"
@@ -91,7 +95,9 @@ export default defineComponent({
           />
         </label>
         <label class="grid gap-1">
-          <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.experimental.fields.batchTool') }}</span>
+          <span class="text-xs text-muted-foreground">{{
+            t('settings.opencodeConfig.sections.experimental.fields.batchTool')
+          }}</span>
           <OptionPicker
             v-model="experimentalBatchTool"
             :options="triStatePickerOptions"
@@ -101,7 +107,9 @@ export default defineComponent({
           />
         </label>
         <label class="grid gap-1">
-          <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.experimental.fields.openTelemetry') }}</span>
+          <span class="text-xs text-muted-foreground">{{
+            t('settings.opencodeConfig.sections.experimental.fields.openTelemetry')
+          }}</span>
           <OptionPicker
             v-model="experimentalOpenTelemetry"
             :options="triStatePickerOptions"
@@ -111,7 +119,9 @@ export default defineComponent({
           />
         </label>
         <label class="grid gap-1">
-          <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.experimental.fields.continueLoopOnDeny') }}</span>
+          <span class="text-xs text-muted-foreground">{{
+            t('settings.opencodeConfig.sections.experimental.fields.continueLoopOnDeny')
+          }}</span>
           <OptionPicker
             v-model="experimentalContinueLoop"
             :options="triStatePickerOptions"
@@ -121,7 +131,9 @@ export default defineComponent({
           />
         </label>
         <label class="grid gap-1">
-          <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.experimental.fields.mcpTimeoutMs') }}</span>
+          <span class="text-xs text-muted-foreground">{{
+            t('settings.opencodeConfig.sections.experimental.fields.mcpTimeoutMs')
+          }}</span>
           <input
             v-model="experimentalMcpTimeout"
             type="number"
@@ -134,7 +146,9 @@ export default defineComponent({
       <div class="grid gap-4 lg:grid-cols-2">
         <div class="grid gap-2">
           <div class="flex items-center justify-between">
-            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.experimental.primaryTools.title') }}</span>
+            <span class="text-xs text-muted-foreground">{{
+              t('settings.opencodeConfig.sections.experimental.primaryTools.title')
+            }}</span>
             <button
               type="button"
               class="text-[11px] text-muted-foreground hover:text-foreground"
@@ -163,9 +177,15 @@ export default defineComponent({
               </div>
             </div>
           </div>
-          <div class="text-[11px] text-muted-foreground">{{ t('settings.opencodeConfig.sections.experimental.primaryTools.help') }}</div>
+          <div class="text-[11px] text-muted-foreground">
+            {{ t('settings.opencodeConfig.sections.experimental.primaryTools.help') }}
+          </div>
           <div v-if="toolIdsError" class="text-[11px] text-muted-foreground break-all">
-            {{ t('settings.opencodeConfig.sections.experimental.primaryTools.toolIdsUnavailable', { error: toolIdsError }) }}
+            {{
+              t('settings.opencodeConfig.sections.experimental.primaryTools.toolIdsUnavailable', {
+                error: toolIdsError,
+              })
+            }}
           </div>
           <textarea
             v-if="showAdvancedPrimaryTools"
