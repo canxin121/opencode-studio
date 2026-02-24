@@ -49,7 +49,7 @@ export function useChatModelSelection(opts: {
   // Other UI state that must be reset when opening picker.
   modelPickerQuery: Ref<string>
   agentPickerQuery: Ref<string>
-  closeComposerActionMenu: () => void
+  onOpenComposerPicker: () => void
   commandOpen: Ref<boolean>
   commandQuery: Ref<string>
   commandIndex: Ref<number>
@@ -66,7 +66,7 @@ export function useChatModelSelection(opts: {
     variantTriggerRef,
     modelPickerQuery,
     agentPickerQuery,
-    closeComposerActionMenu,
+    onOpenComposerPicker,
     commandOpen,
     commandQuery,
     commandIndex,
@@ -225,7 +225,7 @@ export function useChatModelSelection(opts: {
     variantTriggerRef,
     modelPickerQuery,
     agentPickerQuery,
-    closeComposerActionMenu,
+    onOpenComposerPicker,
     commandOpen,
     commandQuery,
     commandIndex,

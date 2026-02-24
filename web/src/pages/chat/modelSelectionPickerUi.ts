@@ -15,7 +15,7 @@ export function useModelSelectionPickerUi(opts: {
   variantTriggerRef: Ref<HTMLElement | null>
   modelPickerQuery: Ref<string>
   agentPickerQuery: Ref<string>
-  closeComposerActionMenu: () => void
+  onOpenComposerPicker: () => void
   commandOpen: Ref<boolean>
   commandQuery: Ref<string>
   commandIndex: Ref<number>
@@ -29,7 +29,7 @@ export function useModelSelectionPickerUi(opts: {
     variantTriggerRef,
     modelPickerQuery,
     agentPickerQuery,
-    closeComposerActionMenu,
+    onOpenComposerPicker,
     commandOpen,
     commandQuery,
     commandIndex,
@@ -45,7 +45,7 @@ export function useModelSelectionPickerUi(opts: {
       return
     }
 
-    closeComposerActionMenu()
+    onOpenComposerPicker()
     commandOpen.value = false
     commandQuery.value = ''
     commandIndex.value = 0
