@@ -9,6 +9,7 @@ import MetaInvocation from '@/components/ui/MetaInvocation.vue'
 import Button from '@/components/ui/Button.vue'
 import MobileSidebarEmptyState from '@/components/ui/MobileSidebarEmptyState.vue'
 import MessageItem from '@/components/chat/MessageItem.vue'
+import { formatTimeHMS } from '@/i18n/intl'
 import type { OptimisticUserMessage } from '@/composables/chat/useMessageStreaming'
 import type { JsonValue } from '@/types/json'
 
@@ -148,11 +149,7 @@ function sessionErrorBody(): string {
 function sessionErrorAtLabel(): string {
   const at = Number(props.sessionError?.at || 0)
   if (!Number.isFinite(at) || at <= 0) return ''
-  try {
-    return new Date(at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-  } catch {
-    return ''
-  }
+  return formatTimeHMS(at)
 }
 </script>
 

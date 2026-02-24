@@ -2,6 +2,7 @@ import { computed, onBeforeUnmount, ref, watch, type ComputedRef, type Ref } fro
 import type { AttachedFile } from './useChatAttachments'
 import type { RenderBlock } from './useChatRenderBlocks'
 import { i18n } from '@/i18n'
+import { formatCompactNumber, formatCurrencyUSD, formatNumber, formatTimeHMS } from '@/i18n/intl'
 
 type ToastsStore = { push: (kind: 'success' | 'error', message: string) => void }
 
@@ -88,8 +89,7 @@ type ActivityLike = {
 }
 
 function formatClockTime(ms?: number): string {
-  if (!ms) return ''
-  return new Date(ms).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  return formatTimeHMS(ms)
 }
 
 function formatCountdown(ms: number): string {
@@ -293,8 +293,7 @@ export function useChatRunUi(opts: {
 
     if (tokenTotal == null && !sawCost) return null
 
-    const currency = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' })
-    const costLabel = currency.format(costTotal)
+    const costLabel = formatCurrencyUSD(costTotal)
 
     let percentUsed: number | null = null
     if (tokenTotal != null && providerID && modelID) {
@@ -308,16 +307,12 @@ export function useChatRunUi(opts: {
 
     return {
       tokensValue: tokenTotal,
-      tokensLabel: tokenTotal != null ? tokenTotal.toLocaleString() : '--',
+      tokensLabel: tokenTotal != null ? formatNumber(tokenTotal) : '--',
       percentUsed,
       costLabel,
       modelLabel: providerID && modelID ? `${providerID}/${modelID}` : undefined,
     }
   })
-
-  function formatCompactNumber(num: number): string {
-    return new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(num)
-  }
 
   const hasStreamingAssistantText = computed(() => {
     const sid = chat.selectedSessionId

@@ -10,6 +10,8 @@ import OptionPicker, { type PickerOption } from '@/components/ui/OptionPicker.vu
 import ScrollArea from '@/components/ui/ScrollArea.vue'
 import DiffViewer from '@/components/DiffViewer.vue'
 
+import { formatDateTimeYMDHM } from '@/i18n/intl'
+
 import type { GitCommitFile, GitLogCommit } from '@/types/git'
 
 const { t } = useI18n()
@@ -73,19 +75,7 @@ function onUpdateOpen(v: boolean) {
 
 function formatDate(value: string) {
   if (!value) return ''
-  const d = new Date(value)
-  if (Number.isNaN(d.getTime())) return value
-  try {
-    return new Intl.DateTimeFormat(undefined, {
-      year: 'numeric',
-      month: 'short',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(d)
-  } catch {
-    return d.toLocaleString()
-  }
+  return formatDateTimeYMDHM(value)
 }
 
 const selectedMeta = computed(() => {

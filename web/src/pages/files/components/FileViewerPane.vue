@@ -22,6 +22,7 @@ import IconButton from '@/components/ui/IconButton.vue'
 import MobileSidebarEmptyState from '@/components/ui/MobileSidebarEmptyState.vue'
 import OptionMenu, { type OptionMenuGroup, type OptionMenuItem } from '@/components/ui/OptionMenu.vue'
 import { buildUnifiedDiffModel } from '@/features/git/diff/unifiedDiff'
+import { formatDateTimeYMDHM, formatDateYMDShort2DigitYear } from '@/i18n/intl'
 
 import { isImagePath } from '../fileKinds'
 import type { FileNode, SelectionRange, ViewerMode } from '../types'
@@ -186,19 +187,7 @@ function shortHash(hash: string): string {
 
 function formatTimelineDate(value: string): string {
   if (!value) return ''
-  const dt = new Date(value)
-  if (Number.isNaN(dt.getTime())) return value
-  try {
-    return new Intl.DateTimeFormat(undefined, {
-      year: 'numeric',
-      month: 'short',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(dt)
-  } catch {
-    return dt.toLocaleString()
-  }
+  return formatDateTimeYMDHM(value)
 }
 
 function timelineCommitLabel(commit: GitLogCommit | null): string {
@@ -481,10 +470,8 @@ function blameKey(line: GitBlameLine): string {
 }
 
 function formatBlameDate(unixSeconds: number): string {
-  if (!Number.isFinite(unixSeconds) || unixSeconds <= 0) return 'Unknown date'
-  const dt = new Date(unixSeconds * 1000)
-  if (Number.isNaN(dt.getTime())) return 'Unknown date'
-  return dt.toLocaleString()
+  if (!Number.isFinite(unixSeconds) || unixSeconds <= 0) return String(t('common.unknown'))
+  return formatDateTimeYMDHM(unixSeconds * 1000) || String(t('common.unknown'))
 }
 
 function clampBlameLabel(text: string, max = 72): string {
@@ -498,17 +485,7 @@ function clampBlameLabel(text: string, max = 72): string {
 
 function formatBlameDateShort(unixSeconds: number): string {
   if (!Number.isFinite(unixSeconds) || unixSeconds <= 0) return ''
-  const dt = new Date(unixSeconds * 1000)
-  if (Number.isNaN(dt.getTime())) return ''
-  try {
-    return new Intl.DateTimeFormat(undefined, {
-      year: '2-digit',
-      month: 'short',
-      day: '2-digit',
-    }).format(dt)
-  } catch {
-    return dt.toLocaleDateString()
-  }
+  return formatDateYMDShort2DigitYear(unixSeconds * 1000)
 }
 
 type BlameCommitBlock = {

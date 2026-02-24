@@ -1,4 +1,5 @@
 import type { JsonObject as PartRecord, JsonValue } from '@/types/json'
+import { formatDateTimeYMDHM } from '@/i18n/intl'
 
 export type TranscriptOptions = {
   thinking: boolean
@@ -80,10 +81,10 @@ export function formatTranscript(
   let transcript = `# ${title}\n\n`
   transcript += `**Session ID:** ${session.id}\n`
   if (session.time?.created) {
-    transcript += `**Created:** ${new Date(session.time.created).toLocaleString()}\n`
+    transcript += `**Created:** ${formatDateTimeYMDHM(session.time.created)}\n`
   }
   if (session.time?.updated) {
-    transcript += `**Updated:** ${new Date(session.time.updated).toLocaleString()}\n`
+    transcript += `**Updated:** ${formatDateTimeYMDHM(session.time.updated)}\n`
   }
   transcript += `\n---\n\n`
 

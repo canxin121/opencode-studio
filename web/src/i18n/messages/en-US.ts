@@ -1502,6 +1502,19 @@ export default {
       answerSent: 'Answer sent',
       questionRejected: 'Question rejected',
     },
+    headerOverlay: {
+      title: {
+        permissionRequired: 'Permission required',
+        question: 'Question',
+        retrying: 'Retrying',
+        actionRequired: 'Action required',
+      },
+      subtitle: {
+        respondToContinue: 'Respond to continue this session.',
+      },
+      retryingIn: 'Retrying in {countdown}',
+      retryMeta: 'attempt {attempt} • next {next}',
+    },
     attention: {
       title: {
         permissionRequired: 'Permission required',
@@ -1840,6 +1853,11 @@ export default {
       sessionRow: {
         status: {
           idle: 'Idle',
+          needsPermission: 'Needs permission',
+          needsReply: 'Needs reply',
+          retrying: 'Retrying',
+          running: 'Running',
+          coolingDown: 'Cooling down',
         },
         threadToggle: {
           expand: 'Expand thread',

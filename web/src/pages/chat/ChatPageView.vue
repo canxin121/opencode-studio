@@ -400,7 +400,6 @@ void sessionActionsMenuRef
             />
           </div>
         </div>
-
       </template>
 
       <template #bottom>
