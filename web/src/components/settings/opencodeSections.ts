@@ -1,21 +1,21 @@
 export type OpencodeSection = {
   id: string
-  label: string
+  labelKey: string
 }
 
 export const opencodeSections: OpencodeSection[] = [
-  { id: 'general', label: 'General' },
-  { id: 'instructions', label: 'Instructions, Skills & Plugins' },
-  { id: 'providers', label: 'Providers' },
-  { id: 'tui', label: 'TUI' },
-  { id: 'server', label: 'Server & Watcher' },
-  { id: 'commands', label: 'Commands' },
-  { id: 'agents', label: 'Agents' },
-  { id: 'permissions', label: 'Permissions' },
-  { id: 'mcp', label: 'MCP' },
-  { id: 'formatter', label: 'Formatter & LSP' },
-  { id: 'keybinds', label: 'Keybinds' },
-  { id: 'compaction', label: 'Compaction' },
-  { id: 'experimental', label: 'Experimental' },
-  { id: 'enterprise', label: 'Enterprise' },
+  { id: 'general', labelKey: 'settings.opencodeConfig.navigation.sections.general' },
+  { id: 'instructions', labelKey: 'settings.opencodeConfig.navigation.sections.instructions' },
+  { id: 'providers', labelKey: 'settings.opencodeConfig.navigation.sections.providers' },
+  { id: 'tui', labelKey: 'settings.opencodeConfig.navigation.sections.tui' },
+  { id: 'server', labelKey: 'settings.opencodeConfig.navigation.sections.server' },
+  { id: 'commands', labelKey: 'settings.opencodeConfig.navigation.sections.commands' },
+  { id: 'agents', labelKey: 'settings.opencodeConfig.navigation.sections.agents' },
+  { id: 'permissions', labelKey: 'settings.opencodeConfig.navigation.sections.permissions' },
+  { id: 'mcp', labelKey: 'settings.opencodeConfig.navigation.sections.mcp' },
+  { id: 'formatter', labelKey: 'settings.opencodeConfig.navigation.sections.formatter' },
+  { id: 'keybinds', labelKey: 'settings.opencodeConfig.navigation.sections.keybinds' },
+  { id: 'compaction', labelKey: 'settings.opencodeConfig.navigation.sections.compaction' },
+  { id: 'experimental', labelKey: 'settings.opencodeConfig.navigation.sections.experimental' },
+  { id: 'enterprise', labelKey: 'settings.opencodeConfig.navigation.sections.enterprise' },
 ]

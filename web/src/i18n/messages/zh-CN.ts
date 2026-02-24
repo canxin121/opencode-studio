@@ -63,6 +63,8 @@ export default {
     ignore: '忽略',
     yes: '是',
     no: '否',
+    true: 'true',
+    false: 'false',
     copyFailed: '复制失败',
     failedToCopyToClipboard: '复制到剪贴板失败',
     downloadFailed: '下载失败',
@@ -351,6 +353,24 @@ export default {
       },
     },
     opencodeConfig: {
+      navigation: {
+        sections: {
+          general: '通用',
+          instructions: '说明、技能与插件',
+          providers: '提供商',
+          tui: 'TUI',
+          server: '服务端与监视器',
+          commands: '命令',
+          agents: 'Agents',
+          permissions: '权限',
+          mcp: 'MCP',
+          formatter: '格式化与 LSP',
+          keybinds: '键位绑定',
+          compaction: '压缩',
+          experimental: '实验性',
+          enterprise: '企业',
+        },
+      },
       scope: {
         title: '配置范围',
         searchPlaceholder: '搜索范围',
@@ -484,6 +504,12 @@ export default {
             },
             search: {
               searchPolicies: '搜索策略',
+            },
+            options: {
+              lastChangeWins: 'last-change-wins',
+              enabledWins: 'enabled-wins',
+              disabledWins: 'disabled-wins',
+              keepConflict: 'keep-conflict',
             },
             picker: {
               panelTitle: 'Providers',
@@ -1329,12 +1355,24 @@ export default {
         useSystem: '跟随系统主题',
         pickerTitle: '主题',
         pickerSearch: '搜索主题',
+        options: {
+          light: '浅色',
+          dark: '深色',
+        },
       },
       fonts: {
         label: '字体',
         ui: '界面字体',
         mono: '等宽字体',
         search: '搜索字体',
+        options: {
+          system: '系统',
+          ibmPlexSans: 'IBM Plex Sans',
+          atkinson: 'Atkinson Hyperlegible',
+          serif: '衬线',
+          ibmPlexMono: 'IBM Plex Mono',
+          jetbrainsMono: 'JetBrains Mono',
+        },
       },
       sizing: {
         label: '大小',

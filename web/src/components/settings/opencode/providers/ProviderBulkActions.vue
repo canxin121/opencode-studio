@@ -31,12 +31,18 @@ const providerPickerOptions = computed<PickerOption[]>(() => {
   return list.map((id) => ({ value: id, label: id }))
 })
 
-const conflictPolicyPickerOptions: OptionPickerOption[] = [
-  { value: 'last-change-wins', label: 'last-change-wins' },
-  { value: 'enabled-wins', label: 'enabled-wins' },
-  { value: 'disabled-wins', label: 'disabled-wins' },
-  { value: 'keep-conflict', label: 'keep-conflict' },
-]
+const conflictPolicyPickerOptions = computed<OptionPickerOption[]>(() => [
+  {
+    value: 'last-change-wins',
+    label: t('settings.opencodeConfig.sections.providers.bulkActions.options.lastChangeWins'),
+  },
+  { value: 'enabled-wins', label: t('settings.opencodeConfig.sections.providers.bulkActions.options.enabledWins') },
+  {
+    value: 'disabled-wins',
+    label: t('settings.opencodeConfig.sections.providers.bulkActions.options.disabledWins'),
+  },
+  { value: 'keep-conflict', label: t('settings.opencodeConfig.sections.providers.bulkActions.options.keepConflict') },
+])
 </script>
 
 <template>
