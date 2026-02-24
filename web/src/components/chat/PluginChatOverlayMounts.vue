@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { RiPlugLine } from '@remixicon/vue'
+import { RiFileList2Line, RiPlugLine } from '@remixicon/vue'
 
+import MonacoDiffEditor from '@/components/MonacoDiffEditor.vue'
 import PluginMountHost from '@/components/plugins/PluginMountHost.vue'
 import OptionMenu, { type OptionMenuGroup, type OptionMenuItem } from '@/components/ui/OptionMenu.vue'
 import type { ChatMount } from '@/plugins/host/mounts'
+import { useChatStore } from '@/stores/chat'
+import type { SessionFileDiff } from '@/types/chat'
 
 const props = withDefaults(
   defineProps<{
@@ -24,6 +27,7 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+const chat = useChatStore()
 
 type ReserveMap = Record<string, number>
 
@@ -34,6 +38,8 @@ const reserveByKey = ref<ReserveMap>({})
 const menuOpen = ref(false)
 const activeMountKey = ref('')
 const menuQuery = ref('')
+const diffPanelOpen = ref(false)
+const selectedDiffFile = ref('')
 
 let reserveObserver: ResizeObserver | null = null
 let reserveRaf = 0
@@ -74,6 +80,25 @@ const mountRows = computed(() =>
 
 const hasMounts = computed(() => mountRows.value.length > 0)
 const isComposerPlacement = computed(() => props.placement === 'composer')
+const sessionDiff = computed<SessionFileDiff[]>(() => {
+  const list = chat.selectedSessionDiff
+  return Array.isArray(list) ? list : []
+})
+const sessionDiffCount = computed(() => sessionDiff.value.length)
+const sessionDiffBadge = computed(() => {
+  const count = sessionDiffCount.value
+  if (count <= 0) return ''
+  if (count > 99) return '99+'
+  return String(count)
+})
+const selectedDiff = computed(() => {
+  const target = selectedDiffFile.value
+  if (!target) return null
+  return sessionDiff.value.find((entry) => entry.file === target) || null
+})
+const selectedDiffPath = computed(() => selectedDiff.value?.file || '')
+const selectedDiffBefore = computed(() => selectedDiff.value?.before || '')
+const selectedDiffAfter = computed(() => selectedDiff.value?.after || '')
 
 const activeMount = computed(() => {
   const key = activeMountKey.value
@@ -99,7 +124,9 @@ const launcherAria = computed(() =>
     : String(t('plugins.overlayLauncher.openMenuAria')),
 )
 
-const launcherHidden = computed(() => menuOpen.value || Boolean(activeMountWithHostMode.value))
+const launcherHidden = computed(
+  () => menuOpen.value || Boolean(activeMountWithHostMode.value) || Boolean(diffPanelOpen.value),
+)
 const optionMenuAnchorEl = computed(() => launcherBtnEl.value || launcherAnchorEl.value)
 
 const menuGroups = computed<OptionMenuGroup[]>(() => {
@@ -134,7 +161,11 @@ function activeMountReserve(): number {
 }
 
 function recomputeReserve() {
-  if (!hasMounts.value || isComposerPlacement.value) {
+  if (isComposerPlacement.value) {
+    emit('reserve-change', 0)
+    return
+  }
+  if (!hasMounts.value && !diffPanelOpen.value) {
     emit('reserve-change', 0)
     return
   }
@@ -166,14 +197,34 @@ function closeMenu() {
   scheduleReserveUpdate()
 }
 
+function closeDiffPanel() {
+  if (!diffPanelOpen.value) return
+  diffPanelOpen.value = false
+  scheduleReserveUpdate()
+}
+
 function toggleMenu() {
   if (!hasMounts.value) return
+  closeDiffPanel()
   menuOpen.value = !menuOpen.value
   if (!menuOpen.value) menuQuery.value = ''
   scheduleReserveUpdate()
 }
 
+function toggleDiffPanel() {
+  const sid = String(chat.selectedSessionId || '').trim()
+  if (!sid) return
+  if (!diffPanelOpen.value) {
+    closeMenu()
+    activeMountKey.value = ''
+    void chat.refreshSessionDiff(sid, { silent: true })
+  }
+  diffPanelOpen.value = !diffPanelOpen.value
+  scheduleReserveUpdate()
+}
+
 function selectMount(key: string) {
+  closeDiffPanel()
   activeMountKey.value = activeMountKey.value === key ? '' : key
   closeMenu()
   scheduleReserveUpdate()
@@ -182,10 +233,12 @@ function selectMount(key: string) {
 function clearActiveMount() {
   activeMountKey.value = ''
   closeMenu()
+  closeDiffPanel()
   scheduleReserveUpdate()
 }
 
 function handleMenuOpenChange(open: boolean) {
+  if (open) closeDiffPanel()
   menuOpen.value = Boolean(open)
   if (!open) menuQuery.value = ''
   scheduleReserveUpdate()
@@ -221,7 +274,30 @@ watch(
 )
 
 watch(
-  () => [menuOpen.value, activeMountKey.value, hasMounts.value, isComposerPlacement.value],
+  () => sessionDiff.value.map((entry) => entry.file).join('|'),
+  () => {
+    const list = sessionDiff.value
+    if (!list.length) {
+      selectedDiffFile.value = ''
+      return
+    }
+    if (!list.some((entry) => entry.file === selectedDiffFile.value)) {
+      selectedDiffFile.value = list[0]?.file || ''
+    }
+  },
+  { immediate: true },
+)
+
+watch(
+  () => chat.selectedSessionId,
+  () => {
+    diffPanelOpen.value = false
+    selectedDiffFile.value = ''
+  },
+)
+
+watch(
+  () => [menuOpen.value, activeMountKey.value, hasMounts.value, isComposerPlacement.value, diffPanelOpen.value],
   () => {
     scheduleReserveUpdate()
   },
@@ -260,7 +336,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div
-    v-if="hasMounts"
+    v-if="hasMounts || chat.selectedSessionId"
     ref="rootEl"
     :class="
       isComposerPlacement ? 'w-full flex flex-col items-stretch gap-1' : 'pointer-events-none w-full flex justify-end'
@@ -283,6 +359,7 @@ onBeforeUnmount(() => {
       />
 
       <OptionMenu
+        v-if="hasMounts"
         :open="menuOpen"
         :query="menuQuery"
         :groups="menuGroups"
@@ -299,6 +376,63 @@ onBeforeUnmount(() => {
       />
 
       <div
+        v-if="diffPanelOpen"
+        class="pointer-events-auto w-full rounded-lg border border-border/70 bg-background/95 shadow-lg backdrop-blur overflow-hidden"
+      >
+        <div class="flex items-center justify-between gap-2 px-3 py-2 border-b border-border/60">
+          <div class="text-xs font-medium text-foreground">{{ t('chat.sessionDiff.panelTitle') }}</div>
+          <button
+            type="button"
+            class="text-[11px] text-muted-foreground hover:text-foreground"
+            :title="t('chat.sessionDiff.close')"
+            :aria-label="t('chat.sessionDiff.close')"
+            @click.stop="closeDiffPanel"
+          >
+            {{ t('chat.sessionDiff.close') }}
+          </button>
+        </div>
+
+        <div v-if="chat.selectedSessionDiffLoading" class="px-3 py-6 text-xs text-muted-foreground">
+          {{ t('chat.sessionDiff.loading') }}
+        </div>
+        <div v-else-if="chat.selectedSessionDiffError" class="px-3 py-6 text-xs text-destructive">
+          {{ chat.selectedSessionDiffError }}
+        </div>
+        <div v-else-if="sessionDiffCount <= 0" class="px-3 py-6 text-xs text-muted-foreground">
+          {{ t('chat.sessionDiff.empty') }}
+        </div>
+        <div v-else class="flex flex-col sm:flex-row h-[56vh] max-h-[520px] min-h-[320px]">
+          <div class="sm:w-72 sm:max-w-72 sm:min-w-72 border-b sm:border-b-0 sm:border-r border-border/60 overflow-auto">
+            <button
+              v-for="entry in sessionDiff"
+              :key="entry.file"
+              type="button"
+              class="w-full px-3 py-2 text-left border-b border-border/50 hover:bg-secondary/40 transition-colors"
+              :class="selectedDiffPath === entry.file ? 'bg-secondary/60' : ''"
+              @click.stop="selectedDiffFile = entry.file"
+            >
+              <div class="text-xs truncate" :title="entry.file">{{ entry.file }}</div>
+              <div class="mt-1 text-[11px] font-mono">
+                <span class="text-emerald-600 dark:text-emerald-400">+{{ entry.additions }}</span>
+                <span class="ml-2 text-red-600 dark:text-red-400">-{{ entry.deletions }}</span>
+              </div>
+            </button>
+          </div>
+          <div class="min-w-0 flex-1 min-h-0 h-[260px] sm:h-auto">
+            <MonacoDiffEditor
+              class="h-full"
+              :path="selectedDiffPath"
+              :original-path="selectedDiffPath"
+              :original-value="selectedDiffBefore"
+              :modified-value="selectedDiffAfter"
+              :read-only="true"
+              :wrap="true"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div
         v-if="!launcherHidden"
         :class="
           isComposerPlacement
@@ -306,22 +440,45 @@ onBeforeUnmount(() => {
             : 'pointer-events-none w-full flex justify-end'
         "
       >
-        <button
-          ref="launcherBtnEl"
-          type="button"
-          class="pointer-events-auto h-7 sm:h-8 w-7 sm:w-8 inline-flex items-center justify-center rounded-md border border-border/60 bg-background/80 shadow-sm backdrop-blur transition-colors"
-          :class="'text-muted-foreground hover:text-foreground hover:bg-background'"
-          :title="launcherAria"
-          :aria-label="launcherAria"
-          :aria-expanded="menuOpen"
-          @mousedown.prevent.stop
-          @click.stop="toggleMenu"
-        >
-          <RiPlugLine class="h-4 w-4" />
-        </button>
+        <div class="pointer-events-none inline-flex items-center gap-1.5">
+          <button
+            v-if="chat.selectedSessionId"
+            type="button"
+            class="pointer-events-auto relative h-7 sm:h-8 w-7 sm:w-8 inline-flex items-center justify-center rounded-md border border-border/60 bg-background/80 shadow-sm backdrop-blur transition-colors text-muted-foreground hover:text-foreground hover:bg-background"
+            :title="t('chat.sessionDiff.toggleAria')"
+            :aria-label="t('chat.sessionDiff.toggleAria')"
+            :aria-expanded="diffPanelOpen"
+            @mousedown.prevent.stop
+            @click.stop="toggleDiffPanel"
+          >
+            <RiFileList2Line class="h-4 w-4" />
+            <span
+              v-if="sessionDiffCount > 0"
+              class="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] leading-4 font-mono text-center"
+              aria-hidden="true"
+            >
+              {{ sessionDiffBadge }}
+            </span>
+          </button>
+
+          <button
+            v-if="hasMounts"
+            ref="launcherBtnEl"
+            type="button"
+            class="pointer-events-auto h-7 sm:h-8 w-7 sm:w-8 inline-flex items-center justify-center rounded-md border border-border/60 bg-background/80 shadow-sm backdrop-blur transition-colors"
+            :class="'text-muted-foreground hover:text-foreground hover:bg-background'"
+            :title="launcherAria"
+            :aria-label="launcherAria"
+            :aria-expanded="menuOpen"
+            @mousedown.prevent.stop
+            @click.stop="toggleMenu"
+          >
+            <RiPlugLine class="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
-      <div v-else-if="menuOpen" class="pointer-events-none w-full relative h-0">
+      <div v-else-if="menuOpen && hasMounts" class="pointer-events-none w-full relative h-0">
         <span ref="launcherAnchorEl" class="absolute top-0 right-0 h-0 w-0 pointer-events-none" aria-hidden="true" />
       </div>
     </div>

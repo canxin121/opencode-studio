@@ -1668,6 +1668,14 @@ export default {
       },
     },
 
+    sessionDiff: {
+      toggleAria: '切换会话文件变更',
+      panelTitle: '会话文件变更',
+      close: '关闭',
+      loading: '正在加载文件变更...',
+      empty: '当前会话暂无文件变更。',
+    },
+
     attachments: {
       title: '附件',
       attaching: '正在附加…',

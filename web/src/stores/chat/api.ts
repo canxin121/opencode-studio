@@ -1,7 +1,7 @@
 import { apiJson } from '../../lib/api'
 import { parseSessionPayloadConsistency, type SessionPayloadConsistency } from '../sessionConsistency'
 
-import type { MessageEntry, Session } from '../../types/chat'
+import type { MessageEntry, Session, SessionFileDiff } from '../../types/chat'
 import type { JsonObject, JsonValue } from '@/types/json'
 
 type SessionListOptions = {
@@ -39,6 +39,28 @@ export type MessageListResponse = {
   hasMore?: boolean
   nextOffset?: number
   consistency?: ApiConsistency
+}
+
+function toText(value: JsonValue): string {
+  return typeof value === 'string' ? value : ''
+}
+
+function toCount(value: JsonValue): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 0
+  return Math.max(0, Math.floor(value))
+}
+
+function parseSessionFileDiff(value: JsonValue): SessionFileDiff | null {
+  const record = asRecord(value)
+  const file = toText(record.file).trim()
+  if (!file) return null
+  return {
+    file,
+    before: toText(record.before),
+    after: toText(record.after),
+    additions: toCount(record.additions),
+    deletions: toCount(record.deletions),
+  }
 }
 
 type AttentionListOptions = {
@@ -350,4 +372,23 @@ export async function unrevertSession(sessionId: string, directory?: string | nu
       method: 'POST',
     },
   )
+}
+
+export async function getSessionDiff(
+  sessionId: string,
+  directory?: string | null,
+  opts?: { messageID?: string },
+): Promise<SessionFileDiff[]> {
+  const sid = String(sessionId || '').trim()
+  if (!sid) return []
+
+  const q = directoryQuery(directory)
+  const params: string[] = []
+  const messageID = typeof opts?.messageID === 'string' ? opts.messageID.trim() : ''
+  if (messageID) params.push(`messageID=${encodeURIComponent(messageID)}`)
+  const sep = q && params.length ? '&' : '?'
+  const suffix = params.length ? `${sep}${params.join('&')}` : ''
+  const payload = await apiJson<JsonValue>(`/api/session/${encodeURIComponent(sid)}/diff${q}${suffix}`)
+  if (!Array.isArray(payload)) return []
+  return payload.map((item) => parseSessionFileDiff(item)).filter((item): item is SessionFileDiff => Boolean(item))
 }
