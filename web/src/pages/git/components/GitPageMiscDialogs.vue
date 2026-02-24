@@ -218,7 +218,11 @@ const sourceControlActionGroups = computed<OptionMenuGroup[]>(() => [
     id: 'sync',
     title: t('git.actionsMenu.groups.sync'),
     items: [
-      { id: 'fetch', label: t('git.actionsMenu.sync.fetch.label'), description: t('git.actionsMenu.sync.fetch.description') },
+      {
+        id: 'fetch',
+        label: t('git.actionsMenu.sync.fetch.label'),
+        description: t('git.actionsMenu.sync.fetch.description'),
+      },
       {
         id: 'fetch-from',
         label: t('git.actionsMenu.sync.fetchFrom.label'),
@@ -234,7 +238,11 @@ const sourceControlActionGroups = computed<OptionMenuGroup[]>(() => [
         label: t('git.actionsMenu.sync.fetchAll.label'),
         description: t('git.actionsMenu.sync.fetchAll.description'),
       },
-      { id: 'pull', label: t('git.actionsMenu.sync.pull.label'), description: t('git.actionsMenu.sync.pull.description') },
+      {
+        id: 'pull',
+        label: t('git.actionsMenu.sync.pull.label'),
+        description: t('git.actionsMenu.sync.pull.description'),
+      },
       {
         id: 'pull-rebase',
         label: t('git.actionsMenu.sync.pullRebase.label'),
@@ -245,7 +253,11 @@ const sourceControlActionGroups = computed<OptionMenuGroup[]>(() => [
         label: t('git.actionsMenu.sync.pullFrom.label'),
         description: t('git.actionsMenu.sync.pullFrom.description'),
       },
-      { id: 'push', label: t('git.actionsMenu.sync.push.label'), description: t('git.actionsMenu.sync.push.description') },
+      {
+        id: 'push',
+        label: t('git.actionsMenu.sync.push.label'),
+        description: t('git.actionsMenu.sync.push.description'),
+      },
       {
         id: 'push-force',
         label: t('git.actionsMenu.sync.pushForce.label'),
@@ -297,29 +309,61 @@ const sourceControlActionGroups = computed<OptionMenuGroup[]>(() => [
     id: 'inspect',
     title: t('git.actionsMenu.groups.inspect'),
     items: [
-      { id: 'branches', label: t('git.actionsMenu.inspect.branches.label'), description: t('git.actionsMenu.inspect.branches.description') },
-      { id: 'remotes', label: t('git.actionsMenu.inspect.remotes.label'), description: t('git.actionsMenu.inspect.remotes.description') },
-      { id: 'worktrees', label: t('git.actionsMenu.inspect.worktrees.label'), description: t('git.actionsMenu.inspect.worktrees.description') },
-      { id: 'history', label: t('git.actionsMenu.inspect.history.label'), description: t('git.actionsMenu.inspect.history.description') },
-      { id: 'compare', label: t('git.actionsMenu.inspect.compare.label'), description: t('git.actionsMenu.inspect.compare.description') },
+      {
+        id: 'branches',
+        label: t('git.actionsMenu.inspect.branches.label'),
+        description: t('git.actionsMenu.inspect.branches.description'),
+      },
+      {
+        id: 'remotes',
+        label: t('git.actionsMenu.inspect.remotes.label'),
+        description: t('git.actionsMenu.inspect.remotes.description'),
+      },
+      {
+        id: 'worktrees',
+        label: t('git.actionsMenu.inspect.worktrees.label'),
+        description: t('git.actionsMenu.inspect.worktrees.description'),
+      },
+      {
+        id: 'history',
+        label: t('git.actionsMenu.inspect.history.label'),
+        description: t('git.actionsMenu.inspect.history.description'),
+      },
+      {
+        id: 'compare',
+        label: t('git.actionsMenu.inspect.compare.label'),
+        description: t('git.actionsMenu.inspect.compare.description'),
+      },
       {
         id: 'compare-upstream',
         label: t('git.actionsMenu.inspect.compareUpstream.label'),
         description: t('git.actionsMenu.inspect.compareUpstream.description'),
       },
-      { id: 'tags', label: t('git.actionsMenu.inspect.tags.label'), description: t('git.actionsMenu.inspect.tags.description') },
+      {
+        id: 'tags',
+        label: t('git.actionsMenu.inspect.tags.label'),
+        description: t('git.actionsMenu.inspect.tags.description'),
+      },
       {
         id: 'submodules',
         label: t('git.actionsMenu.inspect.submodules.label'),
         description: t('git.actionsMenu.inspect.submodules.description'),
       },
-      { id: 'lfs', label: t('git.actionsMenu.inspect.lfs.label'), description: t('git.actionsMenu.inspect.lfs.description') },
+      {
+        id: 'lfs',
+        label: t('git.actionsMenu.inspect.lfs.label'),
+        description: t('git.actionsMenu.inspect.lfs.description'),
+      },
       {
         id: 'autofetch',
         label: t('git.actionsMenu.inspect.autoFetch.label'),
         description: t('git.actionsMenu.inspect.autoFetch.description'),
       },
-      { id: 'stash', label: t('git.actionsMenu.inspect.stash.label'), description: t('git.actionsMenu.inspect.stash.description') },
+      {
+        id: 'stash',
+        label: t('git.actionsMenu.inspect.stash.label'),
+        description: t('git.actionsMenu.inspect.stash.description'),
+      },
       {
         id: 'stash-staged',
         label: t('git.actionsMenu.inspect.stashStagedOnly.label'),
@@ -553,7 +597,9 @@ function runSourceControlAction(item: OptionMenuItem) {
       <div v-if="postCommitExplain" class="text-xs text-muted-foreground whitespace-pre-wrap">
         {{ postCommitExplain }}
       </div>
-      <div class="text-[11px] text-muted-foreground">{{ t('git.ui.postCommit.globalDefault', { label: postCommitDefaultLabel }) }}</div>
+      <div class="text-[11px] text-muted-foreground">
+        {{ t('git.ui.postCommit.globalDefault', { label: postCommitDefaultLabel }) }}
+      </div>
       <label class="inline-flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
         <input v-model="postCommitRememberChoice" type="checkbox" class="accent-primary" />
         {{ t('git.ui.postCommit.rememberChoice') }}

@@ -681,7 +681,9 @@ const contentSearchScopeOptions = computed(() => {
     {
       id: 'active-file' as const,
       label: t('files.scope.options.activeFile.label'),
-      description: activeFilePath ? labelForScopePath(activeFilePath) : t('files.scope.options.activeFile.emptyDescription'),
+      description: activeFilePath
+        ? labelForScopePath(activeFilePath)
+        : t('files.scope.options.activeFile.emptyDescription'),
       disabled: !activeFilePath,
     },
   ]
@@ -719,7 +721,8 @@ const dialogDescription = computed(() => {
   const base = dialogData.value?.path || root.value || t('files.dialog.rootFallback')
   if (activeDialog.value === 'createFile') return t('files.dialog.description.createFile', { base })
   if (activeDialog.value === 'createFolder') return t('files.dialog.description.createFolder', { base })
-  if (activeDialog.value === 'rename') return t('files.dialog.description.rename', { name: dialogData.value?.name || '' })
+  if (activeDialog.value === 'rename')
+    return t('files.dialog.description.rename', { name: dialogData.value?.name || '' })
   return ''
 })
 
@@ -2396,10 +2399,16 @@ onMounted(async () => {
                             <button
                               type="button"
                               class="absolute left-0 top-0 inline-flex h-[26px] w-4 items-center justify-center rounded-sm text-[10px] text-muted-foreground transition hover:bg-sidebar-accent/70 hover:text-foreground"
-                              :title=
-                                "contentSearchReplaceOpen ? String(t('files.search.content.hideReplace')) : String(t('files.search.content.showReplace'))"
-                              :aria-label=
-                                "contentSearchReplaceOpen ? String(t('files.search.content.hideReplace')) : String(t('files.search.content.showReplace'))"
+                              :title="
+                                contentSearchReplaceOpen
+                                  ? String(t('files.search.content.hideReplace'))
+                                  : String(t('files.search.content.showReplace'))
+                              "
+                              :aria-label="
+                                contentSearchReplaceOpen
+                                  ? String(t('files.search.content.hideReplace'))
+                                  : String(t('files.search.content.showReplace'))
+                              "
                               @click="contentSearchReplaceOpen = !contentSearchReplaceOpen"
                             >
                               {{ contentSearchReplaceOpen ? 'v' : '>' }}
@@ -2526,7 +2535,9 @@ onMounted(async () => {
                           <div v-if="!hasFileSearch" class="px-2 py-2 text-xs text-muted-foreground">
                             {{ t('files.search.files.noQuery') }}
                           </div>
-                          <div v-else-if="searching" class="px-2 py-2 text-xs text-muted-foreground">{{ t('common.searching') }}</div>
+                          <div v-else-if="searching" class="px-2 py-2 text-xs text-muted-foreground">
+                            {{ t('common.searching') }}
+                          </div>
                           <div v-else-if="searchResults.length === 0" class="px-2 py-2 text-xs text-muted-foreground">
                             {{ t('files.search.files.noFilesFound') }}
                           </div>

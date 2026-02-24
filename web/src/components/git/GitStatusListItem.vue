@@ -45,7 +45,9 @@ const hasMobileActions = computed(
   () => props.isMobilePointer && Array.isArray(props.mobileActionItems) && props.mobileActionItems.length > 0,
 )
 
-const mobileActionTitleText = computed(() => (props.mobileActionTitle || '').trim() || t('git.ui.workingTree.fileActionsTitle'))
+const mobileActionTitleText = computed(
+  () => (props.mobileActionTitle || '').trim() || t('git.ui.workingTree.fileActionsTitle'),
+)
 
 const mobileActionGroups = computed<OptionMenuGroup[]>(() => {
   if (!hasMobileActions.value) return []

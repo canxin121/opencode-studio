@@ -108,7 +108,12 @@ function runMobileAction(path: string, actionId: string) {
 
 <template>
   <div class="oc-vscode-section select-none">
-    <SectionToggleButton :open="expanded" :label="t('git.ui.workingTree.sections.stagedChanges')" :count="count" @toggle="toggle">
+    <SectionToggleButton
+      :open="expanded"
+      :label="t('git.ui.workingTree.sections.stagedChanges')"
+      :count="count"
+      @toggle="toggle"
+    >
       <template #actions>
         <SidebarIconButton
           size="sm"
@@ -154,7 +159,12 @@ function runMobileAction(path: string, actionId: string) {
           >
             <RiHistoryLine class="h-3.5 w-3.5" />
           </SidebarIconButton>
-          <SidebarIconButton size="sm" :title="t('common.rename')" :aria-label="t('common.rename')" @click.stop="$emit('rename', f.path)">
+          <SidebarIconButton
+            size="sm"
+            :title="t('common.rename')"
+            :aria-label="t('common.rename')"
+            @click.stop="$emit('rename', f.path)"
+          >
             <RiPencilLine class="h-3.5 w-3.5" />
           </SidebarIconButton>
           <ConfirmPopover
@@ -165,7 +175,13 @@ function runMobileAction(path: string, actionId: string) {
             variant="destructive"
             @confirm="$emit('delete', f.path)"
           >
-            <SidebarIconButton size="sm" destructive :title="t('common.delete')" :aria-label="t('common.delete')" @click.stop>
+            <SidebarIconButton
+              size="sm"
+              destructive
+              :title="t('common.delete')"
+              :aria-label="t('common.delete')"
+              @click.stop
+            >
               <RiDeleteBinLine class="h-3.5 w-3.5" />
             </SidebarIconButton>
           </ConfirmPopover>

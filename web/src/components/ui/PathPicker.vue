@@ -60,7 +60,9 @@ const props = withDefaults(
 
 const { t } = useI18n()
 
-const effectiveButtonLabel = computed(() => String(props.buttonLabel || '').trim() || String(t('ui.pathPicker.actions.browse')))
+const effectiveButtonLabel = computed(
+  () => String(props.buttonLabel || '').trim() || String(t('ui.pathPicker.actions.browse')),
+)
 
 const emit = defineEmits<{
   (e: 'update:modelValue', value: string): void
@@ -349,11 +351,7 @@ watch(
                 type="button"
                 class="h-8 w-8"
                 :class="showHidden ? 'bg-secondary/60' : ''"
-                :title="
-                  showHidden
-                    ? t('ui.pathPicker.titles.hiddenShown')
-                    : t('ui.pathPicker.titles.hiddenHidden')
-                "
+                :title="showHidden ? t('ui.pathPicker.titles.hiddenShown') : t('ui.pathPicker.titles.hiddenHidden')"
                 :aria-pressed="showHidden"
                 :aria-label="t('ui.pathPicker.aria.toggleHidden')"
                 @click="showHidden = !showHidden"

@@ -42,7 +42,9 @@ const providerPickerOptions = computed<PickerOption[]>(() => {
 <template>
   <div class="grid gap-3">
     <div class="flex flex-wrap items-center justify-between gap-2">
-      <div class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.allowDeny.title') }}</div>
+      <div class="text-xs text-muted-foreground">
+        {{ t('settings.opencodeConfig.sections.providers.allowDeny.title') }}
+      </div>
       <div class="flex items-center gap-3">
         <button
           type="button"
@@ -72,7 +74,9 @@ const providerPickerOptions = computed<PickerOption[]>(() => {
     <div class="grid gap-4 lg:grid-cols-2">
       <div class="rounded-md border border-border p-3 space-y-2">
         <div class="flex items-center justify-between">
-          <div class="text-sm font-semibold">{{ t('settings.opencodeConfig.sections.providers.allowDeny.enabled.title') }}</div>
+          <div class="text-sm font-semibold">
+            {{ t('settings.opencodeConfig.sections.providers.allowDeny.enabled.title') }}
+          </div>
           <Tooltip>
             <Button
               size="icon"
@@ -87,7 +91,9 @@ const providerPickerOptions = computed<PickerOption[]>(() => {
             <template #content>{{ t('common.clear') }}</template>
           </Tooltip>
         </div>
-        <div class="text-[11px] text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.allowDeny.enabled.help') }}</div>
+        <div class="text-[11px] text-muted-foreground">
+          {{ t('settings.opencodeConfig.sections.providers.allowDeny.enabled.help') }}
+        </div>
 
         <div class="flex flex-wrap gap-2">
           <span
@@ -129,7 +135,9 @@ const providerPickerOptions = computed<PickerOption[]>(() => {
 
       <div class="rounded-md border border-border p-3 space-y-2">
         <div class="flex items-center justify-between">
-          <div class="text-sm font-semibold">{{ t('settings.opencodeConfig.sections.providers.allowDeny.disabled.title') }}</div>
+          <div class="text-sm font-semibold">
+            {{ t('settings.opencodeConfig.sections.providers.allowDeny.disabled.title') }}
+          </div>
           <Tooltip>
             <Button
               size="icon"
@@ -144,7 +152,9 @@ const providerPickerOptions = computed<PickerOption[]>(() => {
             <template #content>{{ t('common.clear') }}</template>
           </Tooltip>
         </div>
-        <div class="text-[11px] text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.allowDeny.disabled.help') }}</div>
+        <div class="text-[11px] text-muted-foreground">
+          {{ t('settings.opencodeConfig.sections.providers.allowDeny.disabled.help') }}
+        </div>
 
         <div class="flex flex-wrap gap-2">
           <span
@@ -193,7 +203,9 @@ const providerPickerOptions = computed<PickerOption[]>(() => {
       />
       <div class="grid gap-4 lg:grid-cols-2">
         <div class="rounded-md border border-border p-3">
-          <div class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.allowDeny.enabled.toggleTitle') }}</div>
+          <div class="text-xs text-muted-foreground">
+            {{ t('settings.opencodeConfig.sections.providers.allowDeny.enabled.toggleTitle') }}
+          </div>
           <VirtualList
             v-if="filteredProviderIdOptions.length"
             :items="filteredProviderIdOptions"
@@ -213,13 +225,15 @@ const providerPickerOptions = computed<PickerOption[]>(() => {
               </label>
             </template>
           </VirtualList>
-          <div v-else class="mt-2 text-xs text-muted-foreground">{{
-            t('settings.opencodeConfig.sections.providers.allowDeny.empty.noMatchingProviders')
-          }}</div>
+          <div v-else class="mt-2 text-xs text-muted-foreground">
+            {{ t('settings.opencodeConfig.sections.providers.allowDeny.empty.noMatchingProviders') }}
+          </div>
         </div>
 
         <div class="rounded-md border border-border p-3">
-          <div class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.allowDeny.disabled.toggleTitle') }}</div>
+          <div class="text-xs text-muted-foreground">
+            {{ t('settings.opencodeConfig.sections.providers.allowDeny.disabled.toggleTitle') }}
+          </div>
           <VirtualList
             v-if="filteredProviderIdOptions.length"
             :items="filteredProviderIdOptions"
@@ -239,9 +253,9 @@ const providerPickerOptions = computed<PickerOption[]>(() => {
               </label>
             </template>
           </VirtualList>
-          <div v-else class="mt-2 text-xs text-muted-foreground">{{
-            t('settings.opencodeConfig.sections.providers.allowDeny.empty.noMatchingProviders')
-          }}</div>
+          <div v-else class="mt-2 text-xs text-muted-foreground">
+            {{ t('settings.opencodeConfig.sections.providers.allowDeny.empty.noMatchingProviders') }}
+          </div>
         </div>
       </div>
     </div>
@@ -256,7 +270,9 @@ const providerPickerOptions = computed<PickerOption[]>(() => {
 
     <div v-if="showAdvancedProviderLists" class="grid gap-4 lg:grid-cols-2">
       <label class="grid gap-1">
-        <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.allowDeny.enabled.advancedLabel') }}</span>
+        <span class="text-xs text-muted-foreground">{{
+          t('settings.opencodeConfig.sections.providers.allowDeny.enabled.advancedLabel')
+        }}</span>
         <textarea
           v-model="enabledProviders"
           rows="4"
@@ -265,7 +281,9 @@ const providerPickerOptions = computed<PickerOption[]>(() => {
         />
       </label>
       <label class="grid gap-1">
-        <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.providers.allowDeny.disabled.advancedLabel') }}</span>
+        <span class="text-xs text-muted-foreground">{{
+          t('settings.opencodeConfig.sections.providers.allowDeny.disabled.advancedLabel')
+        }}</span>
         <textarea
           v-model="disabledProviders"
           rows="4"

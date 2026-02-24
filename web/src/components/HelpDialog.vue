@@ -47,9 +47,21 @@ const sections = computed((): Array<{ category: string; items: ShortcutItem[] }>
       category: String(t('help.dialog.sections.navigationCommands')),
       items: [
         { keys: `${m}+.`, description: String(t('help.dialog.shortcuts.showKeyboardShortcuts')), icon: RiQuestionLine },
-        { keys: `${m}+L`, description: String(t('help.dialog.shortcuts.toggleSessionSidebar')), icon: RiLayoutLeftLine },
-        { keys: `Shift+${m}+M`, description: String(t('help.dialog.shortcuts.openModelSelector')), icon: RiAiGenerate2 },
-        { keys: `Shift+${m}+T`, description: String(t('help.dialog.shortcuts.cycleThinkingVariant')), icon: RiBrain2Line },
+        {
+          keys: `${m}+L`,
+          description: String(t('help.dialog.shortcuts.toggleSessionSidebar')),
+          icon: RiLayoutLeftLine,
+        },
+        {
+          keys: `Shift+${m}+M`,
+          description: String(t('help.dialog.shortcuts.openModelSelector')),
+          icon: RiAiGenerate2,
+        },
+        {
+          keys: `Shift+${m}+T`,
+          description: String(t('help.dialog.shortcuts.cycleThinkingVariant')),
+          icon: RiBrain2Line,
+        },
       ],
     },
     {
@@ -62,7 +74,11 @@ const sections = computed((): Array<{ category: string; items: ShortcutItem[] }>
         },
         { keys: `${m}+Enter`, description: String(t('help.dialog.shortcuts.sendMessage')) },
         { keys: `${m}+I`, description: String(t('help.dialog.shortcuts.focusChatInput')), icon: RiText },
-        { keys: `Esc Esc`, description: String(t('help.dialog.shortcuts.abortActiveRunDouble')), icon: RiCloseCircleLine },
+        {
+          keys: `Esc Esc`,
+          description: String(t('help.dialog.shortcuts.abortActiveRunDouble')),
+          icon: RiCloseCircleLine,
+        },
       ],
     },
     {
@@ -106,9 +122,9 @@ async function setTheme(mode: 'light' | 'dark' | 'system') {
     <div class="max-h-[65vh] overflow-auto pr-1">
       <div class="space-y-4">
         <section>
-          <div class="text-[11px] font-semibold tracking-wider uppercase text-muted-foreground mb-2">{{
-            t('help.dialog.quickActions.title')
-          }}</div>
+          <div class="text-[11px] font-semibold tracking-wider uppercase text-muted-foreground mb-2">
+            {{ t('help.dialog.quickActions.title') }}
+          </div>
           <div class="space-y-1">
             <button
               type="button"

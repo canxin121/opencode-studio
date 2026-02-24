@@ -21,7 +21,9 @@ export default defineComponent({
 
 <template>
   <div class="grid gap-2">
-    <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.permissions.jsonEditors.title') }}</span>
+    <span class="text-xs text-muted-foreground">{{
+      t('settings.opencodeConfig.sections.permissions.jsonEditors.title')
+    }}</span>
     <textarea
       v-model="
         ensureJsonBuffer(
