@@ -402,7 +402,9 @@ onBeforeUnmount(() => {
           {{ t('chat.sessionDiff.empty') }}
         </div>
         <div v-else class="flex flex-col sm:flex-row h-[56vh] max-h-[520px] min-h-[320px]">
-          <div class="sm:w-72 sm:max-w-72 sm:min-w-72 border-b sm:border-b-0 sm:border-r border-border/60 overflow-auto">
+          <div
+            class="sm:w-72 sm:max-w-72 sm:min-w-72 border-b sm:border-b-0 sm:border-r border-border/60 overflow-auto"
+          >
             <button
               v-for="entry in sessionDiff"
               :key="entry.file"
