@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { RiFileList2Line, RiPlugLine } from '@remixicon/vue'
+import { RiCloseLine, RiFileList2Line, RiPlugLine } from '@remixicon/vue'
 
 import MonacoDiffEditor from '@/components/MonacoDiffEditor.vue'
 import PluginMountHost from '@/components/plugins/PluginMountHost.vue'
+import IconButton from '@/components/ui/IconButton.vue'
 import OptionMenu, { type OptionMenuGroup, type OptionMenuItem } from '@/components/ui/OptionMenu.vue'
 import type { ChatMount } from '@/plugins/host/mounts'
 import { useChatStore } from '@/stores/chat'
@@ -384,7 +385,7 @@ onBeforeUnmount(() => {
         :desktop-fixed="true"
         :desktop-anchor-el="optionMenuAnchorEl"
         desktop-placement="top-end"
-        desktop-class="w-[min(420px,calc(100%-1rem))]"
+        desktop-class="pointer-events-auto w-[min(420px,calc(100%-1rem))]"
         @update:open="handleMenuOpenChange"
         @update:query="handleMenuQueryChange"
         @select="handleMenuSelect"
@@ -396,15 +397,16 @@ onBeforeUnmount(() => {
       >
         <div class="flex items-center justify-between gap-2 px-3 py-2 border-b border-border/60">
           <div class="text-xs font-medium text-foreground">{{ t('chat.sessionDiff.panelTitle') }}</div>
-          <button
-            type="button"
-            class="text-[11px] text-muted-foreground hover:text-foreground"
+          <IconButton
+            size="lg"
+            class="h-9 w-9 text-muted-foreground hover:text-foreground"
             :title="t('chat.sessionDiff.close')"
             :aria-label="t('chat.sessionDiff.close')"
+            data-testid="session-diff-close-button"
             @click.stop="closeDiffPanel"
           >
-            {{ t('chat.sessionDiff.close') }}
-          </button>
+            <RiCloseLine class="h-4 w-4" />
+          </IconButton>
         </div>
 
         <div v-if="sessionDiffPanelView === 'loading'" class="px-3 py-6 text-xs text-muted-foreground">
