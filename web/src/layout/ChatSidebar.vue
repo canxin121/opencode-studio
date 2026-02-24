@@ -1647,67 +1647,71 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
         @refresh="handleSidebarRefresh"
       />
 
-      <DirectoriesList
-        :uiIsMobile="ui.isMobile"
-        :directories="directories"
-        :pagedDirectories="pagedDirectories"
-        :visibleDirectories="visibleDirectories"
-        :sidebarQueryNorm="sidebarQueryNorm"
-        :searchWarming="searchWarming"
-        :sessionSearchHits="sessionSearchHits"
-        :locateFromSearch="locateFromSearch"
-        :locatedSessionId="locatedSessionId"
-        :setSessionEl="setSessionEl"
-        :pinnedSessionIds="pinnedSessionIds"
-        :chatSelectedSessionId="chat.selectedSessionId"
-        :creatingSession="creatingSession"
-        :aggregateLoadingByDirectoryId="aggregateLoadingByDirectoryId"
-        :aggregateAttemptedByDirectoryId="aggregateAttemptedByDirectoryId"
-        :hasCachedSessionsForDirectory="hasCachedSessionsForDirectory"
-        :isDirectoryCollapsed="isDirectoryCollapsed"
-        :toggleDirectoryCollapse="toggleDirectoryCollapse"
-        :isDirectoryFocused="isDirectoryFocused"
-        :directoryHasActiveOrBlocked="directoryHasActiveOrBlocked"
-        :openDirectoryActions="openDirectoryActions"
-        :refreshDirectoryInline="refreshDirectoryInline"
-        :newSessionInline="newSessionInline"
-        :removeDirectoryInline="removeDirectoryInline"
-        :aggregatedSessionsForDirectory="aggregatedSessionsForDirectory"
-        :selectDirectory="selectDirectory"
-        :selectSession="selectSession"
-        :openSessionActions="openSessionActions"
-        :openSessionActionMenu="openSessionActionMenu"
-        :togglePin="togglePin"
-        :deleteSession="deleteSession"
-        :hasAttention="hasAttention"
-        :statusLabelForSessionId="statusLabelForSessionId"
-        :sessionActionMenuTarget="sessionActionMenuTarget"
-        :sessionActionMenuAnchorEl="sessionActionMenuAnchorRef"
-        :sessionActionMenuQuery="sessionActionMenuQuery"
-        @update:sessionActionMenuQuery="(v) => (sessionActionMenuQuery = v)"
-        :filteredSessionActionItems="filteredSessionActionItems"
-        :setSessionActionMenuRef="setSessionActionMenuRef"
-        :runSessionActionMenu="runSessionActionMenu"
-        :isSessionRenaming="isRenamingSession"
-        :renameDraft="renameDraft"
-        :renameBusy="renameBusy"
-        :updateRenameDraft="updateRenameDraft"
-        :saveRename="saveRenameFromSidebar"
-        :cancelRename="cancelRenameFromSidebar"
-        :pinnedRowsForDirectory="pinnedRowsForDirectory"
-        :pagedRowsForDirectory="pagedRowsForDirectory"
-        :toggleExpandedParent="toggleExpandedParent"
-        :sessionRootPageCount="sessionRootPageCount"
-        :sessionRootPage="sessionRootPage"
-        :setSessionRootPage="
-          (pid, page) => {
-            dismissDeepLinkFocus()
-            void setSessionRootPage(pid, page)
-          }
-        "
-      />
+      <div
+        class="flex-1 min-h-0 overflow-x-hidden"
+        :class="props.mobileVariant ? 'overflow-y-auto pb-2' : 'flex flex-col overflow-y-hidden'"
+      >
+        <DirectoriesList
+          :uiIsMobile="ui.isMobile"
+          :directories="directories"
+          :pagedDirectories="pagedDirectories"
+          :visibleDirectories="visibleDirectories"
+          :sidebarQueryNorm="sidebarQueryNorm"
+          :searchWarming="searchWarming"
+          :sessionSearchHits="sessionSearchHits"
+          :locateFromSearch="locateFromSearch"
+          :locatedSessionId="locatedSessionId"
+          :setSessionEl="setSessionEl"
+          :pinnedSessionIds="pinnedSessionIds"
+          :chatSelectedSessionId="chat.selectedSessionId"
+          :creatingSession="creatingSession"
+          :aggregateLoadingByDirectoryId="aggregateLoadingByDirectoryId"
+          :aggregateAttemptedByDirectoryId="aggregateAttemptedByDirectoryId"
+          :hasCachedSessionsForDirectory="hasCachedSessionsForDirectory"
+          :isDirectoryCollapsed="isDirectoryCollapsed"
+          :toggleDirectoryCollapse="toggleDirectoryCollapse"
+          :isDirectoryFocused="isDirectoryFocused"
+          :directoryHasActiveOrBlocked="directoryHasActiveOrBlocked"
+          :openDirectoryActions="openDirectoryActions"
+          :refreshDirectoryInline="refreshDirectoryInline"
+          :newSessionInline="newSessionInline"
+          :removeDirectoryInline="removeDirectoryInline"
+          :aggregatedSessionsForDirectory="aggregatedSessionsForDirectory"
+          :selectDirectory="selectDirectory"
+          :selectSession="selectSession"
+          :openSessionActions="openSessionActions"
+          :openSessionActionMenu="openSessionActionMenu"
+          :togglePin="togglePin"
+          :deleteSession="deleteSession"
+          :hasAttention="hasAttention"
+          :statusLabelForSessionId="statusLabelForSessionId"
+          :sessionActionMenuTarget="sessionActionMenuTarget"
+          :sessionActionMenuAnchorEl="sessionActionMenuAnchorRef"
+          :sessionActionMenuQuery="sessionActionMenuQuery"
+          @update:sessionActionMenuQuery="(v) => (sessionActionMenuQuery = v)"
+          :filteredSessionActionItems="filteredSessionActionItems"
+          :setSessionActionMenuRef="setSessionActionMenuRef"
+          :runSessionActionMenu="runSessionActionMenu"
+          :isSessionRenaming="isRenamingSession"
+          :renameDraft="renameDraft"
+          :renameBusy="renameBusy"
+          :updateRenameDraft="updateRenameDraft"
+          :saveRename="saveRenameFromSidebar"
+          :cancelRename="cancelRenameFromSidebar"
+          :pinnedRowsForDirectory="pinnedRowsForDirectory"
+          :pagedRowsForDirectory="pagedRowsForDirectory"
+          :toggleExpandedParent="toggleExpandedParent"
+          :sessionRootPageCount="sessionRootPageCount"
+          :sessionRootPage="sessionRootPage"
+          :setSessionRootPage="
+            (pid, page) => {
+              dismissDeepLinkFocus()
+              void setSessionRootPage(pid, page)
+            }
+          "
+        />
 
-      <PinnedSessionsFooter
+        <PinnedSessionsFooter
         v-model:open="pinnedSessionsOpen"
         :page="pinnedSessionsPage"
         :paging="pinnedSessionsPaging"
@@ -1741,7 +1745,7 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
         @toggle-thread="toggleExpandedParent"
       />
 
-      <RecentSessionsFooter
+        <RecentSessionsFooter
         v-model:open="recentSessionsOpen"
         :page="recentSessionsPage"
         :paging="recentSessionsPaging"
@@ -1775,7 +1779,7 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
         @toggle-thread="toggleExpandedParent"
       />
 
-      <RunningSessionsFooter
+        <RunningSessionsFooter
         v-model:open="runningSessionsOpen"
         :page="runningSessionsPage"
         :paging="runningSessionsPaging"
@@ -1807,7 +1811,8 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
         :cancelRename="cancelRenameFromSidebar"
         @update:page="(v) => void requestRunningSessionsPage(v)"
         @toggle-thread="toggleExpandedParent"
-      />
+        />
+      </div>
     </div>
   </div>
 </template>
