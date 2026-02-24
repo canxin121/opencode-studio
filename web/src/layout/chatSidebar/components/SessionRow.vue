@@ -27,6 +27,7 @@ type SessionLike = {
   id?: string | number | null
   title?: string | null
   slug?: string | null
+  directory?: string | null
   time?: { updated?: number | string | null } | null
 }
 
@@ -112,6 +113,7 @@ const emit = defineEmits<{
 }>()
 
 const hasSessionContext = computed(() => Boolean(props.session && props.directory))
+const hasSession = computed(() => Boolean(props.session))
 const rowRootEl = ref<HTMLElement | null>(null)
 
 const statusLabelText = computed(() => {
@@ -143,6 +145,11 @@ const titleText = computed(() => {
 const directoryText = computed(() => {
   if (!props.directory) return ''
   return directoryEntryLabel(props.directory)
+})
+
+const directoryFallbackText = computed(() => {
+  const raw = props.session?.directory
+  return typeof raw === 'string' ? raw.trim() : ''
 })
 
 const updatedAt = computed(() => {
@@ -222,11 +229,13 @@ function setMenuRef(el: Element | ComponentPublicInstance | null) {
 
       <div class="flex w-full items-center min-w-0 gap-2">
         <template v-if="!isInlineRename">
-          <div v-if="hasSessionContext" class="flex-1 min-w-0 flex flex-col justify-center">
+          <div v-if="hasSession" class="flex-1 min-w-0 flex flex-col justify-center">
             <span class="truncate typography-ui-label w-full text-left">{{ titleText }}</span>
-            <span v-if="showDirectory" class="truncate text-[10px] text-muted-foreground/70 w-full text-left">{{
-              directoryText
-            }}</span>
+            <span
+              v-if="showDirectory && (directoryText || directoryFallbackText)"
+              class="truncate text-[10px] text-muted-foreground/70 w-full text-left"
+              >{{ directoryText || directoryFallbackText }}</span
+            >
           </div>
 
           <div v-else class="flex-1 min-w-0 flex flex-col justify-center">

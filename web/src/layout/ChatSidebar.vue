@@ -1116,7 +1116,10 @@ async function requestRunningSessionsPage(nextPage: number) {
 }
 
 watch(
-  () => (runningSessionsOpen.value ? String(runningSessionsPage.value || 0) : ''),
+  () =>
+    runningSessionsOpen.value
+      ? `${String(runningSessionsPage.value || 0)}|${pagedRunningSessions.value.map((item) => item.id).join('|')}`
+      : '',
   () => {
     if (!runningSessionsOpen.value) return
     void directorySessions.ensureRunningSessionRowsLoaded({
