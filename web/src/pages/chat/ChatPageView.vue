@@ -476,7 +476,6 @@ void sessionActionsMenuRef
                           <ToolbarChipButton
                             ref="attachmentsTriggerRef"
                             :active="attachmentsPanelOpen"
-                            :title="t('chat.page.attachments')"
                             :aria-label="t('chat.page.attachments')"
                             @mousedown.prevent
                             @click.stop="toggleAttachmentsPanel"
@@ -565,7 +564,6 @@ void sessionActionsMenuRef
                         <Tooltip v-if="!ui.isMobilePointer && modelHint">
                           <ToolbarChipButton
                             :active="composerPickerOpen === 'model'"
-                            :title="t('chat.composer.picker.modelTitle')"
                             :aria-label="t('chat.composer.picker.modelTitle')"
                             ref="modelTriggerRef"
                             @mousedown.prevent
@@ -598,7 +596,6 @@ void sessionActionsMenuRef
                         <Tooltip v-if="hasVariantsForSelection && !ui.isMobilePointer && variantHint">
                           <ToolbarChipButton
                             :active="composerPickerOpen === 'variant'"
-                            :title="t('chat.composer.picker.variantTitle')"
                             :aria-label="t('chat.composer.picker.variantTitle')"
                             ref="variantTriggerRef"
                             @mousedown.prevent
@@ -631,7 +628,6 @@ void sessionActionsMenuRef
                         <Tooltip v-if="!ui.isMobilePointer && agentHint">
                           <ToolbarChipButton
                             :active="composerPickerOpen === 'agent'"
-                            :title="t('chat.composer.picker.agentTitle')"
                             :aria-label="t('chat.composer.picker.agentTitle')"
                             ref="agentTriggerRef"
                             @mousedown.prevent
@@ -692,11 +688,6 @@ void sessionActionsMenuRef
                             data-oc-keyboard-tap="blur"
                             :variant="composerPrimaryAction === 'stop' ? 'outline' : undefined"
                             :class="composerPrimaryAction === 'stop' ? 'text-destructive hover:text-destructive' : ''"
-                            :title="
-                              composerPrimaryAction === 'stop'
-                                ? t('chat.page.primary.stop')
-                                : t('chat.page.primary.send')
-                            "
                             :aria-label="
                               composerPrimaryAction === 'stop'
                                 ? t('chat.page.primary.stopRun')
