@@ -79,7 +79,9 @@ const showAdvancedEditor = computed(
   () => Boolean(props.advancedAlwaysVisible) || !Boolean(props.showAdvancedToggle) || advancedOpen.value,
 )
 
-const showAdvancedToggleButton = computed(() => Boolean(props.showAdvancedToggle) && !Boolean(props.advancedAlwaysVisible))
+const showAdvancedToggleButton = computed(
+  () => Boolean(props.showAdvancedToggle) && !Boolean(props.advancedAlwaysVisible),
+)
 
 const pickerOptions = computed<PickerOption[]>(() => {
   const out: PickerOption[] = []
