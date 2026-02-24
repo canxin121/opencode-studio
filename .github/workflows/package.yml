@@ -20,9 +20,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Upload installer scripts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: opencode-studio-service-scripts
           path: |
@@ -43,18 +43,18 @@ jobs:
           - ref: ${{ github.sha }}
             ref_name: current
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ matrix.ref }}
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v1
+        uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
           no-cache: true
 
       - name: Cache Bun downloads
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         continue-on-error: true
         with:
           path: ~/.bun/install/cache
@@ -66,7 +66,7 @@ jobs:
         run: bun install --cwd web --frozen-lockfile
 
       - name: Cache web build artifacts
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         continue-on-error: true
         with:
           path: |
@@ -86,7 +86,7 @@ jobs:
           (cd web && zip -r ../release-assets/opencode-studio-web-dist.zip dist)
 
       - name: Upload web artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: opencode-studio-web-dist
           path: release-assets/*
@@ -113,7 +113,7 @@ jobs:
             target: x86_64-apple-darwin
             ref: ${{ github.sha }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ matrix.ref }}
 
@@ -167,7 +167,7 @@ jobs:
           }
 
       - name: Upload backend artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: opencode-studio-backend-${{ matrix.target }}
           path: release-assets/*
@@ -231,7 +231,7 @@ jobs:
             suffix: ""
             flavor: full
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ matrix.ref }}
 
@@ -252,7 +252,7 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev || sudo apt-get install -y libwebkit2gtk-4.0-dev
 
       - name: Download web dist
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: opencode-studio-web-dist
           path: release-assets
@@ -294,7 +294,7 @@ jobs:
 
       - name: Download backend artifact (full only)
         if: matrix.flavor == 'full'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: opencode-studio-backend-${{ matrix.target }}
           path: release-assets/backend
@@ -416,7 +416,7 @@ jobs:
           }
 
       - name: Upload desktop artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: opencode-studio-desktop-${{ matrix.flavor }}-${{ matrix.target }}${{ matrix.suffix }}
           path: release-assets/opencode-studio-desktop-*
@@ -475,7 +475,7 @@ jobs:
             suffix: "-cef"
             flavor: full
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ github.sha }}
 
@@ -497,7 +497,7 @@ jobs:
 
       - name: Cache CEF runtime (Linux)
         if: matrix.os == 'ubuntu-latest'
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/tauri-cef
           key: ${{ runner.os }}-tauri-cef-${{ hashFiles('desktop/src-tauri-cef/Cargo.lock') }}
@@ -506,7 +506,7 @@ jobs:
 
       - name: Cache CEF runtime (macOS)
         if: matrix.os == 'macos-14' || matrix.os == 'macos-15-intel'
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/Library/Caches/tauri-cef
           key: ${{ runner.os }}-tauri-cef-${{ hashFiles('desktop/src-tauri-cef/Cargo.lock') }}
@@ -515,7 +515,7 @@ jobs:
 
       - name: Cache CEF runtime (Windows)
         if: matrix.os == 'windows-latest'
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ${{ env.LOCALAPPDATA }}\tauri-cef
           key: ${{ runner.os }}-tauri-cef-${{ hashFiles('desktop/src-tauri-cef/Cargo.lock') }}
@@ -523,7 +523,7 @@ jobs:
             ${{ runner.os }}-tauri-cef-
 
       - name: Download web dist
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: opencode-studio-web-dist
           path: release-assets
@@ -573,7 +573,7 @@ jobs:
 
       - name: Download backend artifact (full only)
         if: matrix.flavor == 'full'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: opencode-studio-backend-${{ matrix.target }}
           path: release-assets/backend
@@ -687,7 +687,7 @@ jobs:
           }
 
       - name: Upload desktop artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: opencode-studio-desktop-${{ matrix.flavor }}-${{ matrix.target }}${{ matrix.suffix }}
           path: release-assets/opencode-studio-desktop-*

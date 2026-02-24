@@ -40,18 +40,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ env.RELEASE_REF }}
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v1
+        uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
           no-cache: true
 
       - name: Cache Bun downloads
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         continue-on-error: true
         with:
           path: ~/.bun/install/cache
@@ -63,7 +63,7 @@ jobs:
         run: bun install --cwd web --frozen-lockfile
 
       - name: Cache web build artifacts
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         continue-on-error: true
         with:
           path: |
@@ -117,7 +117,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ env.RELEASE_REF }}
 
@@ -140,7 +140,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ env.RELEASE_REF }}
 
@@ -260,13 +260,13 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Checkout release source (web/backend)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ env.RELEASE_REF }}
           path: src-main
 
       - name: Checkout desktop source (Tauri variant)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ env.RELEASE_REF }}
           path: src-tauri
@@ -288,13 +288,13 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev || sudo apt-get install -y libwebkit2gtk-4.0-dev
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v1
+        uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
           no-cache: true
 
       - name: Cache Bun downloads
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.bun/install/cache
           key: ${{ runner.os }}-bun-${{ hashFiles('src-main/web/bun.lock') }}
@@ -360,7 +360,7 @@ jobs:
 
       - name: Cache CEF runtime (Linux)
         if: matrix.cef == true && matrix.os == 'ubuntu-latest'
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/tauri-cef
           key: ${{ runner.os }}-tauri-cef-${{ hashFiles('src-tauri/desktop/src-tauri-cef/Cargo.lock') }}
@@ -369,7 +369,7 @@ jobs:
 
       - name: Cache CEF runtime (macOS)
         if: matrix.cef == true && (matrix.os == 'macos-14' || matrix.os == 'macos-15-intel')
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/Library/Caches/tauri-cef
           key: ${{ runner.os }}-tauri-cef-${{ hashFiles('src-tauri/desktop/src-tauri-cef/Cargo.lock') }}
@@ -378,7 +378,7 @@ jobs:
 
       - name: Cache CEF runtime (Windows)
         if: matrix.cef == true && matrix.os == 'windows-latest'
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ${{ env.LOCALAPPDATA }}\tauri-cef
           key: ${{ runner.os }}-tauri-cef-${{ hashFiles('src-tauri/desktop/src-tauri-cef/Cargo.lock') }}

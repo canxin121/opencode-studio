@@ -22,10 +22,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Run Renovate
-        uses: renovatebot/github-action@v46.1.1
+        uses: renovatebot/github-action@v46.1.2
         env:
           # In action mode Renovate needs an explicit repo list, otherwise it exits with
           # "No repositories found" and won't create update branches/PRs.
