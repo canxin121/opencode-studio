@@ -29,7 +29,9 @@ export default defineComponent({
     <div class="text-sm font-semibold">{{ t('settings.opencodeConfig.sections.permissions.test.title') }}</div>
     <div class="grid gap-3 lg:grid-cols-3">
       <label class="grid gap-1">
-        <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.permissions.test.fields.tool') }}</span>
+        <span class="text-xs text-muted-foreground">{{
+          t('settings.opencodeConfig.sections.permissions.test.fields.tool')
+        }}</span>
         <OptionPicker
           v-model="permissionTestTool"
           :options="permissionTestToolPickerOptions"
@@ -40,8 +42,13 @@ export default defineComponent({
         />
       </label>
       <label class="grid gap-1 lg:col-span-2">
-        <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.permissions.test.fields.input') }}</span>
-        <Input v-model="permissionTestInput" :placeholder="t('settings.opencodeConfig.sections.permissions.test.placeholders.input')" />
+        <span class="text-xs text-muted-foreground">{{
+          t('settings.opencodeConfig.sections.permissions.test.fields.input')
+        }}</span>
+        <Input
+          v-model="permissionTestInput"
+          :placeholder="t('settings.opencodeConfig.sections.permissions.test.placeholders.input')"
+        />
       </label>
     </div>
     <div class="grid gap-1 text-xs text-muted-foreground">
@@ -58,11 +65,15 @@ export default defineComponent({
       <div v-for="(s, idx) in permissionTestResult.steps" :key="`pts:${idx}`">
         <span class="font-mono">{{ s.key }}</span
         >:
-        <span v-if="s.kind === 'absent'">{{ t('settings.opencodeConfig.sections.permissions.test.steps.noRule') }}</span>
+        <span v-if="s.kind === 'absent'">{{
+          t('settings.opencodeConfig.sections.permissions.test.steps.noRule')
+        }}</span>
         <span v-else>{{
           t('settings.opencodeConfig.sections.permissions.test.steps.stepLine', {
             kind: s.kind,
-            matchedText: s.matched ? ` ${t('settings.opencodeConfig.sections.permissions.test.steps.matchWord')} ${String(s.matched)}` : '',
+            matchedText: s.matched
+              ? ` ${t('settings.opencodeConfig.sections.permissions.test.steps.matchWord')} ${String(s.matched)}`
+              : '',
             action: s.action || t('settings.opencodeConfig.sections.permissions.test.steps.noneAction'),
           })
         }}</span>

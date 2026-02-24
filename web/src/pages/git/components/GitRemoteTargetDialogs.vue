@@ -102,9 +102,9 @@ const remotePickerOptions = computed<PickerOption[]>(() => {
             @blur="props.hideBranchPickSoon"
             @keydown="props.onBranchPickKeydown"
           />
-          <div v-if="remoteBranchLoading" class="text-[11px] text-muted-foreground">{{
-            t('git.remoteTargetDialogs.loadingRemoteBranches')
-          }}</div>
+          <div v-if="remoteBranchLoading" class="text-[11px] text-muted-foreground">
+            {{ t('git.remoteTargetDialogs.loadingRemoteBranches') }}
+          </div>
           <div
             v-else-if="branchPickVisible && filteredRemoteBranchOptions.length"
             class="mt-1 max-h-28 overflow-auto rounded-md border border-border/50 bg-background/40"
@@ -195,9 +195,9 @@ const remotePickerOptions = computed<PickerOption[]>(() => {
             @blur="props.hideBranchPickSoon"
             @keydown="props.onBranchPickKeydown"
           />
-          <div v-if="remoteBranchLoading" class="text-[11px] text-muted-foreground">{{
-            t('git.remoteTargetDialogs.loadingRemoteBranches')
-          }}</div>
+          <div v-if="remoteBranchLoading" class="text-[11px] text-muted-foreground">
+            {{ t('git.remoteTargetDialogs.loadingRemoteBranches') }}
+          </div>
           <div
             v-else-if="branchPickVisible && filteredRemoteBranchOptions.length"
             class="mt-1 max-h-28 overflow-auto rounded-md border border-border/50 bg-background/40"
@@ -282,9 +282,9 @@ const remotePickerOptions = computed<PickerOption[]>(() => {
             @blur="props.hideBranchPickSoon"
             @keydown="props.onBranchPickKeydown"
           />
-          <div v-if="remoteBranchLoading" class="text-[11px] text-muted-foreground">{{
-            t('git.remoteTargetDialogs.loadingRemoteBranches')
-          }}</div>
+          <div v-if="remoteBranchLoading" class="text-[11px] text-muted-foreground">
+            {{ t('git.remoteTargetDialogs.loadingRemoteBranches') }}
+          </div>
           <div
             v-else-if="branchPickVisible && filteredRemoteBranchOptions.length"
             class="mt-1 max-h-28 overflow-auto rounded-md border border-border/50 bg-background/40"

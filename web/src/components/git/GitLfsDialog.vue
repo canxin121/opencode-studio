@@ -56,25 +56,31 @@ function onUpdateText(key: 'trackPattern' | 'lockPath', v: string | number) {
     <div class="space-y-4">
       <div class="flex items-center justify-between">
         <div class="text-xs font-medium text-muted-foreground">{{ t('git.ui.dialogs.lfs.sections.status') }}</div>
-        <Button variant="secondary" size="sm" :disabled="loading" @click="$emit('refresh')">{{ t('common.refresh') }}</Button>
+        <Button variant="secondary" size="sm" :disabled="loading" @click="$emit('refresh')">{{
+          t('common.refresh')
+        }}</Button>
       </div>
 
-        <div class="rounded-md border border-border/50 bg-muted/10 p-3 space-y-2">
-          <div class="text-sm">
-            <span class="font-semibold">{{ t('git.ui.dialogs.lfs.installedLabel') }}</span>
-            <span :class="installed ? 'text-emerald-500' : 'text-rose-500'" class="ml-1">
-              {{ installed ? t('common.yes') : t('common.no') }}
-            </span>
-          </div>
-          <div class="text-[11px] text-muted-foreground font-mono" v-if="version">{{ version }}</div>
-          <div v-if="error" class="text-xs text-red-500">{{ error }}</div>
-          <div class="flex gap-2">
-            <Button size="sm" :disabled="loading" @click="$emit('install')">{{ t('git.ui.dialogs.lfs.actions.installForRepo') }}</Button>
-          </div>
+      <div class="rounded-md border border-border/50 bg-muted/10 p-3 space-y-2">
+        <div class="text-sm">
+          <span class="font-semibold">{{ t('git.ui.dialogs.lfs.installedLabel') }}</span>
+          <span :class="installed ? 'text-emerald-500' : 'text-rose-500'" class="ml-1">
+            {{ installed ? t('common.yes') : t('common.no') }}
+          </span>
         </div>
+        <div class="text-[11px] text-muted-foreground font-mono" v-if="version">{{ version }}</div>
+        <div v-if="error" class="text-xs text-red-500">{{ error }}</div>
+        <div class="flex gap-2">
+          <Button size="sm" :disabled="loading" @click="$emit('install')">{{
+            t('git.ui.dialogs.lfs.actions.installForRepo')
+          }}</Button>
+        </div>
+      </div>
 
       <div class="space-y-2">
-        <div class="text-xs font-medium text-muted-foreground">{{ t('git.ui.dialogs.lfs.sections.trackPatterns') }}</div>
+        <div class="text-xs font-medium text-muted-foreground">
+          {{ t('git.ui.dialogs.lfs.sections.trackPatterns') }}
+        </div>
         <div class="grid gap-2 lg:grid-cols-[1fr_auto]">
           <Input
             :model-value="trackPattern"
@@ -82,10 +88,14 @@ function onUpdateText(key: 'trackPattern' | 'lockPath', v: string | number) {
             :placeholder="t('git.ui.dialogs.lfs.placeholders.trackPattern')"
             @update:model-value="(v) => onUpdateText('trackPattern', v)"
           />
-          <Button size="sm" :disabled="!trackPattern.trim()" @click="$emit('track')">{{ t('git.ui.dialogs.lfs.actions.track') }}</Button>
+          <Button size="sm" :disabled="!trackPattern.trim()" @click="$emit('track')">{{
+            t('git.ui.dialogs.lfs.actions.track')
+          }}</Button>
         </div>
         <ScrollArea class="h-32 border rounded-md">
-          <div v-if="!tracked.length" class="p-3 text-xs text-muted-foreground">{{ t('git.ui.dialogs.lfs.emptyTrackedPatterns') }}</div>
+          <div v-if="!tracked.length" class="p-3 text-xs text-muted-foreground">
+            {{ t('git.ui.dialogs.lfs.emptyTrackedPatterns') }}
+          </div>
           <div v-else class="p-2 space-y-1">
             <div v-for="p in tracked" :key="p" class="text-xs font-mono">{{ p }}</div>
           </div>
@@ -101,11 +111,15 @@ function onUpdateText(key: 'trackPattern' | 'lockPath', v: string | number) {
             :placeholder="t('git.ui.dialogs.lfs.placeholders.lockPath')"
             @update:model-value="(v) => onUpdateText('lockPath', v)"
           />
-          <Button size="sm" :disabled="!lockPath.trim()" @click="$emit('lock')">{{ t('git.ui.dialogs.lfs.actions.lock') }}</Button>
+          <Button size="sm" :disabled="!lockPath.trim()" @click="$emit('lock')">{{
+            t('git.ui.dialogs.lfs.actions.lock')
+          }}</Button>
         </div>
         <ScrollArea class="h-40 border rounded-md">
           <div v-if="locksLoading" class="p-3 text-xs text-muted-foreground">{{ t('common.loading') }}</div>
-          <div v-else-if="!locks.length" class="p-3 text-xs text-muted-foreground">{{ t('git.ui.dialogs.lfs.emptyLocks') }}</div>
+          <div v-else-if="!locks.length" class="p-3 text-xs text-muted-foreground">
+            {{ t('git.ui.dialogs.lfs.emptyLocks') }}
+          </div>
           <div v-else class="divide-y divide-border/40">
             <div v-for="l in locks" :key="l.id || l.path" class="p-3 space-y-1">
               <div class="text-xs font-mono">{{ l.path }}</div>

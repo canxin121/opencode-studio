@@ -59,14 +59,12 @@ export default defineComponent({
           if (ctx.isValidDefaultAgent && !ctx.isValidDefaultAgent(agent)) return null
           const mode = typeof agent?.mode === 'string' ? agent.mode : ''
           const hidden = agent?.hidden === true
-           const label = `${name}${
-             mode === 'subagent'
-               ? t('settings.opencodeConfig.sections.general.defaultAgent.options.subagentSuffix')
-               : ''
-           }${hidden ? t('settings.opencodeConfig.sections.general.defaultAgent.options.hiddenSuffix') : ''}`
-           return {
-             value: name,
-             label,
+          const label = `${name}${
+            mode === 'subagent' ? t('settings.opencodeConfig.sections.general.defaultAgent.options.subagentSuffix') : ''
+          }${hidden ? t('settings.opencodeConfig.sections.general.defaultAgent.options.hiddenSuffix') : ''}`
+          return {
+            value: name,
+            label,
             description: typeof agent?.description === 'string' ? agent.description : undefined,
           } satisfies PickerOption
         })
@@ -92,7 +90,10 @@ export default defineComponent({
       { value: 'active', label: t('settings.opencodeConfig.sections.general.options.modelStatusFilter.active') },
       { value: 'beta', label: t('settings.opencodeConfig.sections.general.options.modelStatusFilter.beta') },
       { value: 'alpha', label: t('settings.opencodeConfig.sections.general.options.modelStatusFilter.alpha') },
-      { value: 'deprecated', label: t('settings.opencodeConfig.sections.general.options.modelStatusFilter.deprecated') },
+      {
+        value: 'deprecated',
+        label: t('settings.opencodeConfig.sections.general.options.modelStatusFilter.deprecated'),
+      },
     ])
 
     const modelSortPickerOptions = computed<PickerOption[]>(() => [
@@ -172,7 +173,9 @@ export default defineComponent({
   <section id="general" class="scroll-mt-24 rounded-lg border border-border bg-background p-4 space-y-4">
     <div class="flex items-start justify-between gap-3">
       <div class="min-w-0">
-        <div class="text-base font-semibold leading-snug">{{ t('settings.opencodeConfig.sections.general.title') }}</div>
+        <div class="text-base font-semibold leading-snug">
+          {{ t('settings.opencodeConfig.sections.general.title') }}
+        </div>
       </div>
       <div class="flex items-center gap-2">
         <Tooltip>
@@ -213,32 +216,48 @@ export default defineComponent({
 
     <div v-if="isSectionOpen('general')" class="space-y-4">
       <div v-if="optionsError" class="text-xs text-destructive break-all">{{ optionsError }}</div>
-      <div v-else class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.help.discovery') }}</div>
+      <div v-else class="text-xs text-muted-foreground">
+        {{ t('settings.opencodeConfig.sections.general.help.discovery') }}
+      </div>
 
       <div class="grid gap-4 lg:grid-cols-2">
         <label class="grid gap-1">
-          <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.fields.schemaUrl') }}</span>
+          <span class="text-xs text-muted-foreground">{{
+            t('settings.opencodeConfig.sections.general.fields.schemaUrl')
+          }}</span>
           <Input
             v-model="schemaUrl"
             :placeholder="t('settings.opencodeConfig.sections.general.placeholders.schemaUrl')"
           />
-          <span class="text-[11px] text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.help.schemaUrl') }}</span>
+          <span class="text-[11px] text-muted-foreground">{{
+            t('settings.opencodeConfig.sections.general.help.schemaUrl')
+          }}</span>
         </label>
         <label class="grid gap-1">
-          <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.fields.theme') }}</span>
+          <span class="text-xs text-muted-foreground">{{
+            t('settings.opencodeConfig.sections.general.fields.theme')
+          }}</span>
           <Input v-model="theme" :placeholder="t('settings.opencodeConfig.sections.general.placeholders.theme')" />
-          <span class="text-[11px] text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.help.theme') }}</span>
+          <span class="text-[11px] text-muted-foreground">{{
+            t('settings.opencodeConfig.sections.general.help.theme')
+          }}</span>
         </label>
         <label class="grid gap-1">
-          <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.fields.username') }}</span>
+          <span class="text-xs text-muted-foreground">{{
+            t('settings.opencodeConfig.sections.general.fields.username')
+          }}</span>
           <Input
             v-model="username"
             :placeholder="t('settings.opencodeConfig.sections.general.placeholders.username')"
           />
-          <span class="text-[11px] text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.help.username') }}</span>
+          <span class="text-[11px] text-muted-foreground">{{
+            t('settings.opencodeConfig.sections.general.help.username')
+          }}</span>
         </label>
         <label class="grid gap-1">
-          <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.fields.defaultAgent') }}</span>
+          <span class="text-xs text-muted-foreground">{{
+            t('settings.opencodeConfig.sections.general.fields.defaultAgent')
+          }}</span>
           <div class="flex items-center gap-2">
             <div class="flex-1 min-w-0">
               <OptionPicker
@@ -263,17 +282,23 @@ export default defineComponent({
               >
                 <RiRefreshLine class="h-4 w-4" :class="optionsLoading ? 'animate-spin' : ''" />
               </Button>
-              <template #content>{{ t('settings.opencodeConfig.sections.general.actions.refreshOptionLists') }}</template>
+              <template #content>{{
+                t('settings.opencodeConfig.sections.general.actions.refreshOptionLists')
+              }}</template>
             </Tooltip>
           </div>
-          <span class="text-[11px] text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.help.defaultAgentRequirement') }}</span>
+          <span class="text-[11px] text-muted-foreground">{{
+            t('settings.opencodeConfig.sections.general.help.defaultAgentRequirement')
+          }}</span>
           <span v-if="defaultAgentWarning" class="text-xs text-destructive">{{ defaultAgentWarning }}</span>
           <span v-else-if="issueText('default_agent')" class="text-xs text-destructive">{{
             issueText('default_agent')
           }}</span>
         </label>
         <label class="grid gap-1">
-          <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.fields.defaultModel') }}</span>
+          <span class="text-xs text-muted-foreground">{{
+            t('settings.opencodeConfig.sections.general.fields.defaultModel')
+          }}</span>
           <div class="flex items-center gap-2">
             <div class="flex-1 min-w-0">
               <OptionPicker
@@ -299,14 +324,16 @@ export default defineComponent({
               >
                 <RiRefreshLine class="h-4 w-4" :class="optionsLoading ? 'animate-spin' : ''" />
               </Button>
-              <template #content>{{ t('settings.opencodeConfig.sections.general.actions.refreshOptionLists') }}</template>
+              <template #content>{{
+                t('settings.opencodeConfig.sections.general.actions.refreshOptionLists')
+              }}</template>
             </Tooltip>
           </div>
           <button
             type="button"
             class="text-[11px] text-muted-foreground hover:text-foreground text-left"
-          @click="showModelBrowse = !showModelBrowse"
-        >
+            @click="showModelBrowse = !showModelBrowse"
+          >
             {{
               showModelBrowse
                 ? t('settings.opencodeConfig.sections.general.actions.hideModelBrowser')
@@ -318,7 +345,9 @@ export default defineComponent({
           <span v-else-if="issueText('model')" class="text-xs text-destructive">{{ issueText('model') }}</span>
         </label>
         <label class="grid gap-1">
-          <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.fields.smallModel') }}</span>
+          <span class="text-xs text-muted-foreground">{{
+            t('settings.opencodeConfig.sections.general.fields.smallModel')
+          }}</span>
           <div class="flex items-center gap-2">
             <div class="flex-1 min-w-0">
               <OptionPicker
@@ -344,10 +373,14 @@ export default defineComponent({
               >
                 <RiRefreshLine class="h-4 w-4" :class="optionsLoading ? 'animate-spin' : ''" />
               </Button>
-              <template #content>{{ t('settings.opencodeConfig.sections.general.actions.refreshOptionLists') }}</template>
+              <template #content>{{
+                t('settings.opencodeConfig.sections.general.actions.refreshOptionLists')
+              }}</template>
             </Tooltip>
           </div>
-          <span class="text-[11px] text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.help.smallModel') }}</span>
+          <span class="text-[11px] text-muted-foreground">{{
+            t('settings.opencodeConfig.sections.general.help.smallModel')
+          }}</span>
           <span v-if="smallModelWarning" class="text-xs text-amber-600">{{ smallModelWarning }}</span>
           <span v-else-if="smallModelUnknownWarning" class="text-xs text-amber-600">{{
             smallModelUnknownWarning
@@ -359,7 +392,9 @@ export default defineComponent({
 
         <div v-if="showModelBrowse" class="lg:col-span-2 rounded-md border border-border p-3 space-y-2">
           <div class="flex items-center justify-between">
-            <div class="text-sm font-semibold">{{ t('settings.opencodeConfig.sections.general.modelBrowser.title') }}</div>
+            <div class="text-sm font-semibold">
+              {{ t('settings.opencodeConfig.sections.general.modelBrowser.title') }}
+            </div>
             <Tooltip>
               <Button
                 size="icon"
@@ -376,14 +411,18 @@ export default defineComponent({
           </div>
           <div class="grid gap-3 lg:grid-cols-3">
             <label class="grid gap-1">
-              <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.modelBrowser.fields.search') }}</span>
+              <span class="text-xs text-muted-foreground">{{
+                t('settings.opencodeConfig.sections.general.modelBrowser.fields.search')
+              }}</span>
               <Input
                 v-model="modelSlugFilter"
                 :placeholder="t('settings.opencodeConfig.sections.general.modelBrowser.placeholders.search')"
               />
             </label>
             <label class="grid gap-1">
-              <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.modelBrowser.fields.provider') }}</span>
+              <span class="text-xs text-muted-foreground">{{
+                t('settings.opencodeConfig.sections.general.modelBrowser.fields.provider')
+              }}</span>
               <OptionPicker
                 v-model="modelProviderFilter"
                 :options="modelProviderFilterPickerOptions"
@@ -393,7 +432,9 @@ export default defineComponent({
               />
             </label>
             <label class="grid gap-1">
-              <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.modelBrowser.fields.status') }}</span>
+              <span class="text-xs text-muted-foreground">{{
+                t('settings.opencodeConfig.sections.general.modelBrowser.fields.status')
+              }}</span>
               <OptionPicker
                 v-model="modelStatusFilter"
                 :options="modelStatusFilterPickerOptions"
@@ -403,7 +444,9 @@ export default defineComponent({
               />
             </label>
             <label class="grid gap-1">
-              <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.modelBrowser.fields.family') }}</span>
+              <span class="text-xs text-muted-foreground">{{
+                t('settings.opencodeConfig.sections.general.modelBrowser.fields.family')
+              }}</span>
               <OptionPicker
                 v-model="modelFamilyFilter"
                 :options="modelFamilyFilterPickerOptions"
@@ -413,7 +456,9 @@ export default defineComponent({
               />
             </label>
             <label class="grid gap-1">
-              <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.modelBrowser.fields.minContext') }}</span>
+              <span class="text-xs text-muted-foreground">{{
+                t('settings.opencodeConfig.sections.general.modelBrowser.fields.minContext')
+              }}</span>
               <input
                 v-model="modelMinContext"
                 type="number"
@@ -423,7 +468,9 @@ export default defineComponent({
               />
             </label>
             <label class="grid gap-1">
-              <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.modelBrowser.fields.minOutput') }}</span>
+              <span class="text-xs text-muted-foreground">{{
+                t('settings.opencodeConfig.sections.general.modelBrowser.fields.minOutput')
+              }}</span>
               <input
                 v-model="modelMinOutput"
                 type="number"
@@ -453,7 +500,9 @@ export default defineComponent({
             </label>
             <div class="flex-1" />
             <label class="inline-flex items-center gap-2 text-sm">
-              <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.modelBrowser.fields.sort') }}</span>
+              <span class="text-xs text-muted-foreground">{{
+                t('settings.opencodeConfig.sections.general.modelBrowser.fields.sort')
+              }}</span>
               <div class="w-[190px]">
                 <OptionPicker
                   v-model="modelSort"
@@ -467,7 +516,11 @@ export default defineComponent({
           </div>
 
           <div class="text-[11px] text-muted-foreground">
-            {{ t('settings.opencodeConfig.sections.general.modelBrowser.help.countLine', { count: sortedModelEntries.length }) }}
+            {{
+              t('settings.opencodeConfig.sections.general.modelBrowser.help.countLine', {
+                count: sortedModelEntries.length,
+              })
+            }}
           </div>
           <VirtualList
             v-if="modelBrowserRows.length"
@@ -507,7 +560,9 @@ export default defineComponent({
                     >
                       <RiStackLine class="h-4 w-4" />
                     </Button>
-                    <template #content>{{ t('settings.opencodeConfig.sections.general.modelBrowser.actions.defaultLabel') }}</template>
+                    <template #content>{{
+                      t('settings.opencodeConfig.sections.general.modelBrowser.actions.defaultLabel')
+                    }}</template>
                   </Tooltip>
                   <Tooltip>
                     <Button
@@ -520,16 +575,22 @@ export default defineComponent({
                     >
                       <RiSparkling2Line class="h-4 w-4" />
                     </Button>
-                    <template #content>{{ t('settings.opencodeConfig.sections.general.modelBrowser.actions.smallLabel') }}</template>
+                    <template #content>{{
+                      t('settings.opencodeConfig.sections.general.modelBrowser.actions.smallLabel')
+                    }}</template>
                   </Tooltip>
                 </div>
               </div>
             </template>
           </VirtualList>
-          <div v-else class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.modelBrowser.empty') }}</div>
+          <div v-else class="text-xs text-muted-foreground">
+            {{ t('settings.opencodeConfig.sections.general.modelBrowser.empty') }}
+          </div>
         </div>
         <label class="grid gap-1">
-          <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.fields.logLevel') }}</span>
+          <span class="text-xs text-muted-foreground">{{
+            t('settings.opencodeConfig.sections.general.fields.logLevel')
+          }}</span>
           <OptionPicker
             v-model="logLevel"
             :options="logLevelPickerOptions"
@@ -539,7 +600,9 @@ export default defineComponent({
           />
         </label>
         <label class="grid gap-1">
-          <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.fields.shareMode') }}</span>
+          <span class="text-xs text-muted-foreground">{{
+            t('settings.opencodeConfig.sections.general.fields.shareMode')
+          }}</span>
           <OptionPicker
             v-model="shareMode"
             :options="shareModePickerOptions"
@@ -549,7 +612,9 @@ export default defineComponent({
           />
         </label>
         <label class="grid gap-1">
-          <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.fields.autoUpdate') }}</span>
+          <span class="text-xs text-muted-foreground">{{
+            t('settings.opencodeConfig.sections.general.fields.autoUpdate')
+          }}</span>
           <OptionPicker
             v-model="autoUpdateMode"
             :options="autoUpdateModePickerOptions"
@@ -559,7 +624,9 @@ export default defineComponent({
           />
         </label>
         <label class="grid gap-1">
-          <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.general.fields.snapshotTracking') }}</span>
+          <span class="text-xs text-muted-foreground">{{
+            t('settings.opencodeConfig.sections.general.fields.snapshotTracking')
+          }}</span>
           <OptionPicker
             v-model="snapshotMode"
             :options="snapshotModePickerOptions"

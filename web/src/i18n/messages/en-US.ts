@@ -2438,8 +2438,7 @@ export default {
         title: 'Enable GPG Passphrase Preset?',
         description: 'This updates your gpg-agent configuration',
         confirmEnableRetry: 'Enable & Retry',
-        body:
-          'Your gpg-agent is not allowing passphrase presetting. To let OpenCode Studio sign commits after you enter the passphrase in the UI, we can add `allow-preset-passphrase` to `~/.gnupg/gpg-agent.conf` and restart gpg-agent.',
+        body: 'Your gpg-agent is not allowing passphrase presetting. To let OpenCode Studio sign commits after you enter the passphrase in the UI, we can add `allow-preset-passphrase` to `~/.gnupg/gpg-agent.conf` and restart gpg-agent.',
       },
       gpgMissingKey: {
         title: 'No GPG Signing Key',
