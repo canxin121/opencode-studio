@@ -6,6 +6,7 @@ import Button from '@/components/ui/Button.vue'
 import Input from '@/components/ui/Input.vue'
 import {
   RiArrowRightSLine,
+  RiAddLine,
   RiEyeLine,
   RiEyeOffLine,
   RiFileTextLine,
@@ -46,6 +47,7 @@ const props = withDefaults(
     buttonClass?: string
     buttonLabel?: string
     browserClass?: string
+    allowCreateDirectory?: boolean
   }>(),
   {
     mode: 'any',
@@ -55,6 +57,7 @@ const props = withDefaults(
     showOptions: false,
     showHidden: false,
     buttonLabel: '',
+    allowCreateDirectory: false,
   },
 )
 
@@ -84,6 +87,9 @@ const browserFoldersOnly = ref(false)
 const browserEntries = ref<ListEntry[]>([])
 const browserLoading = ref(false)
 const browserError = ref<string | null>(null)
+const createFolderName = ref('')
+const createFolderLoading = ref(false)
+const createFolderError = ref<string | null>(null)
 
 const showHidden = ref(Boolean(props.showHidden))
 const showGitignored = ref(Boolean(props.showGitignored))
@@ -215,10 +221,67 @@ async function loadBrowser(path: string) {
   }
 }
 
+function normalizeNewFolderName(raw: string): string {
+  return String(raw || '').trim()
+}
+
+function validateNewFolderName(raw: string): string | null {
+  const name = normalizeNewFolderName(raw)
+  if (!name) return String(t('ui.pathPicker.errors.invalidFolderName'))
+  if (name === '.' || name === '..') return String(t('ui.pathPicker.errors.invalidFolderName'))
+  if (name.includes('/') || name.includes('\\')) return String(t('ui.pathPicker.errors.invalidFolderName'))
+  return null
+}
+
+const canCreateFolder = computed(() => {
+  if (!props.allowCreateDirectory) return false
+  if (createFolderLoading.value) return false
+  if (!browserPath.value) return false
+  return normalizeNewFolderName(createFolderName.value).length > 0
+})
+
+async function createFolderInCurrentPath() {
+  if (!props.allowCreateDirectory) return
+  createFolderError.value = null
+
+  const validationError = validateNewFolderName(createFolderName.value)
+  if (validationError) {
+    createFolderError.value = validationError
+    return
+  }
+
+  const parentPath = trimTrailingSlash(browserPath.value)
+  if (!parentPath) {
+    createFolderError.value = String(t('ui.pathPicker.errors.selectDirectoryFirst'))
+    return
+  }
+
+  const folderName = normalizeNewFolderName(createFolderName.value)
+  try {
+    createFolderLoading.value = true
+    await apiJson<{ success: boolean }>(`/api/fs/mkdir?directory=${encodeURIComponent(parentPath)}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ path: folderName }),
+    })
+    const nextPath = joinPath(parentPath, folderName)
+    createFolderName.value = ''
+    await loadBrowser(parentPath)
+    applyBrowserPath(nextPath)
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err)
+    createFolderError.value = String(t('ui.pathPicker.errors.createFolderFailed', { error: reason }))
+  } finally {
+    createFolderLoading.value = false
+  }
+}
+
 async function openBrowser() {
   if (props.disabled) return
   browserOpen.value = true
   browserQuery.value = ''
+  createFolderName.value = ''
+  createFolderError.value = null
   browserFoldersOnly.value = false
   const ctx = context.value
   let start = ''
@@ -403,6 +466,29 @@ watch(
             <span>{{ crumb.label }}</span>
             <RiArrowRightSLine class="h-3 w-3" />
           </button>
+        </div>
+
+        <div v-if="allowCreateDirectory" class="grid gap-1">
+          <div class="flex items-center gap-2">
+            <Input
+              v-model="createFolderName"
+              :placeholder="t('ui.pathPicker.placeholders.newFolderName')"
+              class="min-w-0 flex-1"
+              @keydown.enter.prevent="createFolderInCurrentPath"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              type="button"
+              :disabled="!canCreateFolder"
+              :class="buttonClass"
+              @click="createFolderInCurrentPath"
+            >
+              <RiAddLine class="h-4 w-4" />
+              <span>{{ t('ui.pathPicker.actions.createFolder') }}</span>
+            </Button>
+          </div>
+          <div v-if="createFolderError" class="text-xs text-destructive">{{ createFolderError }}</div>
         </div>
 
         <div class="flex-1 min-h-0 rounded-md border border-border overflow-hidden">
