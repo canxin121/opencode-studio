@@ -1,6 +1,7 @@
 import { computed, nextTick, ref, watch, type Ref } from 'vue'
 
 import { apiJson } from '@/lib/api'
+import { extractConfigDefaults, parseModelSlug, resolveEffectiveDefaults } from '@/pages/chat/modelSelectionDefaults'
 import type { OpencodeConfigResponse } from '@/stores/opencodeConfig'
 import type { SessionRunConfig } from '@/types/chat'
 import type { JsonValue as JsonLike } from '@/types/json'
@@ -30,15 +31,6 @@ type UiLike = { isMobile: boolean; isMobilePointer: boolean }
 
 function clampNumber(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value))
-}
-
-function parseModelSlug(slug: string): { provider: string; model: string } {
-  const raw = (slug || '').trim()
-  const idx = raw.indexOf('/')
-  if (idx <= 0) return { provider: '', model: '' }
-  const provider = raw.slice(0, idx).trim()
-  const model = raw.slice(idx + 1).trim()
-  return { provider, model }
 }
 
 function isRecord(value: JsonLike): value is UnknownRecord {
@@ -117,14 +109,11 @@ export function useChatModelSelection(opts: {
     commandIndex,
   } = opts
 
-  const opencodeConfigFallback = ref<UnknownRecord | null>(null)
+  const projectConfigLayer = ref<UnknownRecord | null>(null)
+  const userConfigLayer = ref<UnknownRecord | null>(null)
 
   const resolvedOpencodeConfig = computed(() => {
-    const cfg = isRecord(opencodeConfig.data) ? opencodeConfig.data : null
-    if (opencodeConfig.scope === 'project' && opencodeConfig.exists === false) {
-      return opencodeConfigFallback.value || {}
-    }
-    return cfg || {}
+    return projectConfigLayer.value || userConfigLayer.value || {}
   })
 
   const shareDisabled = computed(() => {
@@ -132,48 +121,8 @@ export function useChatModelSelection(opts: {
     return String(cfg?.share || '').trim() === 'disabled'
   })
 
-  const opencodeDefaults = computed(() => {
-    const cfg = resolvedOpencodeConfig.value
-    const pickString = (obj: JsonLike, keys: string[]) => {
-      const rec = asRecord(obj)
-      for (const k of keys) {
-        const v = rec[k]
-        if (typeof v === 'string') {
-          const s = v.trim()
-          if (s) return s
-        }
-      }
-      return ''
-    }
-
-    const normalizeAgentName = (raw: string) => {
-      let v = String(raw || '').trim()
-      if (v.startsWith('@')) v = v.slice(1).trim()
-      return v
-    }
-
-    const defaultAgent = normalizeAgentName(
-      pickString(cfg, ['default_agent', 'defaultAgent', 'agent', 'default_agent_name', 'defaultAgentName']),
-    )
-
-    // OpenCode config uses a mixture of snake_case and camelCase across versions.
-    const providerRaw = pickString(cfg, ['provider', 'default_provider', 'defaultProvider', 'providerID', 'providerId'])
-    const modelRaw = pickString(cfg, ['model', 'default_model', 'defaultModel', 'default_model_id', 'defaultModelId'])
-
-    let defaultProvider = providerRaw
-    let defaultModel = ''
-    if (modelRaw) {
-      const parsed = parseModelSlug(modelRaw)
-      if (parsed.provider && parsed.model) {
-        if (!defaultProvider) defaultProvider = parsed.provider
-        defaultModel = parsed.model
-      } else {
-        defaultModel = modelRaw
-      }
-    }
-
-    return { defaultAgent, defaultProvider, defaultModel }
-  })
+  const projectConfigDefaults = computed(() => extractConfigDefaults(projectConfigLayer.value))
+  const userConfigDefaults = computed(() => extractConfigDefaults(userConfigLayer.value))
 
   // OpenCode /config/providers returns { providers, default }, where `default` is a
   // map of providerID -> default modelID (per-provider, already priority-sorted).
@@ -181,8 +130,6 @@ export function useChatModelSelection(opts: {
 
   const providers = ref<Provider[]>([])
   const agents = ref<Agent[]>([])
-
-  const remoteDefaults = ref<{ provider?: string; model?: string; agent?: string }>({})
 
   const fallbackAgent = computed(() => (agents.value[0]?.name || '').trim())
   const fallbackProviderModel = computed(() => {
@@ -198,27 +145,12 @@ export function useChatModelSelection(opts: {
   })
 
   const effectiveDefaults = computed(() => {
-    const rd = remoteDefaults.value
-
-    // Only treat {provider, model} as a pair; avoid mixing sources.
-    const remoteProvider = (rd.provider || '').trim()
-    const remoteModel = (rd.model || '').trim()
-    const configProvider = (opencodeDefaults.value.defaultProvider || '').trim()
-    const configModel = (opencodeDefaults.value.defaultModel || '').trim()
-    const fallback = fallbackProviderModel.value
-
-    const providerModel =
-      remoteProvider && remoteModel
-        ? { provider: remoteProvider, model: remoteModel }
-        : configProvider && configModel
-          ? { provider: configProvider, model: configModel }
-          : fallback
-
-    return {
-      agent: (rd.agent || opencodeDefaults.value.defaultAgent || fallbackAgent.value || '').trim(),
-      provider: providerModel.provider,
-      model: providerModel.model,
-    }
+    return resolveEffectiveDefaults({
+      projectConfig: projectConfigLayer.value,
+      userConfig: userConfigLayer.value,
+      opencodeSelection: fallbackProviderModel.value,
+      fallbackAgent: fallbackAgent.value,
+    })
   })
 
   // Session selection state.
@@ -321,7 +253,7 @@ export function useChatModelSelection(opts: {
   function ensureDefaultProviderInList(list: Provider[]) {
     // Only ensure *configured* defaults are present. Runtime defaults are derived from
     // the provider list itself and don't need injecting.
-    const def = (opencodeDefaults.value.defaultProvider || '').trim()
+    const def = (projectConfigDefaults.value.defaultProvider || userConfigDefaults.value.defaultProvider || '').trim()
     if (!def) return list
     if (list.some((p) => p.id === def)) return list
     return [...list, { id: def, name: def, models: {} }]
@@ -748,18 +680,27 @@ export function useChatModelSelection(opts: {
   async function refreshOpencodeConfig() {
     const dir = sessionDirectory.value
     const scope = dir ? 'project' : 'user'
-    opencodeConfigFallback.value = null
+    projectConfigLayer.value = null
+    userConfigLayer.value = null
     try {
       await opencodeConfig.refresh({ scope, directory: dir || null })
     } catch {
       // ignore
     }
-    if (scope === 'project' && opencodeConfig.exists === false) {
+
+    if (scope === 'project' && opencodeConfig.exists !== false) {
+      projectConfigLayer.value = isRecord(opencodeConfig.data) ? opencodeConfig.data : {}
+    }
+    if (scope === 'user') {
+      userConfigLayer.value = isRecord(opencodeConfig.data) ? opencodeConfig.data : {}
+    }
+
+    if (scope === 'project') {
       try {
         const resp = await apiJson<OpencodeConfigResponse>('/api/config/opencode?scope=user')
-        opencodeConfigFallback.value = isRecord(resp?.config) ? resp.config : {}
+        userConfigLayer.value = isRecord(resp?.config) ? resp.config : {}
       } catch {
-        opencodeConfigFallback.value = {}
+        userConfigLayer.value = {}
       }
     }
   }
@@ -805,7 +746,7 @@ export function useChatModelSelection(opts: {
     // Do not inject built-in agents here.
     // The chat agent picker should reflect the upstream OpenCode registry; if OpenCode
     // is unavailable, we prefer showing only explicitly configured agents.
-    const defaultAgent = effectiveDefaults.value.agent
+    const defaultAgent = (projectConfigDefaults.value.defaultAgent || userConfigDefaults.value.defaultAgent || '').trim()
     if (defaultAgent && !entries.some((a) => a.name === defaultAgent)) {
       entries.push({ name: defaultAgent })
     }
