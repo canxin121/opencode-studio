@@ -466,7 +466,7 @@ void sessionActionsMenuRef
                     >
                       <div
                         class="min-w-0 flex-1 flex items-center gap-1.5 flex-nowrap overflow-x-auto oc-scrollbar-hidden sm:flex-wrap sm:overflow-visible"
-                        data-oc-keyboard-tap="keep"
+                        data-oc-keyboard-tap="blur"
                       >
                         <Tooltip v-if="!ui.isMobilePointer">
                           <ToolbarChipButton
