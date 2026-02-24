@@ -48,7 +48,9 @@ function onUpdateCheckout(ev: Event) {
   >
     <div class="space-y-3">
       <div class="grid gap-1">
-        <div class="text-xs font-medium text-muted-foreground">{{ t('git.ui.dialogs.createBranchFrom.fields.branchName') }}</div>
+        <div class="text-xs font-medium text-muted-foreground">
+          {{ t('git.ui.dialogs.createBranchFrom.fields.branchName') }}
+        </div>
         <Input
           :model-value="branchName"
           class="h-9 font-mono text-xs"
@@ -57,7 +59,9 @@ function onUpdateCheckout(ev: Event) {
         />
       </div>
       <div class="grid gap-1">
-        <div class="text-xs font-medium text-muted-foreground">{{ t('git.ui.dialogs.createBranchFrom.fields.startPoint') }}</div>
+        <div class="text-xs font-medium text-muted-foreground">
+          {{ t('git.ui.dialogs.createBranchFrom.fields.startPoint') }}
+        </div>
         <Input
           :model-value="startPoint"
           class="h-9 font-mono text-xs"

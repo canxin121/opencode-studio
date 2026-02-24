@@ -66,7 +66,9 @@ async function submitAdd() {
     addOpen.value = false
     toasts.push(
       'success',
-      addSetActive.value ? t('settings.backendsPanel.toasts.addedAndActivated') : t('settings.backendsPanel.toasts.added'),
+      addSetActive.value
+        ? t('settings.backendsPanel.toasts.addedAndActivated')
+        : t('settings.backendsPanel.toasts.added'),
     )
 
     if (addSetActive.value) {
@@ -182,7 +184,12 @@ function refreshFromStorage() {
             <RiAddLine class="h-4 w-4 mr-2" />
             {{ t('common.add') }}
           </Button>
-          <IconButton size="sm" :title="t('common.refresh')" :aria-label="t('common.refresh')" @click="refreshFromStorage">
+          <IconButton
+            size="sm"
+            :title="t('common.refresh')"
+            :aria-label="t('common.refresh')"
+            @click="refreshFromStorage"
+          >
             <RiRefreshLine class="h-4 w-4" />
           </IconButton>
         </div>
@@ -214,7 +221,9 @@ function refreshFromStorage() {
           </div>
 
           <div class="flex items-center gap-2 shrink-0">
-            <Button v-if="b.id !== activeId" variant="outline" size="sm" @click="activate(b.id)">{{ t('common.use') }}</Button>
+            <Button v-if="b.id !== activeId" variant="outline" size="sm" @click="activate(b.id)">{{
+              t('common.use')
+            }}</Button>
             <IconButton size="sm" :title="t('common.edit')" :aria-label="t('common.edit')" @click="openEdit(b.id)">
               <RiEditLine class="h-4 w-4" />
             </IconButton>
@@ -319,7 +328,9 @@ function refreshFromStorage() {
 
         <div class="flex items-center justify-end gap-2">
           <Button variant="secondary" :disabled="editBusy" @click="editOpen = false">{{ t('common.cancel') }}</Button>
-          <Button :disabled="editBusy" @click="submitEdit">{{ editBusy ? t('common.saving') : t('common.save') }}</Button>
+          <Button :disabled="editBusy" @click="submitEdit">{{
+            editBusy ? t('common.saving') : t('common.save')
+          }}</Button>
         </div>
       </div>
     </FormDialog>

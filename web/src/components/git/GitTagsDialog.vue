@@ -86,12 +86,16 @@ function onUpdateRemote(v: string | number) {
             @update:model-value="(v) => onUpdateText('newTagMessage', v)"
           />
           <div class="flex justify-end">
-            <Button size="sm" :disabled="!newTagName.trim()" @click="$emit('createTag')">{{ t('common.create') }}</Button>
+            <Button size="sm" :disabled="!newTagName.trim()" @click="$emit('createTag')">{{
+              t('common.create')
+            }}</Button>
           </div>
         </div>
 
         <div class="grid gap-1">
-          <div class="text-xs font-medium text-muted-foreground">{{ t('git.ui.dialogs.tags.sections.remoteForDeletingTags') }}</div>
+          <div class="text-xs font-medium text-muted-foreground">
+            {{ t('git.ui.dialogs.tags.sections.remoteForDeletingTags') }}
+          </div>
           <OptionPicker
             :model-value="tagRemote"
             :options="remotePickerOptions"
@@ -105,13 +109,19 @@ function onUpdateRemote(v: string | number) {
       </div>
 
       <div class="flex flex-wrap items-center justify-between gap-2">
-        <div class="text-xs font-medium text-muted-foreground">{{ t('git.ui.dialogs.tags.sections.existingTags') }}</div>
-        <Button variant="secondary" size="sm" :disabled="tagsLoading" @click="$emit('refresh')">{{ t('common.refresh') }}</Button>
+        <div class="text-xs font-medium text-muted-foreground">
+          {{ t('git.ui.dialogs.tags.sections.existingTags') }}
+        </div>
+        <Button variant="secondary" size="sm" :disabled="tagsLoading" @click="$emit('refresh')">{{
+          t('common.refresh')
+        }}</Button>
       </div>
 
       <div class="rounded-md border border-border/50 overflow-hidden">
         <div v-if="tagsLoading" class="p-3 text-xs text-muted-foreground">{{ t('common.loading') }}</div>
-        <div v-else-if="!tagsList.length" class="p-3 text-xs text-muted-foreground">{{ t('git.ui.dialogs.tags.empty') }}</div>
+        <div v-else-if="!tagsList.length" class="p-3 text-xs text-muted-foreground">
+          {{ t('git.ui.dialogs.tags.empty') }}
+        </div>
         <div v-else class="divide-y divide-border/40">
           <div
             v-for="tag in tagsList"

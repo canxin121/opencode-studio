@@ -153,7 +153,9 @@ function statusMeta(sessionId: string) {
             <div class="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
               {{ t('chat.sidebar.directoriesList.search.sessionsTitle') }}
             </div>
-            <div v-if="searchWarming" class="text-[10px] font-mono text-muted-foreground/60">{{ t('common.loading') }}</div>
+            <div v-if="searchWarming" class="text-[10px] font-mono text-muted-foreground/60">
+              {{ t('common.loading') }}
+            </div>
           </div>
 
           <div v-if="sessionSearchHits.length" class="mt-1 space-y-1">
@@ -177,8 +179,12 @@ function statusMeta(sessionId: string) {
         </div>
 
         <div v-if="visibleDirectories.length === 0" class="px-2 py-6 text-center text-muted-foreground">
-          <div class="typography-ui-label font-semibold">{{ t('chat.sidebar.directoriesList.noMatchingDirectories.title') }}</div>
-          <div class="typography-meta mt-1">{{ t('chat.sidebar.directoriesList.noMatchingDirectories.description') }}</div>
+          <div class="typography-ui-label font-semibold">
+            {{ t('chat.sidebar.directoriesList.noMatchingDirectories.title') }}
+          </div>
+          <div class="typography-meta mt-1">
+            {{ t('chat.sidebar.directoriesList.noMatchingDirectories.description') }}
+          </div>
         </div>
 
         <div v-else class="space-y-1">
@@ -195,10 +201,11 @@ function statusMeta(sessionId: string) {
                 <button
                   type="button"
                   class="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-                  :aria-label=
-                    "props.isDirectoryCollapsed(directory.id)
+                  :aria-label="
+                    props.isDirectoryCollapsed(directory.id)
                       ? String(t('chat.sidebar.directoriesList.expandDirectory'))
-                      : String(t('chat.sidebar.directoriesList.collapseDirectory'))"
+                      : String(t('chat.sidebar.directoriesList.collapseDirectory'))
+                  "
                   @click="props.toggleDirectoryCollapse(directory.id, directory.path)"
                 >
                   <RiArrowRightSLine v-if="props.isDirectoryCollapsed(directory.id)" class="h-4 w-4" />
@@ -297,7 +304,9 @@ function statusMeta(sessionId: string) {
                   "
                   class="px-1.5 py-2"
                 >
-                  <div class="text-xs text-muted-foreground">{{ t('chat.sidebar.directoriesList.loadingSessions') }}</div>
+                  <div class="text-xs text-muted-foreground">
+                    {{ t('chat.sidebar.directoriesList.loadingSessions') }}
+                  </div>
                   <div class="mt-2 space-y-2 animate-pulse">
                     <div class="h-3 w-3/4 rounded bg-muted/30" />
                     <div class="h-3 w-2/3 rounded bg-muted/30" />

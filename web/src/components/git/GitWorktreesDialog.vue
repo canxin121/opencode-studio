@@ -83,10 +83,16 @@ function worktreeRelativePath(path: string): string | null {
   >
     <div class="space-y-4">
       <div class="flex flex-wrap items-center justify-between gap-2">
-        <div class="text-xs font-medium text-muted-foreground">{{ t('git.ui.dialogs.worktrees.sections.addWorktree') }}</div>
+        <div class="text-xs font-medium text-muted-foreground">
+          {{ t('git.ui.dialogs.worktrees.sections.addWorktree') }}
+        </div>
         <div class="flex flex-wrap items-center gap-2">
-          <Button variant="secondary" size="sm" :disabled="worktreesLoading" @click="$emit('refresh')">{{ t('common.refresh') }}</Button>
-          <Button variant="secondary" size="sm" :disabled="worktreesLoading" @click="$emit('prune')">{{ t('git.ui.dialogs.worktrees.actions.prune') }}</Button>
+          <Button variant="secondary" size="sm" :disabled="worktreesLoading" @click="$emit('refresh')">{{
+            t('common.refresh')
+          }}</Button>
+          <Button variant="secondary" size="sm" :disabled="worktreesLoading" @click="$emit('prune')">{{
+            t('git.ui.dialogs.worktrees.actions.prune')
+          }}</Button>
         </div>
       </div>
 
@@ -138,7 +144,9 @@ function worktreeRelativePath(path: string): string | null {
         <div v-if="worktreesError" class="p-3 text-xs text-red-500">{{ worktreesError }}</div>
         <div v-else-if="worktreesLoading" class="p-3 text-xs text-muted-foreground">{{ t('common.loading') }}</div>
         <ScrollArea v-else class="h-64">
-          <div v-if="!worktrees.length" class="p-3 text-xs text-muted-foreground">{{ t('git.ui.dialogs.worktrees.empty') }}</div>
+          <div v-if="!worktrees.length" class="p-3 text-xs text-muted-foreground">
+            {{ t('git.ui.dialogs.worktrees.empty') }}
+          </div>
           <div v-else class="divide-y divide-border/40">
             <div v-for="wt in worktrees" :key="wt.worktree" class="p-3 space-y-1">
               <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -154,7 +162,9 @@ function worktreeRelativePath(path: string): string | null {
                   </div>
                   <div v-if="wt.locked || wt.prunable" class="text-[10px] text-muted-foreground">
                     <span v-if="wt.locked">{{ t('git.ui.dialogs.worktrees.status.locked') }}</span>
-                    <span v-if="wt.prunable" :class="wt.locked ? 'ml-2' : ''">{{ t('git.ui.dialogs.worktrees.status.prunable') }}</span>
+                    <span v-if="wt.prunable" :class="wt.locked ? 'ml-2' : ''">{{
+                      t('git.ui.dialogs.worktrees.status.prunable')
+                    }}</span>
                   </div>
                 </div>
                 <div class="flex flex-wrap items-center gap-2 sm:justify-end">
@@ -167,7 +177,9 @@ function worktreeRelativePath(path: string): string | null {
                   >
                     {{ t('common.open') }}
                   </Button>
-                  <Button variant="secondary" size="sm" class="h-7" @click="$emit('copyPath', wt.worktree)">{{ t('common.copyPath') }}</Button>
+                  <Button variant="secondary" size="sm" class="h-7" @click="$emit('copyPath', wt.worktree)">{{
+                    t('common.copyPath')
+                  }}</Button>
                   <ConfirmPopover
                     :title="t('git.ui.dialogs.worktrees.confirmMigrate.title')"
                     :description="t('git.ui.dialogs.worktrees.confirmMigrate.description')"
@@ -193,7 +205,9 @@ function worktreeRelativePath(path: string): string | null {
                     variant="destructive"
                     @confirm="$emit('remove', wt.worktree)"
                   >
-                    <Button variant="secondary" size="sm" class="h-7" @click="() => {}">{{ t('common.remove') }}</Button>
+                    <Button variant="secondary" size="sm" class="h-7" @click="() => {}">{{
+                      t('common.remove')
+                    }}</Button>
                   </ConfirmPopover>
                 </div>
               </div>

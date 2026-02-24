@@ -81,7 +81,9 @@ export default defineComponent({
   <section id="commands" class="scroll-mt-24 rounded-lg border border-border bg-background p-4 space-y-4">
     <div class="flex items-start justify-between gap-3">
       <div class="min-w-0">
-        <div class="text-base font-semibold leading-snug">{{ t('settings.opencodeConfig.sections.commands.title') }}</div>
+        <div class="text-base font-semibold leading-snug">
+          {{ t('settings.opencodeConfig.sections.commands.title') }}
+        </div>
       </div>
       <div class="flex items-center gap-2">
         <Tooltip>
@@ -206,7 +208,9 @@ export default defineComponent({
         <div class="grid gap-4 lg:grid-cols-2">
           <div class="grid gap-2">
             <div class="flex items-center justify-between">
-              <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.commands.fields.template') }}</span>
+              <span class="text-xs text-muted-foreground">{{
+                t('settings.opencodeConfig.sections.commands.fields.template')
+              }}</span>
               <div class="flex items-center gap-2">
                 <Tooltip>
                   <Button
@@ -219,7 +223,9 @@ export default defineComponent({
                   >
                     <RiFileTextLine class="h-4 w-4" />
                   </Button>
-                  <template #content>{{ t('settings.opencodeConfig.sections.commands.actions.insertSkeleton') }}</template>
+                  <template #content>{{
+                    t('settings.opencodeConfig.sections.commands.actions.insertSkeleton')
+                  }}</template>
                 </Tooltip>
                 <Tooltip>
                   <Button
@@ -232,7 +238,9 @@ export default defineComponent({
                   >
                     <RiFileTextLine class="h-4 w-4" />
                   </Button>
-                  <template #content>{{ t('settings.opencodeConfig.sections.commands.actions.insertFrontmatter') }}</template>
+                  <template #content>{{
+                    t('settings.opencodeConfig.sections.commands.actions.insertFrontmatter')
+                  }}</template>
                 </Tooltip>
               </div>
             </div>
@@ -251,14 +259,18 @@ export default defineComponent({
           </div>
           <div class="grid gap-3">
             <label class="grid gap-1">
-              <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.commands.fields.description') }}</span>
+              <span class="text-xs text-muted-foreground">{{
+                t('settings.opencodeConfig.sections.commands.fields.description')
+              }}</span>
               <Input
                 :model-value="command.description || ''"
                 @update:model-value="(v) => setEntryField('command', commandId, 'description', v)"
               />
             </label>
             <label class="grid gap-1">
-              <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.commands.fields.agent') }}</span>
+              <span class="text-xs text-muted-foreground">{{
+                t('settings.opencodeConfig.sections.commands.fields.agent')
+              }}</span>
               <OptionPicker
                 :model-value="command.agent || ''"
                 @update:model-value="(v) => setEntryField('command', commandId, 'agent', normalizeAgentName(v))"
@@ -274,7 +286,9 @@ export default defineComponent({
               }}</span>
             </label>
             <label class="grid gap-1">
-              <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.commands.fields.model') }}</span>
+              <span class="text-xs text-muted-foreground">{{
+                t('settings.opencodeConfig.sections.commands.fields.model')
+              }}</span>
               <OptionPicker
                 :model-value="command.model || ''"
                 @update:model-value="(v) => setEntryField('command', commandId, 'model', String(v || '').trim())"

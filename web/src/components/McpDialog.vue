@@ -140,7 +140,9 @@ watch(
       </div>
 
       <div class="flex items-center justify-end gap-2">
-        <Button variant="outline" @click="refresh" :disabled="loading">{{ loading ? t('mcp.dialog.actions.refreshing') : t('common.refresh') }}</Button>
+        <Button variant="outline" @click="refresh" :disabled="loading">{{
+          loading ? t('mcp.dialog.actions.refreshing') : t('common.refresh')
+        }}</Button>
       </div>
     </div>
   </Dialog>

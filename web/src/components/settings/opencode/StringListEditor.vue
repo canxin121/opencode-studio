@@ -59,7 +59,9 @@ const advancedLabelText = computed(() => {
   return next.length > 0 ? next : String(t('settings.opencodeConfig.stringListEditor.advancedLabel'))
 })
 
-const itemsCountLabel = computed(() => String(t('settings.opencodeConfig.stringListEditor.itemsCount', { count: items.value.length })))
+const itemsCountLabel = computed(() =>
+  String(t('settings.opencodeConfig.stringListEditor.itemsCount', { count: items.value.length })),
+)
 
 const pickerOptions = computed<PickerOption[]>(() => {
   const out: PickerOption[] = []

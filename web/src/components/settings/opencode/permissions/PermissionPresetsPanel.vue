@@ -44,7 +44,9 @@ export default defineComponent({
     <div class="text-sm font-semibold">{{ t('settings.opencodeConfig.sections.permissions.presets.title') }}</div>
     <div class="grid gap-3 lg:grid-cols-3">
       <label class="grid gap-1">
-        <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.permissions.presets.fields.preset') }}</span>
+        <span class="text-xs text-muted-foreground">{{
+          t('settings.opencodeConfig.sections.permissions.presets.fields.preset')
+        }}</span>
         <OptionPicker
           v-model="permissionPreset"
           :options="permissionPresetPickerOptions"
@@ -54,7 +56,9 @@ export default defineComponent({
         />
       </label>
       <label class="grid gap-1">
-        <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.permissions.presets.fields.applyMode') }}</span>
+        <span class="text-xs text-muted-foreground">{{
+          t('settings.opencodeConfig.sections.permissions.presets.fields.applyMode')
+        }}</span>
         <OptionPicker
           v-model="permissionPresetMode"
           :options="permissionPresetModePickerOptions"
@@ -77,9 +81,13 @@ export default defineComponent({
         >
           <RiCheckLine class="h-4 w-4" />
         </Button>
-        <template #content>{{ t('settings.opencodeConfig.sections.permissions.presets.actions.applyPreset') }}</template>
+        <template #content>{{
+          t('settings.opencodeConfig.sections.permissions.presets.actions.applyPreset')
+        }}</template>
       </Tooltip>
-      <span class="text-[11px] text-muted-foreground">{{ t('settings.opencodeConfig.sections.permissions.presets.tip') }}</span>
+      <span class="text-[11px] text-muted-foreground">{{
+        t('settings.opencodeConfig.sections.permissions.presets.tip')
+      }}</span>
     </div>
   </div>
 </template>

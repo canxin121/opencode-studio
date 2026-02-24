@@ -50,7 +50,9 @@ function onUpdateText(key: 'from' | 'to', v: string | number) {
       </div>
       <div class="flex justify-end gap-2">
         <Button variant="secondary" size="sm" @click="$emit('update:open', false)">{{ t('common.cancel') }}</Button>
-        <Button size="sm" :disabled="!from.trim() || !to.trim()" @click="$emit('submit')">{{ t('common.rename') }}</Button>
+        <Button size="sm" :disabled="!from.trim() || !to.trim()" @click="$emit('submit')">{{
+          t('common.rename')
+        }}</Button>
       </div>
     </div>
   </FormDialog>

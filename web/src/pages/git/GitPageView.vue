@@ -798,10 +798,10 @@ void diffPaneRef
           :disabled="!projectRoot"
           @click="repoPickerOpen = true"
         >
-            <div class="min-w-0 text-left">
-            <div class="text-[10px] uppercase tracking-[0.08em] text-muted-foreground">{{
-              t('git.ui.repository')
-            }}</div>
+          <div class="min-w-0 text-left">
+            <div class="text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+              {{ t('git.ui.repository') }}
+            </div>
             <div class="truncate font-mono text-[11px] text-foreground" :title="selectedRepoLabel">
               {{ selectedRepoLabel }}
             </div>
@@ -919,7 +919,9 @@ void diffPaneRef
               </div>
               <div class="mt-2 flex flex-wrap items-center justify-end gap-2">
                 <MiniActionButton @click="cherryPickContinue">{{ t('common.continue') }}</MiniActionButton>
-                <MiniActionButton variant="destructive" @click="cherryPickAbort">{{ t('common.abort') }}</MiniActionButton>
+                <MiniActionButton variant="destructive" @click="cherryPickAbort">{{
+                  t('common.abort')
+                }}</MiniActionButton>
 
                 <div class="relative">
                   <IconButton
@@ -960,7 +962,9 @@ void diffPaneRef
               </div>
               <div class="mt-2 flex flex-wrap items-center justify-end gap-2">
                 <MiniActionButton @click="revertContinue">{{ t('common.continue') }}</MiniActionButton>
-                <MiniActionButton variant="destructive" @click="revertAbortSeq">{{ t('common.abort') }}</MiniActionButton>
+                <MiniActionButton variant="destructive" @click="revertAbortSeq">{{
+                  t('common.abort')
+                }}</MiniActionButton>
 
                 <div class="relative">
                   <IconButton
@@ -1064,7 +1068,9 @@ void diffPaneRef
             </div>
             <div class="mt-3 flex items-center justify-center gap-2">
               <MiniActionButton size="xs" @click="repoPickerOpen = true">{{ t('git.ui.selectRepo') }}</MiniActionButton>
-              <MiniActionButton variant="default" size="xs" @click="initRepoOpen = true">{{ t('git.ui.initialize') }}</MiniActionButton>
+              <MiniActionButton variant="default" size="xs" @click="initRepoOpen = true">{{
+                t('git.ui.initialize')
+              }}</MiniActionButton>
             </div>
           </div>
 

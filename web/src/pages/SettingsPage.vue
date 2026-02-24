@@ -601,7 +601,11 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
               </div>
               <div class="mt-3 flex items-center gap-2">
                 <Button variant="outline" :disabled="clearingBackendCache" @click="clearSessionCache">
-                  {{ clearingBackendCache ? t('settings.troubleshooting.clearing') : t('settings.troubleshooting.clearSessionCache') }}
+                  {{
+                    clearingBackendCache
+                      ? t('settings.troubleshooting.clearing')
+                      : t('settings.troubleshooting.clearSessionCache')
+                  }}
                 </Button>
               </div>
             </div>
@@ -696,7 +700,9 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
                     />
                   </label>
                   <label class="grid gap-1">
-                    <span class="text-xs text-muted-foreground">{{ t('settings.appearance.sizing.cornerRadius') }}</span>
+                    <span class="text-xs text-muted-foreground">{{
+                      t('settings.appearance.sizing.cornerRadius')
+                    }}</span>
                     <input
                       type="number"
                       min="0"
@@ -706,7 +712,9 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
                     />
                   </label>
                   <label class="grid gap-1">
-                    <span class="text-xs text-muted-foreground">{{ t('settings.appearance.sizing.inputBarOffset') }}</span>
+                    <span class="text-xs text-muted-foreground">{{
+                      t('settings.appearance.sizing.inputBarOffset')
+                    }}</span>
                     <input
                       type="number"
                       min="-40"
@@ -780,14 +788,22 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
                   </div>
 
                   <div class="mt-1">
-                    <div class="text-xs font-medium text-muted-foreground">{{ t('settings.appearance.chat.toolDetails') }}</div>
+                    <div class="text-xs font-medium text-muted-foreground">
+                      {{ t('settings.appearance.chat.toolDetails') }}
+                    </div>
                     <div class="mt-2 overflow-x-auto rounded-md border border-border/60">
                       <table class="min-w-full text-sm">
                         <thead class="bg-muted/30 text-xs text-muted-foreground">
                           <tr>
-                            <th class="px-3 py-2 text-left font-medium">{{ t('settings.appearance.chat.toolDetailsTable.tool') }}</th>
-                            <th class="px-3 py-2 text-center font-medium">{{ t('settings.appearance.chat.toolDetailsTable.transport') }}</th>
-                            <th class="px-3 py-2 text-center font-medium">{{ t('settings.appearance.chat.toolDetailsTable.expand') }}</th>
+                            <th class="px-3 py-2 text-left font-medium">
+                              {{ t('settings.appearance.chat.toolDetailsTable.tool') }}
+                            </th>
+                            <th class="px-3 py-2 text-center font-medium">
+                              {{ t('settings.appearance.chat.toolDetailsTable.transport') }}
+                            </th>
+                            <th class="px-3 py-2 text-center font-medium">
+                              {{ t('settings.appearance.chat.toolDetailsTable.expand') }}
+                            </th>
                           </tr>
                         </thead>
                         <tbody>

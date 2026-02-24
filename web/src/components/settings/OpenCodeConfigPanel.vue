@@ -925,13 +925,7 @@ export type OpenCodeConfigPanelProvidedContext = typeof panelContext
         </div>
 
         <div class="flex items-center gap-2 ml-auto">
-          <Button
-            variant="outline"
-            size="sm"
-            @click="resetDraft"
-            :disabled="resetDisabled"
-            :title="t('common.reset')"
-          >
+          <Button variant="outline" size="sm" @click="resetDraft" :disabled="resetDisabled" :title="t('common.reset')">
             <RiArrowGoBackLine class="h-4 w-4" />
           </Button>
 

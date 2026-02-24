@@ -128,7 +128,11 @@ export default defineComponent({
 
     <div v-if="isSectionOpen('mcp')" class="space-y-4">
       <div class="flex flex-wrap items-center gap-2">
-        <Input v-model="newMcpName" :placeholder="t('settings.opencodeConfig.sections.mcp.placeholders.serverName')" class="max-w-xs" />
+        <Input
+          v-model="newMcpName"
+          :placeholder="t('settings.opencodeConfig.sections.mcp.placeholders.serverName')"
+          class="max-w-xs"
+        />
         <Tooltip>
           <Button
             size="icon"
@@ -150,14 +154,14 @@ export default defineComponent({
         <div class="flex items-center justify-between">
           <div class="font-mono text-sm break-all">{{ mcpName }}</div>
           <Tooltip>
-              <Button
-                size="icon"
-                variant="ghost-destructive"
-                class="h-8 w-8"
-                :title="t('common.remove')"
-                :aria-label="t('settings.opencodeConfig.sections.mcp.actions.removeServerAria')"
-                @click="removeEntry('mcp', mcpName)"
-              >
+            <Button
+              size="icon"
+              variant="ghost-destructive"
+              class="h-8 w-8"
+              :title="t('common.remove')"
+              :aria-label="t('settings.opencodeConfig.sections.mcp.actions.removeServerAria')"
+              @click="removeEntry('mcp', mcpName)"
+            >
               <RiDeleteBinLine class="h-4 w-4" />
             </Button>
             <template #content>{{ t('common.remove') }}</template>
@@ -177,7 +181,9 @@ export default defineComponent({
 
         <template v-if="mcpType(mcp) === 'local'">
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.mcp.fields.command') }}</span>
+            <span class="text-xs text-muted-foreground">{{
+              t('settings.opencodeConfig.sections.mcp.fields.command')
+            }}</span>
             <StringListEditor
               :model-value="mcp.command || []"
               :suggestions="mcpCommandSuggestions"
@@ -190,7 +196,9 @@ export default defineComponent({
             />
           </label>
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.mcp.fields.timeoutMs') }}</span>
+            <span class="text-xs text-muted-foreground">{{
+              t('settings.opencodeConfig.sections.mcp.fields.timeoutMs')
+            }}</span>
             <input
               :value="mcp.timeout ?? ''"
               @input="
@@ -202,7 +210,9 @@ export default defineComponent({
             />
           </label>
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.mcp.fields.environmentJson') }}</span>
+            <span class="text-xs text-muted-foreground">{{
+              t('settings.opencodeConfig.sections.mcp.fields.environmentJson')
+            }}</span>
             <textarea
               v-model="
                 ensureJsonBuffer(
@@ -255,11 +265,15 @@ export default defineComponent({
 
         <template v-else-if="mcpType(mcp) === 'remote'">
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.mcp.fields.url') }}</span>
+            <span class="text-xs text-muted-foreground">{{
+              t('settings.opencodeConfig.sections.mcp.fields.url')
+            }}</span>
             <Input :model-value="mcp.url || ''" @update:model-value="(v) => setEntryField('mcp', mcpName, 'url', v)" />
           </label>
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.mcp.fields.timeoutMs') }}</span>
+            <span class="text-xs text-muted-foreground">{{
+              t('settings.opencodeConfig.sections.mcp.fields.timeoutMs')
+            }}</span>
             <input
               :value="mcp.timeout ?? ''"
               @input="
@@ -271,7 +285,9 @@ export default defineComponent({
             />
           </label>
           <label class="grid gap-1">
-            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.mcp.fields.headersJson') }}</span>
+            <span class="text-xs text-muted-foreground">{{
+              t('settings.opencodeConfig.sections.mcp.fields.headersJson')
+            }}</span>
             <textarea
               v-model="
                 ensureJsonBuffer(
@@ -321,7 +337,9 @@ export default defineComponent({
             </div>
           </label>
           <div class="grid gap-2">
-            <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.mcp.fields.oauth') }}</span>
+            <span class="text-xs text-muted-foreground">{{
+              t('settings.opencodeConfig.sections.mcp.fields.oauth')
+            }}</span>
             <OptionPicker
               :model-value="mcp.oauth === false ? 'disabled' : mcp.oauth ? 'config' : 'default'"
               @update:model-value="
@@ -347,21 +365,27 @@ export default defineComponent({
           </div>
           <div v-if="mcp.oauth && mcp.oauth !== false" class="grid gap-3 lg:grid-cols-3">
             <label class="grid gap-1">
-              <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.mcp.oauth.clientId') }}</span>
+              <span class="text-xs text-muted-foreground">{{
+                t('settings.opencodeConfig.sections.mcp.oauth.clientId')
+              }}</span>
               <Input
                 :model-value="mcp.oauth.clientId || ''"
                 @update:model-value="(v) => setEntryField('mcp', mcpName, 'oauth', { ...mcp.oauth, clientId: v })"
               />
             </label>
             <label class="grid gap-1">
-              <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.mcp.oauth.clientSecret') }}</span>
+              <span class="text-xs text-muted-foreground">{{
+                t('settings.opencodeConfig.sections.mcp.oauth.clientSecret')
+              }}</span>
               <Input
                 :model-value="mcp.oauth.clientSecret || ''"
                 @update:model-value="(v) => setEntryField('mcp', mcpName, 'oauth', { ...mcp.oauth, clientSecret: v })"
               />
             </label>
             <label class="grid gap-1">
-              <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.mcp.oauth.scope') }}</span>
+              <span class="text-xs text-muted-foreground">{{
+                t('settings.opencodeConfig.sections.mcp.oauth.scope')
+              }}</span>
               <Input
                 :model-value="mcp.oauth.scope || ''"
                 @update:model-value="(v) => setEntryField('mcp', mcpName, 'oauth', { ...mcp.oauth, scope: v })"

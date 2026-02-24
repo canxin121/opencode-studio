@@ -39,7 +39,9 @@ function onUpdateDraft(v: string | number) {
       />
       <div class="flex items-center justify-end gap-2">
         <Button variant="ghost" @click="$emit('update:open', false)">{{ t('common.cancel') }}</Button>
-        <Button @click="$emit('save')" :disabled="busy || !draft.trim()">{{ busy ? t('common.saving') : t('common.save') }}</Button>
+        <Button @click="$emit('save')" :disabled="busy || !draft.trim()">{{
+          busy ? t('common.saving') : t('common.save')
+        }}</Button>
       </div>
     </div>
   </FormDialog>
