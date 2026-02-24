@@ -692,6 +692,10 @@ pub(crate) async fn run(args: crate::Args) {
         .route("/git/revert", post(crate::git::git_revert))
         .route("/git/pull", post(crate::git::git_pull))
         .route("/git/push", post(crate::git::git_push))
+        .route(
+            "/git/create-github-repo-and-push",
+            post(crate::git::git_create_github_repo_and_push),
+        )
         .route("/git/fetch", post(crate::git::git_fetch))
         .route("/git/commit", post(crate::git::git_commit))
         .route("/git/undo-commit", post(crate::git::git_undo_commit))

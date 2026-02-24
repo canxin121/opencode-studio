@@ -3,6 +3,7 @@
 mod abort;
 mod continue_skip;
 mod fetch;
+mod gh_repo_push;
 mod merge_rebase;
 mod pull;
 mod push;
@@ -16,6 +17,10 @@ pub use continue_skip::{
     git_rebase_skip, git_revert_continue, git_revert_skip,
 };
 pub use fetch::{GitFetchBody, git_fetch};
+pub use gh_repo_push::{
+    GitCreateGithubRepoAndPushBody, GitCreateGithubRepoAndPushResult,
+    git_create_github_repo_and_push,
+};
 pub use merge_rebase::{GitMergeBody, GitRebaseBody, git_merge, git_rebase};
 pub use pull::{GitCommitSummary, GitPullBody, GitPullResult, git_pull};
 pub use push::{GitPushBody, GitPushResult, git_push};
