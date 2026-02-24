@@ -57,7 +57,9 @@ export default defineComponent({
 
 <template>
   <div class="grid gap-2">
-    <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.permissions.rules.title') }}</span>
+    <span class="text-xs text-muted-foreground">{{
+      t('settings.opencodeConfig.sections.permissions.rules.title')
+    }}</span>
     <div v-for="(group, gi) in permissionQuickGroups" :key="`perm-group:${gi}`" class="grid gap-3">
       <div class="grid gap-3 lg:grid-cols-3">
         <label v-for="item in group" :key="`perm:${item.key}`" class="grid gap-1">
@@ -79,9 +81,11 @@ export default defineComponent({
             >
               {{ t('settings.opencodeConfig.sections.permissions.rules.actions.editPatterns') }}
             </button>
-            <span v-if="permissionRuleValue(item.key) === 'pattern'" class="text-[11px] text-muted-foreground"
-              >{{ t('settings.opencodeConfig.sections.permissions.rules.rulesCount', { count: permissionPatternCount(item.key) }) }}</span
-            >
+            <span v-if="permissionRuleValue(item.key) === 'pattern'" class="text-[11px] text-muted-foreground">{{
+              t('settings.opencodeConfig.sections.permissions.rules.rulesCount', {
+                count: permissionPatternCount(item.key),
+              })
+            }}</span>
           </div>
 
           <div
@@ -89,9 +93,9 @@ export default defineComponent({
             class="mt-2 rounded-md border border-border p-3 space-y-2"
           >
             <div class="flex items-center justify-between">
-              <div class="font-mono text-xs break-all">{{
-                t('settings.opencodeConfig.sections.permissions.rules.patternMapTitle', { key: item.key })
-              }}</div>
+              <div class="font-mono text-xs break-all">
+                {{ t('settings.opencodeConfig.sections.permissions.rules.patternMapTitle', { key: item.key }) }}
+              </div>
               <div class="flex items-center gap-2">
                 <Tooltip>
                   <Button
@@ -104,7 +108,9 @@ export default defineComponent({
                   >
                     <RiAddLine class="h-4 w-4" />
                   </Button>
-                  <template #content>{{ t('settings.opencodeConfig.sections.permissions.rules.actions.addPattern') }}</template>
+                  <template #content>{{
+                    t('settings.opencodeConfig.sections.permissions.rules.actions.addPattern')
+                  }}</template>
                 </Tooltip>
                 <Tooltip>
                   <Button
@@ -201,7 +207,9 @@ export default defineComponent({
                 >
                   <RiCheckLine class="h-4 w-4" />
                 </Button>
-                <template #content>{{ t('settings.opencodeConfig.sections.permissions.rules.actions.applyPatterns') }}</template>
+                <template #content>{{
+                  t('settings.opencodeConfig.sections.permissions.rules.actions.applyPatterns')
+                }}</template>
               </Tooltip>
               <span v-if="permissionPatternEditors[item.key]?.error" class="text-xs text-destructive">{{
                 permissionPatternEditors[item.key]?.error

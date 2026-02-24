@@ -291,7 +291,9 @@ async function rejectQuestion() {
       <div class="flex items-start justify-between gap-3">
         <div class="min-w-0">
           <div class="typography-ui-label font-semibold">
-            {{ kind === 'permission' ? t('chat.attention.title.permissionRequired') : t('chat.attention.title.question') }}
+            {{
+              kind === 'permission' ? t('chat.attention.title.permissionRequired') : t('chat.attention.title.question')
+            }}
           </div>
           <div class="typography-micro text-muted-foreground">
             {{
@@ -414,7 +416,9 @@ async function rejectQuestion() {
             <RiArrowLeftSLine class="h-4 w-4" />
           </Button>
           <div class="inline-flex items-center gap-1.5 text-[11px] font-mono text-muted-foreground">
-            <span>{{ t('chat.attention.ui.questionPager', { current: questionIndex + 1, total: questionCount }) }}</span>
+            <span>{{
+              t('chat.attention.ui.questionPager', { current: questionIndex + 1, total: questionCount })
+            }}</span>
             <RiCheckLine v-if="currentQuestionAnswered" class="h-3.5 w-3.5 text-emerald-500" />
           </div>
           <Button

@@ -31,7 +31,9 @@ export default defineComponent({
   <section id="enterprise" class="scroll-mt-24 rounded-lg border border-border bg-background p-4 space-y-4">
     <div class="flex items-start justify-between gap-3">
       <div class="min-w-0">
-        <div class="text-base font-semibold leading-snug">{{ t('settings.opencodeConfig.sections.enterprise.title') }}</div>
+        <div class="text-base font-semibold leading-snug">
+          {{ t('settings.opencodeConfig.sections.enterprise.title') }}
+        </div>
       </div>
       <div class="flex items-center gap-2">
         <Tooltip>
@@ -71,7 +73,9 @@ export default defineComponent({
     </div>
     <div v-if="isSectionOpen('enterprise')" class="grid gap-3">
       <label class="grid gap-1">
-        <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.enterprise.fields.enterpriseUrl') }}</span>
+        <span class="text-xs text-muted-foreground">{{
+          t('settings.opencodeConfig.sections.enterprise.fields.enterpriseUrl')
+        }}</span>
         <Input
           v-model="enterpriseUrl"
           :placeholder="t('settings.opencodeConfig.sections.enterprise.placeholders.enterpriseUrl')"

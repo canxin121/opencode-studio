@@ -74,8 +74,12 @@ const selectedInfo = computed(() => props.remotes.find((r) => r.name === props.s
   >
     <div class="space-y-4">
       <div class="flex items-center justify-between">
-        <div class="text-xs font-medium text-muted-foreground">{{ t('git.ui.dialogs.remotes.sections.addRemote') }}</div>
-        <Button variant="secondary" size="sm" :disabled="remotesLoading" @click="$emit('refresh')">{{ t('common.refresh') }}</Button>
+        <div class="text-xs font-medium text-muted-foreground">
+          {{ t('git.ui.dialogs.remotes.sections.addRemote') }}
+        </div>
+        <Button variant="secondary" size="sm" :disabled="remotesLoading" @click="$emit('refresh')">{{
+          t('common.refresh')
+        }}</Button>
       </div>
 
       <div class="grid gap-2 lg:grid-cols-[140px_1fr_auto]">
@@ -91,11 +95,15 @@ const selectedInfo = computed(() => props.remotes.find((r) => r.name === props.s
           placeholder="https://github.com/org/repo.git"
           @update:model-value="(v) => onUpdateText('newRemoteUrl', v)"
         />
-        <Button size="sm" :disabled="!newRemoteName.trim() || !newRemoteUrl.trim()" @click="$emit('add')">{{ t('common.add') }}</Button>
+        <Button size="sm" :disabled="!newRemoteName.trim() || !newRemoteUrl.trim()" @click="$emit('add')">{{
+          t('common.add')
+        }}</Button>
       </div>
 
       <div class="grid gap-2">
-        <div class="text-xs font-medium text-muted-foreground">{{ t('git.ui.dialogs.remotes.sections.manageRemote') }}</div>
+        <div class="text-xs font-medium text-muted-foreground">
+          {{ t('git.ui.dialogs.remotes.sections.manageRemote') }}
+        </div>
         <OptionPicker
           :model-value="selectedRemote"
           :options="remotePickerOptions"
@@ -117,9 +125,9 @@ const selectedInfo = computed(() => props.remotes.find((r) => r.name === props.s
             :placeholder="t('git.ui.dialogs.remotes.placeholders.newRemoteName')"
             @update:model-value="(v) => onUpdateText('renameRemoteTo', v)"
           />
-          <Button size="sm" :disabled="!selectedRemote.trim() || !renameRemoteTo.trim()" @click="$emit('rename')"
-            >{{ t('common.rename') }}</Button
-          >
+          <Button size="sm" :disabled="!selectedRemote.trim() || !renameRemoteTo.trim()" @click="$emit('rename')">{{
+            t('common.rename')
+          }}</Button>
         </div>
 
         <div class="grid gap-2 lg:grid-cols-[1fr_auto]">
@@ -129,9 +137,9 @@ const selectedInfo = computed(() => props.remotes.find((r) => r.name === props.s
             :placeholder="t('git.ui.dialogs.remotes.placeholders.newRemoteUrl')"
             @update:model-value="(v) => onUpdateText('setRemoteUrl', v)"
           />
-          <Button size="sm" :disabled="!selectedRemote.trim() || !setRemoteUrl.trim()" @click="$emit('setUrl')"
-            >{{ t('git.ui.dialogs.remotes.actions.setUrl') }}</Button
-          >
+          <Button size="sm" :disabled="!selectedRemote.trim() || !setRemoteUrl.trim()" @click="$emit('setUrl')">{{
+            t('git.ui.dialogs.remotes.actions.setUrl')
+          }}</Button>
         </div>
 
         <div class="flex flex-wrap gap-2">
@@ -162,7 +170,9 @@ const selectedInfo = computed(() => props.remotes.find((r) => r.name === props.s
         <div v-if="remotesError" class="p-3 text-xs text-red-500">{{ remotesError }}</div>
         <div v-else-if="remotesLoading" class="p-3 text-xs text-muted-foreground">{{ t('common.loading') }}</div>
         <ScrollArea v-else class="h-40">
-          <div v-if="!remotes.length" class="p-3 text-xs text-muted-foreground">{{ t('git.ui.dialogs.remotes.empty') }}</div>
+          <div v-if="!remotes.length" class="p-3 text-xs text-muted-foreground">
+            {{ t('git.ui.dialogs.remotes.empty') }}
+          </div>
           <div v-else class="divide-y divide-border/40">
             <button
               v-for="r in remotes"

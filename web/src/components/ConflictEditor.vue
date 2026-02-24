@@ -177,7 +177,9 @@ onMounted(() => void load())
             {{ t('common.next') }}
           </Button>
         </div>
-        <Button variant="secondary" size="sm" class="h-8" :disabled="loading" @click="load">{{ t('common.refresh') }}</Button>
+        <Button variant="secondary" size="sm" class="h-8" :disabled="loading" @click="load">{{
+          t('common.refresh')
+        }}</Button>
         <Button
           variant="secondary"
           size="sm"
@@ -224,7 +226,9 @@ onMounted(() => void load())
         <Button variant="secondary" size="sm" class="h-8" :disabled="loading || !hasMarkers" @click="resolve('both')">
           {{ t('git.ui.conflictEditor.actions.takeBoth') }}
         </Button>
-        <Button size="sm" class="h-8" :disabled="loading || !hasMarkers" @click="resolve('manual')">{{ t('common.apply') }}</Button>
+        <Button size="sm" class="h-8" :disabled="loading || !hasMarkers" @click="resolve('manual')">{{
+          t('common.apply')
+        }}</Button>
         <Button
           v-if="conflictTotal > 1"
           size="sm"
@@ -233,7 +237,9 @@ onMounted(() => void load())
           @click="resolve('manual', true)"
           >{{ t('git.ui.conflictEditor.actions.applyAndNext') }}</Button
         >
-        <Button variant="secondary" size="sm" class="h-8" :disabled="loading" @click="$emit('fallbackDiff')">{{ t('git.ui.conflictEditor.actions.openDiff') }}</Button>
+        <Button variant="secondary" size="sm" class="h-8" :disabled="loading" @click="$emit('fallbackDiff')">{{
+          t('git.ui.conflictEditor.actions.openDiff')
+        }}</Button>
       </div>
     </div>
 
@@ -266,7 +272,9 @@ onMounted(() => void load())
         </template>
       </div>
       <div class="ce-empty-actions">
-        <Button variant="secondary" size="sm" class="h-8" :disabled="loading" @click="$emit('fallbackDiff')">{{ t('git.ui.conflictEditor.actions.openDiff') }}</Button>
+        <Button variant="secondary" size="sm" class="h-8" :disabled="loading" @click="$emit('fallbackDiff')">{{
+          t('git.ui.conflictEditor.actions.openDiff')
+        }}</Button>
       </div>
     </div>
 
@@ -297,19 +305,22 @@ onMounted(() => void load())
         <div class="ce-cols" :class="{ 'ce-cols--three': hasBase }">
           <div class="ce-col">
             <div class="ce-col-title">
-              {{ t('git.ui.conflictEditor.labels.ours') }} <span v-if="b.oursLabel" class="ce-col-label">{{ b.oursLabel }}</span>
+              {{ t('git.ui.conflictEditor.labels.ours') }}
+              <span v-if="b.oursLabel" class="ce-col-label">{{ b.oursLabel }}</span>
             </div>
             <pre class="ce-code">{{ b.ours }}</pre>
           </div>
           <div v-if="hasBase" class="ce-col">
             <div class="ce-col-title">
-              {{ t('git.ui.conflictEditor.labels.base') }} <span v-if="b.baseLabel" class="ce-col-label">{{ b.baseLabel }}</span>
+              {{ t('git.ui.conflictEditor.labels.base') }}
+              <span v-if="b.baseLabel" class="ce-col-label">{{ b.baseLabel }}</span>
             </div>
             <pre class="ce-code">{{ b.base }}</pre>
           </div>
           <div class="ce-col">
             <div class="ce-col-title">
-              {{ t('git.ui.conflictEditor.labels.theirs') }} <span v-if="b.theirsLabel" class="ce-col-label">{{ b.theirsLabel }}</span>
+              {{ t('git.ui.conflictEditor.labels.theirs') }}
+              <span v-if="b.theirsLabel" class="ce-col-label">{{ b.theirsLabel }}</span>
             </div>
             <pre class="ce-code">{{ b.theirs }}</pre>
           </div>
