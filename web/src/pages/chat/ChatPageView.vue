@@ -59,6 +59,7 @@ const {
   ui,
   attachedFiles,
   attachmentsBusy,
+  attachmentsPanelOpen,
   draft,
   chatSidebarPluginMounts,
   chatOverlayBottomPluginMounts,
@@ -118,6 +119,9 @@ const {
   clearAttachments,
   openFilePicker,
   openProjectAttachDialog,
+  toggleAttachmentsPanel,
+  setAttachmentsPanelOpen,
+  closeAttachmentsPanel,
 
   // Header actions.
   canAbort,
@@ -187,7 +191,6 @@ const {
   handleUnrevertFromRevertMarker,
 } = ctx
 
-const attachmentsPanelOpen = ref(false)
 const attachmentsTriggerRef = ref<HTMLElement | null>(null)
 
 const attachmentsCount = computed(() => {
@@ -200,20 +203,6 @@ const attachmentsCountLabel = computed(() => {
   if (n > 99) return '99+'
   return String(n)
 })
-
-function closeAttachmentsPanel() {
-  attachmentsPanelOpen.value = false
-}
-
-function toggleAttachmentsPanel() {
-  const next = !attachmentsPanelOpen.value
-  attachmentsPanelOpen.value = next
-  if (!next) return
-
-  // Avoid stacking multiple pickers/menus.
-  closeComposerActionMenu()
-  setComposerPickerOpen(false)
-}
 
 function handleAttachProjectFromPanel() {
   closeAttachmentsPanel()
@@ -750,7 +739,7 @@ void sessionActionsMenuRef
     :attached-files="attachedFiles"
     :busy="attachmentsBusy"
     :format-bytes="formatBytes"
-    @update:open="(v) => (attachmentsPanelOpen = v)"
+    @update:open="setAttachmentsPanelOpen"
     @remove="removeAttachment"
     @clear="clearAttachments"
     @attachLocal="openFilePicker"

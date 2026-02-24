@@ -27,6 +27,7 @@ import { useChatModelSelection } from './chat/useChatModelSelection'
 import { useChatCommands } from './chat/useChatCommands'
 import { useChatSessionActions } from './chat/useChatSessionActions'
 import { useChatRunUi } from './chat/useChatRunUi'
+import { openComposerInputMenu } from './chat/composerInputMenus'
 import { formatTimeHM } from '@/i18n/intl'
 import { useChatRenderBlocks } from './chat/useChatRenderBlocks'
 import { useChatMessageActions } from './chat/useChatMessageActions'
@@ -116,6 +117,7 @@ const sessionActionsMenuRef = ref<OptionMenuExpose | null>(null)
 const composerActionMenuOpen = ref(false)
 const composerActionMenuQuery = ref('')
 const composerActionMenuAnchorRef = ref<HTMLElement | null>(null)
+const attachmentsPanelOpen = ref(false)
 
 const composerActionItems = computed<ComposerActionItem[]>(() => [
   {
@@ -248,7 +250,13 @@ modelSelection = useChatModelSelection({
   variantTriggerRef,
   modelPickerQuery,
   agentPickerQuery,
-  closeComposerActionMenu,
+  onOpenComposerPicker: () => {
+    openComposerInputMenu('picker', {
+      closeAttachments: closeAttachmentsPanel,
+      closeActions: closeComposerActionMenu,
+      closePicker: closeComposerPickerMenu,
+    })
+  },
   commandOpen,
   commandQuery,
   commandIndex,
@@ -430,6 +438,27 @@ function closeComposerPickerMenu() {
   modelPickerQuery.value = ''
   agentPickerQuery.value = ''
   variantPickerQuery.value = ''
+}
+
+function closeAttachmentsPanel() {
+  attachmentsPanelOpen.value = false
+}
+
+function setAttachmentsPanelOpen(next: boolean) {
+  if (!next) {
+    closeAttachmentsPanel()
+    return
+  }
+  openComposerInputMenu('attachments', {
+    closeAttachments: closeAttachmentsPanel,
+    closeActions: closeComposerActionMenu,
+    closePicker: closeComposerPickerMenu,
+  })
+  attachmentsPanelOpen.value = true
+}
+
+function toggleAttachmentsPanel() {
+  setAttachmentsPanelOpen(!attachmentsPanelOpen.value)
 }
 
 function setComposerPickerOpen(next: boolean) {
@@ -846,13 +875,17 @@ function toggleComposerActionMenu(event?: MouseEvent | PointerEvent) {
     closeComposerActionMenu()
     return
   }
+  openComposerInputMenu('actions', {
+    closeAttachments: closeAttachmentsPanel,
+    closeActions: closeComposerActionMenu,
+    closePicker: closeComposerPickerMenu,
+  })
   composerActionMenuOpen.value = true
   composerActionMenuAnchorRef.value = event?.currentTarget instanceof HTMLElement ? event.currentTarget : null
   composerActionMenuQuery.value = ''
   commandOpen.value = false
   commandQuery.value = ''
   commandIndex.value = 0
-  closeComposerPickerMenu()
   // Desktop: focus search for quick filtering. Mobile: don't auto-focus (avoid IME popup).
   if (!ui.isMobilePointer) {
     void nextTick(() => sessionActionsMenuRef.value?.focusSearch?.())
@@ -1279,6 +1312,7 @@ const viewCtx = {
   draft,
   attachedFiles,
   attachmentsBusy,
+  attachmentsPanelOpen,
   formatBytes,
   handleDrop,
   handlePaste,
@@ -1289,6 +1323,9 @@ const viewCtx = {
   clearAttachments,
   openFilePicker,
   openProjectAttachDialog,
+  toggleAttachmentsPanel,
+  setAttachmentsPanelOpen,
+  closeAttachmentsPanel,
   composerFullscreenActive,
   composerSplitTopCollapsed,
   composerTargetHeight,
