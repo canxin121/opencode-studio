@@ -423,11 +423,11 @@ onBeforeUnmount(() => {
         v-if="diffPanelOpen"
         class="pointer-events-auto w-full rounded-lg border border-border/70 bg-background/95 shadow-lg backdrop-blur overflow-hidden"
       >
-        <div class="flex items-center justify-between gap-2 px-3 py-0.5 border-b border-border/60">
+        <div class="flex items-center justify-between gap-2 px-3 py-1 border-b border-border/60">
           <div class="text-xs font-medium leading-4 text-foreground">{{ t('chat.sessionDiff.panelTitle') }}</div>
           <IconButton
-            size="sm"
-            class="text-muted-foreground hover:text-foreground"
+            size="lg"
+            class="h-9 w-9 text-muted-foreground hover:text-foreground"
             :title="t('chat.sessionDiff.close')"
             :aria-label="t('chat.sessionDiff.close')"
             data-testid="session-diff-close-button"
