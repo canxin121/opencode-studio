@@ -88,8 +88,7 @@ function short(text: MetaValue, max = 72): string {
 
 const summary = computed(() => {
   const p = asRecord(props.part)
-  if (kind.value === 'snapshot' && typeof p.snapshot === 'string')
-    return short(p.snapshot)
+  if (kind.value === 'snapshot' && typeof p.snapshot === 'string') return short(p.snapshot)
   if (kind.value === 'patch') {
     const files = Array.isArray(p.files)
       ? p.files.length

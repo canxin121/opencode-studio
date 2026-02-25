@@ -40,13 +40,7 @@ export type KnownChatToolActivityType =
 
 export type ChatToolActivityType = KnownChatToolActivityType | (string & {})
 
-export const DEFAULT_CHAT_ACTIVITY_FILTERS: ChatActivityType[] = [
-  'tool',
-  'snapshot',
-  'patch',
-  'retry',
-  'compaction',
-]
+export const DEFAULT_CHAT_ACTIVITY_FILTERS: ChatActivityType[] = ['tool', 'snapshot', 'patch', 'retry', 'compaction']
 
 export const DEFAULT_CHAT_ACTIVITY_EXPAND_KEYS: ChatActivityExpandKey[] = [
   'snapshot',

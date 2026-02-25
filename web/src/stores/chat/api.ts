@@ -74,12 +74,12 @@ function firstCount(record: JsonObject, keys: string[]): number {
 function looksLikeSessionFileDiffRecord(record: JsonObject): boolean {
   return Boolean(
     firstText(record, ['file', 'path', 'filename', 'name', 'target']) ||
-      typeof record.before === 'string' ||
-      typeof record.after === 'string' ||
-      typeof record.patch === 'string' ||
-      typeof record.diff === 'string' ||
-      typeof record.additions === 'number' ||
-      typeof record.deletions === 'number',
+    typeof record.before === 'string' ||
+    typeof record.after === 'string' ||
+    typeof record.patch === 'string' ||
+    typeof record.diff === 'string' ||
+    typeof record.additions === 'number' ||
+    typeof record.deletions === 'number',
   )
 }
 
@@ -92,7 +92,19 @@ function readSessionDiffItems(value: JsonValue, depth = 0): JsonValue[] {
 
   if (looksLikeSessionFileDiffRecord(record)) return [record]
 
-  const wrapperKeys = ['files', 'changes', 'diff', 'diffs', 'entries', 'items', 'list', 'value', 'data', 'payload', 'result']
+  const wrapperKeys = [
+    'files',
+    'changes',
+    'diff',
+    'diffs',
+    'entries',
+    'items',
+    'list',
+    'value',
+    'data',
+    'payload',
+    'result',
+  ]
   for (const key of wrapperKeys) {
     const items = readSessionDiffItems(record[key], depth + 1)
     if (items.length) return items

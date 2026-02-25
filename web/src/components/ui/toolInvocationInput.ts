@@ -26,7 +26,9 @@ export function resolveToolInputDisplay(
   text: string
   lang: string
 } {
-  const t = String(toolName || '').trim().toLowerCase()
+  const t = String(toolName || '')
+    .trim()
+    .toLowerCase()
   const inp = asRecord(input)
 
   if (t === 'bash' && typeof inp.command === 'string' && inp.command) {
