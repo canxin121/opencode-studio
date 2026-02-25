@@ -100,7 +100,9 @@ export interface GitSigningInfoResponse {
   sshSigningKey?: string | null
   sshAuthSockPresent: boolean
   sshAgentHasKeys: boolean
+  sshSigningAvailable: boolean
   sshAgentError?: string | null
+  sshSigningProbeError?: string | null
 }
 
 export interface GitStateResponse {

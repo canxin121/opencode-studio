@@ -15,6 +15,7 @@ use tokio::process::Command;
 use super::utils::git_config_get;
 use super::{
     DirectoryQuery, lock_repo, map_git_failure, require_directory, require_directory_raw, run_git,
+    run_git_env,
 };
 
 #[derive(Debug, Serialize)]
@@ -384,8 +385,11 @@ pub struct GitSigningInfoResponse {
     pub ssh_signing_key: Option<String>,
     pub ssh_auth_sock_present: bool,
     pub ssh_agent_has_keys: bool,
+    pub ssh_signing_available: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ssh_agent_error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ssh_signing_probe_error: Option<String>,
 }
 
 pub async fn git_signing_info(Query(q): Query<DirectoryQuery>) -> Response {
@@ -427,6 +431,23 @@ pub async fn git_signing_info(Query(q): Query<DirectoryQuery>) -> Response {
 
     let (ssh_auth_sock_present, ssh_agent_has_keys, ssh_agent_error) = ssh_agent_probe().await;
 
+    let probe_result = if commit_gpgsign && gpg_format.trim().eq_ignore_ascii_case("ssh") {
+        Some(
+            ssh_signing_probe(
+                &gpg_format,
+                signing_key.as_deref(),
+                gpg_program.as_deref(),
+                ssh_signing_key.as_deref(),
+            )
+            .await,
+        )
+    } else {
+        None
+    };
+
+    let (ssh_signing_available, ssh_signing_probe_error) =
+        resolve_ssh_signing_status(ssh_auth_sock_present, ssh_agent_has_keys, probe_result);
+
     Json(GitSigningInfoResponse {
         commit_gpgsign,
         gpg_format: gpg_format.trim().to_string(),
@@ -435,9 +456,104 @@ pub async fn git_signing_info(Query(q): Query<DirectoryQuery>) -> Response {
         ssh_signing_key,
         ssh_auth_sock_present,
         ssh_agent_has_keys,
+        ssh_signing_available,
         ssh_agent_error,
+        ssh_signing_probe_error,
     })
     .into_response()
+}
+
+fn resolve_ssh_signing_status(
+    ssh_auth_sock_present: bool,
+    ssh_agent_has_keys: bool,
+    probe_result: Option<(bool, Option<String>)>,
+) -> (bool, Option<String>) {
+    if let Some((available, error)) = probe_result {
+        return (available, error);
+    }
+    (ssh_auth_sock_present && ssh_agent_has_keys, None)
+}
+
+async fn ssh_signing_probe(
+    gpg_format: &str,
+    signing_key: Option<&str>,
+    gpg_program: Option<&str>,
+    ssh_signing_key: Option<&str>,
+) -> (bool, Option<String>) {
+    let temp_dir = match tempfile::tempdir() {
+        Ok(dir) => dir,
+        Err(err) => {
+            return (
+                false,
+                Some(format!("unable to create probe repository: {err}")),
+            );
+        }
+    };
+
+    let (init_code, _init_out, init_err) = run_git(temp_dir.path(), &["init", "-q"])
+        .await
+        .unwrap_or((1, "".to_string(), "failed to run git init".to_string()));
+    if init_code != 0 {
+        let msg = init_err.trim();
+        if msg.is_empty() {
+            return (
+                false,
+                Some("git init failed during SSH signing probe".to_string()),
+            );
+        }
+        return (false, Some(msg.to_string()));
+    }
+
+    let mut args = vec![
+        "-c".to_string(),
+        "user.name=OpenCode Studio SSH Probe".to_string(),
+        "-c".to_string(),
+        "user.email=opencode-studio-ssh-probe@example.invalid".to_string(),
+        "-c".to_string(),
+        "commit.gpgsign=true".to_string(),
+        "-c".to_string(),
+        format!("gpg.format={}", gpg_format.trim()),
+    ];
+
+    if let Some(v) = signing_key.map(str::trim).filter(|v| !v.is_empty()) {
+        args.push("-c".to_string());
+        args.push(format!("user.signingkey={v}"));
+    }
+    if let Some(v) = gpg_program.map(str::trim).filter(|v| !v.is_empty()) {
+        args.push("-c".to_string());
+        args.push(format!("gpg.program={v}"));
+    }
+    if let Some(v) = ssh_signing_key.map(str::trim).filter(|v| !v.is_empty()) {
+        args.push("-c".to_string());
+        args.push(format!("ssh.signingkey={v}"));
+    }
+
+    args.push("commit".to_string());
+    args.push("--allow-empty".to_string());
+    args.push("--no-verify".to_string());
+    args.push("-S".to_string());
+    args.push("-m".to_string());
+    args.push("opencode ssh signing probe".to_string());
+
+    let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
+    let env = [("LC_ALL", "C")];
+
+    let (code, out, err) = run_git_env(temp_dir.path(), &arg_refs, &env)
+        .await
+        .unwrap_or((1, "".to_string(), "failed to run signing probe".to_string()));
+
+    if code == 0 {
+        return (true, None);
+    }
+
+    let msg = err
+        .lines()
+        .chain(out.lines())
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .map(|line| line.to_string())
+        .unwrap_or_else(|| "SSH signing probe failed".to_string());
+    (false, Some(msg))
 }
 
 async fn ssh_agent_probe() -> (bool, bool, Option<String>) {
@@ -475,6 +591,33 @@ async fn ssh_agent_probe() -> (bool, bool, Option<String>) {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let has_keys = stdout.lines().any(|l| !l.trim().is_empty());
     (true, has_keys, None)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_ssh_signing_status;
+
+    #[test]
+    fn signing_probe_success_overrides_agent_heuristic() {
+        let (available, error) = resolve_ssh_signing_status(false, false, Some((true, None)));
+        assert!(available);
+        assert_eq!(error, None);
+    }
+
+    #[test]
+    fn signing_probe_failure_preserves_warning() {
+        let (available, error) =
+            resolve_ssh_signing_status(true, true, Some((false, Some("probe failed".to_string()))));
+        assert!(!available);
+        assert_eq!(error.as_deref(), Some("probe failed"));
+    }
+
+    #[test]
+    fn fallback_uses_agent_heuristic_without_probe() {
+        let (available, error) = resolve_ssh_signing_status(true, false, None);
+        assert!(!available);
+        assert_eq!(error, None);
+    }
 }
 
 #[derive(Debug, Serialize)]
