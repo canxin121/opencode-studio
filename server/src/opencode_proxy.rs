@@ -3673,9 +3673,15 @@ mod tests {
     fn should_sanitize_chat_session_response_skips_session_diff() {
         assert!(should_sanitize_chat_session_response("session"));
         assert!(should_sanitize_chat_session_response("session/ses_123"));
-        assert!(!should_sanitize_chat_session_response("session/ses_123/message"));
-        assert!(!should_sanitize_chat_session_response("session/ses_123/diff"));
-        assert!(!should_sanitize_chat_session_response("/session/ses_123/diff/"));
+        assert!(!should_sanitize_chat_session_response(
+            "session/ses_123/message"
+        ));
+        assert!(!should_sanitize_chat_session_response(
+            "session/ses_123/diff"
+        ));
+        assert!(!should_sanitize_chat_session_response(
+            "/session/ses_123/diff/"
+        ));
     }
 
     #[test]
