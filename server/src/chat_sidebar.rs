@@ -89,12 +89,7 @@ struct SessionSummariesByIdsResponse {
 }
 
 fn normalize_path_for_match(path: &str) -> Option<String> {
-    let normalized = crate::path_utils::normalize_directory_path(path);
-    let trimmed = normalized.trim();
-    if trimmed.is_empty() {
-        return None;
-    }
-    Some(trimmed.replace('\\', "/").trim_end_matches('/').to_string())
+    crate::path_utils::normalize_directory_for_match(path)
 }
 
 fn parse_limit(raw: Option<usize>, default_limit: usize, max_limit: usize) -> usize {
@@ -445,6 +440,18 @@ mod tests {
     fn normalize_path_for_match_trims_and_normalizes() {
         let normalized = normalize_path_for_match("/tmp/demo//").expect("normalized");
         assert_eq!(normalized, "/tmp/demo");
+    }
+
+    #[test]
+    fn normalize_path_for_match_windows_drive_is_case_insensitive() {
+        let normalized = normalize_path_for_match("C:\\Users\\Alice\\Repo\\").expect("normalized");
+        assert_eq!(normalized, "c:/users/alice/repo");
+    }
+
+    #[test]
+    fn normalize_path_for_match_linux_remains_case_sensitive() {
+        let normalized = normalize_path_for_match("/home/Alice/Repo/").expect("normalized");
+        assert_eq!(normalized, "/home/Alice/Repo");
     }
 
     #[test]

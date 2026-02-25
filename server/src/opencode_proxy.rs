@@ -512,17 +512,7 @@ pub(crate) async fn proxy_opencode_rest_inner(
                     };
 
                     // Resolve ~ and relative paths.
-                    let resolved = if server_path == "~" {
-                        std::env::var("HOME").unwrap_or_else(|_| server_path.clone())
-                    } else if let Some(rest) = server_path.strip_prefix("~/") {
-                        if let Ok(home) = std::env::var("HOME") {
-                            format!("{}/{}", home.trim_end_matches('/'), rest)
-                        } else {
-                            server_path.clone()
-                        }
-                    } else {
-                        server_path.clone()
-                    };
+                    let resolved = crate::path_utils::normalize_directory_path(&server_path);
 
                     let mut abs = std::path::PathBuf::from(&resolved);
                     if !abs.is_absolute() {

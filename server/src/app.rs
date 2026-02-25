@@ -15,7 +15,7 @@ use futures_util::stream::{self as futures_stream, StreamExt as _};
 use serde::Serialize;
 use tokio::sync::RwLock;
 use tower_http::{
-    cors::{AllowOrigin, CorsLayer},
+    cors::{AllowOrigin, Any, CorsLayer},
     limit::RequestBodyLimitLayer,
     services::{ServeDir, ServeFile},
     trace::TraceLayer,
@@ -27,6 +27,7 @@ pub(crate) struct AppState {
     pub(crate) ui_auth: crate::ui_auth::UiAuth,
     pub(crate) ui_cookie_same_site: SameSite,
     pub(crate) cors_allowed_origins: Vec<String>,
+    pub(crate) cors_allow_all: bool,
     pub(crate) opencode: Arc<crate::opencode::OpenCodeManager>,
     pub(crate) plugin_runtime: Arc<crate::plugin_runtime::PluginRuntime>,
     pub(crate) terminal: Arc<crate::terminal::TerminalManager>,
@@ -214,7 +215,35 @@ pub(crate) async fn run(args: crate::Args) {
         Some(url.origin().ascii_serialization())
     }
 
-    fn build_cors_layer(origins: &[String]) -> Option<CorsLayer> {
+    fn build_cors_layer(origins: &[String], allow_all: bool) -> Option<CorsLayer> {
+        let allow_headers = [
+            header::ACCEPT,
+            header::CONTENT_TYPE,
+            header::AUTHORIZATION,
+            header::IF_MATCH,
+            header::IF_NONE_MATCH,
+            header::HeaderName::from_static("last-event-id"),
+        ];
+        let allow_methods = [
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::DELETE,
+            Method::PATCH,
+            Method::OPTIONS,
+        ];
+
+        if allow_all {
+            return Some(
+                CorsLayer::new()
+                    .allow_origin(Any)
+                    .allow_credentials(false)
+                    .allow_headers(allow_headers)
+                    .allow_methods(allow_methods)
+                    .max_age(std::time::Duration::from_secs(60 * 60)),
+            );
+        }
+
         if origins.is_empty() {
             return None;
         }
@@ -235,21 +264,6 @@ pub(crate) async fn run(args: crate::Args) {
         if values.is_empty() {
             return None;
         }
-
-        let allow_headers = [
-            header::ACCEPT,
-            header::CONTENT_TYPE,
-            header::AUTHORIZATION,
-            header::HeaderName::from_static("last-event-id"),
-        ];
-        let allow_methods = [
-            Method::GET,
-            Method::POST,
-            Method::PUT,
-            Method::DELETE,
-            Method::PATCH,
-            Method::OPTIONS,
-        ];
 
         Some(
             CorsLayer::new()
@@ -276,9 +290,17 @@ pub(crate) async fn run(args: crate::Args) {
     normalized_cors_origins.sort();
     normalized_cors_origins.dedup();
 
+    if args.cors_allow_all && !normalized_cors_origins.is_empty() {
+        tracing::warn!(
+            target: "opencode_studio.cors",
+            origins = %normalized_cors_origins.len(),
+            "CORS allow-all enabled; explicit origins are ignored"
+        );
+    }
+
     let ui_cookie_same_site = match args.ui_cookie_samesite {
         crate::UiCookieSameSite::Auto => {
-            if normalized_cors_origins.is_empty() {
+            if normalized_cors_origins.is_empty() && !args.cors_allow_all {
                 SameSite::Strict
             } else {
                 SameSite::None
@@ -350,6 +372,7 @@ pub(crate) async fn run(args: crate::Args) {
         ui_auth,
         ui_cookie_same_site,
         cors_allowed_origins: normalized_cors_origins.clone(),
+        cors_allow_all: args.cors_allow_all,
         opencode,
         plugin_runtime,
         terminal,
@@ -787,12 +810,16 @@ pub(crate) async fn run(args: crate::Args) {
         .with_state(state)
         .layer(TraceLayer::new_for_http());
 
-    if let Some(cors) = build_cors_layer(&normalized_cors_origins) {
-        tracing::info!(
-            target: "opencode_studio.cors",
-            origins = %normalized_cors_origins.len(),
-            "CORS enabled"
-        );
+    if let Some(cors) = build_cors_layer(&normalized_cors_origins, args.cors_allow_all) {
+        if args.cors_allow_all {
+            tracing::info!(target: "opencode_studio.cors", "CORS enabled (allow all)");
+        } else {
+            tracing::info!(
+                target: "opencode_studio.cors",
+                origins = %normalized_cors_origins.len(),
+                "CORS enabled"
+            );
+        }
         app = app.layer(cors);
     }
 

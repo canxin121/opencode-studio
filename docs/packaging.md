@@ -6,7 +6,7 @@ Repository layout:
 
 - `web/`: Vue app (Vite) -> `web/dist`
 - `server/`: Rust Axum server binary (`opencode-studio`)
-- `desktop/`: Tauri desktop packaging (frontend-only + full app)
+- `desktop/`: Tauri desktop packaging (full app)
 
 ## Artifacts
 
@@ -22,13 +22,7 @@ Repository layout:
 - Use cases: run as a service on a machine; optionally serve UI with `--ui-dir`.
 - Produced by: `cargo build --manifest-path server/Cargo.toml --release`.
 
-3) `frontend-only-app` (desktop)
-
-- What: a desktop app that *only* embeds the frontend (no bundled Rust server sidecar).
-- Use cases: connect the UI to a remote/local server, or run the server separately.
-- Built from: `desktop/src-tauri/tauri.conf.frontend.json`.
-
-4) `full-app` (desktop)
+3) `full-app` (desktop)
 
 - What: one desktop installer/bundle that includes:
   - the frontend UI
@@ -63,40 +57,6 @@ Output:
 - Linux/macOS: `server/target/release/opencode-studio`
 - Windows: `server/target/release/opencode-studio.exe`
 
-### Build `frontend-only-app`
-
-Prereqs:
-
-- Rust toolchain
-- Bun
-- Linux: install Tauri deps (GTK/WebKitGTK, tray icon, etc)
-
-Example (Debian/Ubuntu):
-
-```bash
-sudo apt update
-sudo apt install -y \
-  pkg-config \
-  libgtk-3-dev \
-  libwebkit2gtk-4.1-dev \
-  libayatana-appindicator3-dev \
-  librsvg2-dev \
-  patchelf \
-  zsync
-```
-
-If `libwebkit2gtk-4.1-dev` is not available on your distro version, try `libwebkit2gtk-4.0-dev` instead.
-
-AppImage bundling also needs `zsyncmake` (provided by the `zsync` package).
-
-Build:
-
-```bash
-./scripts/build-frontend-dist.sh
-cd desktop/src-tauri
-cargo tauri build --config tauri.conf.frontend.json
-```
-
 ### Build `full-app`
 
 The full app bundles the Rust server as a Tauri sidecar.
@@ -114,8 +74,10 @@ cargo tauri build --config tauri.conf.full.json
 Notes:
 
 - The sidecar must be named with a `-$TARGET_TRIPLE` suffix (Tauri requirement).
-- The desktop app uses a fixed backend port by default (`3000`). If it is already
-  in use, edit the generated config file (see below).
+- In `full-app`, Tauri opens the backend URL directly and frontend assets are
+  served by the bundled backend sidecar (`--ui-dir`).
+- Backend API port defaults to `3000`; if this port is occupied, update
+  `desktop-config.json` to use another port.
 
 ### Build desktop with CEF runtime (`-cef`)
 
@@ -129,14 +91,6 @@ Prereqs:
 ```bash
 cargo install tauri-cli --locked --git https://github.com/tauri-apps/tauri --branch feat/cef
 ```
-
-Build (frontend-only):
-
-```bash
-./desktop/scripts/build-frontend-only-cef.sh
-```
-
-On Linux, if `zsyncmake` is missing, the script will automatically skip the AppImage bundle and build only `deb` + `rpm`. You can override with `TAURI_BUNDLES=...`.
 
 Build (full / bundled backend):
 
@@ -170,7 +124,7 @@ For releases:
 - `Release` (`.github/workflows/release.yml`): on tag `v*` it creates a GitHub Release and attaches:
   - web dist archives
   - backend binaries for macOS/Windows/Linux
-  - desktop installers (frontend-only + full) as native artifacts when available:
+  - desktop installers (full) as native artifacts when available:
     - Windows: `.msi` (and/or `.exe`)
     - macOS: `.dmg`
     - Linux: `.AppImage` + `.deb` + `.rpm`

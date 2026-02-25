@@ -17,6 +17,8 @@ pub struct DesktopConfig {
 pub struct BackendConfig {
     pub host: String,
     pub port: u16,
+    pub cors_origins: Vec<String>,
+    pub cors_allow_all: bool,
     pub ui_password: Option<String>,
 
     // OpenCode connectivity overrides.
@@ -39,6 +41,8 @@ impl Default for BackendConfig {
         Self {
             host: "127.0.0.1".to_string(),
             port: 3000,
+            cors_origins: Vec::new(),
+            cors_allow_all: false,
             ui_password: None,
             opencode_host: "127.0.0.1".to_string(),
             opencode_port: None,
@@ -59,15 +63,26 @@ pub fn load_or_create(app: &AppHandle) -> Result<DesktopConfig, String> {
 
     if path.exists() {
         let txt = fs::read_to_string(&path).map_err(|e| format!("read config: {e}"))?;
-        let cfg: DesktopConfig =
-            serde_json::from_str(&txt).map_err(|e| format!("parse config: {e}"))?;
+        let cfg =
+            normalize_config(serde_json::from_str(&txt).map_err(|e| format!("parse config: {e}"))?);
         return Ok(cfg);
     }
 
-    let cfg = DesktopConfig::default();
+    let cfg = normalize_config(DesktopConfig::default());
     let txt = serde_json::to_string_pretty(&cfg).map_err(|e| format!("serialize config: {e}"))?;
     fs::write(&path, format!("{txt}\n")).map_err(|e| format!("write config: {e}"))?;
     Ok(cfg)
+}
+
+pub fn save(app: &AppHandle, cfg: DesktopConfig) -> Result<DesktopConfig, String> {
+    let path = config_path(app).ok_or_else(|| "unable to resolve app config dir".to_string())?;
+    ensure_parent_dir(&path)?;
+
+    let normalized = normalize_config(cfg);
+    let txt =
+        serde_json::to_string_pretty(&normalized).map_err(|e| format!("serialize config: {e}"))?;
+    fs::write(&path, format!("{txt}\n")).map_err(|e| format!("write config: {e}"))?;
+    Ok(normalized)
 }
 
 pub fn open_config_file(app: &AppHandle) -> Result<(), String> {
@@ -91,4 +106,34 @@ fn ensure_parent_dir(path: &Path) -> Result<(), String> {
         fs::create_dir_all(parent).map_err(|e| format!("mkdir {parent:?}: {e}"))?;
     }
     Ok(())
+}
+
+fn normalize_config(mut cfg: DesktopConfig) -> DesktopConfig {
+    cfg.backend.host = normalize_host(&cfg.backend.host);
+    cfg.backend.opencode_host = normalize_host(&cfg.backend.opencode_host);
+    cfg.backend.cors_origins = normalize_cors_origins(cfg.backend.cors_origins);
+    cfg
+}
+
+fn normalize_host(raw: &str) -> String {
+    let v = raw.trim();
+    if v.is_empty() {
+        "127.0.0.1".to_string()
+    } else {
+        v.to_string()
+    }
+}
+
+fn normalize_cors_origins(values: Vec<String>) -> Vec<String> {
+    let mut out = Vec::<String>::new();
+    for raw in values {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if !out.iter().any(|v| v == trimmed) {
+            out.push(trimmed.to_string());
+        }
+    }
+    out
 }

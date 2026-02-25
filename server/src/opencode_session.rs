@@ -37,8 +37,6 @@ struct SessionRecord {
 }
 
 use crate::ApiResult;
-use crate::path_utils::normalize_directory_path;
-
 #[derive(Debug, Deserialize, Default)]
 pub(crate) struct SessionListQuery {
     pub directory: Option<String>,
@@ -185,19 +183,7 @@ pub async fn opencode_storage_cache_clear() -> ApiResult<Response> {
 }
 
 fn opencode_data_dir() -> PathBuf {
-    if let Ok(dir) = std::env::var("XDG_DATA_HOME")
-        && !dir.trim().is_empty()
-    {
-        return PathBuf::from(dir).join("opencode");
-    }
-
-    let home = std::env::var("HOME").unwrap_or_default();
-    let base = if home.trim().is_empty() {
-        PathBuf::from(".")
-    } else {
-        PathBuf::from(home)
-    };
-    base.join(".local").join("share").join("opencode")
+    crate::path_utils::opencode_data_dir()
 }
 
 fn opencode_storage_dir() -> PathBuf {
@@ -292,23 +278,7 @@ fn resolve_directory(query_directory: Option<&str>, headers: &HeaderMap) -> Stri
 }
 
 fn normalize_dir_for_compare(value: &str) -> Option<String> {
-    let normalized = normalize_directory_path(value);
-    let trimmed = normalized.trim();
-    if trimmed.is_empty() {
-        None
-    } else {
-        let slash_normalized = trimmed.replace('\\', "/");
-        let canonical = if slash_normalized.len() > 1 {
-            slash_normalized.trim_end_matches('/').to_string()
-        } else {
-            slash_normalized
-        };
-        if canonical.is_empty() {
-            None
-        } else {
-            Some(canonical)
-        }
-    }
+    crate::path_utils::normalize_directory_for_match(value)
 }
 
 fn session_matches_directory(session: &Value, filter_dir: &str, allow_descendants: bool) -> bool {
@@ -1565,6 +1535,34 @@ mod tests {
         assert!(!parse_boolish(None));
     }
 
+    #[test]
+    fn normalize_dir_for_compare_handles_windows_drive_case_and_encoded_input() {
+        let plain = normalize_dir_for_compare("C:\\Users\\Alice\\Repo\\").expect("plain");
+        let encoded = normalize_dir_for_compare("c%3A%5CUsers%5Calice%5Crepo").expect("encoded");
+        assert_eq!(plain, "c:/users/alice/repo");
+        assert_eq!(encoded, "c:/users/alice/repo");
+    }
+
+    #[test]
+    fn session_matches_directory_windows_paths_are_case_and_separator_tolerant() {
+        let session = serde_json::json!({
+            "id": "ses_win",
+            "directory": "c:/Users/Alice/Repo"
+        });
+        let filter = normalize_dir_for_compare("C:\\users\\alice\\repo\\").expect("filter");
+        assert!(session_matches_directory(&session, &filter, false));
+    }
+
+    #[test]
+    fn session_matches_directory_linux_paths_remain_case_sensitive() {
+        let session = serde_json::json!({
+            "id": "ses_linux",
+            "directory": "/home/Alice/repo"
+        });
+        let filter = normalize_dir_for_compare("/home/alice/repo").expect("filter");
+        assert!(!session_matches_directory(&session, &filter, false));
+    }
+
     async fn write_json(path: &std::path::Path, value: &serde_json::Value) {
         if let Some(parent) = path.parent() {
             tokio::fs::create_dir_all(parent).await.unwrap();
@@ -1579,6 +1577,7 @@ mod tests {
             ui_auth: crate::ui_auth::UiAuth::Disabled,
             ui_cookie_same_site: axum_extra::extract::cookie::SameSite::Strict,
             cors_allowed_origins: Vec::new(),
+            cors_allow_all: false,
             opencode: Arc::new(crate::opencode::OpenCodeManager::new(
                 "127.0.0.1".to_string(),
                 Some(1),
@@ -2210,6 +2209,79 @@ mod tests {
         assert_eq!(
             sessions[0].get("id").and_then(|v| v.as_str()),
             Some("slashy")
+        );
+    }
+
+    #[tokio::test]
+    async fn session_list_directory_scope_reads_legacy_data_dir_on_windows_like_env() {
+        let _env_lock = ENV_LOCK.lock().unwrap();
+        STORAGE_CACHE.clear();
+
+        let tmp = unique_tmp_dir("session-list-legacy-windows-home");
+        tokio::fs::create_dir_all(&tmp).await.unwrap();
+
+        let home = tmp.join("home");
+        let local_app = tmp.join("localapp");
+        let legacy_data = home.join(".local").join("share").join("opencode");
+        tokio::fs::create_dir_all(legacy_data.join("storage").join("session").join("global"))
+            .await
+            .unwrap();
+        tokio::fs::create_dir_all(local_app.join("opencode"))
+            .await
+            .unwrap();
+
+        let _home = EnvVarGuard::set("HOME", home.to_string_lossy().to_string());
+        let _local = EnvVarGuard::set("LOCALAPPDATA", local_app.to_string_lossy().to_string());
+        let _xdg = EnvVarGuard::set("XDG_DATA_HOME", "".to_string());
+
+        write_json(
+            &legacy_data
+                .join("storage")
+                .join("session")
+                .join("global")
+                .join("win-home.json"),
+            &serde_json::json!({
+                "id": "win-home",
+                "directory": "C:\\Users\\canxin.LAPTOP",
+                "title": "WinHome",
+                "slug": "win-home",
+                "time": {"updated": 55.0}
+            }),
+        )
+        .await;
+
+        let resp = session_list(
+            State(dummy_state()),
+            HeaderMap::new(),
+            Query(SessionListQuery {
+                directory: Some("C%3A%2FUsers%2Fcanxin.LAPTOP".to_string()),
+                scope: Some("directory".to_string()),
+                roots: None,
+                start: None,
+                search: None,
+                offset: Some("0".to_string()),
+                limit: Some("30".to_string()),
+                include_total: Some("true".to_string()),
+                include_children: None,
+                ids: None,
+                focus_session_id: None,
+            }),
+        )
+        .await
+        .unwrap();
+
+        let body = to_bytes(resp.into_body(), 1024 * 1024).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let sessions = json
+            .get("sessions")
+            .and_then(|v| v.as_array())
+            .expect("sessions array");
+
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(json.get("total").and_then(|v| v.as_u64()), Some(1));
+        assert_eq!(
+            sessions[0].get("id").and_then(|v| v.as_str()),
+            Some("win-home")
         );
     }
 

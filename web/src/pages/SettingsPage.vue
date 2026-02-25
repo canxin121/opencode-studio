@@ -19,9 +19,18 @@ import ScrollArea from '@/components/ui/ScrollArea.vue'
 import OpenCodeConfigPanel from '@/components/settings/OpenCodeConfigPanel.vue'
 import PluginSettingsPanel from '@/components/settings/PluginSettingsPanel.vue'
 import BackendsPanel from '@/components/settings/BackendsPanel.vue'
+import Input from '@/components/ui/Input.vue'
 import { opencodeSections } from '@/components/settings/opencodeSections'
 import { clearBackendSessionCache } from '@/features/settings/api/settingsApi'
 import { useDesktopSidebarResize } from '@/composables/useDesktopSidebarResize'
+import {
+  desktopBackendRestart,
+  desktopConfigGet,
+  desktopConfigSave,
+  isDesktopRuntime,
+  type DesktopConfig,
+} from '@/lib/desktopConfig'
+import { syncDesktopBackendTarget } from '@/lib/backend'
 import {
   DEFAULT_CHAT_ACTIVITY_FILTERS,
   DEFAULT_CHAT_ACTIVITY_EXPAND_KEYS,
@@ -66,6 +75,87 @@ const settingsSidebarClass = computed(() =>
 )
 
 const clearingBackendCache = ref(false)
+const desktopRuntimeEnabled = isDesktopRuntime()
+const desktopRuntimeLoading = ref(false)
+const desktopRuntimeSaving = ref(false)
+const desktopBackendHost = ref('127.0.0.1')
+const desktopBackendPortInput = ref('3000')
+const desktopCorsOriginsText = ref('')
+const desktopCorsAllowAll = ref(false)
+
+function parseCorsOriginsText(input: string): string[] {
+  return String(input || '')
+    .split(/\r?\n|,/)
+    .map((v) => v.trim())
+    .filter((v) => v.length > 0)
+    .filter((v, index, arr) => arr.indexOf(v) === index)
+}
+
+function applyDesktopRuntimeForm(cfg: DesktopConfig) {
+  desktopBackendHost.value = String(cfg.backend.host || '127.0.0.1').trim() || '127.0.0.1'
+  desktopBackendPortInput.value = String(cfg.backend.port || 3000)
+  desktopCorsOriginsText.value = (cfg.backend.cors_origins || []).join('\n')
+  desktopCorsAllowAll.value = cfg.backend.cors_allow_all === true
+}
+
+async function loadDesktopRuntimeConfig() {
+  if (!desktopRuntimeEnabled || desktopRuntimeLoading.value) return
+  desktopRuntimeLoading.value = true
+  try {
+    const cfg = await desktopConfigGet()
+    if (!cfg) return
+    applyDesktopRuntimeForm(cfg)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    toasts.push('error', msg || String(t('settings.desktopRuntime.toasts.loadFailed')))
+  } finally {
+    desktopRuntimeLoading.value = false
+  }
+}
+
+async function saveDesktopRuntimeConfig() {
+  if (!desktopRuntimeEnabled || desktopRuntimeSaving.value) return
+
+  const host = String(desktopBackendHost.value || '').trim() || '127.0.0.1'
+  const parsedPort = Number.parseInt(String(desktopBackendPortInput.value || '').trim(), 10)
+  if (!Number.isFinite(parsedPort) || parsedPort < 1 || parsedPort > 65535) {
+    toasts.push('error', String(t('settings.desktopRuntime.toasts.invalidPort')))
+    return
+  }
+
+  desktopRuntimeSaving.value = true
+  try {
+    const current = await desktopConfigGet()
+    const next: DesktopConfig = {
+      backend: {
+        host,
+        port: parsedPort,
+        cors_origins: parseCorsOriginsText(desktopCorsOriginsText.value),
+        cors_allow_all: desktopCorsAllowAll.value === true,
+        ui_password: current?.backend.ui_password ?? null,
+        opencode_host: current?.backend.opencode_host || '127.0.0.1',
+        opencode_port: current?.backend.opencode_port ?? null,
+        skip_opencode_start: current?.backend.skip_opencode_start === true,
+        opencode_log_level: current?.backend.opencode_log_level ?? null,
+      },
+    }
+
+    const saved = await desktopConfigSave(next)
+    if (saved) {
+      applyDesktopRuntimeForm(saved)
+    }
+
+    await desktopBackendRestart()
+    await syncDesktopBackendTarget()
+    toasts.push('success', String(t('settings.desktopRuntime.toasts.savedAndRestarted')))
+    window.location.reload()
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    toasts.push('error', msg || String(t('settings.desktopRuntime.toasts.saveFailed')))
+  } finally {
+    desktopRuntimeSaving.value = false
+  }
+}
 
 async function clearSessionCache() {
   if (clearingBackendCache.value) return
@@ -224,6 +314,9 @@ onMounted(() => {
   }
   if (!pluginHost.bootstrapped && !pluginHost.loading) {
     void pluginHost.bootstrap()
+  }
+  if (desktopRuntimeEnabled) {
+    void loadDesktopRuntimeConfig()
   }
 })
 
@@ -590,6 +683,77 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
           <!-- Backends Tab -->
           <div v-else-if="activeTab === 'backends'" class="space-y-6">
             <BackendsPanel />
+            <div v-if="desktopRuntimeEnabled" class="rounded-lg border border-border bg-muted/10 p-4">
+              <div class="text-sm font-medium">{{ t('settings.desktopRuntime.title') }}</div>
+              <div class="mt-1 text-xs text-muted-foreground">
+                {{ t('settings.desktopRuntime.description') }}
+              </div>
+
+              <div class="mt-4 grid gap-3">
+                <div class="grid gap-1">
+                  <label class="text-xs text-muted-foreground">{{ t('settings.desktopRuntime.fields.host') }}</label>
+                  <Input
+                    v-model="desktopBackendHost"
+                    :placeholder="String(t('settings.desktopRuntime.placeholders.host'))"
+                    :disabled="desktopRuntimeLoading || desktopRuntimeSaving"
+                    class="h-10"
+                    autocomplete="off"
+                  />
+                </div>
+
+                <div class="grid gap-1">
+                  <label class="text-xs text-muted-foreground">{{ t('settings.desktopRuntime.fields.port') }}</label>
+                  <Input
+                    v-model="desktopBackendPortInput"
+                    type="number"
+                    min="1"
+                    max="65535"
+                    :placeholder="String(t('settings.desktopRuntime.placeholders.port'))"
+                    :disabled="desktopRuntimeLoading || desktopRuntimeSaving"
+                    class="h-10"
+                    inputmode="numeric"
+                  />
+                </div>
+
+                <div class="grid gap-1">
+                  <label class="text-xs text-muted-foreground">{{
+                    t('settings.desktopRuntime.fields.corsOrigins')
+                  }}</label>
+                  <textarea
+                    v-model="desktopCorsOriginsText"
+                    rows="4"
+                    :placeholder="String(t('settings.desktopRuntime.placeholders.corsOrigins'))"
+                    :disabled="desktopRuntimeLoading || desktopRuntimeSaving"
+                    class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  />
+                  <div class="text-[11px] text-muted-foreground">
+                    {{ t('settings.desktopRuntime.corsHint') }}
+                  </div>
+                </div>
+
+                <label class="inline-flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    v-model="desktopCorsAllowAll"
+                    :disabled="desktopRuntimeLoading || desktopRuntimeSaving"
+                  />
+                  {{ t('settings.desktopRuntime.fields.corsAllowAll') }}
+                </label>
+
+                <div class="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    :disabled="desktopRuntimeLoading || desktopRuntimeSaving"
+                    @click="loadDesktopRuntimeConfig"
+                  >
+                    {{ t('common.refresh') }}
+                  </Button>
+                  <Button :disabled="desktopRuntimeLoading || desktopRuntimeSaving" @click="saveDesktopRuntimeConfig">
+                    {{ desktopRuntimeSaving ? t('common.saving') : t('settings.desktopRuntime.saveAndRestart') }}
+                  </Button>
+                </div>
+              </div>
+            </div>
           </div>
 
           <!-- Troubleshooting Tab -->

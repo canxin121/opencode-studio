@@ -46,16 +46,11 @@ pub struct ConfigPaths {
 
 #[derive(Debug, Clone)]
 pub struct OpenCodeConfigStore {
-    home_dir: PathBuf,
     custom_config_path: Option<PathBuf>,
 }
 
 impl OpenCodeConfigStore {
     pub fn from_env() -> Self {
-        let home_dir = std::env::var("HOME")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| PathBuf::from("."));
-
         let custom_config_path = std::env::var(OPENCODE_CONFIG_ENV)
             .ok()
             .map(|s| s.trim().to_string())
@@ -63,14 +58,11 @@ impl OpenCodeConfigStore {
             .map(PathBuf::from)
             .map(|p| p.canonicalize().unwrap_or(p));
 
-        Self {
-            home_dir,
-            custom_config_path,
-        }
+        Self { custom_config_path }
     }
 
     pub fn opencode_config_dir(&self) -> PathBuf {
-        self.home_dir.join(".config").join("opencode")
+        crate::path_utils::opencode_config_dir()
     }
 
     pub fn config_file_user(&self) -> PathBuf {
@@ -206,6 +198,39 @@ fn fs_read_to_string(path: &Path) -> OcResult<String> {
 #[cfg(test)]
 mod tests {
     use super::OpenCodeConfigStore;
+    use std::sync::{LazyLock, Mutex};
+
+    static ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+
+    struct EnvVarGuard {
+        key: String,
+        old: Option<String>,
+    }
+
+    impl EnvVarGuard {
+        fn set(key: &str, value: String) -> Self {
+            let old = std::env::var(key).ok();
+            unsafe {
+                std::env::set_var(key, value);
+            }
+            Self {
+                key: key.to_string(),
+                old,
+            }
+        }
+    }
+
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            unsafe {
+                if let Some(ref old) = self.old {
+                    std::env::set_var(&self.key, old);
+                } else {
+                    std::env::remove_var(&self.key);
+                }
+            }
+        }
+    }
 
     #[test]
     fn parse_jsonc_accepts_comments() {
@@ -213,5 +238,28 @@ mod tests {
         let parsed =
             OpenCodeConfigStore::parse_jsonc(raw, std::path::Path::new("/tmp/opencode.jsonc"));
         assert!(parsed.is_ok());
+    }
+
+    #[test]
+    fn config_file_user_falls_back_to_legacy_home_config_when_present() {
+        let _env_lock = ENV_LOCK.lock().unwrap();
+        let tmp =
+            std::env::temp_dir().join(format!("opencode-config-store-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&tmp);
+
+        let home = tmp.join("home");
+        let appdata = tmp.join("appdata");
+        let legacy_dir = home.join(".config").join("opencode");
+        let preferred_dir = appdata.join("opencode");
+        std::fs::create_dir_all(&legacy_dir).unwrap();
+        std::fs::create_dir_all(&preferred_dir).unwrap();
+        std::fs::write(legacy_dir.join("opencode.json"), "{\"$schema\":\"x\"}\n").unwrap();
+
+        let _home = EnvVarGuard::set("HOME", home.to_string_lossy().to_string());
+        let _app = EnvVarGuard::set("APPDATA", appdata.to_string_lossy().to_string());
+        let _xdg = EnvVarGuard::set("XDG_CONFIG_HOME", "".to_string());
+
+        let store = OpenCodeConfigStore::from_env();
+        assert_eq!(store.config_file_user(), legacy_dir.join("opencode.json"));
     }
 }

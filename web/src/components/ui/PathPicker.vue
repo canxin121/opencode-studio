@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { apiJson } from '@/lib/api'
+import { normalizeFsPath, trimTrailingFsSlashes } from '@/lib/path'
 import Button from '@/components/ui/Button.vue'
 import Input from '@/components/ui/Input.vue'
 import {
@@ -96,27 +97,28 @@ const showGitignored = ref(Boolean(props.showGitignored))
 const effectiveRespectGitignore = computed(() => !showGitignored.value)
 
 function trimTrailingSlash(path: string): string {
-  if (!path) return ''
-  if (path === '/') return '/'
-  return path.replace(/\/+$/, '')
+  return trimTrailingFsSlashes(path)
 }
 
 function isAbsolutePath(path: string): boolean {
-  if (!path) return false
-  if (path.startsWith('/') || path.startsWith('~')) return true
-  return /^[A-Za-z]:[\\/]/.test(path)
+  const normalized = normalizeFsPath(path)
+  if (!normalized) return false
+  if (normalized.startsWith('/') || normalized.startsWith('~')) return true
+  return /^[A-Za-z]:\//.test(normalized)
 }
 
 function joinPath(base: string, suffix: string): string {
-  if (!base) return suffix
-  if (!suffix) return base
-  const left = trimTrailingSlash(base)
-  const right = suffix.replace(/^\/+/, '')
+  const leftRaw = normalizeFsPath(base)
+  const rightRaw = normalizeFsPath(suffix)
+  if (!leftRaw) return rightRaw
+  if (!rightRaw) return leftRaw
+  const left = trimTrailingSlash(leftRaw)
+  const right = rightRaw.replace(/^\/+/, '')
   return `${left}/${right}`
 }
 
 function splitInput(raw: string) {
-  const clean = raw.trim()
+  const clean = normalizeFsPath(raw)
   const lastSlash = clean.lastIndexOf('/')
   if (lastSlash >= 0) {
     return {
@@ -151,13 +153,18 @@ const context = computed(() => {
 })
 
 const browserBreadcrumbs = computed(() => {
-  const path = browserPath.value
+  const path = normalizeFsPath(browserPath.value)
   if (!path) return [] as Array<{ label: string; path: string }>
-  const parts = path.split('/').filter(Boolean)
-  const crumbs: Array<{ label: string; path: string }> = [{ label: '/', path: '/' }]
-  let current = ''
+  const driveMatch = path.match(/^[A-Za-z]:\//)
+  const driveRoot = driveMatch ? driveMatch[0] : ''
+  const rest = driveRoot ? path.slice(driveRoot.length) : path
+  const parts = rest.split('/').filter(Boolean)
+  const crumbs: Array<{ label: string; path: string }> = driveRoot
+    ? [{ label: driveRoot, path: driveRoot }]
+    : [{ label: '/', path: '/' }]
+  let current = driveRoot ? driveRoot.replace(/\/$/, '') : ''
   for (const part of parts) {
-    current = `${current}/${part}`
+    current = current ? `${current}/${part}` : `/${part}`
     crumbs.push({ label: part, path: current })
   }
   return crumbs

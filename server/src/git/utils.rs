@@ -579,34 +579,7 @@ pub(crate) fn classify_git_failure(
 }
 
 pub(crate) fn normalize_directory_path(value: &str) -> String {
-    let trimmed = value.trim();
-    if trimmed.is_empty() {
-        return "".to_string();
-    }
-
-    if trimmed == "~" {
-        return std::env::var("HOME").unwrap_or_else(|_| trimmed.to_string());
-    }
-
-    if let Some(rest) = trimmed.strip_prefix("~/")
-        && let Ok(home) = std::env::var("HOME")
-    {
-        return PathBuf::from(home)
-            .join(rest)
-            .to_string_lossy()
-            .into_owned();
-    }
-
-    if let Some(rest) = trimmed.strip_prefix("~\\")
-        && let Ok(home) = std::env::var("HOME")
-    {
-        return PathBuf::from(home)
-            .join(rest)
-            .to_string_lossy()
-            .into_owned();
-    }
-
-    trimmed.to_string()
+    crate::path_utils::normalize_directory_path(value)
 }
 
 pub(crate) fn abs_path(value: &str) -> PathBuf {

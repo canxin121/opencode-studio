@@ -129,18 +129,13 @@ async fn gpg_preset_passphrase(keygrip: &str, passphrase: &str) -> Result<(), St
 }
 
 fn gpg_agent_conf_path() -> Option<PathBuf> {
-    // Prefer HOME; for local desktop apps this is usually correct.
-    let home = std::env::var("HOME").ok()?;
-    let home = home.trim();
-    if home.is_empty() {
-        return None;
-    }
-    Some(PathBuf::from(home).join(".gnupg").join("gpg-agent.conf"))
+    let home = crate::path_utils::home_dir_path()?;
+    Some(home.join(".gnupg").join("gpg-agent.conf"))
 }
 
 async fn gpg_agent_enable_allow_preset_passphrase() -> Result<bool, String> {
     let Some(conf) = gpg_agent_conf_path() else {
-        return Err("HOME is not set; cannot locate ~/.gnupg/gpg-agent.conf".to_string());
+        return Err("Home directory is not set; cannot locate ~/.gnupg/gpg-agent.conf".to_string());
     };
 
     if let Some(parent) = conf.parent() {

@@ -1,5 +1,9 @@
 function normalizeDirForCompare(path: string): string {
-  return (path || '').trim().replace(/\\/g, '/').replace(/\/+$/g, '')
+  const normalized = (path || '').trim().replace(/\\/g, '/').replace(/\/+$/g, '')
+  if (/^[a-zA-Z]:\//.test(normalized)) {
+    return normalized.toLowerCase()
+  }
+  return normalized
 }
 
 function isPathWithinDirectory(path: string, directoryPath: string): boolean {

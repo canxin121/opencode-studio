@@ -26,6 +26,8 @@ pub fn run() {
       desktop_backend_start,
       desktop_backend_stop,
       desktop_backend_restart,
+      desktop_config_get,
+      desktop_config_save,
       desktop_open_logs_dir,
       desktop_open_config,
     ])
@@ -35,8 +37,8 @@ pub fn run() {
       // Ensure a user-editable config file exists.
       let _ = config::load_or_create(&app_handle);
 
-      // Backend manager is present even in frontend-only builds; it will
-      // simply not find a sidecar to spawn.
+      // Backend manager is always present so tray actions and UI commands share
+      // one code path even when sidecar startup fails.
       app.manage(BackendManager::new());
 
       // Create tray.
@@ -90,7 +92,7 @@ pub fn run() {
         });
       }
 
-      // Attempt autostart backend (only works on full build where sidecar exists).
+      // Attempt autostart backend.
       let manager = app_handle.state::<BackendManager>().inner().clone();
       tauri::async_runtime::spawn(async move {
         let _ = manager.ensure_started(&app_handle).await;
@@ -124,6 +126,16 @@ async fn desktop_backend_stop(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 async fn desktop_backend_restart(app: AppHandle) -> Result<backend::BackendStatus, String> {
   app.state::<BackendManager>().inner().restart(&app).await
+}
+
+#[tauri::command]
+fn desktop_config_get(app: AppHandle) -> Result<config::DesktopConfig, String> {
+  config::load_or_create(&app)
+}
+
+#[tauri::command]
+fn desktop_config_save(app: AppHandle, config: config::DesktopConfig) -> Result<config::DesktopConfig, String> {
+  config::save(&app, config)
 }
 
 #[tauri::command]

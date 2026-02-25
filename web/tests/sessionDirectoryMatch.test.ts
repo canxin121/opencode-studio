@@ -29,3 +29,17 @@ test('matchDirectoryEntryForPath does not match sibling prefix collisions', () =
   const out = matchDirectoryEntryForPath(entries, '/repo-2/worktree')
   assert.equal(out, null)
 })
+
+test('matchDirectoryEntryForPath normalizes windows drive case and separators', () => {
+  const entries = [{ id: 'repo', path: 'c:/Users/Alice/Repo' }]
+
+  const out = matchDirectoryEntryForPath(entries, 'C:\\users\\alice\\repo\\worktree')
+  assert.equal(out?.id, 'repo')
+})
+
+test('matchDirectoryEntryForPath keeps linux matching case-sensitive', () => {
+  const entries = [{ id: 'repo', path: '/home/Alice/repo' }]
+
+  const out = matchDirectoryEntryForPath(entries, '/home/alice/repo')
+  assert.equal(out, null)
+})

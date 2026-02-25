@@ -1,13 +1,9 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use serde_json::Value;
 
 fn opencode_data_dir() -> PathBuf {
-    let home = std::env::var("HOME").unwrap_or_default();
-    Path::new(&home)
-        .join(".local")
-        .join("share")
-        .join("opencode")
+    crate::path_utils::opencode_data_dir()
 }
 
 fn auth_file_path() -> PathBuf {

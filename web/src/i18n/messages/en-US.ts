@@ -1359,6 +1359,29 @@ export default {
       cacheCleared: 'Backend cache cleared',
       cacheClearFailed: 'Failed to clear cache',
     },
+    desktopRuntime: {
+      title: 'Desktop backend runtime',
+      description: 'Configure sidecar backend host/port and CORS policy. Saving restarts the desktop backend.',
+      fields: {
+        host: 'Host',
+        port: 'Port',
+        corsOrigins: 'CORS origins',
+        corsAllowAll: 'Allow all origins (*)',
+      },
+      placeholders: {
+        host: '127.0.0.1',
+        port: '3000',
+        corsOrigins: 'One origin per line, e.g. http://localhost:5173',
+      },
+      corsHint: 'Supports comma or newline separators. Keep empty to use defaults.',
+      saveAndRestart: 'Save and restart backend',
+      toasts: {
+        invalidPort: 'Port must be an integer between 1 and 65535',
+        loadFailed: 'Failed to load desktop runtime config',
+        saveFailed: 'Failed to save desktop runtime config',
+        savedAndRestarted: 'Desktop runtime config saved. Restarting backend...',
+      },
+    },
     appearance: {
       intro: 'Theme and typography settings.',
       language: {

@@ -187,19 +187,7 @@ jobs:
             ref: ${{ github.sha }}
             tauri: main
             suffix: ""
-            flavor: frontend
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            ref: ${{ github.sha }}
-            tauri: main
-            suffix: ""
             flavor: full
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            ref: ${{ github.sha }}
-            tauri: main
-            suffix: ""
-            flavor: frontend
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             ref: ${{ github.sha }}
@@ -211,19 +199,7 @@ jobs:
             ref: ${{ github.sha }}
             tauri: main
             suffix: ""
-            flavor: frontend
-          - os: macos-14
-            target: aarch64-apple-darwin
-            ref: ${{ github.sha }}
-            tauri: main
-            suffix: ""
             flavor: full
-          - os: macos-15-intel
-            target: x86_64-apple-darwin
-            ref: ${{ github.sha }}
-            tauri: main
-            suffix: ""
-            flavor: frontend
           - os: macos-15-intel
             target: x86_64-apple-darwin
             ref: ${{ github.sha }}
@@ -326,10 +302,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          CONFIG="tauri.conf.frontend.json"
-          if [ "${{ matrix.flavor }}" = "full" ]; then
-            CONFIG="tauri.conf.full.json"
-          fi
+          CONFIG="tauri.conf.full.json"
 
           TARGET_DIR="desktop/src-tauri/target"
           if [[ -n "${CARGO_TARGET_DIR:-}" ]]; then
@@ -438,17 +411,7 @@ jobs:
             target: x86_64-unknown-linux-gnu
             tauri: cef
             suffix: "-cef"
-            flavor: frontend
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            tauri: cef
-            suffix: "-cef"
             flavor: full
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            tauri: cef
-            suffix: "-cef"
-            flavor: frontend
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             tauri: cef
@@ -458,17 +421,7 @@ jobs:
             target: aarch64-apple-darwin
             tauri: cef
             suffix: "-cef"
-            flavor: frontend
-          - os: macos-14
-            target: aarch64-apple-darwin
-            tauri: cef
-            suffix: "-cef"
             flavor: full
-          - os: macos-15-intel
-            target: x86_64-apple-darwin
-            tauri: cef
-            suffix: "-cef"
-            flavor: frontend
           - os: macos-15-intel
             target: x86_64-apple-darwin
             tauri: cef
@@ -605,10 +558,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          CONFIG="tauri.conf.frontend.json"
-          if [ "${{ matrix.flavor }}" = "full" ]; then
-            CONFIG="tauri.conf.full.json"
-          fi
+          CONFIG="tauri.conf.full.json"
 
           rm -rf "${CARGO_TARGET_DIR}/${{ matrix.target }}/release/bundle" "${CARGO_TARGET_DIR}/release/bundle" || true
 

@@ -1004,13 +1004,9 @@ fn resolve_bridge_cwd(base: &Path, raw: &str) -> Result<PathBuf, String> {
 }
 
 fn resolve_spec_path_with_base(raw: &str, base: &Path) -> PathBuf {
-    if let Some(rest) = raw.strip_prefix("~/")
-        && let Ok(home) = std::env::var("HOME")
-    {
-        return PathBuf::from(home).join(rest);
-    }
+    let normalized = crate::path_utils::normalize_directory_path(raw);
+    let path = PathBuf::from(normalized);
 
-    let path = PathBuf::from(raw);
     if path.is_absolute() {
         return path;
     }
@@ -1570,13 +1566,7 @@ fn looks_like_path(spec: &str) -> bool {
 }
 
 fn resolve_spec_path(spec: &str) -> PathBuf {
-    if let Some(rest) = spec.strip_prefix("~/")
-        && let Ok(home) = std::env::var("HOME")
-    {
-        return PathBuf::from(home).join(rest);
-    }
-
-    let path = PathBuf::from(spec);
+    let path = PathBuf::from(crate::path_utils::normalize_directory_path(spec));
     if path.is_absolute() {
         return path;
     }
@@ -1613,13 +1603,23 @@ fn resolve_package_spec_root(spec: &str) -> Result<PathBuf, String> {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let store = crate::opencode_config::OpenCodeConfigStore::from_env();
     let opencode_home = store.opencode_config_dir();
+    let opencode_cache = crate::path_utils::cache_home_dir().join("opencode");
+    let home = crate::path_utils::home_dir_path().unwrap_or_else(|| PathBuf::from("."));
+    let home_config = home.join(".config").join("opencode");
+    let home_cache = home.join(".cache").join("opencode");
 
     let candidates = [
         cwd.join("node_modules").join(spec),
         opencode_home.join("node_modules").join(spec),
+        opencode_cache.join("node_modules").join(spec),
+        home_config.join("node_modules").join(spec),
+        home_cache.join("node_modules").join(spec),
     ];
 
+    let mut attempted = Vec::<String>::new();
+
     for candidate in candidates {
+        attempted.push(candidate.to_string_lossy().into_owned());
         if candidate.exists() {
             if let Some(root) = find_package_root(&candidate) {
                 return Ok(canonicalize_fallback(root));
@@ -1631,7 +1631,8 @@ fn resolve_package_spec_root(spec: &str) -> Result<PathBuf, String> {
     }
 
     Err(format!(
-        "failed to resolve npm package '{spec}' from node_modules"
+        "failed to resolve npm package '{spec}' from node_modules (checked: {})",
+        attempted.join("; ")
     ))
 }
 
@@ -1959,19 +1960,22 @@ mod tests {
 
     #[test]
     fn resolve_bridge_invocation_reads_timeout_and_args() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let cwd = temp.path().to_path_buf();
+
         let plugin = RegisteredPlugin {
             id: "opencode-planpilot".to_string(),
             spec: "file:///tmp/planpilot/src/index.ts".to_string(),
             status: PluginStatus::Ready,
-            root_path: Some(PathBuf::from("/tmp")),
-            manifest_path: Some(PathBuf::from("/tmp/studio.manifest.json")),
+            root_path: Some(cwd.clone()),
+            manifest_path: Some(cwd.join("studio.manifest.json")),
             manifest: Some(json!({
                 "id": "opencode-planpilot",
                 "bridge": {
                     "command": "node",
                     "args": ["dist/studio-bridge.js", "--stdio"],
                     "timeoutMs": 3400,
-                    "cwd": "/tmp"
+                    "cwd": cwd
                 }
             })),
             display_name: Some("Planpilot".to_string()),
@@ -1983,7 +1987,12 @@ mod tests {
         let bridge = resolve_bridge_invocation(&plugin).expect("bridge invocation");
         assert_eq!(bridge.program, "node");
         assert_eq!(bridge.args, vec!["dist/studio-bridge.js", "--stdio"]);
-        assert_eq!(bridge.cwd, PathBuf::from("/tmp"));
+        assert!(bridge.cwd.is_dir());
+        assert!(
+            bridge
+                .cwd
+                .ends_with(cwd.file_name().expect("cwd file name"))
+        );
         assert_eq!(bridge.timeout, Duration::from_millis(3400));
     }
 

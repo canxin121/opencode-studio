@@ -1358,6 +1358,29 @@ export default {
       cacheCleared: '后端缓存已清除',
       cacheClearFailed: '清除缓存失败',
     },
+    desktopRuntime: {
+      title: '桌面后端运行配置',
+      description: '配置 sidecar 后端的 host、port 和 CORS 策略。保存后会自动重启桌面后端。',
+      fields: {
+        host: '主机',
+        port: '端口',
+        corsOrigins: 'CORS 源',
+        corsAllowAll: '放行所有来源（*）',
+      },
+      placeholders: {
+        host: '127.0.0.1',
+        port: '3000',
+        corsOrigins: '每行一个来源，例如 http://localhost:5173',
+      },
+      corsHint: '支持逗号或换行分隔。留空则使用默认值。',
+      saveAndRestart: '保存并重启后端',
+      toasts: {
+        invalidPort: '端口必须是 1 到 65535 的整数',
+        loadFailed: '加载桌面运行配置失败',
+        saveFailed: '保存桌面运行配置失败',
+        savedAndRestarted: '桌面运行配置已保存，正在重启后端...',
+      },
+    },
     appearance: {
       intro: '主题与排版设置。',
       language: {

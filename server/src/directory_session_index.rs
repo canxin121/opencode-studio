@@ -105,17 +105,7 @@ pub struct DirectorySessionIndexManager {
 }
 
 fn normalize_directory_for_index(path: &str) -> Option<String> {
-    let normalized = crate::path_utils::normalize_directory_path(path);
-    let normalized = normalized.trim();
-    if normalized.is_empty() {
-        return None;
-    }
-    Some(
-        normalized
-            .replace('\\', "/")
-            .trim_end_matches('/')
-            .to_string(),
-    )
+    crate::path_utils::normalize_directory_for_match(path)
 }
 
 fn now_millis() -> i64 {
@@ -1052,5 +1042,38 @@ mod tests {
         assert!(snapshot.get("s_idle_old").is_none());
         assert!(snapshot.get("s_busy_old").is_some());
         assert!(snapshot.get("s_idle_recent").is_some());
+    }
+
+    #[test]
+    fn directory_lookup_matches_windows_drive_case_and_separator_variants() {
+        let idx = DirectorySessionIndexManager::new();
+        idx.replace_directory_mappings(vec![(
+            "d_win".to_string(),
+            "C:\\Users\\Alice\\Repo".to_string(),
+        )]);
+
+        assert_eq!(
+            idx.directory_id_for_path("c:/users/alice/repo/"),
+            Some("d_win".to_string())
+        );
+        assert_eq!(
+            idx.directory_id_for_path("C%3A%5CUsers%5CAlice%5CRepo"),
+            Some("d_win".to_string())
+        );
+    }
+
+    #[test]
+    fn directory_lookup_keeps_linux_case_sensitive() {
+        let idx = DirectorySessionIndexManager::new();
+        idx.replace_directory_mappings(vec![(
+            "d_linux".to_string(),
+            "/home/Alice/repo".to_string(),
+        )]);
+
+        assert_eq!(idx.directory_id_for_path("/home/alice/repo"), None);
+        assert_eq!(
+            idx.directory_id_for_path("/home/Alice/repo"),
+            Some("d_linux".to_string())
+        );
     }
 }

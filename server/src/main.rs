@@ -101,6 +101,13 @@ pub(crate) struct Args {
     )]
     pub(crate) cors_origin: Vec<String>,
 
+    /// Allow all CORS origins (`*`).
+    ///
+    /// This is intended for explicit cross-origin API usage where credentials are
+    /// not required by the browser CORS layer.
+    #[arg(long, env = "OPENCODE_STUDIO_CORS_ALLOW_ALL", default_value_t = false)]
+    pub(crate) cors_allow_all: bool,
+
     /// SameSite policy for the UI session cookie.
     ///
     /// - auto: Strict by default; switches to None when CORS origins are configured

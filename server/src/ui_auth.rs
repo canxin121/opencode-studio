@@ -197,6 +197,19 @@ fn is_safe_method(method: &Method) -> bool {
     matches!(*method, Method::GET | Method::HEAD | Method::OPTIONS)
 }
 
+fn is_public_plugin_asset_request(method: &Method, path: &str) -> bool {
+    if !is_safe_method(method) {
+        return false;
+    }
+
+    let normalized = path.trim();
+    if !normalized.starts_with("/api/plugins/") {
+        return false;
+    }
+
+    normalized.contains("/assets/")
+}
+
 fn normalize_origin_header_value(raw: &str) -> Option<String> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
@@ -246,13 +259,17 @@ fn origin_matches_host(origin: &str, host: &str) -> bool {
     false
 }
 
-fn is_allowed_origin(headers: &HeaderMap, allowed: &[String]) -> bool {
+fn is_allowed_origin(headers: &HeaderMap, allowed: &[String], allow_all: bool) -> bool {
     let Some(raw_origin) = headers.get(header::ORIGIN).and_then(|v| v.to_str().ok()) else {
         return false;
     };
     let Some(origin) = normalize_origin_header_value(raw_origin) else {
         return false;
     };
+
+    if allow_all {
+        return true;
+    }
 
     if allowed.iter().any(|o| o == &origin) {
         return true;
@@ -599,9 +616,18 @@ pub(crate) async fn require_ui_auth(
     req: axum::http::Request<axum::body::Body>,
     next: middleware::Next,
 ) -> impl IntoResponse {
+    let req_method = req.method().clone();
+    let req_path = req.uri().path().to_string();
+
     match &state.ui_auth {
         UiAuth::Disabled => next.run(req).await,
         UiAuth::Enabled(inner) => {
+            // Plugin UI static assets are loaded by iframe/module requests where adding
+            // Authorization headers is not practical. Keep this narrow to read-only asset URLs.
+            if is_public_plugin_asset_request(&req_method, &req_path) {
+                return next.run(req).await;
+            }
+
             // Header token (preferred): avoids third-party cookie issues and doesn't
             // require CSRF origin enforcement because the token isn't sent automatically.
             if let Some(token) = get_token_from_authorization(&headers)
@@ -617,8 +643,13 @@ pub(crate) async fn require_ui_auth(
             {
                 if !is_safe_method(req.method())
                     && (matches!(state.ui_cookie_same_site, SameSite::None)
-                        || !state.cors_allowed_origins.is_empty())
-                    && !is_allowed_origin(&headers, &state.cors_allowed_origins)
+                        || !state.cors_allowed_origins.is_empty()
+                        || state.cors_allow_all)
+                    && !is_allowed_origin(
+                        &headers,
+                        &state.cors_allowed_origins,
+                        state.cors_allow_all,
+                    )
                 {
                     return (
                         StatusCode::FORBIDDEN,

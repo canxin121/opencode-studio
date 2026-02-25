@@ -92,7 +92,7 @@ const iframeSrc = computed(() => {
   if (props.mount.pluginVersion) {
     url.searchParams.set('pluginVersion', props.mount.pluginVersion)
   }
-  return `${url.pathname}${url.search}`
+  return url.toString()
 })
 
 function clearReserve() {

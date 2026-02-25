@@ -4,6 +4,7 @@ import { computed, ref } from 'vue'
 import { ApiError, apiJson } from '../lib/api'
 import { useDirectoryStore } from './directory'
 import { postAppBroadcast } from '@/lib/appBroadcast'
+import { fsPathEquals, trimTrailingFsSlashes } from '@/lib/path'
 
 export type Project = {
   id: string
@@ -100,10 +101,10 @@ export const useSettingsStore = defineStore('settings', () => {
   const error = ref<string | null>(null)
 
   function projectForPath(path: string | null | undefined): Project | null {
-    const dir = typeof path === 'string' ? path.trim() : ''
+    const dir = trimTrailingFsSlashes(typeof path === 'string' ? path : '')
     const s = data.value
     if (!dir || !s || s.projects.length === 0) return null
-    return s.projects.find((p) => p.path === dir) || null
+    return s.projects.find((p) => fsPathEquals(p.path, dir)) || null
   }
 
   const activeProject = computed(() => projectForPath(directoryStore.currentDirectory))
@@ -147,12 +148,12 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   async function addProject(path: string) {
-    const trimmed = path.trim()
+    const trimmed = trimTrailingFsSlashes(path)
     if (!trimmed) return
     const s = data.value
     const now = Date.now()
     const projects = (s?.projects || []).slice()
-    const existing = projects.find((p) => p.path === trimmed)
+    const existing = projects.find((p) => fsPathEquals(p.path, trimmed))
     if (existing) {
       existing.lastOpenedAt = now
       await save({ projects })

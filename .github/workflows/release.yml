@@ -172,17 +172,7 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             suffix: ""
-            flavor: frontend
-            cef: false
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            suffix: ""
             flavor: full
-            cef: false
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            suffix: ""
-            flavor: frontend
             cef: false
           - os: windows-latest
             target: x86_64-pc-windows-msvc
@@ -192,17 +182,7 @@ jobs:
           - os: macos-14
             target: aarch64-apple-darwin
             suffix: ""
-            flavor: frontend
-            cef: false
-          - os: macos-14
-            target: aarch64-apple-darwin
-            suffix: ""
             flavor: full
-            cef: false
-          - os: macos-15-intel
-            target: x86_64-apple-darwin
-            suffix: ""
-            flavor: frontend
             cef: false
           - os: macos-15-intel
             target: x86_64-apple-darwin
@@ -214,17 +194,7 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             suffix: "-cef"
-            flavor: frontend
-            cef: true
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            suffix: "-cef"
             flavor: full
-            cef: true
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            suffix: "-cef"
-            flavor: frontend
             cef: true
           - os: windows-latest
             target: x86_64-pc-windows-msvc
@@ -234,17 +204,7 @@ jobs:
           - os: macos-14
             target: aarch64-apple-darwin
             suffix: "-cef"
-            flavor: frontend
-            cef: true
-          - os: macos-14
-            target: aarch64-apple-darwin
-            suffix: "-cef"
             flavor: full
-            cef: true
-          - os: macos-15-intel
-            target: x86_64-apple-darwin
-            suffix: "-cef"
-            flavor: frontend
             cef: true
           - os: macos-15-intel
             target: x86_64-apple-darwin
@@ -427,10 +387,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          CONFIG="tauri.conf.frontend.json"
-          if [ "${{ matrix.flavor }}" = "full" ]; then
-            CONFIG="tauri.conf.full.json"
-          fi
+          CONFIG="tauri.conf.full.json"
 
           rm -rf "${CARGO_TARGET_DIR}/${{ matrix.target }}/release/bundle" "${CARGO_TARGET_DIR}/release/bundle" || true
 
@@ -461,10 +418,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          CONFIG="tauri.conf.frontend.json"
-          if [ "${{ matrix.flavor }}" = "full" ]; then
-            CONFIG="tauri.conf.full.json"
-          fi
+          CONFIG="tauri.conf.full.json"
 
           rm -rf "${CARGO_TARGET_DIR}/${{ matrix.target }}/release/bundle" "${CARGO_TARGET_DIR}/release/bundle" || true
 

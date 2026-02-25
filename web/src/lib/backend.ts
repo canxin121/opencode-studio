@@ -23,6 +23,14 @@ function nowMs(): number {
   return Date.now()
 }
 
+type DesktopBackendStatus = {
+  running: boolean
+  url?: string | null
+  last_error?: string | null
+}
+
+type TauriInvoke = (cmd: string, args?: Record<string, unknown>) => Promise<unknown>
+
 function randomId(): string {
   try {
     if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID()
@@ -157,7 +165,13 @@ export function getActiveBackendTarget(config: BackendsConfigV1 | null): Backend
 
 export function ensureBackendsConfigInStorage(): BackendsConfigV1 {
   const existing = readBackendsConfigFromStorage()
-  if (existing) return existing
+  if (existing) {
+    const normalized = pruneDesktopFrontendEntries(existing)
+    if (normalized !== existing) {
+      writeBackendsConfigToStorage(normalized)
+    }
+    return normalized
+  }
 
   // Migration path from older single-backend storage.
   const legacyBaseUrl = normalizeBackendBaseUrl(getLocalString(LEGACY_BASE_URL_KEY))
@@ -180,7 +194,25 @@ export function ensureBackendsConfigInStorage(): BackendsConfigV1 {
     return cfg
   }
 
-  // Default: preserve the historical behavior (single backend on this origin).
+  if (readTauriInvoke()) {
+    const now = nowMs()
+    const backend: BackendTarget = {
+      id: randomId(),
+      label: 'Desktop local backend',
+      baseUrl: normalizeBackendBaseUrl('http://127.0.0.1:3000'),
+      createdAt: now,
+      lastUsedAt: now,
+    }
+    const cfg: BackendsConfigV1 = {
+      version: 1,
+      activeBackendId: backend.id,
+      backends: [backend],
+    }
+    writeBackendsConfigToStorage(cfg)
+    return cfg
+  }
+
+  // Default for browser mode: preserve single backend on this origin.
   const origin = normalizeBackendBaseUrl(currentOrigin())
   const now = nowMs()
   const backend: BackendTarget = {
@@ -199,8 +231,111 @@ export function ensureBackendsConfigInStorage(): BackendsConfigV1 {
   return cfg
 }
 
+function pruneDesktopFrontendEntries(cfg: BackendsConfigV1): BackendsConfigV1 {
+  if (!readTauriInvoke()) return cfg
+
+  const origin = normalizeBackendBaseUrl(currentOrigin())
+  if (!origin) return cfg
+
+  const filtered = cfg.backends.filter((b) => !(b.label === 'This server' && b.baseUrl === origin))
+  if (filtered.length === cfg.backends.length) return cfg
+
+  const hasActive = filtered.some((b) => b.id === cfg.activeBackendId)
+  return {
+    ...cfg,
+    activeBackendId: hasActive ? cfg.activeBackendId : filtered[0]?.id || null,
+    backends: filtered,
+  }
+}
+
 export function readActiveBackendBaseUrl(): string {
   const cfg = ensureBackendsConfigInStorage()
   const active = getActiveBackendTarget(cfg)
   return active?.baseUrl || ''
+}
+
+function readTauriInvoke(): TauriInvoke | null {
+  try {
+    const candidate = (window as unknown as { __TAURI_INTERNALS__?: { invoke?: unknown } }).__TAURI_INTERNALS__?.invoke
+    return typeof candidate === 'function' ? (candidate as TauriInvoke) : null
+  } catch {
+    return null
+  }
+}
+
+function normalizeDesktopStatus(raw: unknown): DesktopBackendStatus | null {
+  if (!isRecord(raw)) return null
+  return {
+    running: raw.running === true,
+    url: typeof raw.url === 'string' ? raw.url : null,
+    last_error: typeof raw.last_error === 'string' ? raw.last_error : null,
+  }
+}
+
+function upsertDesktopBackend(url: string) {
+  const normalizedUrl = normalizeBackendBaseUrl(url)
+  if (!normalizedUrl) return
+
+  const cfg = ensureBackendsConfigInStorage()
+  const now = nowMs()
+  const existingByUrl = cfg.backends.find((b) => b.baseUrl === normalizedUrl)
+
+  if (existingByUrl) {
+    const nextBackends = cfg.backends.map((b) =>
+      b.id === existingByUrl.id ? { ...b, label: 'Desktop local backend', lastUsedAt: now } : b,
+    )
+    writeBackendsConfigToStorage({
+      ...cfg,
+      activeBackendId: existingByUrl.id,
+      backends: nextBackends,
+    })
+    return
+  }
+
+  const existingDesktop = cfg.backends.find((b) => b.label === 'Desktop local backend')
+  if (existingDesktop) {
+    const nextBackends = cfg.backends.map((b) =>
+      b.id === existingDesktop.id ? { ...b, baseUrl: normalizedUrl, lastUsedAt: now } : b,
+    )
+    writeBackendsConfigToStorage({
+      ...cfg,
+      activeBackendId: existingDesktop.id,
+      backends: nextBackends,
+    })
+    return
+  }
+
+  const backend: BackendTarget = {
+    id: randomId(),
+    label: 'Desktop local backend',
+    baseUrl: normalizedUrl,
+    createdAt: now,
+    lastUsedAt: now,
+  }
+
+  writeBackendsConfigToStorage({
+    ...cfg,
+    activeBackendId: backend.id,
+    backends: [backend, ...cfg.backends],
+  })
+}
+
+export async function syncDesktopBackendTarget(): Promise<void> {
+  const invoke = readTauriInvoke()
+  if (!invoke) return
+
+  try {
+    const rawStatus = await invoke('desktop_backend_status')
+    let status = normalizeDesktopStatus(rawStatus)
+
+    if (!status?.running || !status.url) {
+      const started = await invoke('desktop_backend_start')
+      status = normalizeDesktopStatus(started)
+    }
+
+    const url = String(status?.url || '').trim()
+    if (url) upsertDesktopBackend(url)
+  } catch {
+    // ignore: desktop command may be unavailable in some runtimes.
+  }
 }

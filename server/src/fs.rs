@@ -20,7 +20,7 @@ use regex::{Regex, RegexBuilder};
 use serde::{Deserialize, Serialize};
 use tokio::process::Command;
 
-use crate::path_utils::normalize_directory_path;
+use crate::path_utils::{home_dir_env, normalize_directory_path};
 
 const DEFAULT_FILE_SEARCH_LIMIT: usize = 60;
 const MAX_FILE_SEARCH_LIMIT: usize = 400;
@@ -165,7 +165,7 @@ pub struct SuccessPathResponse {
 }
 
 pub async fn fs_home() -> ApiResult<Json<FsHomeResponse>> {
-    let home = std::env::var("HOME").unwrap_or_default();
+    let home = home_dir_env().unwrap_or_default();
     if home.trim().is_empty() {
         return Err(AppError::internal("Failed to resolve home directory"));
     }
@@ -763,7 +763,7 @@ pub async fn fs_list(Query(q): Query<ListQuery>) -> ApiResult<Json<ListResponse>
         .map(|v| v.trim())
         .filter(|v| !v.is_empty())
         .map(|v| v.to_string())
-        .unwrap_or_else(|| std::env::var("HOME").unwrap_or_default());
+        .unwrap_or_else(|| home_dir_env().unwrap_or_default());
     let respect_gitignore = q.respect_gitignore.unwrap_or(false);
 
     let resolved = resolve_path(&raw_path);
@@ -988,7 +988,7 @@ pub async fn fs_search(Query(q): Query<SearchQuery>) -> ApiResult<Json<SearchRes
     let raw_root = q
         .root
         .or(q.directory)
-        .unwrap_or_else(|| std::env::var("HOME").unwrap_or_default());
+        .unwrap_or_else(|| home_dir_env().unwrap_or_default());
     let raw_query = q.q.unwrap_or_default();
     let include_hidden = q.include_hidden.unwrap_or(false);
     let respect_gitignore = q.respect_gitignore.unwrap_or(true);

@@ -32,12 +32,6 @@ pub struct Project {
     pub last_opened_at: i64,
 }
 
-fn home_dir() -> PathBuf {
-    std::env::var("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("."))
-}
-
 pub fn opencode_studio_data_dir() -> PathBuf {
     if let Ok(dir) = std::env::var("OPENCODE_STUDIO_DATA_DIR")
         && !dir.trim().is_empty()
@@ -45,7 +39,7 @@ pub fn opencode_studio_data_dir() -> PathBuf {
         return PathBuf::from(dir);
     }
 
-    home_dir().join(".config").join("opencode-studio")
+    crate::path_utils::config_home_dir().join("opencode-studio")
 }
 
 pub fn settings_path() -> PathBuf {

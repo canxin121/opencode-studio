@@ -4,7 +4,10 @@
   "version": "0.1.0",
   "identifier": "cn.cxits.opencode-studio",
   "build": {
-    "beforeDevCommand": "bun run --cwd ../../web dev",
+    "beforeDevCommand": {
+      "script": "bun run dev",
+      "cwd": "../../web"
+    },
     "devUrl": "http://127.0.0.1:3000",
     "frontendDist": "../../web/dist"
   },

@@ -16,6 +16,7 @@ import { i18n, ensureDefaultLocale, setAppLocale } from './i18n'
 import { readSessionIdFromQuery } from './app/navigation/sessionQuery'
 import { useToastsStore } from './stores/toasts'
 import { useAuthStore } from './stores/auth'
+import { syncDesktopBackendTarget } from './lib/backend'
 import {
   OC_AUTH_REQUIRED_EVENT,
   readAuthRequiredFromStorage,
@@ -40,6 +41,8 @@ try {
 } catch {
   // ignore
 }
+
+await syncDesktopBackendTarget()
 
 const app = createApp(App)
 const pinia = createPinia()

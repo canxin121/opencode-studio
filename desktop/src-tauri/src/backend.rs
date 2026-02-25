@@ -115,7 +115,8 @@ async fn spawn_sidecar(
   app: &AppHandle,
   cfg: &DesktopConfig,
 ) -> Result<(tauri_plugin_shell::process::CommandChild, String), String> {
-  // If the sidecar is not bundled, treat this as a frontend-only build.
+  // If the sidecar is not bundled, startup fails and desktop commands can
+  // still report status/manage retries.
   let sidecar = match app.shell().sidecar("opencode-studio") {
     Ok(cmd) => cmd,
     Err(_) => {
@@ -131,6 +132,7 @@ async fn spawn_sidecar(
     .path()
     .app_config_dir()
     .map_err(|e| format!("resolve app config dir: {e}"))?;
+  let home_env = resolve_home_env();
 
   let mut cmd = sidecar
     .args([
@@ -142,6 +144,10 @@ async fn spawn_sidecar(
       ui_dir.to_string_lossy().as_ref(),
     ])
     .env("OPENCODE_STUDIO_DATA_DIR", data_dir.to_string_lossy().as_ref());
+
+  if let Some(home) = home_env.as_deref() {
+    cmd = cmd.env("HOME", home);
+  }
 
   if let Some(pw) = cfg.backend.ui_password.as_deref() {
     if !pw.trim().is_empty() {
@@ -164,6 +170,14 @@ async fn spawn_sidecar(
     if !v.is_empty() {
       cmd = cmd.args(["--opencode-log-level", v]);
     }
+  }
+
+  for origin in merge_cors_origins(cfg) {
+    cmd = cmd.args(["--cors-origin", &origin]);
+  }
+
+  if cfg.backend.cors_allow_all {
+    cmd = cmd.args(["--cors-allow-all"]);
   }
 
   let (mut rx, child) = cmd.spawn().map_err(|e| format!("spawn backend: {e}"))?;
@@ -262,4 +276,52 @@ async fn wait_for_health(base_url: &str) -> Result<(), String> {
       }
     }
   }
+}
+
+fn resolve_home_env() -> Option<String> {
+  let home = std::env::var("HOME").ok().map(|v| v.trim().to_string()).filter(|v| !v.is_empty());
+  if home.is_some() {
+    return home;
+  }
+
+  let user_profile = std::env::var("USERPROFILE")
+    .ok()
+    .map(|v| v.trim().to_string())
+    .filter(|v| !v.is_empty());
+  if user_profile.is_some() {
+    return user_profile;
+  }
+
+  let home_drive = std::env::var("HOMEDRIVE").ok().map(|v| v.trim().to_string()).unwrap_or_default();
+  let home_path = std::env::var("HOMEPATH").ok().map(|v| v.trim().to_string()).unwrap_or_default();
+  let combined = format!("{home_drive}{home_path}").trim().to_string();
+  if combined.is_empty() {
+    None
+  } else {
+    Some(combined)
+  }
+}
+
+fn merge_cors_origins(cfg: &DesktopConfig) -> Vec<String> {
+  let mut origins = Vec::<String>::new();
+
+  for raw in &cfg.backend.cors_origins {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+      continue;
+    }
+    if !origins.iter().any(|v| v == trimmed) {
+      origins.push(trimmed.to_string());
+    }
+  }
+
+  if cfg!(debug_assertions) {
+    for dev_origin in ["http://localhost:5173", "http://127.0.0.1:5173"] {
+      if !origins.iter().any(|v| v == dev_origin) {
+        origins.push(dev_origin.to_string());
+      }
+    }
+  }
+
+  origins
 }
