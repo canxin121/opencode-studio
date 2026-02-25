@@ -1,7 +1,7 @@
 use std::fs;
 use std::io::Write;
 use std::net::TcpListener;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -223,9 +223,10 @@ async fn spawn_sidecar(
 fn resolve_ui_dir(app: &AppHandle) -> Result<PathBuf, String> {
   // In packaged builds, resources are available.
   if let Ok(resource_dir) = app.path().resource_dir() {
-    let candidate = resource_dir.join("dist");
-    if candidate.join("index.html").is_file() {
-      return Ok(candidate);
+    for candidate in ui_dir_candidates(&resource_dir) {
+      if candidate.join("index.html").is_file() {
+        return Ok(candidate);
+      }
     }
   }
 
@@ -237,6 +238,20 @@ fn resolve_ui_dir(app: &AppHandle) -> Result<PathBuf, String> {
   }
 
   Err("unable to locate UI dist directory".to_string())
+}
+
+fn ui_dir_candidates(resource_dir: &Path) -> Vec<PathBuf> {
+  vec![
+    resource_dir.join("dist"),
+    resource_dir.join("web").join("dist"),
+    resource_dir.join("_up_").join("dist"),
+    resource_dir.join("_up_").join("web").join("dist"),
+    resource_dir
+      .join("_up_")
+      .join("_up_")
+      .join("web")
+      .join("dist"),
+  ]
 }
 
 fn pick_port(preferred: u16) -> Result<u16, String> {
