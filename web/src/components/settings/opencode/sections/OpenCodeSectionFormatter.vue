@@ -1,11 +1,13 @@
 <script lang="ts">
-import { computed, defineComponent } from 'vue'
+import { computed, defineComponent, onMounted, ref } from 'vue'
 import {
   RiAddLine,
   RiArrowDownSLine,
   RiArrowUpSLine,
   RiCheckLine,
   RiDeleteBinLine,
+  RiLoader4Line,
+  RiRefreshLine,
   RiRestartLine,
 } from '@remixicon/vue'
 
@@ -17,8 +19,85 @@ import Tooltip from '@/components/ui/Tooltip.vue'
 import VirtualList from '@/components/ui/VirtualList.vue'
 import CodeMirrorEditor from '@/components/CodeMirrorEditor.vue'
 import StringListEditor from '../StringListEditor.vue'
+import { apiJson } from '@/lib/api'
 
 import { useOpencodeConfigPanelContext } from '../opencodeConfigContext'
+
+type LspRuntimeListResponse =
+  | unknown[]
+  | {
+      items?: unknown[]
+      servers?: unknown[]
+      list?: unknown[]
+    }
+
+type LspRuntimeItem = {
+  id: string
+  name: string
+  status: string
+  rootDir: string
+  transport: string
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  return value as Record<string, unknown>
+}
+
+function pickString(obj: Record<string, unknown>, keys: string[]): string {
+  for (const key of keys) {
+    const value = obj[key]
+    if (typeof value === 'string' && value.trim()) return value.trim()
+  }
+  return ''
+}
+
+function pickStatus(obj: Record<string, unknown>): string {
+  const explicit = pickString(obj, ['status', 'state'])
+  if (explicit) return explicit
+  if (obj.connected === true) return 'connected'
+  if (obj.connected === false) return 'disconnected'
+  return 'unknown'
+}
+
+function normalizeLspRuntimeList(payload: LspRuntimeListResponse): LspRuntimeItem[] {
+  const list = Array.isArray(payload)
+    ? payload
+    : Array.isArray(payload?.items)
+      ? payload.items
+      : Array.isArray(payload?.servers)
+        ? payload.servers
+        : Array.isArray(payload?.list)
+          ? payload.list
+          : []
+
+  return list
+    .map((raw) => {
+      const rec = asRecord(raw)
+      if (!rec) return null
+      const id = pickString(rec, ['id', 'lspId', 'serverId', 'name', 'label'])
+      const name = pickString(rec, ['name', 'label', 'server', 'serverName']) || id
+      if (!id && !name) return null
+      return {
+        id: id || name,
+        name,
+        status: pickStatus(rec),
+        rootDir: pickString(rec, ['rootDir', 'root', 'workspaceRoot', 'workspace', 'directory']),
+        transport: pickString(rec, ['transport', 'connection', 'mode']),
+      }
+    })
+    .filter((item): item is LspRuntimeItem => Boolean(item))
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
+
+function runtimeStatusTone(status: string): 'ok' | 'warn' | 'idle' {
+  const value = String(status || '')
+    .trim()
+    .toLowerCase()
+  if (value === 'connected' || value === 'running' || value === 'ready') return 'ok'
+  if (value === 'error' || value === 'failed' || value === 'disconnected' || value === 'stopped') return 'warn'
+  return 'idle'
+}
 
 export default defineComponent({
   components: {
@@ -34,6 +113,8 @@ export default defineComponent({
     RiArrowUpSLine,
     RiCheckLine,
     RiDeleteBinLine,
+    RiLoader4Line,
+    RiRefreshLine,
     RiRestartLine,
   },
   setup() {
@@ -69,11 +150,38 @@ export default defineComponent({
       { value: 'disabled', label: t('settings.opencodeConfig.sections.formatter.lsp.options.mode.disabled') },
     ])
 
+    const lspRuntimeLoading = ref(false)
+    const lspRuntimeError = ref('')
+    const lspRuntimeItems = ref<LspRuntimeItem[]>([])
+
+    async function refreshLspRuntimeStatus() {
+      lspRuntimeLoading.value = true
+      lspRuntimeError.value = ''
+      try {
+        const payload = await apiJson<LspRuntimeListResponse>('/api/lsp')
+        lspRuntimeItems.value = normalizeLspRuntimeList(payload)
+      } catch (err) {
+        lspRuntimeError.value = err instanceof Error ? err.message : String(err)
+        lspRuntimeItems.value = []
+      } finally {
+        lspRuntimeLoading.value = false
+      }
+    }
+
+    onMounted(() => {
+      void refreshLspRuntimeStatus()
+    })
+
     return Object.assign(ctx, {
       formatterCommandSuggestions,
       lspCommandSuggestions,
       extensionSuggestions,
       lspModePickerOptions,
+      lspRuntimeLoading,
+      lspRuntimeError,
+      lspRuntimeItems,
+      refreshLspRuntimeStatus,
+      runtimeStatusTone,
     })
   },
 })
@@ -481,6 +589,77 @@ export default defineComponent({
             />
             {{ t('settings.opencodeConfig.sections.common.disabled') }}
           </label>
+        </div>
+      </div>
+
+      <div class="grid gap-3 rounded-md border border-border/70 p-3">
+        <div class="flex items-center justify-between gap-2">
+          <div>
+            <div class="text-sm font-medium">
+              {{ t('settings.opencodeConfig.sections.formatter.lsp.runtime.title') }}
+            </div>
+            <div class="text-xs text-muted-foreground">
+              {{ t('settings.opencodeConfig.sections.formatter.lsp.runtime.description') }}
+            </div>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            class="gap-1"
+            :disabled="lspRuntimeLoading"
+            @click="refreshLspRuntimeStatus"
+          >
+            <RiLoader4Line v-if="lspRuntimeLoading" class="h-3.5 w-3.5 animate-spin" />
+            <RiRefreshLine v-else class="h-3.5 w-3.5" />
+            <span>{{ t('common.refresh') }}</span>
+          </Button>
+        </div>
+
+        <div v-if="lspRuntimeLoading" class="text-xs text-muted-foreground">
+          {{ t('common.loading') }}
+        </div>
+        <div
+          v-else-if="lspRuntimeError"
+          class="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive"
+        >
+          {{ lspRuntimeError }}
+        </div>
+        <div v-else-if="lspRuntimeItems.length === 0" class="text-xs text-muted-foreground">
+          {{ t('settings.opencodeConfig.sections.formatter.lsp.runtime.empty') }}
+        </div>
+        <div v-else class="space-y-2">
+          <div
+            v-for="runtime in lspRuntimeItems"
+            :key="runtime.id"
+            class="rounded-md border border-border/70 bg-muted/10 p-2.5 text-xs"
+          >
+            <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span class="font-mono text-foreground break-all">{{ runtime.name }}</span>
+              <span
+                class="inline-flex rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide"
+                :class="
+                  runtimeStatusTone(runtime.status) === 'ok'
+                    ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                    : runtimeStatusTone(runtime.status) === 'warn'
+                      ? 'bg-red-500/15 text-red-700 dark:text-red-300'
+                      : 'bg-muted text-muted-foreground'
+                "
+              >
+                {{ runtime.status || t('common.unknown') }}
+              </span>
+            </div>
+
+            <div class="mt-1 grid gap-1 text-muted-foreground">
+              <div v-if="runtime.rootDir" class="break-all">
+                {{ t('settings.opencodeConfig.sections.formatter.lsp.runtime.fields.root') }}: {{ runtime.rootDir }}
+              </div>
+              <div v-if="runtime.transport">
+                {{ t('settings.opencodeConfig.sections.formatter.lsp.runtime.fields.transport') }}:
+                {{ runtime.transport }}
+              </div>
+              <div>{{ t('settings.opencodeConfig.sections.formatter.lsp.runtime.fields.id') }}: {{ runtime.id }}</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

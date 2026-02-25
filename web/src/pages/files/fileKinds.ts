@@ -196,6 +196,14 @@ export const DOCUMENT_EXTENSIONS = new Set([
   'bib',
 ])
 
+export const MARKDOWN_EXTENSIONS = new Set(['md', 'mdx', 'markdown', 'mdown', 'mkd'])
+
+export const PDF_EXTENSIONS = new Set(['pdf'])
+
+export const AUDIO_EXTENSIONS = new Set(['mp3', 'wav', 'ogg', 'oga', 'm4a', 'aac', 'flac', 'opus', 'weba'])
+
+export const VIDEO_EXTENSIONS = new Set(['mp4', 'webm', 'ogv', 'mov', 'm4v', 'mkv'])
+
 export function extensionFromPath(path: string): string {
   const base = path.split('/').pop() || path
   const idx = base.lastIndexOf('.')
@@ -218,6 +226,26 @@ export function shouldIgnorePath(path: string): boolean {
 export function isImagePath(path: string): boolean {
   const ext = extensionFromPath(path)
   return ext ? IMAGE_EXTENSIONS.has(ext) : false
+}
+
+export function isMarkdownPath(path: string): boolean {
+  const ext = extensionFromPath(path)
+  return ext ? MARKDOWN_EXTENSIONS.has(ext) : false
+}
+
+export function isPdfPath(path: string): boolean {
+  const ext = extensionFromPath(path)
+  return ext ? PDF_EXTENSIONS.has(ext) : false
+}
+
+export function isAudioPath(path: string): boolean {
+  const ext = extensionFromPath(path)
+  return ext ? AUDIO_EXTENSIONS.has(ext) : false
+}
+
+export function isVideoPath(path: string): boolean {
+  const ext = extensionFromPath(path)
+  return ext ? VIDEO_EXTENSIONS.has(ext) : false
 }
 
 export function fileIconComponent(ext?: string) {

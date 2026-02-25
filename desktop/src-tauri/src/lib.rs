@@ -14,6 +14,7 @@ use tauri::{
   tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
   Manager,
 };
+use tauri_plugin_autostart::ManagerExt;
 
 use backend::BackendManager;
 
@@ -21,6 +22,10 @@ pub fn run() {
   tauri::Builder::<AppRuntime>::new()
     .plugin(tauri_plugin_shell::init())
     .plugin(tauri_plugin_opener::init())
+    .plugin(tauri_plugin_autostart::init(
+      tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+      None,
+    ))
     .invoke_handler(tauri::generate_handler![
       desktop_backend_status,
       desktop_backend_start,
@@ -35,7 +40,11 @@ pub fn run() {
       let app_handle = app.handle().clone();
 
       // Ensure a user-editable config file exists.
-      let _ = config::load_or_create(&app_handle);
+      if let Ok(cfg) = config::load_or_create(&app_handle) {
+        if let Err(err) = apply_autostart_on_boot(&app_handle, cfg.autostart_on_boot) {
+          eprintln!("desktop autostart apply failed: {err}");
+        }
+      }
 
       // Backend manager is always present so tray actions and UI commands share
       // one code path even when sidecar startup fails.
@@ -135,7 +144,9 @@ fn desktop_config_get(app: AppHandle) -> Result<config::DesktopConfig, String> {
 
 #[tauri::command]
 fn desktop_config_save(app: AppHandle, config: config::DesktopConfig) -> Result<config::DesktopConfig, String> {
-  config::save(&app, config)
+  let saved = config::save(&app, config)?;
+  apply_autostart_on_boot(&app, saved.autostart_on_boot)?;
+  Ok(saved)
 }
 
 #[tauri::command]
@@ -187,4 +198,23 @@ async fn handle_tray_menu(app: &AppHandle, id: &str) {
     }
     _ => {}
   }
+}
+
+fn apply_autostart_on_boot(app: &AppHandle, enabled: bool) -> Result<(), String> {
+  let manager = app.autolaunch();
+  let is_enabled = manager
+    .is_enabled()
+    .map_err(|e| format!("autostart status: {e}"))?;
+
+  if enabled && !is_enabled {
+    manager
+      .enable()
+      .map_err(|e| format!("autostart enable: {e}"))?;
+  } else if !enabled && is_enabled {
+    manager
+      .disable()
+      .map_err(|e| format!("autostart disable: {e}"))?;
+  }
+
+  Ok(())
 }

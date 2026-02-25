@@ -16,18 +16,19 @@ import {
   MAX_VIEW_CHARS,
   extensionFromPath,
   isHiddenName,
-  isImagePath,
   languageForPath,
   shouldIgnoreEntryName,
   shouldIgnorePath,
   truncateContent,
 } from './files/fileKinds'
+import { detectPreviewMode } from './files/previewKinds'
 import type {
   DialogKind,
   FileNode,
   FlatRow,
   ListEntry,
   ListResponse,
+  MarkdownViewMode,
   SearchFile,
   SearchResponse,
   SelectionRange,
@@ -331,6 +332,7 @@ const draftContent = ref('')
 const fileLoading = ref(false)
 const fileError = ref<string | null>(null)
 const viewerMode = ref<ViewerMode>('none')
+const markdownViewMode = ref<MarkdownViewMode>('source')
 const wrapLines = ref(true)
 const isSaving = ref(false)
 const uploading = ref(false)
@@ -397,7 +399,7 @@ function handleGlobalKeydown(e: KeyboardEvent) {
   // Cmd/Ctrl+S: save current file.
   if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) return
   if ((e.key || '').toLowerCase() !== 's') return
-  if (viewerMode.value !== 'text' || !canEdit.value) return
+  if (!['text', 'markdown'].includes(viewerMode.value) || !canEdit.value) return
   if (!selectedFile.value?.path) return
 
   e.preventDefault()
@@ -500,6 +502,8 @@ const rawApiPath = computed(() => {
 const rawUrl = ref('')
 let rawUrlSeq = 0
 
+const usesBlobPreview = computed(() => ['image', 'pdf', 'audio', 'video'].includes(viewerMode.value))
+
 function revokeRawUrl() {
   const href = String(rawUrl.value || '').trim()
   if (!href) return
@@ -515,16 +519,14 @@ function revokeRawUrl() {
 
 watch(
   () => {
-    const filePath = selectedFile.value?.path || ''
-    const isImg = Boolean(filePath && isImagePath(filePath))
-    return [rawApiPath.value, isImg] as const
+    return [rawApiPath.value, usesBlobPreview.value] as const
   },
-  async ([path, isImg]) => {
+  async ([path, needsBlob]) => {
     rawUrlSeq += 1
     const seq = rawUrlSeq
 
     revokeRawUrl()
-    if (!isImg) return
+    if (!needsBlob) return
     if (!path) return
 
     try {
@@ -545,10 +547,11 @@ watch(
 onBeforeUnmount(() => {
   revokeRawUrl()
 })
-const isSelectedImage = computed(() => Boolean(selectedFile.value && isImagePath(selectedFile.value.path)))
 const isTruncated = computed(() => fileContent.value.length > MAX_VIEW_CHARS)
 const displayedContent = computed(() => truncateContent(fileContent.value))
-const canEdit = computed(() => Boolean(selectedFile.value && !isSelectedImage.value && !isTruncated.value))
+const canEdit = computed(() =>
+  Boolean(selectedFile.value && ['text', 'markdown'].includes(viewerMode.value) && !isTruncated.value),
+)
 const dirty = computed(() => canEdit.value && draftContent.value !== displayedContent.value)
 
 const displaySelectedPath = computed(() => {
@@ -558,7 +561,7 @@ const displaySelectedPath = computed(() => {
 })
 
 const fileStatusLabel = computed(() => {
-  if (!selectedFile.value?.path || viewerMode.value !== 'text') return ''
+  if (!selectedFile.value?.path || !['text', 'markdown'].includes(viewerMode.value)) return ''
   return dirty.value ? 'modified' : 'saved'
 })
 
@@ -1800,15 +1803,16 @@ async function openFile(node: FileNode) {
     showMobileViewer.value = true
   }
 
-  if (isImagePath(node.path)) {
-    viewerMode.value = 'image'
+  const previewMode = detectPreviewMode(node.path)
+  if (previewMode === 'image' || previewMode === 'pdf' || previewMode === 'audio' || previewMode === 'video') {
+    viewerMode.value = previewMode
     fileContent.value = ''
     draftContent.value = ''
     fileLoading.value = false
     return
   }
 
-  viewerMode.value = 'text'
+  viewerMode.value = previewMode === 'markdown' ? 'markdown' : 'text'
   try {
     const content = await readFileText({ directory: rootPath, path: node.path })
     if (seq !== openFileSeq || root.value !== rootPath || selectedFile.value?.path !== node.path) return
@@ -1987,7 +1991,7 @@ watch(
   () => {
     clearAutoSaveTimer()
     if (!autoSaveEnabled.value) return
-    if (viewerMode.value !== 'text' || !canEdit.value) return
+    if (!['text', 'markdown'].includes(viewerMode.value) || !canEdit.value) return
     if (!dirty.value || isSaving.value) return
 
     autoSaveTimer = window.setTimeout(() => {
@@ -2827,6 +2831,7 @@ onMounted(async () => {
                 v-model:showMobileViewer="showMobileViewer"
                 v-model:autoSaveEnabled="autoSaveEnabled"
                 v-model:wrapLines="wrapLines"
+                v-model:markdownViewMode="markdownViewMode"
                 v-model:draftContent="draftContent"
                 v-model:selection="selection"
                 v-model:commentText="commentText"

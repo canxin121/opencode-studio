@@ -9,6 +9,8 @@ use crate::AppHandle;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DesktopConfig {
+    #[serde(default = "default_autostart_on_boot")]
+    pub autostart_on_boot: bool,
     pub backend: BackendConfig,
 }
 
@@ -31,9 +33,14 @@ pub struct BackendConfig {
 impl Default for DesktopConfig {
     fn default() -> Self {
         Self {
+            autostart_on_boot: default_autostart_on_boot(),
             backend: BackendConfig::default(),
         }
     }
+}
+
+fn default_autostart_on_boot() -> bool {
+    true
 }
 
 impl Default for BackendConfig {

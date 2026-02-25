@@ -27,6 +27,7 @@ reqwest = { version = "0.13", default-features = true, features = ["json"] }
 tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-shell = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
 tauri-plugin-opener = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
+tauri-plugin-autostart = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
 
 [features]
 cef = ["tauri/cef"]

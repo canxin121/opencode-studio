@@ -26,7 +26,9 @@ export type FileNode = {
   relativePath?: string
 }
 
-export type ViewerMode = 'none' | 'text' | 'image' | 'binary'
+export type ViewerMode = 'none' | 'text' | 'markdown' | 'image' | 'pdf' | 'audio' | 'video' | 'binary'
+
+export type MarkdownViewMode = 'source' | 'preview' | 'split'
 
 export type DialogKind = 'createFile' | 'createFolder' | 'rename' | null
 

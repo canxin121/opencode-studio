@@ -57,11 +57,51 @@ fn resolve_path(input: &str) -> PathBuf {
     PathBuf::from(normalized)
 }
 
-fn ensure_within_base(base: &Path, target: &Path) -> ApiResult<()> {
-    let base = base.components().collect::<PathBuf>();
-    let target = target.components().collect::<PathBuf>();
+fn is_windows_style_path(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':'
+}
 
-    if !target.starts_with(&base) {
+fn normalize_for_workspace_compare(path: &Path) -> String {
+    let mut normalized = path
+        .components()
+        .collect::<PathBuf>()
+        .to_string_lossy()
+        .replace('\\', "/");
+
+    if normalized.len() > 1 {
+        normalized = normalized.trim_end_matches('/').to_string();
+    }
+
+    if cfg!(windows) || is_windows_style_path(&normalized) {
+        normalized = normalized.to_ascii_lowercase();
+    }
+
+    normalized
+}
+
+fn is_path_within_base(base: &str, target: &str) -> bool {
+    if target == base {
+        return true;
+    }
+    if base == "/" {
+        return target.starts_with('/');
+    }
+
+    target
+        .strip_prefix(base)
+        .is_some_and(|suffix| suffix.starts_with('/'))
+}
+
+fn to_api_path(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
+}
+
+fn ensure_within_base(base: &Path, target: &Path) -> ApiResult<()> {
+    let base = normalize_for_workspace_compare(base);
+    let target = normalize_for_workspace_compare(target);
+
+    if !is_path_within_base(&base, &target) {
         return Err(AppError::bad_request("Path is outside of active workspace"));
     }
     Ok(())
@@ -208,7 +248,7 @@ pub async fn fs_mkdir(
 
     Ok(Json(SuccessPathResponse {
         success: true,
-        path: resolved.to_string_lossy().into_owned(),
+        path: to_api_path(&resolved),
     }))
 }
 
@@ -506,7 +546,7 @@ pub async fn fs_upload(
 
     Ok(Json(UploadResponse {
         success: true,
-        path: resolved.to_string_lossy().into_owned(),
+        path: to_api_path(&resolved),
         bytes: bytes_len,
     }))
 }
@@ -565,7 +605,7 @@ pub async fn fs_write(
 
     Ok(Json(SuccessPathResponse {
         success: true,
-        path: resolved.to_string_lossy().into_owned(),
+        path: to_api_path(&resolved),
     }))
 }
 
@@ -608,7 +648,7 @@ pub async fn fs_delete(
         // Match client "force: true" behavior.
         return Ok(Json(SuccessPathResponse {
             success: true,
-            path: resolved.to_string_lossy().into_owned(),
+            path: to_api_path(&resolved),
         }));
     }
 
@@ -628,7 +668,7 @@ pub async fn fs_delete(
 
     Ok(Json(SuccessPathResponse {
         success: true,
-        path: resolved.to_string_lossy().into_owned(),
+        path: to_api_path(&resolved),
     }))
 }
 
@@ -674,7 +714,7 @@ pub async fn fs_rename(
     )
     .await?;
 
-    if base_old != base_new {
+    if normalize_for_workspace_compare(&base_old) != normalize_for_workspace_compare(&base_new) {
         return Err(AppError::bad_request(
             "Source and destination must share the same workspace root",
         ));
@@ -690,7 +730,7 @@ pub async fn fs_rename(
 
     Ok(Json(SuccessPathResponse {
         success: true,
-        path: resolved_new.to_string_lossy().into_owned(),
+        path: to_api_path(&resolved_new),
     }))
 }
 
@@ -829,7 +869,7 @@ pub async fn fs_list(Query(q): Query<ListQuery>) -> ApiResult<Json<ListResponse>
 
         entries.push(ListEntry {
             name,
-            path: path.to_string_lossy().into_owned(),
+            path: to_api_path(&path),
             is_directory,
             is_file: ft.is_file(),
             is_symbolic_link,
@@ -857,7 +897,7 @@ pub async fn fs_list(Query(q): Query<ListQuery>) -> ApiResult<Json<ListResponse>
     };
 
     Ok(Json(ListResponse {
-        path: abs.to_string_lossy().into_owned(),
+        path: to_api_path(&abs),
         entries: page_entries,
         offset: if q.limit.is_some() || offset > 0 {
             Some(offset)
@@ -1102,7 +1142,7 @@ pub async fn fs_search(Query(q): Query<SearchQuery>) -> ApiResult<Json<SearchRes
         candidates.push((
             SearchFile {
                 name,
-                path: path.to_string_lossy().into_owned(),
+                path: to_api_path(&path),
                 relative_path,
                 extension,
             },
@@ -1137,7 +1177,7 @@ pub async fn fs_search(Query(q): Query<SearchQuery>) -> ApiResult<Json<SearchRes
     );
 
     Ok(Json(SearchResponse {
-        root: abs_root.to_string_lossy().into_owned(),
+        root: to_api_path(&abs_root),
         count: files.len(),
         files,
     }))
@@ -1618,7 +1658,7 @@ pub async fn fs_content_search(
 
         let relative_path = normalize_relative_search_path(&root, &path);
         files.push(ContentSearchFileResult {
-            path: path.to_string_lossy().into_owned(),
+            path: to_api_path(&path),
             relative_path,
             match_count: matches.len(),
             matches,
@@ -1643,7 +1683,7 @@ pub async fn fs_content_search(
     );
 
     Ok(Json(ContentSearchResponse {
-        root: root.to_string_lossy().into_owned(),
+        root: to_api_path(&root),
         query,
         file_count: files.len(),
         match_count: total_matches,
@@ -1720,12 +1760,12 @@ pub async fn fs_content_replace(
 
         let relative_path = normalize_relative_search_path(&root, &resolved);
         return Ok(Json(ContentReplaceResponse {
-            root: root.to_string_lossy().into_owned(),
+            root: to_api_path(&root),
             file_count: 1,
             replacement_count: 1,
             skipped: 0,
             files: vec![ContentReplaceFileResult {
-                path: resolved.to_string_lossy().into_owned(),
+                path: to_api_path(&resolved),
                 relative_path,
                 replacements: 1,
             }],
@@ -1794,7 +1834,7 @@ pub async fn fs_content_replace(
         total_replacements += replacements;
         let relative_path = normalize_relative_search_path(&root, &path);
         files.push(ContentReplaceFileResult {
-            path: path.to_string_lossy().into_owned(),
+            path: to_api_path(&path),
             relative_path,
             replacements,
         });
@@ -1813,10 +1853,43 @@ pub async fn fs_content_replace(
     );
 
     Ok(Json(ContentReplaceResponse {
-        root: root.to_string_lossy().into_owned(),
+        root: to_api_path(&root),
         file_count: files.len(),
         replacement_count: total_replacements,
         skipped,
         files,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn ensure_within_base_accepts_windows_case_and_separator_variants() {
+        let base = Path::new("C:/Users/Alice/Workspace");
+        let target = Path::new("c:\\users\\alice\\workspace\\project\\src\\main.rs");
+        assert!(ensure_within_base(base, target).is_ok());
+    }
+
+    #[test]
+    fn ensure_within_base_rejects_windows_prefix_collision() {
+        let base = Path::new("C:/Users/Alice/Workspace");
+        let target = Path::new("C:/Users/Alice/Workspace-archive/file.txt");
+        assert!(ensure_within_base(base, target).is_err());
+    }
+
+    #[test]
+    fn ensure_within_base_rejects_unix_prefix_collision() {
+        let base = Path::new("/home/alice/work");
+        let target = Path::new("/home/alice/workspace/readme.md");
+        assert!(ensure_within_base(base, target).is_err());
+    }
+
+    #[test]
+    fn to_api_path_uses_forward_slashes() {
+        let path = Path::new("C:\\Users\\Alice\\workspace\\file.txt");
+        assert_eq!(to_api_path(path), "C:/Users/Alice/workspace/file.txt");
+    }
 }

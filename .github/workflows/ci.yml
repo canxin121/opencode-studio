@@ -12,6 +12,10 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  BUN_VERSION: 1.3.9
+  CACHE_VERSION: v1
+
 jobs:
   web:
     name: Web (${{ matrix.task }})
@@ -27,7 +31,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.9
+          bun-version: ${{ env.BUN_VERSION }}
           # Disable setup-bun's internal cache to avoid failures
           # when GitHub's cache service is degraded.
           no-cache: true
@@ -36,10 +40,15 @@ jobs:
         uses: actions/cache@v5
         continue-on-error: true
         with:
-          path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ hashFiles('web/bun.lock') }}
+          path: |
+            ~/.bun/install/cache
+            web/node_modules
+            web/node_modules/.tmp
+            web/node_modules/.vite
+            web/.prettier-cache
+          key: ${{ runner.os }}-web-${{ env.CACHE_VERSION }}-${{ env.BUN_VERSION }}-${{ hashFiles('web/bun.lock', 'web/package.json', 'web/vite.config.*', 'web/tsconfig*.json') }}
           restore-keys: |
-            ${{ runner.os }}-bun-
+            ${{ runner.os }}-web-${{ env.CACHE_VERSION }}-${{ env.BUN_VERSION }}-
 
       - name: Install web deps
         run: bun install --cwd web --frozen-lockfile

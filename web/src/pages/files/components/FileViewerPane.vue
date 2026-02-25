@@ -16,17 +16,20 @@ import {
 } from '@remixicon/vue'
 
 import CodeMirrorEditor from '@/components/CodeMirrorEditor.vue'
+import Markdown from '@/components/Markdown.vue'
 import MonacoDiffEditor from '@/components/MonacoDiffEditor.vue'
 import Button from '@/components/ui/Button.vue'
 import IconButton from '@/components/ui/IconButton.vue'
 import MobileSidebarEmptyState from '@/components/ui/MobileSidebarEmptyState.vue'
 import OptionMenu from '@/components/ui/OptionMenu.vue'
+import SegmentedButton from '@/components/ui/SegmentedButton.vue'
+import SegmentedControl from '@/components/ui/SegmentedControl.vue'
 import type { OptionMenuGroup, OptionMenuItem } from '@/components/ui/optionMenu.types'
 import { buildUnifiedDiffModel } from '@/features/git/diff/unifiedDiff'
 import { formatDateTimeYMDHM, formatDateYMDShort2DigitYear } from '@/i18n/intl'
 
 import { isImagePath } from '../fileKinds'
-import type { FileNode, SelectionRange, ViewerMode } from '../types'
+import type { FileNode, MarkdownViewMode, SelectionRange, ViewerMode } from '../types'
 import type { GitBlameLine, GitDiffMeta, GitLogCommit } from '@/types/git'
 
 type GitDiffMode = 'working' | 'staged'
@@ -36,6 +39,7 @@ type TimelineSide = 'left' | 'right'
 const showMobileViewer = defineModel<boolean>('showMobileViewer', { default: false })
 const autoSaveEnabled = defineModel<boolean>('autoSaveEnabled', { default: false })
 const wrapLines = defineModel<boolean>('wrapLines', { default: true })
+const markdownViewMode = defineModel<MarkdownViewMode>('markdownViewMode', { default: 'source' })
 const draftContent = defineModel<string>('draftContent', { default: '' })
 const selection = defineModel<SelectionRange | null>('selection', { default: null })
 const commentText = defineModel<string>('commentText', { default: '' })
@@ -105,6 +109,13 @@ const viewMenuQuery = ref('')
 const viewMenuAnchorEl = ref<HTMLElement | null>(null)
 
 const isSelectedImage = computed(() => Boolean(props.selectedFile && isImagePath(props.selectedFile.path)))
+const supportsSourceEditor = computed(
+  () => props.viewerMode === 'text' || (props.viewerMode === 'markdown' && markdownViewMode.value !== 'preview'),
+)
+const showMarkdownPreview = computed(() => props.viewerMode === 'markdown' && markdownViewMode.value !== 'source')
+const showMarkdownSource = computed(() => props.viewerMode === 'markdown' && markdownViewMode.value !== 'preview')
+const showMarkdownSplit = computed(() => props.viewerMode === 'markdown' && markdownViewMode.value === 'split')
+const canShowViewMenu = computed(() => props.viewerMode === 'text' || props.viewerMode === 'markdown')
 
 const viewMenuGroups = computed<OptionMenuGroup[]>(() => [
   {
@@ -135,7 +146,7 @@ const viewMenuGroups = computed<OptionMenuGroup[]>(() => [
         description: t('files.viewer.viewMenu.wrap.description'),
         checked: wrapLines.value,
         icon: RiTextWrap,
-        disabled: props.viewerMode !== 'text',
+        disabled: !supportsSourceEditor.value,
       },
       {
         id: 'toggle-autosave',
@@ -145,7 +156,7 @@ const viewMenuGroups = computed<OptionMenuGroup[]>(() => [
         description: t('files.viewer.viewMenu.autosave.description'),
         checked: autoSaveEnabled.value,
         icon: RiSave3Line,
-        disabled: props.viewerMode !== 'text' || !props.canEdit,
+        disabled: !supportsSourceEditor.value || !props.canEdit,
       },
     ],
   },
@@ -932,7 +943,7 @@ const codeLensActions = computed(() => {
 })
 
 function updateSelectionFromEditor() {
-  if (props.viewerMode !== 'text') return
+  if (!supportsSourceEditor.value) return
   const sel = editorRef.value?.getSelection?.()
   if (!sel || !sel.text || !sel.text.trim()) {
     selection.value = null
@@ -994,7 +1005,7 @@ function onSendSelection() {
 
       <div class="flex items-center gap-1">
         <Button
-          v-if="viewerMode === 'text' && canEdit && !autoSaveEnabled"
+          v-if="supportsSourceEditor && canEdit && !autoSaveEnabled"
           variant="ghost"
           size="icon"
           class="h-7 w-7"
@@ -1007,7 +1018,7 @@ function onSendSelection() {
         </Button>
 
         <Button
-          v-if="viewerMode === 'text' && displayedContent"
+          v-if="supportsSourceEditor && displayedContent"
           variant="ghost"
           size="icon"
           class="h-7 w-7"
@@ -1017,7 +1028,7 @@ function onSendSelection() {
           <RiClipboardLine class="h-4 w-4" />
         </Button>
 
-        <div v-if="viewerMode === 'text'" ref="viewMenuAnchorEl" class="relative">
+        <div v-if="canShowViewMenu" ref="viewMenuAnchorEl" class="relative">
           <Button
             variant="ghost"
             size="icon"
@@ -1077,6 +1088,20 @@ function onSendSelection() {
       </span>
     </div>
 
+    <div v-if="viewerMode === 'markdown'" class="border-b border-border/40 px-3 py-2">
+      <SegmentedControl class="grid-cols-3 max-w-xs">
+        <SegmentedButton :active="markdownViewMode === 'source'" size="xs" @click="markdownViewMode = 'source'">
+          {{ t('files.viewer.markdown.mode.source') }}
+        </SegmentedButton>
+        <SegmentedButton :active="markdownViewMode === 'preview'" size="xs" @click="markdownViewMode = 'preview'">
+          {{ t('files.viewer.markdown.mode.preview') }}
+        </SegmentedButton>
+        <SegmentedButton :active="markdownViewMode === 'split'" size="xs" @click="markdownViewMode = 'split'">
+          {{ t('files.viewer.markdown.mode.split') }}
+        </SegmentedButton>
+      </SegmentedControl>
+    </div>
+
     <div class="flex-1 min-h-0 relative">
       <template v-if="!selectedFile">
         <MobileSidebarEmptyState
@@ -1109,6 +1134,33 @@ function onSendSelection() {
         </div>
       </div>
 
+      <div v-else-if="viewerMode === 'pdf'" class="flex h-full flex-col p-2">
+        <div v-if="!rawUrl" class="p-3 text-muted-foreground typography-meta">
+          {{ t('files.viewer.status.loadingPdf') }}
+        </div>
+        <iframe
+          v-else
+          :src="rawUrl"
+          class="h-full w-full rounded-md border border-border/40 bg-background"
+          :title="selectedFile?.name || 'PDF preview'"
+        />
+      </div>
+
+      <div v-else-if="viewerMode === 'audio'" class="grid h-full place-items-center p-4">
+        <div class="w-full max-w-2xl rounded-md border border-border/40 bg-muted/10 p-4">
+          <div class="mb-2 text-xs text-muted-foreground">{{ selectedFile?.name }}</div>
+          <audio v-if="rawUrl" :src="rawUrl" controls class="w-full" />
+          <div v-else class="text-sm text-muted-foreground">{{ t('files.viewer.status.loadingAudio') }}</div>
+        </div>
+      </div>
+
+      <div v-else-if="viewerMode === 'video'" class="grid h-full place-items-center p-3">
+        <div class="w-full max-w-5xl rounded-md border border-border/40 bg-background/70 p-2">
+          <video v-if="rawUrl" :src="rawUrl" controls class="max-h-[72vh] w-full rounded" />
+          <div v-else class="p-3 text-sm text-muted-foreground">{{ t('files.viewer.status.loadingVideo') }}</div>
+        </div>
+      </div>
+
       <div v-else-if="viewerMode === 'image' || isSelectedImage" class="flex h-full items-center justify-center p-3">
         <div v-if="!rawUrl" class="text-muted-foreground typography-meta">
           {{ t('files.viewer.status.loadingImage') }}
@@ -1119,6 +1171,46 @@ function onSendSelection() {
           :alt="selectedFile?.name || t('files.viewer.imageAltFallback')"
           class="max-w-full max-h-[70vh] object-contain rounded-md border border-border/30 bg-primary/10"
         />
+      </div>
+
+      <div
+        v-else-if="viewerMode === 'markdown'"
+        class="h-full flex min-h-0"
+        :class="showMarkdownSplit && isMobile ? 'flex-col' : ''"
+      >
+        <div
+          v-if="showMarkdownSource"
+          class="min-h-0 min-w-0"
+          :class="
+            showMarkdownSplit
+              ? isMobile
+                ? 'flex-1 border-b border-border/30'
+                : 'flex-1 border-r border-border/30'
+              : 'flex-1'
+          "
+          @mouseup="updateSelectionFromEditor"
+          @keyup="updateSelectionFromEditor"
+        >
+          <CodeMirrorEditor
+            ref="editorRef"
+            v-model="draftContent"
+            :path="selectedPath"
+            :use-files-theme="true"
+            :wrap="wrapLines"
+            :read-only="!canEdit"
+            @editor-scroll="onEditorScroll"
+          />
+        </div>
+
+        <div
+          v-if="showMarkdownPreview"
+          class="min-h-0 min-w-0 overflow-auto"
+          :class="showMarkdownSplit ? 'flex-1' : 'flex-1'"
+        >
+          <div class="mx-auto w-full max-w-4xl p-4">
+            <Markdown :content="draftContent" mode="markdown" />
+          </div>
+        </div>
       </div>
 
       <div v-else class="h-full flex min-h-0">
@@ -1243,7 +1335,7 @@ function onSendSelection() {
       </div>
 
       <div
-        v-if="selection && !timelineEnabled"
+        v-if="selection && !timelineEnabled && supportsSourceEditor"
         class="absolute inset-x-0 bottom-3 flex justify-center pointer-events-none"
       >
         <div class="pointer-events-auto w-full max-w-xl rounded-xl border border-border bg-background/95 p-3 shadow-lg">
