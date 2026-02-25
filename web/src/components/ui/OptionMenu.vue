@@ -269,10 +269,9 @@ async function syncMobileSheetPosition() {
 
   const safeTop = cssVarPx('--oc-safe-area-top', 0)
   const safeBottom = cssVarPx('--oc-safe-area-bottom', 0)
-  const bottomNav = cssVarPx('--oc-bottom-nav-height', 56)
 
   const topInset = safeTop + MOBILE_SHEET_MARGIN_PX
-  const bottomInset = safeBottom + bottomNav + MOBILE_SHEET_MARGIN_PX
+  const bottomInset = safeBottom + MOBILE_SHEET_MARGIN_PX
   const maxHeight = Math.max(180, viewportHeight - topInset - bottomInset)
   const panelHeight = Math.min(maxHeight, Math.max(0, panel.scrollHeight))
 

@@ -42,6 +42,7 @@ const pathModel = computed({
         :resolve-to-absolute="true"
         :show-options="true"
         :show-gitignored="true"
+        :allow-create-directory="true"
         input-class="h-9 font-mono"
         browser-class="flex h-[min(56vh,34rem)] min-h-[14rem] flex-col"
       />
