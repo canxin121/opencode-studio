@@ -16,7 +16,6 @@ import {
   MAX_VIEW_CHARS,
   extensionFromPath,
   isHiddenName,
-  isImagePath,
   languageForPath,
   shouldIgnoreEntryName,
   shouldIgnorePath,
@@ -548,10 +547,11 @@ watch(
 onBeforeUnmount(() => {
   revokeRawUrl()
 })
-const isSelectedImage = computed(() => Boolean(selectedFile.value && isImagePath(selectedFile.value.path)))
 const isTruncated = computed(() => fileContent.value.length > MAX_VIEW_CHARS)
 const displayedContent = computed(() => truncateContent(fileContent.value))
-const canEdit = computed(() => Boolean(selectedFile.value && ['text', 'markdown'].includes(viewerMode.value) && !isTruncated.value))
+const canEdit = computed(() =>
+  Boolean(selectedFile.value && ['text', 'markdown'].includes(viewerMode.value) && !isTruncated.value),
+)
 const dirty = computed(() => canEdit.value && draftContent.value !== displayedContent.value)
 
 const displaySelectedPath = computed(() => {

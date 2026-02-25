@@ -200,17 +200,7 @@ export const MARKDOWN_EXTENSIONS = new Set(['md', 'mdx', 'markdown', 'mdown', 'm
 
 export const PDF_EXTENSIONS = new Set(['pdf'])
 
-export const AUDIO_EXTENSIONS = new Set([
-  'mp3',
-  'wav',
-  'ogg',
-  'oga',
-  'm4a',
-  'aac',
-  'flac',
-  'opus',
-  'weba',
-])
+export const AUDIO_EXTENSIONS = new Set(['mp3', 'wav', 'ogg', 'oga', 'm4a', 'aac', 'flac', 'opus', 'weba'])
 
 export const VIDEO_EXTENSIONS = new Set(['mp4', 'webm', 'ogv', 'mov', 'm4v', 'mkv'])
 

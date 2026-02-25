@@ -112,12 +112,8 @@ const isSelectedImage = computed(() => Boolean(props.selectedFile && isImagePath
 const supportsSourceEditor = computed(
   () => props.viewerMode === 'text' || (props.viewerMode === 'markdown' && markdownViewMode.value !== 'preview'),
 )
-const showMarkdownPreview = computed(
-  () => props.viewerMode === 'markdown' && markdownViewMode.value !== 'source',
-)
-const showMarkdownSource = computed(
-  () => props.viewerMode === 'markdown' && markdownViewMode.value !== 'preview',
-)
+const showMarkdownPreview = computed(() => props.viewerMode === 'markdown' && markdownViewMode.value !== 'source')
+const showMarkdownSource = computed(() => props.viewerMode === 'markdown' && markdownViewMode.value !== 'preview')
 const showMarkdownSplit = computed(() => props.viewerMode === 'markdown' && markdownViewMode.value === 'split')
 const canShowViewMenu = computed(() => props.viewerMode === 'text' || props.viewerMode === 'markdown')
 
@@ -1139,7 +1135,9 @@ function onSendSelection() {
       </div>
 
       <div v-else-if="viewerMode === 'pdf'" class="flex h-full flex-col p-2">
-        <div v-if="!rawUrl" class="p-3 text-muted-foreground typography-meta">{{ t('files.viewer.status.loadingPdf') }}</div>
+        <div v-if="!rawUrl" class="p-3 text-muted-foreground typography-meta">
+          {{ t('files.viewer.status.loadingPdf') }}
+        </div>
         <iframe
           v-else
           :src="rawUrl"
@@ -1175,11 +1173,21 @@ function onSendSelection() {
         />
       </div>
 
-      <div v-else-if="viewerMode === 'markdown'" class="h-full flex min-h-0" :class="showMarkdownSplit && isMobile ? 'flex-col' : ''">
+      <div
+        v-else-if="viewerMode === 'markdown'"
+        class="h-full flex min-h-0"
+        :class="showMarkdownSplit && isMobile ? 'flex-col' : ''"
+      >
         <div
           v-if="showMarkdownSource"
           class="min-h-0 min-w-0"
-          :class="showMarkdownSplit ? (isMobile ? 'flex-1 border-b border-border/30' : 'flex-1 border-r border-border/30') : 'flex-1'"
+          :class="
+            showMarkdownSplit
+              ? isMobile
+                ? 'flex-1 border-b border-border/30'
+                : 'flex-1 border-r border-border/30'
+              : 'flex-1'
+          "
           @mouseup="updateSelectionFromEditor"
           @keyup="updateSelectionFromEditor"
         >
@@ -1194,7 +1202,11 @@ function onSendSelection() {
           />
         </div>
 
-        <div v-if="showMarkdownPreview" class="min-h-0 min-w-0 overflow-auto" :class="showMarkdownSplit ? 'flex-1' : 'flex-1'">
+        <div
+          v-if="showMarkdownPreview"
+          class="min-h-0 min-w-0 overflow-auto"
+          :class="showMarkdownSplit ? 'flex-1' : 'flex-1'"
+        >
           <div class="mx-auto w-full max-w-4xl p-4">
             <Markdown :content="draftContent" mode="markdown" />
           </div>

@@ -91,7 +91,9 @@ function normalizeLspRuntimeList(payload: LspRuntimeListResponse): LspRuntimeIte
 }
 
 function runtimeStatusTone(status: string): 'ok' | 'warn' | 'idle' {
-  const value = String(status || '').trim().toLowerCase()
+  const value = String(status || '')
+    .trim()
+    .toLowerCase()
   if (value === 'connected' || value === 'running' || value === 'ready') return 'ok'
   if (value === 'error' || value === 'failed' || value === 'disconnected' || value === 'stopped') return 'warn'
   return 'idle'
@@ -616,7 +618,10 @@ export default defineComponent({
         <div v-if="lspRuntimeLoading" class="text-xs text-muted-foreground">
           {{ t('common.loading') }}
         </div>
-        <div v-else-if="lspRuntimeError" class="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
+        <div
+          v-else-if="lspRuntimeError"
+          class="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive"
+        >
           {{ lspRuntimeError }}
         </div>
         <div v-else-if="lspRuntimeItems.length === 0" class="text-xs text-muted-foreground">
@@ -649,11 +654,10 @@ export default defineComponent({
                 {{ t('settings.opencodeConfig.sections.formatter.lsp.runtime.fields.root') }}: {{ runtime.rootDir }}
               </div>
               <div v-if="runtime.transport">
-                {{ t('settings.opencodeConfig.sections.formatter.lsp.runtime.fields.transport') }}: {{ runtime.transport }}
+                {{ t('settings.opencodeConfig.sections.formatter.lsp.runtime.fields.transport') }}:
+                {{ runtime.transport }}
               </div>
-              <div>
-                {{ t('settings.opencodeConfig.sections.formatter.lsp.runtime.fields.id') }}: {{ runtime.id }}
-              </div>
+              <div>{{ t('settings.opencodeConfig.sections.formatter.lsp.runtime.fields.id') }}: {{ runtime.id }}</div>
             </div>
           </div>
         </div>
