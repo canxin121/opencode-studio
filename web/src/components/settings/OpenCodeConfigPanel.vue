@@ -894,7 +894,6 @@ const panelContext = reactive({
 })
 
 provideOpencodeConfigPanelContext(panelContext)
-
 </script>
 
 <template>
