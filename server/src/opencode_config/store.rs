@@ -198,9 +198,7 @@ fn fs_read_to_string(path: &Path) -> OcResult<String> {
 #[cfg(test)]
 mod tests {
     use super::OpenCodeConfigStore;
-    use std::sync::{LazyLock, Mutex};
-
-    static ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+    use crate::test_support::ENV_LOCK;
 
     struct EnvVarGuard {
         key: String,

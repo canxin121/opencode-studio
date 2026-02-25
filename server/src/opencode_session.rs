@@ -1610,13 +1610,11 @@ mod tests {
     #![allow(clippy::await_holding_lock)]
 
     use super::*;
+    use crate::test_support::ENV_LOCK;
     use axum::body::to_bytes;
     use axum::extract::{Query, State};
-    use std::sync::{LazyLock, Mutex};
     use std::time::{SystemTime, UNIX_EPOCH};
     use tokio::fs;
-
-    static ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
     struct EnvVarGuard {
         key: &'static str,

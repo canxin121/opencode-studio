@@ -323,9 +323,7 @@ fn initialize_cache_store(root: &Path, db_path: &Path) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::{LazyLock, Mutex};
-
-    static ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+    use crate::test_support::ENV_LOCK;
 
     struct EnvVarGuard {
         key: &'static str,
