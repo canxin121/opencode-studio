@@ -51,7 +51,20 @@ export function extractSessionId(evt: SseEvent): string | null {
   const props = asRecord(evt.properties)
   const info = isRecord(props.info) ? props.info : null
   const part = firstRecord(props, ['part', 'messagePart', 'partInfo'])
-  const session = getString(info, 'sessionID') || getString(part, 'sessionID') || getString(props, 'sessionID')
+  const root = asRecord(evt as unknown as JsonLike)
+  const session =
+    getString(info, 'sessionID') ||
+    getString(info, 'sessionId') ||
+    getString(info, 'session_id') ||
+    getString(part, 'sessionID') ||
+    getString(part, 'sessionId') ||
+    getString(part, 'session_id') ||
+    getString(props, 'sessionID') ||
+    getString(props, 'sessionId') ||
+    getString(props, 'session_id') ||
+    getString(root, 'sessionID') ||
+    getString(root, 'sessionId') ||
+    getString(root, 'session_id')
   return typeof session === 'string' && session.trim() ? session.trim() : null
 }
 
