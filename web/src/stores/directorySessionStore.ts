@@ -1181,45 +1181,48 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     const byDirectory = sessionSummariesByDirectoryId.value
 
     const nextRoots = { ...rootsByDirectoryId.value }
-    const nextChildren = { ...childrenByParentSessionId.value }
+    const nextChildren: Record<string, string[]> = {}
 
-    // Remove existing child links for sessions in touched directories.
-    const touchedChildIds = new Set<string>()
-    for (const directoryId of unique) {
-      const list = byDirectory[directoryId] || []
-      for (const item of list) {
-        const sid = readObjectId(item)
-        if (sid) touchedChildIds.add(sid)
-      }
+    for (const session of Object.values(sessionSummariesById.value)) {
+      const sessionId = readObjectId(session)
+      if (!sessionId) continue
+      const parentId = readParentId(session)
+      if (!parentId) continue
+      if (!nextChildren[parentId]) nextChildren[parentId] = []
+      nextChildren[parentId].push(sessionId)
     }
-    if (touchedChildIds.size > 0) {
-      for (const [parentId, list] of Object.entries(nextChildren)) {
-        const filtered = (list || []).filter((childId) => !touchedChildIds.has(childId))
-        if (filtered.length === (list || []).length) continue
-        if (filtered.length > 0) {
-          nextChildren[parentId] = filtered
-        } else {
-          delete nextChildren[parentId]
-        }
-      }
+
+    for (const [parentId, list] of Object.entries(nextChildren)) {
+      const deduped = Array.from(new Set(list))
+      deduped.sort(
+        (a, b) => readUpdatedAt(sessionSummariesById.value[b]) - readUpdatedAt(sessionSummariesById.value[a]),
+      )
+      nextChildren[parentId] = deduped
     }
 
     for (const directoryId of unique) {
-      const list = byDirectory[directoryId] || []
+      const pageIds = (sessionPageByDirectoryId.value[directoryId]?.sessions || [])
+        .map((session) => readObjectId(session))
+        .filter(Boolean)
+      const pinnedIds = pinnedSessionIdsByDirectoryId.value[directoryId] || []
+
+      const keepIds = new Set<string>()
+      const list = [...pageIds, ...pinnedIds]
+        .map((rawId) => String(rawId || '').trim())
+        .filter((sid) => {
+          if (!sid || keepIds.has(sid)) return false
+          keepIds.add(sid)
+          return true
+        })
+        .map((sid) => sessionSummariesById.value[sid])
+        .filter((session): session is SessionSummarySnapshot => Boolean(session))
+
+      if (list.length === 0 && byDirectory[directoryId]?.length) {
+        nextRoots[directoryId] = buildFlattenedTree(byDirectory[directoryId], expanded).rootIds.slice()
+        continue
+      }
       const tree = buildFlattenedTree(list, expanded)
       nextRoots[directoryId] = (tree.rootIds || []).slice()
-
-      for (const item of list) {
-        const sessionId = readObjectId(item)
-        if (!sessionId) continue
-        const parentId = readParentId(item)
-        if (!parentId) continue
-        const children = new Set(nextChildren[parentId] || [])
-        children.add(sessionId)
-        nextChildren[parentId] = Array.from(children).sort((a, b) => {
-          return readUpdatedAt(sessionSummariesById.value[b]) - readUpdatedAt(sessionSummariesById.value[a])
-        })
-      }
     }
 
     rootsByDirectoryId.value = nextRoots
@@ -1246,7 +1249,9 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
       if (!sessionId) continue
       keep.add(sessionId)
       nextById[sessionId] = rawSession
-      nextDirectoryBySessionId[sessionId] = dirId
+      const sessionDirectory = readSessionDirectory(rawSession)
+      const mappedDirectoryId = directoryIdForPath(sessionDirectory)
+      nextDirectoryBySessionId[sessionId] = mappedDirectoryId || dirId
     }
 
     for (const [sessionId, mappedDirectoryId] of Object.entries(nextDirectoryBySessionId)) {
@@ -1254,9 +1259,6 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
       if (keep.has(sessionId)) continue
       delete nextById[sessionId]
       delete nextDirectoryBySessionId[sessionId]
-      const nextRuntime = { ...runtimeBySessionId.value }
-      delete nextRuntime[sessionId]
-      runtimeBySessionId.value = nextRuntime
     }
 
     sessionSummariesById.value = nextById
@@ -2724,7 +2726,8 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
           const sid = readObjectId(session)
           if (!sid) continue
           nextSessionSummariesById[sid] = session
-          nextDirectoryIdBySessionId[sid] = entry.id
+          const sessionDirectory = readSessionDirectory(session)
+          nextDirectoryIdBySessionId[sid] = directoryIdForPath(sessionDirectory) || entry.id
         }
       }
 

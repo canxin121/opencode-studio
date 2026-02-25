@@ -219,6 +219,60 @@ pub(super) async fn load_session_records_by_ids_from_sqlite(
     .flatten()
 }
 
+pub(super) async fn load_session_records_by_parent_ids_from_sqlite(
+    parent_ids: &[String],
+) -> Option<Vec<SessionRecord>> {
+    if parent_ids.is_empty() {
+        return Some(Vec::new());
+    }
+
+    let db_path = opencode_db_path();
+    if fs::metadata(&db_path).await.is_err() {
+        return None;
+    }
+
+    let mut normalized = parent_ids
+        .iter()
+        .map(|id| id.trim())
+        .filter(|id| !id.is_empty())
+        .map(|id| id.to_string())
+        .collect::<Vec<_>>();
+    normalized.sort();
+    normalized.dedup();
+
+    if normalized.is_empty() {
+        return Some(Vec::new());
+    }
+
+    let _permit = SQLITE_READ_SEMAPHORE.acquire().await.ok()?;
+
+    tokio::task::spawn_blocking(move || {
+        let conn = with_sqlite_busy_retry(|| open_sqlite_readonly_connection(&db_path))?;
+        let mut out = Vec::<SessionRecord>::new();
+        const CHUNK_SIZE: usize = 300;
+
+        for chunk in normalized.chunks(CHUNK_SIZE) {
+            let sql = format!(
+                "SELECT id, parent_id, directory, title, slug, share_url, revert, time_created, time_updated FROM session WHERE parent_id IN ({})",
+                sqlite_placeholders(chunk.len())
+            );
+            let mut stmt = conn.prepare(&sql).ok()?;
+            let mapped = stmt
+                .query_map(
+                    rusqlite::params_from_iter(chunk.iter()),
+                    session_record_from_sqlite_row,
+                )
+                .ok()?;
+            out.extend(mapped.filter_map(Result::ok));
+        }
+
+        Some(out)
+    })
+    .await
+    .ok()
+    .flatten()
+}
+
 fn sqlite_placeholders(count: usize) -> String {
     if count == 0 {
         return String::new();
