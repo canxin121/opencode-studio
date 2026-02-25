@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::sync::{Arc, LazyLock};
 use std::time::Duration;
 
@@ -193,6 +193,492 @@ fn parse_usize_param(raw: Option<String>) -> Option<usize> {
         return None;
     }
     trimmed.parse::<usize>().ok()
+}
+
+fn query_param(uri: &Uri, key: &str) -> Option<String> {
+    uri.query().and_then(|q| {
+        for (k, v) in url::form_urlencoded::parse(q.as_bytes()) {
+            if k == key {
+                let value = v.into_owned();
+                let trimmed = value.trim();
+                if !trimmed.is_empty() {
+                    return Some(trimmed.to_string());
+                }
+            }
+        }
+        None
+    })
+}
+
+fn query_has_message_id(uri: &Uri) -> bool {
+    query_param(uri, "messageID").is_some() || query_param(uri, "messageId").is_some()
+}
+
+fn extract_session_id_from_diff_path(path: &str) -> Option<String> {
+    let normalized = path.trim().trim_matches('/');
+    let mut parts = normalized.split('/');
+    let resource = parts.next()?;
+    let raw_id = parts.next()?;
+    let tail = parts.next()?;
+    if parts.next().is_some() || resource != "session" || !tail.eq_ignore_ascii_case("diff") {
+        return None;
+    }
+
+    let decoded = urlencoding::decode(raw_id)
+        .map(|v| v.into_owned())
+        .unwrap_or_else(|_| raw_id.to_string());
+    let session_id = decoded.trim();
+    if session_id.is_empty() {
+        return None;
+    }
+    Some(session_id.to_string())
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SessionDiffItem {
+    file: String,
+    before: String,
+    after: String,
+    additions: usize,
+    deletions: usize,
+}
+
+fn normalize_diff_path(raw_path: &str, directory: Option<&str>) -> Option<String> {
+    let mut out = raw_path.trim().to_string();
+    if out.is_empty() || out == "/dev/null" {
+        return None;
+    }
+
+    if out.starts_with('"') && out.ends_with('"') && out.len() > 1 {
+        out = out[1..out.len() - 1].to_string();
+    }
+
+    if let Some(tab_idx) = out.find('\t')
+        && tab_idx > 0
+    {
+        out = out[..tab_idx].to_string();
+    }
+
+    out = out.replace('\\', "/");
+    if out.starts_with("a/") || out.starts_with("b/") {
+        out = out[2..].to_string();
+    }
+
+    if let Some(dir) = directory {
+        let dir = dir
+            .trim()
+            .replace('\\', "/")
+            .trim_end_matches('/')
+            .to_string();
+        if !dir.is_empty() {
+            let prefix = format!("{dir}/");
+            if out.starts_with(&prefix) {
+                out = out[prefix.len()..].to_string();
+            }
+        }
+    }
+
+    let trimmed = out.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+fn first_trimmed(
+    map: &serde_json::Map<String, serde_json::Value>,
+    keys: &[&str],
+) -> Option<String> {
+    for key in keys {
+        if let Some(value) = map.get(*key).and_then(|v| v.as_str()) {
+            let trimmed = value.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
+            }
+        }
+    }
+    None
+}
+
+fn first_string(map: &serde_json::Map<String, serde_json::Value>, keys: &[&str]) -> String {
+    for key in keys {
+        if let Some(value) = map.get(*key).and_then(|v| v.as_str()) {
+            return value.to_string();
+        }
+    }
+    String::new()
+}
+
+fn first_count(map: &serde_json::Map<String, serde_json::Value>, keys: &[&str]) -> usize {
+    for key in keys {
+        if let Some(n) = map.get(*key).and_then(|v| v.as_f64())
+            && n.is_finite()
+            && n >= 0.0
+        {
+            return n.floor() as usize;
+        }
+    }
+    0
+}
+
+fn parse_metadata_file_entry(
+    row: &serde_json::Value,
+    directory: Option<&str>,
+) -> Option<SessionDiffItem> {
+    let map = row.as_object()?;
+    let file = normalize_diff_path(
+        &first_trimmed(
+            map,
+            &[
+                "file",
+                "path",
+                "filename",
+                "name",
+                "target",
+                "filePath",
+                "filepath",
+                "relativePath",
+            ],
+        )?,
+        directory,
+    )?;
+
+    Some(SessionDiffItem {
+        file,
+        before: first_string(
+            map,
+            &[
+                "before", "old", "oldText", "original", "previous", "prev", "from", "left", "a",
+            ],
+        ),
+        after: first_string(
+            map,
+            &[
+                "after", "new", "newText", "modified", "current", "next", "to", "right", "b",
+            ],
+        ),
+        additions: first_count(
+            map,
+            &["additions", "added", "insertions", "linesAdded", "add"],
+        ),
+        deletions: first_count(map, &["deletions", "removed", "linesDeleted", "del"]),
+    })
+}
+
+fn parse_unified_diff_stats(
+    diff_text: &str,
+    directory: Option<&str>,
+) -> BTreeMap<String, (usize, usize)> {
+    let mut by_file = BTreeMap::<String, (usize, usize)>::new();
+    let text = diff_text.trim();
+    if text.is_empty() {
+        return by_file;
+    }
+
+    let mut current = String::new();
+    for line in text.replace("\r\n", "\n").replace('\r', "\n").lines() {
+        if line.starts_with("diff --git ") {
+            if let Some(rest) = line.strip_prefix("diff --git ") {
+                let mut parts = rest.split_whitespace();
+                let left = parts.next().unwrap_or_default();
+                let right = parts.next().unwrap_or_default();
+                if let Some(file) =
+                    normalize_diff_path(if !right.is_empty() { right } else { left }, directory)
+                {
+                    current = file;
+                    by_file.entry(current.clone()).or_insert((0, 0));
+                }
+            }
+            continue;
+        }
+
+        if let Some(path) = line.strip_prefix("Index: ") {
+            if let Some(file) = normalize_diff_path(path, directory) {
+                current = file;
+                by_file.entry(current.clone()).or_insert((0, 0));
+            }
+            continue;
+        }
+
+        if let Some(path) = line.strip_prefix("+++ ") {
+            if let Some(file) = normalize_diff_path(path, directory) {
+                current = file;
+                by_file.entry(current.clone()).or_insert((0, 0));
+            }
+            continue;
+        }
+
+        if current.is_empty()
+            && let Some(path) = line.strip_prefix("--- ")
+            && let Some(file) = normalize_diff_path(path, directory)
+        {
+            current = file;
+            by_file.entry(current.clone()).or_insert((0, 0));
+            continue;
+        }
+
+        if current.is_empty() {
+            continue;
+        }
+        let Some(counts) = by_file.get_mut(&current) else {
+            continue;
+        };
+        if line.starts_with('+') && !line.starts_with("+++") {
+            counts.0 += 1;
+        } else if line.starts_with('-') && !line.starts_with("---") {
+            counts.1 += 1;
+        }
+    }
+
+    by_file
+}
+
+fn metadata_map_from_tool_part(
+    part_map: &serde_json::Map<String, serde_json::Value>,
+) -> Option<&serde_json::Map<String, serde_json::Value>> {
+    if let Some(state_map) = part_map.get("state").and_then(|v| v.as_object())
+        && let Some(meta) = state_map.get("metadata").and_then(|v| v.as_object())
+    {
+        return Some(meta);
+    }
+    part_map.get("metadata").and_then(|v| v.as_object())
+}
+
+fn build_session_diff_from_messages(
+    messages: &[serde_json::Value],
+    directory: Option<&str>,
+) -> Vec<SessionDiffItem> {
+    let mut by_file = BTreeMap::<String, SessionDiffItem>::new();
+
+    for message in messages {
+        let Some(parts) = message
+            .as_object()
+            .and_then(|obj| obj.get("parts"))
+            .and_then(|v| v.as_array())
+        else {
+            continue;
+        };
+
+        for part in parts {
+            let Some(part_map) = part.as_object() else {
+                continue;
+            };
+            let part_type = part_map
+                .get("type")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .trim()
+                .to_ascii_lowercase();
+            if part_type != "tool" && part_type != "patch" {
+                continue;
+            }
+
+            let Some(metadata) = metadata_map_from_tool_part(part_map) else {
+                continue;
+            };
+
+            if let Some(files) = metadata.get("files").and_then(|v| v.as_array()) {
+                for row in files {
+                    if let Some(parsed) = parse_metadata_file_entry(row, directory) {
+                        by_file.insert(parsed.file.clone(), parsed);
+                    }
+                }
+            }
+
+            let diff_text = first_string(metadata, &["diff", "patch"]);
+            if diff_text.is_empty() {
+                continue;
+            }
+            let stats = parse_unified_diff_stats(&diff_text, directory);
+            for (file, (additions, deletions)) in stats {
+                let prev = by_file.get(&file).cloned();
+                by_file.insert(
+                    file.clone(),
+                    SessionDiffItem {
+                        file,
+                        before: prev.as_ref().map(|v| v.before.clone()).unwrap_or_default(),
+                        after: prev.as_ref().map(|v| v.after.clone()).unwrap_or_default(),
+                        additions,
+                        deletions,
+                    },
+                );
+            }
+        }
+    }
+
+    by_file.into_values().collect()
+}
+
+fn looks_like_diff_item_map(map: &serde_json::Map<String, serde_json::Value>) -> bool {
+    first_trimmed(
+        map,
+        &[
+            "file",
+            "path",
+            "filename",
+            "name",
+            "target",
+            "filePath",
+            "filepath",
+            "relativePath",
+        ],
+    )
+    .is_some()
+        || map.get("before").and_then(|v| v.as_str()).is_some()
+        || map.get("after").and_then(|v| v.as_str()).is_some()
+        || map.get("diff").and_then(|v| v.as_str()).is_some()
+        || map.get("patch").and_then(|v| v.as_str()).is_some()
+        || map.get("additions").and_then(|v| v.as_f64()).is_some()
+        || map.get("deletions").and_then(|v| v.as_f64()).is_some()
+}
+
+fn read_session_diff_items(value: &serde_json::Value, depth: usize) -> Vec<serde_json::Value> {
+    if depth > 4 {
+        return Vec::new();
+    }
+    if let Some(arr) = value.as_array() {
+        return arr.clone();
+    }
+    let Some(map) = value.as_object() else {
+        return Vec::new();
+    };
+
+    if looks_like_diff_item_map(map) {
+        return vec![serde_json::Value::Object(map.clone())];
+    }
+
+    for key in [
+        "files", "changes", "diff", "diffs", "entries", "items", "list", "value", "data",
+        "payload", "result",
+    ] {
+        if let Some(nested) = map.get(key) {
+            let out = read_session_diff_items(nested, depth + 1);
+            if !out.is_empty() {
+                return out;
+            }
+        }
+    }
+
+    for nested in map.values() {
+        if let Some(arr) = nested.as_array()
+            && arr.iter().any(|entry| {
+                entry
+                    .as_object()
+                    .map(looks_like_diff_item_map)
+                    .unwrap_or(false)
+            })
+        {
+            return arr.clone();
+        }
+    }
+
+    Vec::new()
+}
+
+fn normalize_session_diff_payload(
+    payload: &serde_json::Value,
+    directory: Option<&str>,
+) -> Vec<SessionDiffItem> {
+    read_session_diff_items(payload, 0)
+        .into_iter()
+        .filter_map(|entry| parse_metadata_file_entry(&entry, directory))
+        .collect()
+}
+
+fn merge_session_diff_items(
+    primary: Vec<SessionDiffItem>,
+    secondary: Vec<SessionDiffItem>,
+) -> Vec<SessionDiffItem> {
+    let mut merged = BTreeMap::<String, SessionDiffItem>::new();
+    for item in secondary {
+        merged.insert(item.file.clone(), item);
+    }
+    for item in primary {
+        merged.insert(item.file.clone(), item);
+    }
+    merged.into_values().collect()
+}
+
+async fn load_upstream_session_diff(
+    state: &crate::AppState,
+    uri: &Uri,
+    path: &str,
+) -> Option<Vec<SessionDiffItem>> {
+    if state.opencode.is_restarting().await {
+        return None;
+    }
+    let bridge = state.opencode.bridge().await?;
+    let upstream_path = format!("/{path}");
+    let target = bridge.build_url(&upstream_path, Some(uri)).ok()?;
+    let resp = bridge.client.get(target).send().await.ok()?;
+    if !resp.status().is_success() {
+        return None;
+    }
+    let payload = resp.json::<serde_json::Value>().await.ok()?;
+    Some(normalize_session_diff_payload(
+        &payload,
+        directory_from_uri_query(uri).as_deref(),
+    ))
+}
+
+async fn session_diff_get_authoritative(
+    state: Arc<crate::AppState>,
+    uri: Uri,
+    path: &str,
+) -> ApiResult<Response> {
+    let Some(session_id) = extract_session_id_from_diff_path(path) else {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "Invalid session diff path"})),
+        )
+            .into_response());
+    };
+
+    let offset = parse_usize_param(query_param(&uri, "offset")).unwrap_or(0);
+    let limit = parse_usize_param(query_param(&uri, "limit"))
+        .map(|v| v.max(1))
+        .unwrap_or(100);
+
+    let directory = directory_from_uri_query(&uri);
+    let local_messages =
+        crate::opencode_session::load_session_messages_unfiltered(&session_id).await;
+    let computed = build_session_diff_from_messages(&local_messages, directory.as_deref());
+    let upstream = load_upstream_session_diff(state.as_ref(), &uri, path)
+        .await
+        .unwrap_or_default();
+    let items = merge_session_diff_items(upstream, computed);
+
+    let total = items.len();
+    let start = offset.min(total);
+    let end = start.saturating_add(limit).min(total);
+    let page_items = if start < end {
+        items[start..end].to_vec()
+    } else {
+        Vec::new()
+    };
+    let has_more = end < total;
+    let next_offset = if has_more { Some(end) } else { None };
+
+    let mut payload = serde_json::Map::new();
+    payload.insert(
+        "items".to_string(),
+        serde_json::to_value(page_items)
+            .map_err(|_| AppError::bad_gateway("Failed to encode session diff items"))?,
+    );
+    payload.insert("total".to_string(), serde_json::Value::from(total as u64));
+    payload.insert("offset".to_string(), serde_json::Value::from(start as u64));
+    payload.insert("limit".to_string(), serde_json::Value::from(limit as u64));
+    payload.insert("hasMore".to_string(), serde_json::Value::Bool(has_more));
+    if let Some(next) = next_offset {
+        payload.insert(
+            "nextOffset".to_string(),
+            serde_json::Value::from(next as u64),
+        );
+    }
+
+    Ok(Json(serde_json::Value::Object(payload)).into_response())
 }
 
 fn normalize_session_id(raw: &Option<String>) -> Option<String> {
@@ -508,6 +994,13 @@ pub(crate) async fn proxy_opencode_rest_inner(
             Json(serde_json::json!({"error": "Not found"})),
         )
             .into_response());
+    }
+
+    let is_session_diff_get = method == Method::GET
+        && extract_session_id_from_diff_path(normalized_path).is_some()
+        && !query_has_message_id(&uri);
+    if is_session_diff_get {
+        return session_diff_get_authoritative(state, uri, normalized_path).await;
     }
 
     let oc = state.opencode.status().await;
@@ -4996,5 +5489,69 @@ mod tests {
             Some("https://example.com")
         );
         assert!(session.get("share").and_then(|v| v.get("other")).is_none());
+    }
+
+    #[test]
+    fn extract_session_id_from_diff_path_accepts_expected_shape() {
+        assert_eq!(
+            extract_session_id_from_diff_path("session/ses_123/diff").as_deref(),
+            Some("ses_123")
+        );
+        assert_eq!(
+            extract_session_id_from_diff_path("/session/ses_abc%2Fdef/diff/").as_deref(),
+            Some("ses_abc/def")
+        );
+        assert!(extract_session_id_from_diff_path("session/ses_123/message").is_none());
+        assert!(extract_session_id_from_diff_path("session/status").is_none());
+    }
+
+    #[test]
+    fn build_session_diff_from_messages_aggregates_full_history_for_pagination() {
+        let messages = json!([
+            {
+                "info": {"id": "msg_old", "sessionID": "ses_1"},
+                "parts": [
+                    {
+                        "id": "part_old",
+                        "type": "tool",
+                        "state": {
+                            "metadata": {
+                                "diff": "diff --git a/src/old.ts b/src/old.ts\n--- a/src/old.ts\n+++ b/src/old.ts\n@@ -1 +1,2 @@\n-a\n+b\n+c"
+                            }
+                        }
+                    }
+                ]
+            },
+            {
+                "info": {"id": "msg_new", "sessionID": "ses_1"},
+                "parts": [
+                    {
+                        "id": "part_new",
+                        "type": "tool",
+                        "state": {
+                            "metadata": {
+                                "files": [
+                                    {
+                                        "path": "/repo/src/new.ts",
+                                        "before": "old\\n",
+                                        "after": "new\\n",
+                                        "additions": 1,
+                                        "deletions": 1
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                ]
+            }
+        ]);
+
+        let computed =
+            build_session_diff_from_messages(messages.as_array().expect("messages"), Some("/repo"));
+
+        let files = computed.iter().map(|v| v.file.as_str()).collect::<Vec<_>>();
+        assert_eq!(files, vec!["src/new.ts", "src/old.ts"]);
+        assert_eq!(computed[1].additions, 2);
+        assert_eq!(computed[1].deletions, 1);
     }
 }
