@@ -1296,6 +1296,16 @@ export default {
               placeholder: 'typescript-language-server',
               advancedPlaceholder: 'typescript-language-server\n--stdio',
             },
+            runtime: {
+              title: 'LSP runtime status',
+              description: 'Inspect active runtime connections and roots.',
+              empty: 'No active LSP runtime sessions.',
+              fields: {
+                root: 'Root',
+                transport: 'Transport',
+                id: 'ID',
+              },
+            },
           },
         },
         mcp: {
@@ -3058,6 +3068,16 @@ export default {
         noChanges: 'No {scope} changes.',
         hunksSummary: '{count} hunks · {range}',
         loadingImage: 'Loading image…',
+        loadingPdf: 'Loading PDF…',
+        loadingAudio: 'Loading audio…',
+        loadingVideo: 'Loading video…',
+      },
+      markdown: {
+        mode: {
+          source: 'Source',
+          preview: 'Preview',
+          split: 'Split',
+        },
       },
       gitDiffMode: {
         staged: 'staged',

@@ -1296,6 +1296,16 @@ export default {
               placeholder: 'typescript-language-server',
               advancedPlaceholder: 'typescript-language-server\n--stdio',
             },
+            runtime: {
+              title: 'LSP 运行时状态',
+              description: '查看当前运行时连接与根目录。',
+              empty: '当前没有活跃的 LSP 运行时会话。',
+              fields: {
+                root: '根目录',
+                transport: '连接方式',
+                id: 'ID',
+              },
+            },
           },
         },
         mcp: {
@@ -3055,6 +3065,16 @@ export default {
         noChanges: '没有{scope}改动。',
         hunksSummary: '{count} 个 hunk · {range}',
         loadingImage: '图片加载中…',
+        loadingPdf: 'PDF 加载中…',
+        loadingAudio: '音频加载中…',
+        loadingVideo: '视频加载中…',
+      },
+      markdown: {
+        mode: {
+          source: '源码',
+          preview: '预览',
+          split: '分栏',
+        },
       },
       gitDiffMode: {
         staged: '暂存区',
