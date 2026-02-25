@@ -322,6 +322,8 @@ fn initialize_cache_store(root: &Path, db_path: &Path) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::await_holding_lock)]
+
     use super::*;
     use crate::test_support::ENV_LOCK;
 

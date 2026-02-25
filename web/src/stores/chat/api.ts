@@ -541,8 +541,10 @@ export async function getSessionDiff(
   const q = directoryQuery(directory)
   const params: string[] = []
   const messageID = typeof opts?.messageID === 'string' ? opts.messageID.trim() : ''
-  const offset = typeof opts?.offset === 'number' && Number.isFinite(opts.offset) ? Math.max(0, Math.floor(opts.offset)) : 0
-  const limit = typeof opts?.limit === 'number' && Number.isFinite(opts.limit) ? Math.max(1, Math.floor(opts.limit)) : 100
+  const offset =
+    typeof opts?.offset === 'number' && Number.isFinite(opts.offset) ? Math.max(0, Math.floor(opts.offset)) : 0
+  const limit =
+    typeof opts?.limit === 'number' && Number.isFinite(opts.limit) ? Math.max(1, Math.floor(opts.limit)) : 100
   if (offset > 0) params.push(`offset=${encodeURIComponent(String(offset))}`)
   if (limit > 0) params.push(`limit=${encodeURIComponent(String(limit))}`)
   if (messageID) params.push(`messageID=${encodeURIComponent(messageID)}`)

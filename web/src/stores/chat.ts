@@ -997,7 +997,10 @@ export const useChatStore = defineStore('chat', () => {
       [sid]: nextList,
     }
 
-    const resolvedLimit = Math.max(1, Math.floor(page.limit || sessionDiffLimitBySession.value[sid] || SESSION_DIFF_PAGE_SIZE))
+    const resolvedLimit = Math.max(
+      1,
+      Math.floor(page.limit || sessionDiffLimitBySession.value[sid] || SESSION_DIFF_PAGE_SIZE),
+    )
     const resolvedOffset = Math.max(0, Math.floor(page.offset || 0))
     const fallbackNext = resolvedOffset + incoming.length
     const nextOffset =
@@ -1063,7 +1066,10 @@ export const useChatStore = defineStore('chat', () => {
 
     const selected = selectedSessionId.value === sid
     const silent = Boolean(opts?.silent)
-    const offset = Math.max(0, Math.floor(sessionDiffNextOffsetBySession.value[sid] || sessionDiffBySession.value[sid]?.length || 0))
+    const offset = Math.max(
+      0,
+      Math.floor(sessionDiffNextOffsetBySession.value[sid] || sessionDiffBySession.value[sid]?.length || 0),
+    )
     const limit = Math.max(1, Math.floor(sessionDiffLimitBySession.value[sid] || SESSION_DIFF_PAGE_SIZE))
 
     sessionDiffLoadingMoreBySession.value = { ...sessionDiffLoadingMoreBySession.value, [sid]: true }
