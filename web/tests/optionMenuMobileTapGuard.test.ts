@@ -13,6 +13,7 @@ test('plugin OptionMenu captures pointer/click and avoids click-through', () => 
   assert.ok(optionMenuSource.includes('pointer-events-auto fixed'))
   assert.ok(optionMenuSource.includes('@pointerdown.stop'))
   assert.ok(optionMenuSource.includes('@click.stop'))
+  assert.match(optionMenuSource, /<Teleport to="body">[\s\S]*v-if="open && isMobileSheet"/)
 
   assert.ok(overlaySource.includes('desktop-class="pointer-events-auto w-[min(420px,calc(100%-1rem))]"'))
   assert.ok(overlaySource.includes('@pointerdown.prevent.stop'))

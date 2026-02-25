@@ -4,18 +4,21 @@ export type ComposerToolbarLayout = {
   wrapChips: boolean
   stackActionsRow: boolean
   allowHorizontalScroll: boolean
+  splitChipRows: boolean
 }
 
 const SINGLE_ROW_LAYOUT: ComposerToolbarLayout = {
   wrapChips: false,
   stackActionsRow: false,
   allowHorizontalScroll: true,
+  splitChipRows: false,
 }
 
 const TWO_ROW_LAYOUT: ComposerToolbarLayout = {
   wrapChips: true,
-  stackActionsRow: true,
+  stackActionsRow: false,
   allowHorizontalScroll: false,
+  splitChipRows: true,
 }
 
 export function shouldWrapComposerToolbar(isMobilePointer: boolean, viewportWidth: number): boolean {

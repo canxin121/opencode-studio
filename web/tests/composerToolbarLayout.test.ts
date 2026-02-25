@@ -17,12 +17,13 @@ test('keeps single-row layout outside narrow mobile constraints', () => {
   assert.equal(shouldWrapComposerToolbar(false, COMPOSER_TOOLBAR_WRAP_MAX_WIDTH - 100), false)
 })
 
-test('stacks actions into a second row at ultra-narrow mobile widths', () => {
+test('uses split chip rows with pinned actions on ultra-narrow mobile widths', () => {
   const layout = resolveComposerToolbarLayout(true, 260)
   assert.deepEqual(layout, {
     wrapChips: true,
-    stackActionsRow: true,
+    stackActionsRow: false,
     allowHorizontalScroll: false,
+    splitChipRows: true,
   })
 })
 
@@ -32,5 +33,6 @@ test('keeps single-row scrolling behavior outside wrapped mobile mode', () => {
     wrapChips: false,
     stackActionsRow: false,
     allowHorizontalScroll: true,
+    splitChipRows: false,
   })
 })

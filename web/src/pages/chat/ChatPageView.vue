@@ -199,6 +199,22 @@ const attachmentsTriggerRef = ref<HTMLElement | null>(null)
 const { width: viewportWidth } = useWindowSize()
 
 const composerToolbarLayout = computed(() => resolveComposerToolbarLayout(ui.isMobilePointer, viewportWidth.value))
+const splitComposerChipRows = computed(() => composerToolbarLayout.value.splitChipRows)
+const modelChipTextClass = computed(() =>
+  splitComposerChipRows.value
+    ? 'text-[11px] font-mono font-medium truncate max-w-[88px]'
+    : 'text-[11px] sm:text-xs font-mono font-medium truncate max-w-[150px] sm:max-w-[220px]',
+)
+const variantChipTextClass = computed(() =>
+  splitComposerChipRows.value
+    ? 'text-[11px] font-mono font-medium truncate max-w-[64px]'
+    : 'text-[11px] sm:text-xs font-mono font-medium truncate max-w-[96px] sm:max-w-[140px]',
+)
+const agentChipTextClass = computed(() =>
+  splitComposerChipRows.value
+    ? 'text-[11px] font-medium truncate max-w-[72px]'
+    : 'text-[11px] sm:text-xs font-medium truncate max-w-[96px] sm:max-w-[140px]',
+)
 
 const attachmentsCount = computed(() => {
   const list = unref(attachedFiles)
@@ -269,7 +285,7 @@ void sessionActionsMenuRef
       :collapse-top="composerSplitTopCollapsed"
       @update:model-value="handleComposerResize"
       @dblclick="resetComposerHeight"
-      :min-height="ui.isMobile ? 160 : 180"
+      :min-height="ui.isMobile ? 170 : 190"
       :disabled="ui.isMobile"
     >
       <template #top>
@@ -423,7 +439,7 @@ void sessionActionsMenuRef
                 ref="composerRef"
                 v-model:draft="draft"
                 :fullscreen="composerFullscreenActive"
-                class="flex-1 min-h-0"
+                class="flex-1 shrink-0 sm:shrink min-h-min"
                 @toggleFullscreen="toggleEditorFullscreen"
                 @drop="handleDrop"
                 @paste="handlePaste"
@@ -461,23 +477,10 @@ void sessionActionsMenuRef
                     />
 
                     <div
-                      class="composer-controls-surface w-full flex gap-2 rounded-b-xl border-t border-border/60 bg-background/60"
-                      :class="[
-                        composerToolbarLayout.stackActionsRow
-                          ? 'flex-wrap items-start justify-start overflow-visible'
-                          : 'items-center justify-between overflow-hidden',
-                        ui.isMobilePointer ? 'px-2 py-1.5' : 'px-2.5 py-2',
-                      ]"
+                      class="composer-controls-surface w-full flex flex-row items-center justify-between gap-2 rounded-b-xl border-t border-border/60 bg-background/60 p-2 sm:px-2.5"
                     >
-                      <div
-                        class="min-w-0 flex-1 flex items-center gap-1.5 oc-scrollbar-hidden"
-                        :class="
-                          composerToolbarLayout.wrapChips
-                            ? 'basis-full flex-wrap overflow-visible'
-                            : 'flex-nowrap overflow-x-auto sm:flex-wrap sm:overflow-visible'
-                        "
-                        data-oc-keyboard-tap="blur"
-                      >
+                      <!-- Region 1: Attachments, Menu, Agent, Model, Variant -->
+                      <div class="flex-1 flex flex-nowrap items-center gap-1 sm:gap-1.5 min-w-0 overflow-x-auto oc-scrollbar-hidden [&>*]:shrink-0" data-oc-keyboard-tap="blur">
                         <Tooltip v-if="!ui.isMobilePointer">
                           <ToolbarChipButton
                             ref="attachmentsTriggerRef"
@@ -539,7 +542,7 @@ void sessionActionsMenuRef
 
                         <IconButton
                           class="text-muted-foreground hover:text-foreground hover:bg-secondary/40"
-                          :class="composerActionMenuOpen ? 'bg-secondary/60 text-foreground' : ''"
+                          :class="[composerActionMenuOpen ? 'bg-secondary/60 text-foreground' : '']"
                           :title="t('chat.page.tools')"
                           :aria-label="t('chat.page.tools')"
                           @mousedown.prevent
@@ -567,72 +570,10 @@ void sessionActionsMenuRef
                           @select="runComposerActionMenu"
                         />
 
-                        <Tooltip v-if="!ui.isMobilePointer && modelHint">
-                          <ToolbarChipButton
-                            :active="composerPickerOpen === 'model'"
-                            :aria-label="t('chat.composer.picker.modelTitle')"
-                            ref="modelTriggerRef"
-                            @mousedown.prevent
-                            @click.stop="toggleComposerPicker('model')"
-                          >
-                            <RiStackLine class="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
-                            <span
-                              class="text-[11px] sm:text-xs font-mono font-medium truncate max-w-[150px] sm:max-w-[220px]"
-                              >{{ ui.isMobilePointer ? modelChipLabelMobile : modelChipLabel }}</span
-                            >
-                          </ToolbarChipButton>
-                          <template #content>{{ modelHint }}</template>
-                        </Tooltip>
-                        <ToolbarChipButton
-                          v-else
-                          :active="composerPickerOpen === 'model'"
-                          :title="t('chat.composer.picker.modelTitle')"
-                          :aria-label="t('chat.composer.picker.modelTitle')"
-                          ref="modelTriggerRef"
-                          @mousedown.prevent
-                          @click.stop="toggleComposerPicker('model')"
-                        >
-                          <RiStackLine class="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
-                          <span
-                            class="text-[11px] sm:text-xs font-mono font-medium truncate max-w-[150px] sm:max-w-[220px]"
-                            >{{ ui.isMobilePointer ? modelChipLabelMobile : modelChipLabel }}</span
-                          >
-                        </ToolbarChipButton>
-
-                        <Tooltip v-if="hasVariantsForSelection && !ui.isMobilePointer && variantHint">
-                          <ToolbarChipButton
-                            :active="composerPickerOpen === 'variant'"
-                            :aria-label="t('chat.composer.picker.variantTitle')"
-                            ref="variantTriggerRef"
-                            @mousedown.prevent
-                            @click.stop="toggleComposerPicker('variant')"
-                          >
-                            <RiBrainAi3Line class="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
-                            <span
-                              class="text-[11px] sm:text-xs font-mono font-medium truncate max-w-[96px] sm:max-w-[140px]"
-                              >{{ variantChipLabel }}</span
-                            >
-                          </ToolbarChipButton>
-                          <template #content>{{ variantHint }}</template>
-                        </Tooltip>
-                        <ToolbarChipButton
-                          v-else-if="hasVariantsForSelection"
-                          :active="composerPickerOpen === 'variant'"
-                          :title="t('chat.composer.picker.variantTitle')"
-                          :aria-label="t('chat.composer.picker.variantTitle')"
-                          ref="variantTriggerRef"
-                          @mousedown.prevent
-                          @click.stop="toggleComposerPicker('variant')"
-                        >
-                          <RiBrainAi3Line class="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
-                          <span
-                            class="text-[11px] sm:text-xs font-mono font-medium truncate max-w-[96px] sm:max-w-[140px]"
-                            >{{ variantChipLabel }}</span
-                          >
-                        </ToolbarChipButton>
-
+                        <!-- Agent Tooltip -->
                         <Tooltip v-if="!ui.isMobilePointer && agentHint">
                           <ToolbarChipButton
+                            
                             :active="composerPickerOpen === 'agent'"
                             :aria-label="t('chat.composer.picker.agentTitle')"
                             ref="agentTriggerRef"
@@ -640,14 +581,13 @@ void sessionActionsMenuRef
                             @click.stop="toggleComposerPicker('agent')"
                           >
                             <RiUserLine class="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
-                            <span class="text-[11px] sm:text-xs font-medium truncate max-w-[96px] sm:max-w-[140px]">{{
-                              agentChipLabel
-                            }}</span>
+                            <span :class="agentChipTextClass">{{ agentChipLabel }}</span>
                           </ToolbarChipButton>
                           <template #content>{{ agentHint }}</template>
                         </Tooltip>
                         <ToolbarChipButton
                           v-else
+                          
                           :active="composerPickerOpen === 'agent'"
                           :title="t('chat.composer.picker.agentTitle')"
                           :aria-label="t('chat.composer.picker.agentTitle')"
@@ -656,44 +596,95 @@ void sessionActionsMenuRef
                           @click.stop="toggleComposerPicker('agent')"
                         >
                           <RiUserLine class="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
-                          <span class="text-[11px] sm:text-xs font-medium truncate max-w-[96px] sm:max-w-[140px]">{{
-                            agentChipLabel
+                          <span :class="agentChipTextClass">{{ agentChipLabel }}</span>
+                        </ToolbarChipButton>
+
+                        <!-- Model Tooltip -->
+                        <Tooltip v-if="!ui.isMobilePointer && modelHint">
+                          <ToolbarChipButton
+                            
+                            :active="composerPickerOpen === 'model'"
+                            :aria-label="t('chat.composer.picker.modelTitle')"
+                            ref="modelTriggerRef"
+                            @mousedown.prevent
+                            @click.stop="toggleComposerPicker('model')"
+                          >
+                            <RiStackLine class="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
+                            <span :class="modelChipTextClass">{{
+                              ui.isMobilePointer ? modelChipLabelMobile : modelChipLabel
+                            }}</span>
+                          </ToolbarChipButton>
+                          <template #content>{{ modelHint }}</template>
+                        </Tooltip>
+                        <ToolbarChipButton
+                          v-else
+                          
+                          :active="composerPickerOpen === 'model'"
+                          :title="t('chat.composer.picker.modelTitle')"
+                          :aria-label="t('chat.composer.picker.modelTitle')"
+                          ref="modelTriggerRef"
+                          @mousedown.prevent
+                          @click.stop="toggleComposerPicker('model')"
+                        >
+                          <RiStackLine class="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
+                          <span :class="modelChipTextClass">{{
+                            ui.isMobilePointer ? modelChipLabelMobile : modelChipLabel
                           }}</span>
+                        </ToolbarChipButton>
+
+                        <!-- Variant Tooltip -->
+                        <Tooltip v-if="hasVariantsForSelection && !ui.isMobilePointer && variantHint">
+                          <ToolbarChipButton
+                            
+                            :active="composerPickerOpen === 'variant'"
+                            :aria-label="t('chat.composer.picker.variantTitle')"
+                            ref="variantTriggerRef"
+                            @mousedown.prevent
+                            @click.stop="toggleComposerPicker('variant')"
+                          >
+                            <RiBrainAi3Line class="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
+                            <span :class="variantChipTextClass">{{ variantChipLabel }}</span>
+                          </ToolbarChipButton>
+                          <template #content>{{ variantHint }}</template>
+                        </Tooltip>
+                        <ToolbarChipButton
+                          v-else-if="hasVariantsForSelection"
+                          
+                          :active="composerPickerOpen === 'variant'"
+                          :title="t('chat.composer.picker.variantTitle')"
+                          :aria-label="t('chat.composer.picker.variantTitle')"
+                          ref="variantTriggerRef"
+                          @mousedown.prevent
+                          @click.stop="toggleComposerPicker('variant')"
+                        >
+                          <RiBrainAi3Line class="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
+                          <span :class="variantChipTextClass">{{ variantChipLabel }}</span>
                         </ToolbarChipButton>
                       </div>
 
+                      <!-- Region 2: Tokens usage -->
                       <div
-                        class="flex items-center gap-1.5"
-                        :class="
-                          composerToolbarLayout.stackActionsRow
-                            ? 'w-full flex-none justify-end pt-0.5'
-                            : 'flex-shrink-0'
-                        "
+                        v-if="sessionUsage"
+                        class="flex-none flex items-center justify-end gap-1.5 text-[10px] leading-tight text-muted-foreground font-mono select-none sm:pr-2"
                       >
-                        <div
-                          v-if="sessionUsage"
-                          class="hidden sm:flex items-center gap-2 mr-2 text-[10px] text-muted-foreground font-mono select-none"
-                        >
-                          <span>{{ t('chat.page.usage.tokensSuffix', { value: sessionUsage.tokensLabel }) }}</span>
-                          <span v-if="sessionUsage.percentUsed !== null" class="opacity-80"
-                            >{{ sessionUsage.percentUsed }}%</span
-                          >
-                          <span
-                            v-if="sessionUsage.costLabel && sessionUsage.costLabel !== '$0.00'"
-                            class="opacity-80"
-                            >{{ sessionUsage.costLabel }}</span
-                          >
-                        </div>
-                        <div
-                          v-if="sessionUsage && ui.isMobilePointer"
-                          class="sm:hidden flex flex-col items-end mr-1 text-[9px] leading-tight text-muted-foreground font-mono select-none"
-                        >
-                          <span>{{ formatCompactNumber(sessionUsage.tokensValue || 0) }}</span>
-                          <span v-if="sessionUsage.percentUsed !== null" class="opacity-80"
-                            >{{ sessionUsage.percentUsed }}%</span
-                          >
-                        </div>
+                        <span class="opacity-80">
+                          {{
+                            ui.isMobilePointer
+                              ? formatCompactNumber(sessionUsage.tokensValue || 0)
+                              : t('chat.page.usage.tokensSuffix', { value: sessionUsage.tokensLabel })
+                          }}
+                        </span>
+                        <span v-if="sessionUsage.percentUsed !== null" class="opacity-80">
+                          {{ sessionUsage.percentUsed }}%
+                        </span>
+                        <span
+                          v-if="sessionUsage.costLabel && sessionUsage.costLabel !== '$0.00' && !ui.isMobilePointer"
+                          class="opacity-80 text-[9px]"
+                        >{{ sessionUsage.costLabel }}</span>
+                      </div>
 
+                      <!-- Region 3: Stop & Send Actions -->
+                      <div class="flex-none flex items-center gap-1.5">
                         <Tooltip v-if="showComposerStopAction">
                           <Button
                             size="icon"

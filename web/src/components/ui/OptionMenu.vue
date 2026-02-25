@@ -783,56 +783,69 @@ defineExpose({ containsTarget, focusSearch })
       </div>
     </Teleport>
 
-    <div
-      v-if="open && isMobileSheet"
-      class="fixed inset-0 z-50"
-      data-oc-keyboard-tap="keep"
-      @pointerdown.stop
-      @click="closeMenu"
-    >
-      <div class="absolute inset-0 bg-black/55 backdrop-blur-sm" />
+    <Teleport to="body">
       <div
-        ref="panelEl"
-        class="absolute left-1/2 w-[calc(100%-1rem)] max-w-[21rem] -translate-x-1/2 rounded-xl border border-border/70 bg-background/95 shadow-xl backdrop-blur overflow-hidden flex flex-col"
-        :style="mobileSheetStyle"
+        v-if="open && isMobileSheet"
+        class="fixed inset-0 z-50"
+        data-oc-keyboard-tap="keep"
         @pointerdown.stop
-        @click.stop
+        @click="closeMenu"
       >
-        <div class="flex items-center justify-between gap-3 px-3 py-2 border-b border-border/40">
-          <div class="text-sm font-semibold">{{ mobileTitle || title || t('common.options') }}</div>
-          <IconButton size="sm" :title="effectiveCloseLabel" :aria-label="effectiveCloseLabel" @click="closeMenu">
-            <RiCloseLine class="h-4 w-4" />
-          </IconButton>
-        </div>
+        <div class="absolute inset-0 bg-black/55 backdrop-blur-sm" />
+        <div
+          ref="panelEl"
+          class="absolute left-1/2 w-[calc(100%-1rem)] max-w-[21rem] -translate-x-1/2 rounded-xl border border-border/70 bg-background/95 shadow-xl backdrop-blur overflow-hidden flex flex-col"
+          :style="mobileSheetStyle"
+          @pointerdown.stop
+          @click.stop
+        >
+          <div class="flex items-center justify-between gap-3 px-3 py-2 border-b border-border/40">
+            <div class="text-sm font-semibold">{{ mobileTitle || title || t('common.options') }}</div>
+            <IconButton size="sm" :title="effectiveCloseLabel" :aria-label="effectiveCloseLabel" @click="closeMenu">
+              <RiCloseLine class="h-4 w-4" />
+            </IconButton>
+          </div>
 
-        <div v-if="searchable" class="p-3 border-b border-border/40">
-          <Input
-            :model-value="query"
-            :placeholder="effectiveSearchPlaceholder"
-            :class="mobileInputClass"
-            @update:model-value="updateQuery"
-          />
-        </div>
+          <div v-if="searchable" class="p-3 border-b border-border/40">
+            <Input
+              :model-value="query"
+              :placeholder="effectiveSearchPlaceholder"
+              :class="mobileInputClass"
+              @update:model-value="updateQuery"
+            />
+          </div>
 
-        <div class="flex-1 min-h-0 overflow-auto px-2 py-1.5">
-          <template v-if="hasVisibleItems">
-            <div
-              v-for="(group, groupIndex) in pagedGroups"
-              :key="group._key || `mobile-group-${groupIndex}`"
-              :class="groupIndex > 0 ? 'mt-1 pt-1 border-t border-border/40' : ''"
-            >
-              <div v-if="group.title || group.subtitle" class="px-2 py-1">
-                <button
-                  v-if="canCollapseGroup(group)"
-                  type="button"
-                  class="w-full flex items-start gap-2 rounded px-1 py-1 text-left hover:bg-secondary/40"
-                  @click="toggleGroupCollapsed(group)"
-                >
-                  <RiArrowDownSLine
-                    class="h-4 w-4 mt-0.5 text-muted-foreground transition-transform"
-                    :class="isGroupCollapsed(group) ? '-rotate-90' : ''"
-                  />
-                  <div class="min-w-0 flex-1">
+          <div class="flex-1 min-h-0 overflow-auto px-2 py-1.5">
+            <template v-if="hasVisibleItems">
+              <div
+                v-for="(group, groupIndex) in pagedGroups"
+                :key="group._key || `mobile-group-${groupIndex}`"
+                :class="groupIndex > 0 ? 'mt-1 pt-1 border-t border-border/40' : ''"
+              >
+                <div v-if="group.title || group.subtitle" class="px-2 py-1">
+                  <button
+                    v-if="canCollapseGroup(group)"
+                    type="button"
+                    class="w-full flex items-start gap-2 rounded px-1 py-1 text-left hover:bg-secondary/40"
+                    @click="toggleGroupCollapsed(group)"
+                  >
+                    <RiArrowDownSLine
+                      class="h-4 w-4 mt-0.5 text-muted-foreground transition-transform"
+                      :class="isGroupCollapsed(group) ? '-rotate-90' : ''"
+                    />
+                    <div class="min-w-0 flex-1">
+                      <div
+                        v-if="group.title"
+                        class="text-[11px] font-semibold tracking-wider uppercase text-muted-foreground"
+                      >
+                        {{ group.title }}
+                      </div>
+                      <div v-if="group.subtitle" class="text-[11px] text-muted-foreground/70">{{ group.subtitle }}</div>
+                    </div>
+                    <span class="text-[11px] text-muted-foreground/70 tabular-nums">{{ group.items.length }}</span>
+                  </button>
+
+                  <div v-else>
                     <div
                       v-if="group.title"
                       class="text-[11px] font-semibold tracking-wider uppercase text-muted-foreground"
@@ -841,37 +854,48 @@ defineExpose({ containsTarget, focusSearch })
                     </div>
                     <div v-if="group.subtitle" class="text-[11px] text-muted-foreground/70">{{ group.subtitle }}</div>
                   </div>
-                  <span class="text-[11px] text-muted-foreground/70 tabular-nums">{{ group.items.length }}</span>
-                </button>
-
-                <div v-else>
-                  <div
-                    v-if="group.title"
-                    class="text-[11px] font-semibold tracking-wider uppercase text-muted-foreground"
-                  >
-                    {{ group.title }}
-                  </div>
-                  <div v-if="group.subtitle" class="text-[11px] text-muted-foreground/70">{{ group.subtitle }}</div>
                 </div>
-              </div>
 
-              <template v-if="!isGroupCollapsed(group)">
-                <template v-for="item in group.items" :key="item.id">
-                  <ConfirmPopover
-                    v-if="item.confirmTitle"
-                    :title="item.confirmTitle"
-                    :description="item.confirmDescription || ''"
-                    :confirm-text="item.confirmText || t('common.confirm')"
-                    :cancel-text="item.cancelText || t('common.cancel')"
-                    :variant="item.variant === 'destructive' ? 'destructive' : 'default'"
-                    @confirm="selectItem(item)"
-                  >
+                <template v-if="!isGroupCollapsed(group)">
+                  <template v-for="item in group.items" :key="item.id">
+                    <ConfirmPopover
+                      v-if="item.confirmTitle"
+                      :title="item.confirmTitle"
+                      :description="item.confirmDescription || ''"
+                      :confirm-text="item.confirmText || t('common.confirm')"
+                      :cancel-text="item.cancelText || t('common.cancel')"
+                      :variant="item.variant === 'destructive' ? 'destructive' : 'default'"
+                      @confirm="selectItem(item)"
+                    >
+                      <ListRowButton
+                        size="md"
+                        class="px-4"
+                        :disabled="item.disabled"
+                        :destructive="item.variant === 'destructive'"
+                        @click.stop
+                      >
+                        <div class="mx-auto flex w-full max-w-[18rem] items-center gap-3">
+                          <component :is="item.icon || RiMore2Line" class="h-5 w-5 shrink-0 text-muted-foreground" />
+                          <div class="min-w-0 flex-1">
+                            <div class="text-sm font-medium truncate" :class="item.monospace ? 'font-mono' : ''">
+                              {{ item.label }}
+                            </div>
+                            <div v-if="item.description" class="text-[13px] text-muted-foreground truncate">
+                              {{ item.description }}
+                            </div>
+                          </div>
+                          <RiCheckLine v-if="item.checked" class="h-4 w-4 text-primary flex-shrink-0" />
+                        </div>
+                      </ListRowButton>
+                    </ConfirmPopover>
+
                     <ListRowButton
+                      v-else
                       size="md"
                       class="px-4"
                       :disabled="item.disabled"
                       :destructive="item.variant === 'destructive'"
-                      @click.stop
+                      @click="selectItem(item)"
                     >
                       <div class="mx-auto flex w-full max-w-[18rem] items-center gap-3">
                         <component :is="item.icon || RiMore2Line" class="h-5 w-5 shrink-0 text-muted-foreground" />
@@ -886,68 +910,46 @@ defineExpose({ containsTarget, focusSearch })
                         <RiCheckLine v-if="item.checked" class="h-4 w-4 text-primary flex-shrink-0" />
                       </div>
                     </ListRowButton>
-                  </ConfirmPopover>
-
-                  <ListRowButton
-                    v-else
-                    size="md"
-                    class="px-4"
-                    :disabled="item.disabled"
-                    :destructive="item.variant === 'destructive'"
-                    @click="selectItem(item)"
-                  >
-                    <div class="mx-auto flex w-full max-w-[18rem] items-center gap-3">
-                      <component :is="item.icon || RiMore2Line" class="h-5 w-5 shrink-0 text-muted-foreground" />
-                      <div class="min-w-0 flex-1">
-                        <div class="text-sm font-medium truncate" :class="item.monospace ? 'font-mono' : ''">
-                          {{ item.label }}
-                        </div>
-                        <div v-if="item.description" class="text-[13px] text-muted-foreground truncate">
-                          {{ item.description }}
-                        </div>
-                      </div>
-                      <RiCheckLine v-if="item.checked" class="h-4 w-4 text-primary flex-shrink-0" />
-                    </div>
-                  </ListRowButton>
+                  </template>
                 </template>
-              </template>
-            </div>
+              </div>
 
-            <div v-if="helperText" class="px-3 py-2 text-[13px] text-muted-foreground">{{ helperText }}</div>
-          </template>
+              <div v-if="helperText" class="px-3 py-2 text-[13px] text-muted-foreground">{{ helperText }}</div>
+            </template>
 
-          <div v-else class="px-3 py-3 text-sm text-muted-foreground">{{ effectiveEmptyText }}</div>
-        </div>
+            <div v-else class="px-3 py-3 text-sm text-muted-foreground">{{ effectiveEmptyText }}</div>
+          </div>
 
-        <div
-          v-if="showPager"
-          class="border-t border-border/40 px-3 py-2 flex items-center justify-between gap-2 bg-background/80"
-        >
-          <Button
-            size="sm"
-            variant="ghost"
-            class="h-8 w-8 p-0"
-            :title="t('common.previousPage')"
-            :aria-label="t('common.previousPage')"
-            :disabled="currentPage <= 1"
-            @click="goToPrevPage"
+          <div
+            v-if="showPager"
+            class="border-t border-border/40 px-3 py-2 flex items-center justify-between gap-2 bg-background/80"
           >
-            <RiArrowLeftSLine class="h-4 w-4" />
-          </Button>
-          <div class="text-xs text-muted-foreground tabular-nums text-center">{{ pagerLabel }}</div>
-          <Button
-            size="sm"
-            variant="ghost"
-            class="h-8 w-8 p-0"
-            :title="t('common.nextPage')"
-            :aria-label="t('common.nextPage')"
-            :disabled="currentPage >= pageCount"
-            @click="goToNextPage"
-          >
-            <RiArrowRightSLine class="h-4 w-4" />
-          </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              class="h-8 w-8 p-0"
+              :title="t('common.previousPage')"
+              :aria-label="t('common.previousPage')"
+              :disabled="currentPage <= 1"
+              @click="goToPrevPage"
+            >
+              <RiArrowLeftSLine class="h-4 w-4" />
+            </Button>
+            <div class="text-xs text-muted-foreground tabular-nums text-center">{{ pagerLabel }}</div>
+            <Button
+              size="sm"
+              variant="ghost"
+              class="h-8 w-8 p-0"
+              :title="t('common.nextPage')"
+              :aria-label="t('common.nextPage')"
+              :disabled="currentPage >= pageCount"
+              @click="goToNextPage"
+            >
+              <RiArrowRightSLine class="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </div>
-    </div>
+    </Teleport>
   </div>
 </template>

@@ -65,7 +65,7 @@ defineExpose({ shellEl, textareaEl, openFilePicker })
       ref="textareaEl"
       :value="draft ?? ''"
       data-chat-input="true"
-      class="w-full min-h-[84px] resize-none border-0 bg-transparent px-3 py-2 text-sm shadow-none placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-0 flex-1 min-h-0"
+      class="w-full min-h-[44px] sm:min-h-[60px] resize-none border-0 bg-transparent px-3 py-2 text-sm shadow-none placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-0 flex-1"
       :class="fullscreen ? 'composer-textarea-full' : 'max-h-none'"
       :placeholder="t('chat.composer.input.placeholder')"
       spellcheck="false"
