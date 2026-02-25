@@ -3,6 +3,7 @@ use clap::{Parser, ValueEnum};
 use tracing::Level;
 
 mod app;
+mod attachment_cache;
 mod chat_sidebar;
 mod chat_sidebar_preferences;
 mod config;
@@ -27,6 +28,8 @@ mod settings;
 mod settings_events;
 mod terminal;
 mod terminal_ui_state;
+#[cfg(test)]
+mod test_support;
 mod ui_auth;
 mod updates;
 

@@ -31,6 +31,7 @@ pub(crate) struct AppState {
     pub(crate) opencode: Arc<crate::opencode::OpenCodeManager>,
     pub(crate) plugin_runtime: Arc<crate::plugin_runtime::PluginRuntime>,
     pub(crate) terminal: Arc<crate::terminal::TerminalManager>,
+    pub(crate) attachment_cache: Arc<crate::attachment_cache::AttachmentCacheManager>,
     pub(crate) session_activity: crate::session_activity::SessionActivityManager,
     pub(crate) directory_session_index:
         crate::directory_session_index::DirectorySessionIndexManager,
@@ -362,6 +363,8 @@ pub(crate) async fn run(args: crate::Args) {
     let terminal = Arc::new(crate::terminal::TerminalManager::new());
     terminal.clone().spawn_cleanup_task();
 
+    let attachment_cache = Arc::new(crate::attachment_cache::AttachmentCacheManager::new());
+
     let plugin_runtime = Arc::new(crate::plugin_runtime::PluginRuntime::new());
 
     let activity = crate::session_activity::SessionActivityManager::new();
@@ -376,6 +379,7 @@ pub(crate) async fn run(args: crate::Args) {
         opencode,
         plugin_runtime,
         terminal,
+        attachment_cache,
         session_activity: activity,
         directory_session_index,
         settings_path,

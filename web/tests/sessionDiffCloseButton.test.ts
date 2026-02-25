@@ -13,4 +13,5 @@ test('session diff panel uses icon close button with large hit target', () => {
   assert.ok(source.includes('size="lg"'))
   assert.ok(source.includes('class="h-9 w-9'))
   assert.ok(source.includes('<RiCloseLine class="h-4 w-4" />'))
+  assert.ok(source.includes('px-3 py-1 border-b border-border/60'))
 })
