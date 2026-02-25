@@ -999,7 +999,7 @@ void diffPaneRef
               v-if="
                 signingInfo?.commitGpgsign &&
                 (signingInfo?.gpgFormat || '').toLowerCase() === 'ssh' &&
-                (!signingInfo.sshAuthSockPresent || !signingInfo.sshAgentHasKeys)
+                !signingInfo.sshSigningAvailable
               "
               class="rounded-sm border border-sidebar-border/60 bg-sidebar-accent/20 p-2 text-[11px]"
             >
