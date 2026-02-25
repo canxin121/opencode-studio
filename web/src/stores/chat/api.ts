@@ -41,6 +41,15 @@ export type MessageListResponse = {
   consistency?: ApiConsistency
 }
 
+export type SessionDiffPageResponse = {
+  items: SessionFileDiff[]
+  total?: number
+  offset: number
+  limit: number
+  hasMore: boolean
+  nextOffset?: number
+}
+
 function toTextTrimmed(value: JsonValue): string {
   return typeof value === 'string' ? value.trim() : ''
 }
@@ -142,6 +151,65 @@ export function normalizeSessionDiffPayload(payload: JsonValue): SessionFileDiff
   const items = readSessionDiffItems(payload)
   if (!items.length) return []
   return items.map((item) => parseSessionFileDiff(item)).filter((item): item is SessionFileDiff => Boolean(item))
+}
+
+function readBoolean(value: JsonValue): boolean | undefined {
+  if (typeof value === 'boolean') return value
+  return undefined
+}
+
+function readOptionalInt(value: JsonValue): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined
+  return Math.max(0, Math.floor(value))
+}
+
+export function normalizeSessionDiffPagePayload(
+  payload: JsonValue,
+  opts?: { fallbackOffset?: number; fallbackLimit?: number },
+): SessionDiffPageResponse {
+  const fallbackOffset =
+    typeof opts?.fallbackOffset === 'number' && Number.isFinite(opts.fallbackOffset)
+      ? Math.max(0, Math.floor(opts.fallbackOffset))
+      : 0
+  const fallbackLimit =
+    typeof opts?.fallbackLimit === 'number' && Number.isFinite(opts.fallbackLimit)
+      ? Math.max(1, Math.floor(opts.fallbackLimit))
+      : 100
+
+  const body = asRecord(payload)
+  const items = normalizeSessionDiffPayload(payload)
+
+  const offsetRaw = readOptionalInt(body.offset ?? body.start)
+  const limitRaw = readOptionalInt(body.limit ?? body.pageSize)
+  const totalRaw = readOptionalInt(body.total)
+  const nextOffsetRaw = readOptionalInt(body.nextOffset ?? body.next_offset ?? body.next)
+  const hasMoreRaw = readBoolean(body.hasMore ?? body.has_more)
+
+  const offset = offsetRaw ?? fallbackOffset
+  const limit = Math.max(1, limitRaw ?? fallbackLimit)
+  const inferredNextOffset = offset + items.length
+  const inferredHasMoreFromTotal = typeof totalRaw === 'number' ? inferredNextOffset < totalRaw : undefined
+  const inferredHasMoreFromPage = items.length >= limit
+  const nextOffset = nextOffsetRaw ?? (inferredHasMoreFromPage ? inferredNextOffset : undefined)
+
+  let hasMore =
+    hasMoreRaw ??
+    (typeof nextOffsetRaw === 'number' ? nextOffsetRaw > inferredNextOffset : undefined) ??
+    inferredHasMoreFromTotal ??
+    inferredHasMoreFromPage
+
+  if (!items.length || (typeof nextOffset === 'number' && nextOffset <= offset)) {
+    hasMore = false
+  }
+
+  return {
+    items,
+    ...(typeof totalRaw === 'number' ? { total: totalRaw } : {}),
+    offset,
+    limit,
+    hasMore,
+    ...(hasMore && typeof nextOffset === 'number' ? { nextOffset } : {}),
+  }
 }
 
 type AttentionListOptions = {
@@ -458,17 +526,31 @@ export async function unrevertSession(sessionId: string, directory?: string | nu
 export async function getSessionDiff(
   sessionId: string,
   directory?: string | null,
-  opts?: { messageID?: string },
-): Promise<SessionFileDiff[]> {
+  opts?: { messageID?: string; offset?: number; limit?: number },
+): Promise<SessionDiffPageResponse> {
   const sid = String(sessionId || '').trim()
-  if (!sid) return []
+  if (!sid) {
+    return {
+      items: [],
+      offset: 0,
+      limit: Math.max(1, Math.floor(opts?.limit || 100)),
+      hasMore: false,
+    }
+  }
 
   const q = directoryQuery(directory)
   const params: string[] = []
   const messageID = typeof opts?.messageID === 'string' ? opts.messageID.trim() : ''
+  const offset = typeof opts?.offset === 'number' && Number.isFinite(opts.offset) ? Math.max(0, Math.floor(opts.offset)) : 0
+  const limit = typeof opts?.limit === 'number' && Number.isFinite(opts.limit) ? Math.max(1, Math.floor(opts.limit)) : 100
+  if (offset > 0) params.push(`offset=${encodeURIComponent(String(offset))}`)
+  if (limit > 0) params.push(`limit=${encodeURIComponent(String(limit))}`)
   if (messageID) params.push(`messageID=${encodeURIComponent(messageID)}`)
   const sep = q && params.length ? '&' : '?'
   const suffix = params.length ? `${sep}${params.join('&')}` : ''
   const payload = await apiJson<JsonValue>(`/api/session/${encodeURIComponent(sid)}/diff${q}${suffix}`)
-  return normalizeSessionDiffPayload(payload)
+  return normalizeSessionDiffPagePayload(payload, {
+    fallbackOffset: offset,
+    fallbackLimit: limit,
+  })
 }

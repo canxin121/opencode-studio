@@ -98,33 +98,8 @@ export function useAppRuntime() {
   }
 
   function computeSidebarLimitPerDirectory(opts?: { reason?: string; gapMs?: number }): number {
-    // Start from the server default; clamp within server limits.
-    let limit = 80
-    if (document.visibilityState !== 'visible') {
-      return 40
-    }
-
-    // visibleDirectories is a computed array (Pinia unwraps refs). Guard in case of partial init.
-    const dirs = Array.isArray((directorySessions as unknown as { visibleDirectories?: unknown }).visibleDirectories)
-      ? ((directorySessions as unknown as { visibleDirectories: unknown[] }).visibleDirectories as unknown[])
-      : []
-    const collapsed = Array.isArray(directorySessions.uiPrefs?.collapsedDirectoryIds)
-      ? directorySessions.uiPrefs.collapsedDirectoryIds.length
-      : 0
-    const expandedCount = Math.max(0, dirs.length - collapsed)
-
-    // If the user only has a few expanded directories, fetch deeper so the sidebar
-    // can recover without needing extra paging requests after gaps/resume.
-    if (expandedCount <= 3) limit = Math.max(limit, 160)
-    else if (expandedCount <= 8) limit = Math.max(limit, 120)
-
-    const gapMs = Math.max(0, Math.floor(opts?.gapMs || 0))
-    if (gapMs >= 20000) limit = Math.max(limit, 140)
-
-    const reason = String(opts?.reason || '').trim()
-    if (reason === 'sse-gap' || reason === 'replay-gap') limit = Math.max(limit, 120)
-
-    return Math.min(200, Math.max(40, Math.floor(limit)))
+    void opts
+    return 10
   }
 
   function resyncAfterResume(reason: string, opts?: { gapMs?: number }) {

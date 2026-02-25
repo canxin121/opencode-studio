@@ -1667,7 +1667,7 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
 
     const focusId = typeof opts?.focusSessionId === 'string' ? opts.focusSessionId.trim() : ''
     const wantsFocus = Boolean(focusId)
-    const pageSize = Math.max(1, Math.floor(opts?.pageSize || 30))
+    const pageSize = Math.max(1, Math.floor(opts?.pageSize || 10))
     const targetPage = Math.max(0, Math.floor(opts?.page || 0))
     const cached = sessionPageByDirectoryId.value[did]
 
@@ -2650,7 +2650,7 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     const limit =
       typeof opts?.limitPerDirectory === 'number' && Number.isFinite(opts.limitPerDirectory)
         ? Math.max(1, Math.floor(opts.limitPerDirectory))
-        : 80
+        : 10
 
     try {
       const collapsedSet = new Set(

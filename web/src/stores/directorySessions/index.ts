@@ -114,7 +114,7 @@ export function parseSessionPagePayload(raw: JsonValue, fallbackLimit: number): 
   const limit =
     typeof payload?.limit === 'number' && Number.isFinite(payload.limit) && payload.limit > 0
       ? Math.max(1, Math.floor(payload.limit))
-      : Math.max(1, Math.floor(fallbackLimit || 80))
+      : Math.max(1, Math.floor(fallbackLimit || 10))
   const consistency = parseSessionPayloadConsistency(payload?.consistency)
   return {
     page: Math.floor(offset / limit),

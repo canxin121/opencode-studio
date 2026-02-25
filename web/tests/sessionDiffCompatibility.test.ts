@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { normalizeSessionDiffPayload } from '../src/stores/chat/api'
+import { normalizeSessionDiffPagePayload, normalizeSessionDiffPayload } from '../src/stores/chat/api'
 import { extractSessionId } from '../src/stores/chat/reducers'
 
 test('normalizeSessionDiffPayload: accepts wrapped payload and alternate field names', () => {
@@ -102,4 +102,56 @@ test('extractSessionId: accepts camelCase and snake_case session keys', () => {
     }),
     'session-snake',
   )
+})
+
+test('normalizeSessionDiffPagePayload: honors paging metadata and hasMore', () => {
+  const page = normalizeSessionDiffPagePayload({
+    items: [
+      {
+        path: 'src/main.ts',
+        old: 'before\n',
+        new: 'after\n',
+        added: 1,
+        removed: 1,
+      },
+    ],
+    total: 12,
+    offset: 0,
+    limit: 1,
+    hasMore: true,
+    nextOffset: 1,
+  })
+
+  assert.equal(page.items.length, 1)
+  assert.equal(page.offset, 0)
+  assert.equal(page.limit, 1)
+  assert.equal(page.hasMore, true)
+  assert.equal(page.nextOffset, 1)
+  assert.equal(page.total, 12)
+})
+
+test('normalizeSessionDiffPagePayload: infers next page for bare arrays', () => {
+  const page = normalizeSessionDiffPagePayload(
+    [
+      {
+        file: 'README.md',
+        before: 'old\n',
+        after: 'new\n',
+        additions: 1,
+        deletions: 1,
+      },
+      {
+        file: 'src/a.ts',
+        before: 'a\n',
+        after: 'b\n',
+        additions: 1,
+        deletions: 1,
+      },
+    ],
+    { fallbackOffset: 0, fallbackLimit: 2 },
+  )
+
+  assert.equal(page.items.length, 2)
+  assert.equal(page.hasMore, true)
+  assert.equal(page.nextOffset, 2)
 })

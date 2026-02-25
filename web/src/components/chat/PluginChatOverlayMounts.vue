@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RiCloseLine, RiFileList2Line, RiPlugLine } from '@remixicon/vue'
 
@@ -43,6 +43,7 @@ const activeMountKey = ref('')
 const menuQuery = ref('')
 const diffPanelOpen = ref(false)
 const selectedDiffFile = ref('')
+const diffListEl = ref<HTMLElement | null>(null)
 
 let reserveObserver: ResizeObserver | null = null
 let reserveRaf = 0
@@ -116,6 +117,8 @@ const selectedDiff = computed(() => {
 const selectedDiffPath = computed(() => selectedDiff.value?.file || '')
 const selectedDiffBefore = computed(() => selectedDiff.value?.before || '')
 const selectedDiffAfter = computed(() => selectedDiff.value?.after || '')
+const sessionDiffHasMore = computed(() => chat.selectedSessionDiffHasMore)
+const sessionDiffLoadingMore = computed(() => chat.selectedSessionDiffLoadingMore)
 
 const activeMount = computed(() => {
   const key = activeMountKey.value
@@ -240,6 +243,22 @@ function toggleDiffPanel() {
   scheduleReserveUpdate()
 }
 
+function maybeLoadMoreSessionDiff() {
+  if (!diffPanelOpen.value) return
+  if (!sessionDiffHasMore.value || sessionDiffLoadingMore.value || chat.selectedSessionDiffLoading) return
+  const el = diffListEl.value
+  if (!el) return
+  const remaining = el.scrollHeight - (el.scrollTop + el.clientHeight)
+  if (remaining > 88) return
+  const sid = String(chat.selectedSessionId || '').trim()
+  if (!sid) return
+  void chat.loadMoreSessionDiff(sid, { silent: true })
+}
+
+function handleDiffListScroll() {
+  maybeLoadMoreSessionDiff()
+}
+
 function selectMount(key: string) {
   closeDiffPanel()
   activeMountKey.value = activeMountKey.value === key ? '' : key
@@ -301,6 +320,9 @@ watch(
     if (!list.some((entry) => entry.file === selectedDiffFile.value)) {
       selectedDiffFile.value = list[0]?.file || ''
     }
+    void nextTick(() => {
+      maybeLoadMoreSessionDiff()
+    })
   },
   { immediate: true },
 )
@@ -317,6 +339,11 @@ watch(
   () => [menuOpen.value, activeMountKey.value, hasMounts.value, isComposerPlacement.value, diffPanelOpen.value],
   () => {
     scheduleReserveUpdate()
+    if (diffPanelOpen.value) {
+      void nextTick(() => {
+        maybeLoadMoreSessionDiff()
+      })
+    }
   },
 )
 
@@ -396,8 +423,8 @@ onBeforeUnmount(() => {
         v-if="diffPanelOpen"
         class="pointer-events-auto w-full rounded-lg border border-border/70 bg-background/95 shadow-lg backdrop-blur overflow-hidden"
       >
-        <div class="flex items-center justify-between gap-2 px-3 py-2 border-b border-border/60">
-          <div class="text-xs font-medium text-foreground">{{ t('chat.sessionDiff.panelTitle') }}</div>
+        <div class="flex items-center justify-between gap-2 px-3 py-1 border-b border-border/60">
+          <div class="text-xs font-medium leading-5 text-foreground">{{ t('chat.sessionDiff.panelTitle') }}</div>
           <IconButton
             size="lg"
             class="h-9 w-9 text-muted-foreground hover:text-foreground"
@@ -421,7 +448,9 @@ onBeforeUnmount(() => {
         </div>
         <div v-else class="flex flex-col sm:flex-row h-[56vh] max-h-[520px] min-h-[320px]">
           <div
+            ref="diffListEl"
             class="sm:w-72 sm:max-w-72 sm:min-w-72 border-b sm:border-b-0 sm:border-r border-border/60 overflow-auto"
+            @scroll.passive="handleDiffListScroll"
           >
             <button
               v-for="entry in sessionDiff"
@@ -437,6 +466,9 @@ onBeforeUnmount(() => {
                 <span class="ml-2 text-red-600 dark:text-red-400">-{{ entry.deletions }}</span>
               </div>
             </button>
+            <div v-if="sessionDiffLoadingMore" class="px-3 py-2 text-[11px] text-muted-foreground">
+              {{ t('chat.sessionDiff.loading') }}
+            </div>
           </div>
           <div class="min-w-0 flex-1 min-h-0 h-[260px] sm:h-auto">
             <MonacoDiffEditor

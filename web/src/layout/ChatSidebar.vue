@@ -159,7 +159,7 @@ watch(
 
 // Paging (sidebar can contain many directories/sessions).
 const DIRECTORIES_PAGE_SIZE = DIRECTORIES_PAGE_SIZE_DEFAULT
-const SESSION_ROOTS_PAGE_SIZE = 30
+const SESSION_ROOTS_PAGE_SIZE = 10
 
 // Search/filter (user-driven only).
 const sidebarQuery = ref('')

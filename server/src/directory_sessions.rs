@@ -98,8 +98,8 @@ struct DirectorySessionsEventHub {
 
 const EVENT_HUB_REPLAY_MAX_EVENTS: usize = 2048;
 const EVENT_HUB_REPLAY_MAX_BYTES: usize = 8 * 1024 * 1024;
-const DIRECTORY_SESSIONS_LIMIT_DEFAULT: usize = 80;
-const DIRECTORY_SESSIONS_LIMIT_MIN: usize = 40;
+const DIRECTORY_SESSIONS_LIMIT_DEFAULT: usize = 10;
+const DIRECTORY_SESSIONS_LIMIT_MIN: usize = 10;
 const DIRECTORY_SESSIONS_LIMIT_MAX: usize = 200;
 const DIRECTORY_SESSIONS_INDEX_SEED_LIMIT: usize = 40;
 const DIRECTORY_SESSIONS_INTERNAL_BODY_LIMIT: usize = 5 * 1024 * 1024;
@@ -299,8 +299,7 @@ fn now_millis() -> u64 {
 }
 
 fn parse_limit(raw: Option<usize>) -> usize {
-    // Keep at least 40 summaries per directory so the global recent-40 index
-    // can be maintained without falling back to full scans.
+    // Keep limit bounded so sidebar pagination remains predictable.
     raw.unwrap_or(DIRECTORY_SESSIONS_LIMIT_DEFAULT)
         .clamp(DIRECTORY_SESSIONS_LIMIT_MIN, DIRECTORY_SESSIONS_LIMIT_MAX)
 }
