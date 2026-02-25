@@ -7,6 +7,8 @@ use super::{ResponseConsistency, SessionRecord, opencode_db_path};
 
 const SQLITE_BUSY_TIMEOUT_MS: u64 = 15000;
 const SQLITE_READ_CONCURRENCY: usize = 2;
+const SQLITE_BUSY_RETRY_ATTEMPTS: usize = 3;
+const SQLITE_BUSY_RETRY_DELAY_MS: u64 = 30;
 
 static SQLITE_READ_SEMAPHORE: LazyLock<Semaphore> =
     LazyLock::new(|| Semaphore::new(SQLITE_READ_CONCURRENCY));
@@ -19,9 +21,36 @@ fn open_sqlite_readonly_connection(
         rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_URI,
     )?;
     let _ = conn.pragma_update(None, "query_only", "ON");
-    let _ = conn.pragma_update(None, "read_uncommitted", "ON");
+    let _ = conn.pragma_update(None, "read_uncommitted", "OFF");
+    let _ = conn.pragma_update(None, "temp_store", "MEMORY");
+    let _ = conn.pragma_update(None, "cache_size", -16_000i64);
+    let _ = conn.pragma_update(None, "mmap_size", 256_i64 * 1024 * 1024);
     let _ = conn.busy_timeout(std::time::Duration::from_millis(SQLITE_BUSY_TIMEOUT_MS));
     Ok(conn)
+}
+
+fn sqlite_is_busy_error(err: &rusqlite::Error) -> bool {
+    matches!(
+        err.sqlite_error_code(),
+        Some(rusqlite::ffi::ErrorCode::DatabaseBusy)
+            | Some(rusqlite::ffi::ErrorCode::DatabaseLocked)
+    )
+}
+
+fn with_sqlite_busy_retry<T, F>(mut op: F) -> Option<T>
+where
+    F: FnMut() -> rusqlite::Result<T>,
+{
+    for attempt in 0..SQLITE_BUSY_RETRY_ATTEMPTS {
+        match op() {
+            Ok(value) => return Some(value),
+            Err(err) if sqlite_is_busy_error(&err) && attempt + 1 < SQLITE_BUSY_RETRY_ATTEMPTS => {
+                std::thread::sleep(std::time::Duration::from_millis(SQLITE_BUSY_RETRY_DELAY_MS));
+            }
+            Err(_) => return None,
+        }
+    }
+    None
 }
 
 #[derive(Debug)]
@@ -111,10 +140,7 @@ pub(super) async fn load_session_records_from_sqlite(
     let _permit = SQLITE_READ_SEMAPHORE.acquire().await.ok()?;
 
     tokio::task::spawn_blocking(move || {
-        let conn = match open_sqlite_readonly_connection(&db_path) {
-            Ok(conn) => conn,
-            Err(_) => return None,
-        };
+        let conn = with_sqlite_busy_retry(|| open_sqlite_readonly_connection(&db_path))?;
 
         let sql = if project_id.is_some() {
             "SELECT id, parent_id, directory, title, slug, share_url, revert, time_created, time_updated FROM session WHERE project_id = ?1"
@@ -122,26 +148,71 @@ pub(super) async fn load_session_records_from_sqlite(
             "SELECT id, parent_id, directory, title, slug, share_url, revert, time_created, time_updated FROM session"
         };
 
-        let mut stmt = match conn.prepare(sql) {
-            Ok(stmt) => stmt,
-            Err(_) => return None,
-        };
+        let mut stmt = conn.prepare(sql).ok()?;
 
         let mapped = match project_id.as_deref() {
             Some(project_id) => {
-                match stmt.query_map(rusqlite::params![project_id], session_record_from_sqlite_row)
-                {
-                    Ok(mapped) => mapped,
-                    Err(_) => return None,
-                }
+                stmt.query_map(rusqlite::params![project_id], session_record_from_sqlite_row)
+                    .ok()?
             }
-            None => match stmt.query_map([], session_record_from_sqlite_row) {
-                Ok(mapped) => mapped,
-                Err(_) => return None,
-            },
+            None => stmt.query_map([], session_record_from_sqlite_row).ok()?,
         };
 
         Some(mapped.filter_map(Result::ok).collect::<Vec<_>>())
+    })
+    .await
+    .ok()
+    .flatten()
+}
+
+pub(super) async fn load_session_records_by_ids_from_sqlite(
+    ids: &[String],
+) -> Option<Vec<SessionRecord>> {
+    if ids.is_empty() {
+        return Some(Vec::new());
+    }
+
+    let db_path = opencode_db_path();
+    if fs::metadata(&db_path).await.is_err() {
+        return None;
+    }
+
+    let mut normalized = ids
+        .iter()
+        .map(|id| id.trim())
+        .filter(|id| !id.is_empty())
+        .map(|id| id.to_string())
+        .collect::<Vec<_>>();
+    normalized.sort();
+    normalized.dedup();
+
+    if normalized.is_empty() {
+        return Some(Vec::new());
+    }
+
+    let _permit = SQLITE_READ_SEMAPHORE.acquire().await.ok()?;
+
+    tokio::task::spawn_blocking(move || {
+        let conn = with_sqlite_busy_retry(|| open_sqlite_readonly_connection(&db_path))?;
+        let mut out = Vec::<SessionRecord>::new();
+        const CHUNK_SIZE: usize = 300;
+
+        for chunk in normalized.chunks(CHUNK_SIZE) {
+            let sql = format!(
+                "SELECT id, parent_id, directory, title, slug, share_url, revert, time_created, time_updated FROM session WHERE id IN ({})",
+                sqlite_placeholders(chunk.len())
+            );
+            let mut stmt = conn.prepare(&sql).ok()?;
+            let mapped = stmt
+                .query_map(
+                    rusqlite::params_from_iter(chunk.iter()),
+                    session_record_from_sqlite_row,
+                )
+                .ok()?;
+            out.extend(mapped.filter_map(Result::ok));
+        }
+
+        Some(out)
     })
     .await
     .ok()
@@ -172,23 +243,22 @@ pub(super) async fn load_session_message_page_from_sqlite(
     let _permit = SQLITE_READ_SEMAPHORE.acquire().await.ok()?;
 
     tokio::task::spawn_blocking(move || {
-        let conn = match open_sqlite_readonly_connection(&db_path) {
-            Ok(conn) => conn,
-            Err(_) => return None,
-        };
+        let conn = with_sqlite_busy_retry(|| open_sqlite_readonly_connection(&db_path))?;
 
         let mut consistency = ResponseConsistency::default();
         let mut total = 0usize;
         if include_total {
-            match conn.query_row(
-                "SELECT COUNT(*) FROM message WHERE session_id = ?1",
-                rusqlite::params![session_id.as_str()],
-                |row| row.get::<_, i64>(0),
-            ) {
-                Ok(count) => {
+            match with_sqlite_busy_retry(|| {
+                conn.query_row(
+                    "SELECT COUNT(*) FROM message WHERE session_id = ?1",
+                    rusqlite::params![session_id.as_str()],
+                    |row| row.get::<_, i64>(0),
+                )
+            }) {
+                Some(count) => {
                     total = if count.is_negative() { 0 } else { count as usize };
                 }
-                Err(_) => {
+                None => {
                     consistency.note_io_skip();
                 }
             }
@@ -209,26 +279,18 @@ pub(super) async fn load_session_message_page_from_sqlite(
                 )
             };
 
-            let mut stmt = match conn.prepare(sql) {
-                Ok(stmt) => stmt,
-                Err(_) => {
-                    return None;
-                }
-            };
+            let mut stmt = conn.prepare(sql).ok()?;
 
-            let mut rows = match if use_limit {
+            let mut rows = if use_limit {
                 stmt.query(rusqlite::params![
                     session_id.as_str(),
                     limit.unwrap_or_default() as i64,
                     offset as i64
                 ])
+                .ok()?
             } else {
                 stmt.query(rusqlite::params![session_id.as_str(), offset as i64])
-            } {
-                Ok(rows) => rows,
-                Err(_) => {
-                    return None;
-                }
+                    .ok()?
             };
 
             loop {
@@ -311,15 +373,9 @@ pub(super) async fn load_session_message_page_from_sqlite(
                     sqlite_placeholders(chunk.len())
                 );
 
-                let mut stmt = match conn.prepare(&sql) {
-                    Ok(stmt) => stmt,
-                    Err(_) => return None,
-                };
+                let mut stmt = conn.prepare(&sql).ok()?;
 
-                let mut rows = match stmt.query(rusqlite::params_from_iter(chunk.iter())) {
-                    Ok(rows) => rows,
-                    Err(_) => return None,
-                };
+                let mut rows = stmt.query(rusqlite::params_from_iter(chunk.iter())).ok()?;
 
                 loop {
                     match rows.next() {
@@ -411,7 +467,7 @@ pub(super) async fn load_session_message_part_from_sqlite(
     let _permit = SQLITE_READ_SEMAPHORE.acquire().await.ok()?;
 
     tokio::task::spawn_blocking(move || {
-        let conn = open_sqlite_readonly_connection(&db_path).ok()?;
+        let conn = with_sqlite_busy_retry(|| open_sqlite_readonly_connection(&db_path))?;
 
         let info_raw = conn
             .query_row(

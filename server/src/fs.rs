@@ -544,6 +544,20 @@ pub async fn fs_upload(
             _ => AppError::internal(err.to_string()),
         })?;
 
+    let upload_mime = mime_for_ext(&resolved);
+    if let Err(err) = state
+        .attachment_cache
+        .register_uploaded_file(&resolved, payload.as_ref(), upload_mime)
+        .await
+    {
+        tracing::warn!(
+            target: "opencode_studio.attachment_cache",
+            path = %resolved.display(),
+            error = %err,
+            "failed to register uploaded file in attachment cache"
+        );
+    }
+
     Ok(Json(UploadResponse {
         success: true,
         path: to_api_path(&resolved),

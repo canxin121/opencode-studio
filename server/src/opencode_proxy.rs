@@ -216,6 +216,67 @@ fn directory_from_uri_query(uri: &Uri) -> Option<String> {
     })
 }
 
+fn query_bool(uri: &Uri, key: &str) -> bool {
+    uri.query()
+        .map(|query| {
+            url::form_urlencoded::parse(query.as_bytes()).any(|(k, v)| {
+                if k != key {
+                    return false;
+                }
+                let raw = v.trim().to_ascii_lowercase();
+                raw.is_empty() || raw == "1" || raw == "true" || raw == "yes" || raw == "on"
+            })
+        })
+        .unwrap_or(false)
+}
+
+fn infer_attachment_mime(
+    abs: &std::path::Path,
+    obj: &serde_json::Map<String, serde_json::Value>,
+) -> String {
+    obj.get("mime")
+        .and_then(|v| v.as_str())
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| {
+            match abs
+                .extension()
+                .and_then(std::ffi::OsStr::to_str)
+                .unwrap_or("")
+                .to_ascii_lowercase()
+                .as_str()
+            {
+                "png" => "image/png",
+                "jpg" | "jpeg" => "image/jpeg",
+                "gif" => "image/gif",
+                "webp" => "image/webp",
+                "svg" => "image/svg+xml",
+                "pdf" => "application/pdf",
+                "json" => "application/json",
+                "md" => "text/markdown",
+                "txt" | "log" => "text/plain",
+                "ts" | "tsx" | "js" | "jsx" | "css" | "html" => "text/plain",
+                _ => "application/octet-stream",
+            }
+            .to_string()
+        })
+}
+
+fn infer_attachment_filename(
+    abs: &std::path::Path,
+    obj: &serde_json::Map<String, serde_json::Value>,
+) -> Option<String> {
+    obj.get("filename")
+        .and_then(|v| v.as_str())
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .or_else(|| {
+            abs.file_name()
+                .and_then(std::ffi::OsStr::to_str)
+                .map(|v| v.to_string())
+        })
+}
+
 async fn proxy_opencode_sse_event_inner(
     state: Arc<crate::AppState>,
     headers: HeaderMap,
@@ -562,52 +623,25 @@ pub(crate) async fn proxy_opencode_rest_inner(
                         return Err(AppError::payload_too_large("Attachment file too large"));
                     }
 
-                    let bytes = tokio::fs::read(&abs)
-                        .await
-                        .map_err(|_| AppError::bad_request("Failed to read attachment file"))?;
+                    let mime = infer_attachment_mime(&abs, obj);
+                    let filename = infer_attachment_filename(&abs, obj);
 
-                    let mime = obj
-                        .get("mime")
-                        .and_then(|v| v.as_str())
-                        .map(|v| v.trim().to_string())
-                        .filter(|v| !v.is_empty())
-                        .unwrap_or_else(|| {
-                            // Lightweight fallback; OpenCode only includes data: attachments in the model.
-                            match abs
-                                .extension()
-                                .and_then(std::ffi::OsStr::to_str)
-                                .unwrap_or("")
-                                .to_ascii_lowercase()
-                                .as_str()
-                            {
-                                "png" => "image/png",
-                                "jpg" | "jpeg" => "image/jpeg",
-                                "gif" => "image/gif",
-                                "webp" => "image/webp",
-                                "svg" => "image/svg+xml",
-                                "pdf" => "application/pdf",
-                                "json" => "application/json",
-                                "md" => "text/markdown",
-                                "txt" | "log" => "text/plain",
-                                "ts" | "tsx" | "js" | "jsx" | "css" | "html" => "text/plain",
-                                _ => "application/octet-stream",
-                            }
-                            .to_string()
-                        });
-
-                    let filename = obj
-                        .get("filename")
-                        .and_then(|v| v.as_str())
-                        .map(|v| v.trim().to_string())
-                        .filter(|v| !v.is_empty())
-                        .or_else(|| {
-                            abs.file_name()
-                                .and_then(std::ffi::OsStr::to_str)
-                                .map(|v| v.to_string())
-                        });
-
-                    let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
-                    let url = format!("data:{};base64,{}", mime, encoded);
+                    let url = match state.attachment_cache.data_url_for_file(&abs, &mime).await {
+                        Ok(url) => url,
+                        Err(err) => {
+                            tracing::warn!(
+                                target: "opencode_studio.attachment_cache",
+                                path = %abs.display(),
+                                error = %err,
+                                "attachment cache miss/failure; using direct base64 path"
+                            );
+                            let bytes = tokio::fs::read(&abs).await.map_err(|_| {
+                                AppError::bad_request("Failed to read attachment file")
+                            })?;
+                            let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
+                            format!("data:{};base64,{}", mime, encoded)
+                        }
+                    };
 
                     obj.insert("mime".to_string(), serde_json::Value::String(mime));
                     obj.insert("url".to_string(), serde_json::Value::String(url));
@@ -3201,9 +3235,97 @@ pub(crate) async fn session_status_get(
     uri: Uri,
     Query(q): Query<AttentionListQuery>,
 ) -> ApiResult<Response> {
+    fn local_status_snapshot(
+        state: &crate::AppState,
+        query_session_id: Option<&str>,
+        query_directory: Option<&str>,
+    ) -> serde_json::Value {
+        let mut payload = state.directory_session_index.runtime_snapshot_json();
+        let Some(map) = payload.as_object_mut() else {
+            return serde_json::Value::Object(serde_json::Map::new());
+        };
+
+        let query_directory_norm =
+            query_directory.and_then(crate::path_utils::normalize_directory_for_match);
+
+        let keys = map.keys().cloned().collect::<Vec<_>>();
+        for sid in keys {
+            if let Some(filter_sid) = query_session_id
+                && sid != filter_sid
+            {
+                map.remove(&sid);
+                continue;
+            }
+
+            if let Some(filter_dir) = query_directory_norm.as_deref() {
+                let matches = state
+                    .directory_session_index
+                    .directory_for_session(&sid)
+                    .and_then(|d| crate::path_utils::normalize_directory_for_match(&d))
+                    .is_some_and(|dir| dir == filter_dir);
+                if !matches {
+                    map.remove(&sid);
+                    continue;
+                }
+            }
+
+            if let Some(entry) = map.get_mut(&sid) {
+                let status_type = entry
+                    .get("statusType")
+                    .and_then(|v| v.as_str())
+                    .or_else(|| entry.get("type").and_then(|v| v.as_str()))
+                    .unwrap_or("idle")
+                    .to_string();
+                *entry = serde_json::json!({ "type": status_type });
+            }
+        }
+
+        payload
+    }
+
+    let query_directory = directory_from_uri_query(&uri);
+    let filter_session_id = normalize_session_id(&q.session_id);
+    let local_preferred = query_bool(&uri, "local") || query_bool(&uri, "preferLocal");
+
+    if local_preferred {
+        let mut payload = local_status_snapshot(
+            state.as_ref(),
+            filter_session_id.as_deref(),
+            query_directory.as_deref(),
+        );
+        prune_session_status_payload(&mut payload);
+        let body = serde_json::to_vec(&payload)
+            .map_err(|_| AppError::bad_gateway("Failed to encode local status response"))?;
+        let mut out = Response::new(axum::body::Body::from(body));
+        *out.status_mut() = StatusCode::OK;
+        out.headers_mut().insert(
+            axum::http::header::CONTENT_TYPE,
+            "application/json".parse().unwrap(),
+        );
+        return Ok(out);
+    }
+
     let oc = state.opencode.status().await;
     if oc.restarting || !oc.ready {
-        return Ok(open_code_restarting());
+        let mut payload = local_status_snapshot(
+            state.as_ref(),
+            filter_session_id.as_deref(),
+            query_directory.as_deref(),
+        );
+        prune_session_status_payload(&mut payload);
+        let body = serde_json::to_vec(&payload)
+            .map_err(|_| AppError::bad_gateway("Failed to encode local status response"))?;
+        let mut out = Response::new(axum::body::Body::from(body));
+        *out.status_mut() = StatusCode::OK;
+        out.headers_mut().insert(
+            axum::http::header::CONTENT_TYPE,
+            "application/json".parse().unwrap(),
+        );
+        out.headers_mut().insert(
+            axum::http::HeaderName::from_static("x-opencode-studio-source"),
+            "local-cache".parse().unwrap(),
+        );
+        return Ok(out);
     }
     let Some(bridge) = state.opencode.bridge().await else {
         return Ok(open_code_unavailable());
@@ -3214,12 +3336,31 @@ pub(crate) async fn session_status_get(
         Err(_) => return Ok(open_code_unavailable()),
     };
 
-    let resp = bridge
-        .client
-        .get(target)
-        .send()
-        .await
-        .map_err(|_| AppError::bad_gateway("OpenCode request failed"))?;
+    let resp = bridge.client.get(target).send().await;
+    let resp = match resp {
+        Ok(resp) => resp,
+        Err(_) => {
+            let mut payload = local_status_snapshot(
+                state.as_ref(),
+                filter_session_id.as_deref(),
+                query_directory.as_deref(),
+            );
+            prune_session_status_payload(&mut payload);
+            let body = serde_json::to_vec(&payload)
+                .map_err(|_| AppError::bad_gateway("Failed to encode local status response"))?;
+            let mut out = Response::new(axum::body::Body::from(body));
+            *out.status_mut() = StatusCode::OK;
+            out.headers_mut().insert(
+                axum::http::header::CONTENT_TYPE,
+                "application/json".parse().unwrap(),
+            );
+            out.headers_mut().insert(
+                axum::http::HeaderName::from_static("x-opencode-studio-source"),
+                "local-cache".parse().unwrap(),
+            );
+            return Ok(out);
+        }
+    };
 
     let resp_status = resp.status();
     let status = StatusCode::from_u16(resp_status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
@@ -3249,7 +3390,7 @@ pub(crate) async fn session_status_get(
         .directory_session_index
         .merge_runtime_status_map(&payload);
 
-    if let Some(session_id) = normalize_session_id(&q.session_id)
+    if let Some(session_id) = filter_session_id
         && let Some(obj) = payload.as_object()
     {
         let mut filtered = serde_json::Map::new();
