@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type CSSProperties } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RiCloseLine, RiFileList2Line, RiPlugLine } from '@remixicon/vue'
 
@@ -119,6 +119,12 @@ const selectedDiffBefore = computed(() => selectedDiff.value?.before || '')
 const selectedDiffAfter = computed(() => selectedDiff.value?.after || '')
 const sessionDiffHasMore = computed(() => chat.selectedSessionDiffHasMore)
 const sessionDiffLoadingMore = computed(() => chat.selectedSessionDiffLoadingMore)
+const sessionDiffPanelStyle = computed<CSSProperties | undefined>(() => {
+  if (!props.isMobilePointer) return undefined
+  return {
+    maxHeight: 'calc(100dvh - var(--oc-safe-area-top, 0px) - var(--oc-safe-area-bottom, 0px) - 1rem)',
+  }
+})
 
 const activeMount = computed(() => {
   const key = activeMountKey.value
@@ -421,7 +427,8 @@ onBeforeUnmount(() => {
 
       <div
         v-if="diffPanelOpen"
-        class="pointer-events-auto w-full rounded-lg border border-border/70 bg-background/95 shadow-lg backdrop-blur overflow-hidden"
+        class="pointer-events-auto w-full rounded-lg border border-border/70 bg-background/95 shadow-lg backdrop-blur overflow-hidden flex flex-col min-h-0"
+        :style="sessionDiffPanelStyle"
       >
         <div class="flex items-center justify-between gap-2 px-3 py-1 border-b border-border/60">
           <div class="text-xs font-medium leading-4 text-foreground">{{ t('chat.sessionDiff.panelTitle') }}</div>
@@ -446,10 +453,13 @@ onBeforeUnmount(() => {
         <div v-else-if="sessionDiffPanelView === 'empty'" class="px-3 py-6 text-xs text-muted-foreground">
           {{ t('chat.sessionDiff.empty') }}
         </div>
-        <div v-else class="flex flex-col sm:flex-row h-[56vh] max-h-[520px] min-h-[320px]">
+        <div
+          v-else
+          class="flex min-h-0 flex-col sm:flex-row h-[min(56dvh,calc(100dvh-var(--oc-safe-area-top,0px)-var(--oc-safe-area-bottom,0px)-9rem))] max-h-[520px] min-h-[280px] sm:min-h-[320px]"
+        >
           <div
             ref="diffListEl"
-            class="sm:w-72 sm:max-w-72 sm:min-w-72 border-b sm:border-b-0 sm:border-r border-border/60 overflow-auto"
+            class="max-h-[38dvh] sm:max-h-none sm:w-72 sm:max-w-72 sm:min-w-72 border-b sm:border-b-0 sm:border-r border-border/60 overflow-auto"
             @scroll.passive="handleDiffListScroll"
           >
             <button
@@ -470,7 +480,7 @@ onBeforeUnmount(() => {
               {{ t('chat.sessionDiff.loading') }}
             </div>
           </div>
-          <div class="min-w-0 flex-1 min-h-0 h-[260px] sm:h-auto">
+          <div class="min-w-0 flex-1 min-h-[200px] sm:min-h-0">
             <MonacoDiffEditor
               class="h-full"
               :path="selectedDiffPath"

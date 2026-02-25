@@ -23,6 +23,13 @@ export type ParsedUnifiedDiffModel = {
   summary: GitDiffSummary
 }
 
+export type UnifiedMonacoDiffModel = {
+  path: string
+  original: string
+  modified: string
+  hasChanges: boolean
+}
+
 type ParsedHunkHeader = {
   oldStart: number
   oldCount: number
@@ -301,6 +308,121 @@ function getCachedFallback(diff: string): ParsedUnifiedDiffModel {
     fallbackDiffCache.delete(oldestKey)
   }
   return parsed
+}
+
+function parseHeaderPath(line: string, prefix: string): string {
+  if (!line.startsWith(prefix)) return ''
+  let raw = line.slice(prefix.length).trim()
+  if (!raw || raw === '/dev/null') return ''
+
+  const tabIdx = raw.indexOf('\t')
+  if (tabIdx > 0) raw = raw.slice(0, tabIdx)
+
+  if (raw.startsWith('"') && raw.endsWith('"') && raw.length > 1) {
+    raw = raw.slice(1, -1)
+  }
+
+  if (raw.startsWith('a/') || raw.startsWith('b/')) {
+    raw = raw.slice(2)
+  }
+
+  return raw.trim()
+}
+
+function extractHeaderPath(fileHeader: string[]): string {
+  for (const line of fileHeader) {
+    const parsed = parseHeaderPath(line, '+++ ')
+    if (parsed) return parsed
+  }
+
+  for (const line of fileHeader) {
+    const parsed = parseHeaderPath(line, '--- ')
+    if (parsed) return parsed
+  }
+
+  for (const line of fileHeader) {
+    const match = line.match(/^diff --git\s+(\S+)\s+(\S+)$/)
+    if (!match) continue
+    const right = parseHeaderPath(`+++ ${match[2] || ''}`, '+++ ')
+    if (right) return right
+    const left = parseHeaderPath(`--- ${match[1] || ''}`, '--- ')
+    if (left) return left
+  }
+
+  return ''
+}
+
+export function buildUnifiedMonacoDiffModel(diff: string, meta?: GitDiffMeta | null): UnifiedMonacoDiffModel {
+  const source = String(diff || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+  const parsed = buildUnifiedDiffModel(source, meta)
+  const path = extractHeaderPath(parsed.fileHeader) || 'activity.patch'
+
+  if (!parsed.hunks.length) {
+    return {
+      path,
+      original: source,
+      modified: source,
+      hasChanges: false,
+    }
+  }
+
+  const original: string[] = []
+  const modified: string[] = []
+  let hasChanges = false
+
+  for (const [index, hunk] of parsed.hunks.entries()) {
+    if (index > 0) {
+      original.push('')
+      modified.push('')
+    }
+
+    if (hunk.header) {
+      original.push(hunk.header)
+      modified.push(hunk.header)
+    }
+
+    for (const rawLine of hunk.lines) {
+      const line = normalizeLine(rawLine)
+      if (!line) {
+        original.push('')
+        modified.push('')
+        continue
+      }
+
+      if (line.startsWith(' ') || line.startsWith('\t')) {
+        const content = line.slice(1)
+        original.push(content)
+        modified.push(content)
+        continue
+      }
+
+      if (line.startsWith('-') && !line.startsWith('---')) {
+        original.push(line.slice(1))
+        hasChanges = true
+        continue
+      }
+
+      if (line.startsWith('+') && !line.startsWith('+++')) {
+        modified.push(line.slice(1))
+        hasChanges = true
+        continue
+      }
+
+      if (line.startsWith('\\')) {
+        continue
+      }
+
+      original.push(line)
+      modified.push(line)
+    }
+  }
+
+  return {
+    path,
+    original: original.join('\n'),
+    modified: modified.join('\n'),
+    hasChanges,
+  }
 }
 
 export function buildUnifiedDiffModel(diff: string, meta?: GitDiffMeta | null): ParsedUnifiedDiffModel {

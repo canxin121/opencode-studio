@@ -1619,6 +1619,58 @@ pub async fn session_message_get(
     Ok(out)
 }
 
+pub(crate) async fn load_session_messages_unfiltered(session_id: &str) -> Vec<Value> {
+    let sid = session_id.trim();
+    if sid.is_empty() {
+        return Vec::new();
+    }
+
+    if let Some(page) = load_session_message_page_from_sqlite(sid, 0, None, false).await {
+        return page.entries;
+    }
+
+    let storage_dir = opencode_storage_dir();
+    let message_dir = storage_dir.join("message").join(sid);
+    let message_ids = list_json_ids_cached(&message_dir).await;
+    if message_ids.is_empty() {
+        return Vec::new();
+    }
+
+    let mut entries = Vec::new();
+    for message_id in message_ids.iter().rev() {
+        let message_path = message_dir.join(format!("{message_id}.json"));
+        let (info, _) = match read_json_value(&message_path).await {
+            Ok(value) => value,
+            Err(_) => continue,
+        };
+
+        let parts_dir = storage_dir.join("part").join(message_id);
+        let part_ids = list_json_ids_cached(&parts_dir).await;
+        let mut parts = Vec::new();
+        for part_id in part_ids {
+            let part_path = parts_dir.join(format!("{part_id}.json"));
+            let (part, _) = match read_json_value(&part_path).await {
+                Ok(value) => value,
+                Err(_) => continue,
+            };
+            parts.push(part);
+        }
+        parts.sort_by(|a, b| {
+            let a_id = a.get("id").and_then(|v| v.as_str()).unwrap_or("");
+            let b_id = b.get("id").and_then(|v| v.as_str()).unwrap_or("");
+            a_id.cmp(b_id)
+        });
+
+        entries.push(json!({
+            "info": info,
+            "parts": parts,
+        }));
+    }
+
+    entries.reverse();
+    entries
+}
+
 pub async fn session_message_part_get(
     State(state): State<Arc<crate::AppState>>,
     AxumPath((session_id, message_id, part_id)): AxumPath<(String, String, String)>,

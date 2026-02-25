@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { buildUnifiedDiffModel } from '../src/features/git/diff/unifiedDiff.ts'
+import { buildUnifiedDiffModel, buildUnifiedMonacoDiffModel } from '../src/features/git/diff/unifiedDiff.ts'
 
 const SAMPLE_DIFF =
   'diff --git a/a.txt b/a.txt\n' +
@@ -57,4 +57,21 @@ test('buildUnifiedDiffModel normalizes server metadata payload', () => {
   assert.equal(parsed.hunks[0]?.anchorLine, 5)
   assert.equal(parsed.hunks[0]?.patchReady, true)
   assert.match(parsed.hunks[0]?.patch || '', /^diff --git a\/a\.txt b\/a\.txt/m)
+})
+
+test('buildUnifiedMonacoDiffModel builds Monaco-ready before/after text', () => {
+  const model = buildUnifiedMonacoDiffModel(SAMPLE_DIFF)
+  assert.equal(model.path, 'a.txt')
+  assert.equal(model.hasChanges, true)
+  assert.match(model.original, /@@ -1,3 \+1,3 @@\nkeep\nold\nkeep/)
+  assert.match(model.modified, /@@ -1,3 \+1,3 @@\nkeep\nnew\nkeep/)
+})
+
+test('buildUnifiedMonacoDiffModel falls back to raw patch when hunks missing', () => {
+  const raw = 'diff --git a/a.txt b/a.txt\nindex 111..222 100644\n--- a/a.txt\n+++ b/a.txt\n'
+  const model = buildUnifiedMonacoDiffModel(raw)
+  assert.equal(model.path, 'a.txt')
+  assert.equal(model.hasChanges, false)
+  assert.equal(model.original, raw)
+  assert.equal(model.modified, raw)
 })

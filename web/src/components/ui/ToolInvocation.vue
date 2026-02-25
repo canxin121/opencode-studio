@@ -21,7 +21,8 @@ import {
 } from '@remixicon/vue'
 import ActivityDisclosureButton from '@/components/ui/ActivityDisclosureButton.vue'
 import CodeBlock from './CodeBlock.vue'
-import DiffViewer from '@/components/DiffViewer.vue'
+import MonacoDiffEditor from '@/components/MonacoDiffEditor.vue'
+import { buildUnifiedMonacoDiffModel } from '@/features/git/diff/unifiedDiff'
 import { useChatStore } from '@/stores/chat'
 import { formatTimeHM } from '@/i18n/intl'
 import { resolveToolInputDisplay } from './toolInvocationInput'
@@ -349,6 +350,12 @@ const diffText = computed(() => {
   return joined
 })
 
+const activityDiffPreview = computed(() => {
+  const text = diffText.value
+  if (!text) return null
+  return buildUnifiedMonacoDiffModel(text)
+})
+
 const displayOutput = computed(() => {
   if (error.value) return toDisplayString(error.value)
   if (output.value == null) return ''
@@ -410,18 +417,20 @@ const shouldShowInput = computed(() => {
             <CodeBlock :code="displayInputData.text" :lang="displayInputData.lang" :compact="true" class="my-0" />
           </div>
 
-          <div v-if="diffText" class="text-xs">
+          <div v-if="activityDiffPreview" class="text-xs">
             <div class="text-muted-foreground/80 mb-1 font-medium flex justify-between items-center">
               <span>Diff</span>
               <span class="text-[10px] uppercase tracking-wider opacity-70">diff</span>
             </div>
-            <div class="oc-activity-detail overflow-auto touch-pan-x">
-              <DiffViewer
-                :diff="diffText"
-                output-format="line-by-line"
-                :draw-file-list="false"
-                :highlight="false"
-                class="max-h-96"
+            <div class="oc-activity-detail overflow-hidden">
+              <MonacoDiffEditor
+                class="h-96"
+                :path="activityDiffPreview.path"
+                :original-path="`${activityDiffPreview.path}:base`"
+                :original-value="activityDiffPreview.original"
+                :modified-value="activityDiffPreview.modified"
+                :read-only="true"
+                :wrap="true"
               />
             </div>
           </div>
