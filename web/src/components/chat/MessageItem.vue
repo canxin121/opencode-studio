@@ -1,16 +1,20 @@
 <script setup lang="ts">
+import { computed, ref } from 'vue'
 import {
   RiArrowGoBackLine,
   RiCheckLine,
   RiClipboardLine,
   RiFileLine,
   RiGitBranchLine,
+  RiInformationLine,
   RiLoader4Line,
 } from '@remixicon/vue'
 
 import Markdown from '@/components/Markdown.vue'
 import Button from '@/components/ui/Button.vue'
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
+import ToolbarChipButton from '@/components/ui/ToolbarChipButton.vue'
+import Tooltip from '@/components/ui/Tooltip.vue'
 import {
   buildAssistantErrorDetailsText,
   buildAssistantErrorMetaEntries,
@@ -63,6 +67,7 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+const errorDetailsOpen = ref(false)
 
 function isFilePart(part: MessagePartLike): part is FilePart {
   return part?.type === 'file' && typeof part?.url === 'string' && part.url.length > 0
@@ -122,6 +127,9 @@ const assistantErrorDetailsText = () => {
   if (!info || info.interrupted) return ''
   return buildAssistantErrorDetailsText(info)
 }
+
+const assistantErrorDetails = computed(() => assistantErrorDetailsText())
+const hasAssistantErrorDetails = computed(() => assistantErrorDetails.value.length > 0)
 
 const assistantInterrupted = () => Boolean(assistantErrorInfo()?.interrupted)
 const assistantHasError = () => role() === 'assistant' && Boolean(assistantErrorMessage())
@@ -250,20 +258,29 @@ const assistantHasError = () => role() === 'assistant' && Boolean(assistantError
             </span>
           </div>
 
-          <details
-            v-if="assistantErrorDetailsText()"
-            class="mt-2 rounded-md border border-rose-300/60 bg-rose-100/40 dark:border-rose-500/40 dark:bg-rose-900/20"
-          >
-            <summary
-              class="cursor-pointer select-none px-2 py-1 text-[11px] font-medium text-rose-900 dark:text-rose-100"
-            >
-              {{ t('chat.messageItem.errorDetails') }}
-            </summary>
-            <pre
-              class="max-h-64 overflow-auto border-t border-rose-300/50 px-2 py-1 text-[11px] leading-relaxed whitespace-pre-wrap break-words text-rose-950 dark:border-rose-500/35 dark:text-rose-100"
-              >{{ assistantErrorDetailsText() }}</pre
-            >
-          </details>
+          <div v-if="hasAssistantErrorDetails" class="mt-2">
+            <Tooltip>
+              <ToolbarChipButton
+                :active="errorDetailsOpen"
+                :title="t('chat.messageItem.errorDetails')"
+                :aria-label="t('chat.messageItem.errorDetails')"
+                :aria-expanded="errorDetailsOpen"
+                class="h-6 sm:h-7 rounded-md border border-rose-300/60 bg-rose-100/40 px-2 text-[11px] font-medium text-rose-900 hover:bg-rose-100/65 dark:border-rose-500/40 dark:bg-rose-900/25 dark:text-rose-100 dark:hover:bg-rose-900/40"
+                @click="errorDetailsOpen = !errorDetailsOpen"
+              >
+                <RiInformationLine class="h-3.5 w-3.5" />
+                <span>{{ t('chat.messageItem.errorDetails') }}</span>
+              </ToolbarChipButton>
+              <template #content>{{ t('chat.messageItem.errorDetails') }}</template>
+            </Tooltip>
+            <Transition name="toolreveal">
+              <pre
+                v-show="errorDetailsOpen"
+                class="mt-1 max-h-64 overflow-auto rounded-md border border-rose-300/60 bg-rose-100/40 px-2 py-1 text-[11px] leading-relaxed whitespace-pre-wrap break-words text-rose-950 dark:border-rose-500/35 dark:bg-rose-900/20 dark:text-rose-100"
+                >{{ assistantErrorDetails }}</pre
+              >
+            </Transition>
+          </div>
 
           <div v-if="getFileParts(message.parts).length" class="mt-3 space-y-2">
             <div class="flex flex-wrap gap-2">
@@ -301,3 +318,18 @@ const assistantHasError = () => role() === 'assistant' && Boolean(assistantError
     </div>
   </div>
 </template>
+
+<style scoped>
+.toolreveal-enter-active,
+.toolreveal-leave-active {
+  transition:
+    opacity 140ms ease,
+    transform 160ms ease;
+}
+
+.toolreveal-enter-from,
+.toolreveal-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+</style>
