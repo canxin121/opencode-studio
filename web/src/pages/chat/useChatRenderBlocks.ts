@@ -213,15 +213,7 @@ export function useChatRenderBlocks(opts: {
 
   function isMetaPart(part: ChatPart): boolean {
     const t = String(part?.type || '').toLowerCase()
-    return (
-      t === 'step-start' ||
-      t === 'step-finish' ||
-      t === 'snapshot' ||
-      t === 'patch' ||
-      t === 'agent' ||
-      t === 'retry' ||
-      t === 'compaction'
-    )
+    return t === 'snapshot' || t === 'patch' || t === 'retry' || t === 'compaction'
   }
 
   function getRenderableActivityParts(parts: ChatPart[]): ChatPart[] {
@@ -232,15 +224,7 @@ export function useChatRenderBlocks(opts: {
         const toolId = typeof p?.tool === 'string' ? p.tool : ''
         return toolActivityEnabled(toolId)
       }
-      if (
-        t === 'step-start' ||
-        t === 'step-finish' ||
-        t === 'snapshot' ||
-        t === 'patch' ||
-        t === 'agent' ||
-        t === 'retry' ||
-        t === 'compaction'
-      ) {
+      if (t === 'snapshot' || t === 'patch' || t === 'retry' || t === 'compaction') {
         if (!isChatActivityType(t)) return false
         return activityEnabled(t)
       }

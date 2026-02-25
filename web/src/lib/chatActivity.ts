@@ -42,21 +42,15 @@ export type ChatToolActivityType = KnownChatToolActivityType | (string & {})
 
 export const DEFAULT_CHAT_ACTIVITY_FILTERS: ChatActivityType[] = [
   'tool',
-  'step-start',
-  'step-finish',
   'snapshot',
   'patch',
-  'agent',
   'retry',
   'compaction',
 ]
 
 export const DEFAULT_CHAT_ACTIVITY_EXPAND_KEYS: ChatActivityExpandKey[] = [
-  'step-start',
-  'step-finish',
   'snapshot',
   'patch',
-  'agent',
   'retry',
   'compaction',
   'thinking',
@@ -159,11 +153,8 @@ export const ACTIVITY_DEFAULT_EXPANDED_OPTIONS: Array<{
   label: string
   description: string
 }> = [
-  { id: 'step-start', label: 'Steps (start)', description: 'Step start markers.' },
-  { id: 'step-finish', label: 'Steps (finish)', description: 'Step completion markers.' },
   { id: 'snapshot', label: 'Snapshots', description: 'Snapshot payloads.' },
   { id: 'patch', label: 'Patches', description: 'Patch payloads.' },
-  { id: 'agent', label: 'Agents', description: 'Agent selection metadata.' },
   { id: 'retry', label: 'Retries', description: 'Retry state metadata.' },
   { id: 'compaction', label: 'Compaction', description: 'Memory compaction markers.' },
   { id: 'thinking', label: 'Thinking', description: 'Reasoning / thinking traces.' },

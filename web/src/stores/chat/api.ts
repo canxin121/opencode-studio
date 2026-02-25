@@ -50,17 +50,95 @@ function toCount(value: JsonValue): number {
   return Math.max(0, Math.floor(value))
 }
 
+function toTextTrimmed(value: JsonValue): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function firstText(record: JsonObject, keys: string[]): string {
+  for (const key of keys) {
+    const text = toTextTrimmed(record[key])
+    if (text) return text
+  }
+  return ''
+}
+
+function firstString(record: JsonObject, keys: string[]): string {
+  for (const key of keys) {
+    const value = record[key]
+    if (typeof value === 'string') return value
+  }
+  return ''
+}
+
+function firstCount(record: JsonObject, keys: string[]): number {
+  for (const key of keys) {
+    const value = record[key]
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return Math.max(0, Math.floor(value))
+    }
+  }
+  return 0
+}
+
+function looksLikeSessionFileDiffRecord(record: JsonObject): boolean {
+  return Boolean(
+    firstText(record, ['file', 'path', 'filename', 'name', 'target']) ||
+      typeof record.before === 'string' ||
+      typeof record.after === 'string' ||
+      typeof record.patch === 'string' ||
+      typeof record.diff === 'string' ||
+      typeof record.additions === 'number' ||
+      typeof record.deletions === 'number',
+  )
+}
+
+function readSessionDiffItems(value: JsonValue, depth = 0): JsonValue[] {
+  if (depth > 4) return []
+  if (Array.isArray(value)) return value
+
+  const record = asRecord(value)
+  if (!Object.keys(record).length) return []
+
+  if (looksLikeSessionFileDiffRecord(record)) return [record]
+
+  const wrapperKeys = ['files', 'changes', 'diff', 'diffs', 'entries', 'items', 'list', 'value', 'data', 'payload', 'result']
+  for (const key of wrapperKeys) {
+    const items = readSessionDiffItems(record[key], depth + 1)
+    if (items.length) return items
+  }
+
+  for (const nested of Object.values(record)) {
+    if (!Array.isArray(nested)) continue
+    if (
+      nested.some((entry) => {
+        const row = asRecord(entry)
+        return Object.keys(row).length > 0 && looksLikeSessionFileDiffRecord(row)
+      })
+    ) {
+      return nested
+    }
+  }
+
+  return []
+}
+
 function parseSessionFileDiff(value: JsonValue): SessionFileDiff | null {
   const record = asRecord(value)
-  const file = toText(record.file).trim()
+  const file = firstText(record, ['file', 'path', 'filename', 'name', 'target'])
   if (!file) return null
   return {
     file,
-    before: toText(record.before),
-    after: toText(record.after),
-    additions: toCount(record.additions),
-    deletions: toCount(record.deletions),
+    before: firstString(record, ['before', 'old', 'oldText', 'original', 'previous', 'prev', 'from', 'left', 'a']),
+    after: firstString(record, ['after', 'new', 'newText', 'modified', 'current', 'next', 'to', 'right', 'b']),
+    additions: firstCount(record, ['additions', 'added', 'insertions', 'linesAdded', 'add']),
+    deletions: firstCount(record, ['deletions', 'removed', 'linesDeleted', 'del']),
   }
+}
+
+export function normalizeSessionDiffPayload(payload: JsonValue): SessionFileDiff[] {
+  const items = readSessionDiffItems(payload)
+  if (!items.length) return []
+  return items.map((item) => parseSessionFileDiff(item)).filter((item): item is SessionFileDiff => Boolean(item))
 }
 
 type AttentionListOptions = {
@@ -389,6 +467,5 @@ export async function getSessionDiff(
   const sep = q && params.length ? '&' : '?'
   const suffix = params.length ? `${sep}${params.join('&')}` : ''
   const payload = await apiJson<JsonValue>(`/api/session/${encodeURIComponent(sid)}/diff${q}${suffix}`)
-  if (!Array.isArray(payload)) return []
-  return payload.map((item) => parseSessionFileDiff(item)).filter((item): item is SessionFileDiff => Boolean(item))
+  return normalizeSessionDiffPayload(payload)
 }
