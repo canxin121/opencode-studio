@@ -1,7 +1,7 @@
 import type { CSSProperties, ComputedRef, Ref } from 'vue'
 
-import type { OptionMenuGroup, OptionMenuItem } from '@/components/ui/OptionMenu.vue'
-import type { RenderBlock } from '@/components/chat/MessageList.vue'
+import type { RenderBlock } from '@/components/chat/messageList.types'
+import type { OptionMenuGroup, OptionMenuItem } from '@/components/ui/optionMenu.types'
 import type { OptimisticUserMessage } from '@/composables/chat/useMessageStreaming'
 import type { AttachedFile } from '@/pages/chat/useChatAttachments'
 import type { ChatMount } from '@/plugins/host/mounts'

@@ -2,7 +2,8 @@
 import { computed, type ComponentPublicInstance } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import OptionMenu, { type OptionMenuGroup, type OptionMenuItem } from '@/components/ui/OptionMenu.vue'
+import OptionMenu from '@/components/ui/OptionMenu.vue'
+import type { OptionMenuGroup, OptionMenuItem } from '@/components/ui/optionMenu.types'
 import type { SessionActionItem } from '@/layout/chatSidebar/useSessionActionMenu'
 
 const { t } = useI18n()

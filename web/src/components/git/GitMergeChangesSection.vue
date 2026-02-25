@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n'
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import SectionToggleButton from '@/components/ui/SectionToggleButton.vue'
 import SidebarIconButton from '@/components/ui/SidebarIconButton.vue'
-import type { OptionMenuItem } from '@/components/ui/OptionMenu.vue'
+import type { OptionMenuItem } from '@/components/ui/optionMenu.types'
 import GitStatusListItem from '@/components/git/GitStatusListItem.vue'
 
 import type { GitStatusFile } from '@/types/git'

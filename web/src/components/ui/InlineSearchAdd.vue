@@ -3,14 +3,8 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RiCheckLine } from '@remixicon/vue'
 
 import Input from '@/components/ui/Input.vue'
+import type { PickerOption } from '@/components/ui/pickerOption.types'
 import { cn } from '@/lib/utils'
-
-export type PickerOption = {
-  value: string
-  label?: string
-  description?: string
-  disabled?: boolean
-}
 
 const props = withDefaults(
   defineProps<{

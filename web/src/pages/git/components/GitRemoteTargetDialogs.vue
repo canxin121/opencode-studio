@@ -5,7 +5,8 @@ import { useI18n } from 'vue-i18n'
 import FormDialog from '@/components/ui/FormDialog.vue'
 import Input from '@/components/ui/Input.vue'
 import MiniActionButton from '@/components/ui/MiniActionButton.vue'
-import OptionPicker, { type PickerOption } from '@/components/ui/OptionPicker.vue'
+import OptionPicker from '@/components/ui/OptionPicker.vue'
+import type { PickerOption } from '@/components/ui/pickerOption.types'
 
 const { t } = useI18n()
 

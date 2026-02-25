@@ -6,7 +6,8 @@ import { useI18n } from 'vue-i18n'
 import MiniActionButton from '@/components/ui/MiniActionButton.vue'
 import MobileSidebarEmptyState from '@/components/ui/MobileSidebarEmptyState.vue'
 import IconButton from '@/components/ui/IconButton.vue'
-import OptionMenu, { type OptionMenuGroup, type OptionMenuItem } from '@/components/ui/OptionMenu.vue'
+import OptionMenu from '@/components/ui/OptionMenu.vue'
+import type { OptionMenuGroup, OptionMenuItem } from '@/components/ui/optionMenu.types'
 import ScrollArea from '@/components/ui/ScrollArea.vue'
 import SidebarIconButton from '@/components/ui/SidebarIconButton.vue'
 import GitCommitBox from '@/components/git/GitCommitBox.vue'
@@ -999,7 +1000,7 @@ void diffPaneRef
               v-if="
                 signingInfo?.commitGpgsign &&
                 (signingInfo?.gpgFormat || '').toLowerCase() === 'ssh' &&
-                (!signingInfo.sshAuthSockPresent || !signingInfo.sshAgentHasKeys)
+                !signingInfo.sshSigningAvailable
               "
               class="rounded-sm border border-sidebar-border/60 bg-sidebar-accent/20 p-2 text-[11px]"
             >

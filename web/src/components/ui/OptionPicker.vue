@@ -3,15 +3,10 @@ import { computed, onBeforeUnmount, ref, watch, type Component } from 'vue'
 import { RiArrowDownSLine } from '@remixicon/vue'
 import { useI18n } from 'vue-i18n'
 
-import OptionMenu, { type OptionMenuGroup, type OptionMenuItem } from '@/components/ui/OptionMenu.vue'
+import OptionMenu from '@/components/ui/OptionMenu.vue'
+import type { OptionMenuGroup, OptionMenuItem } from '@/components/ui/optionMenu.types'
+import type { PickerOption } from '@/components/ui/pickerOption.types'
 import { cn } from '@/lib/utils'
-
-export type PickerOption = {
-  value: string
-  label?: string
-  description?: string
-  disabled?: boolean
-}
 
 type OptionMenuExpose = {
   containsTarget?: (target: Node | null) => boolean

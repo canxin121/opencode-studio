@@ -4,7 +4,8 @@ import { RiCloseLine } from '@remixicon/vue'
 import { useI18n } from 'vue-i18n'
 
 import IconButton from '@/components/ui/IconButton.vue'
-import InlineSearchAdd, { type PickerOption } from '@/components/ui/InlineSearchAdd.vue'
+import InlineSearchAdd from '@/components/ui/InlineSearchAdd.vue'
+import type { PickerOption } from '@/components/ui/pickerOption.types'
 import TextActionButton from '@/components/ui/TextActionButton.vue'
 import Tooltip from '@/components/ui/Tooltip.vue'
 

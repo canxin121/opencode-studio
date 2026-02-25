@@ -32,7 +32,7 @@ import { formatTimeHM } from '@/i18n/intl'
 import { useChatRenderBlocks } from './chat/useChatRenderBlocks'
 import { useChatMessageActions } from './chat/useChatMessageActions'
 import { deriveSendRunConfig } from './chat/modelSendDefaults'
-import type { OptionMenuGroup, OptionMenuItem } from '@/components/ui/OptionMenu.vue'
+import type { OptionMenuGroup, OptionMenuItem } from '@/components/ui/optionMenu.types'
 import type { MessageEntry } from '@/types/chat'
 import type { JsonObject, JsonValue } from '@/types/json'
 import {

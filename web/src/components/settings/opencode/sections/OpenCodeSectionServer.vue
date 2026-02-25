@@ -4,11 +4,14 @@ import { RiAddLine, RiArrowDownSLine, RiArrowUpSLine, RiCloseLine, RiRestartLine
 
 import Button from '@/components/ui/Button.vue'
 import Input from '@/components/ui/Input.vue'
-import InlineSearchAdd, { type PickerOption } from '@/components/ui/InlineSearchAdd.vue'
-import OptionPicker, { type PickerOption as OptionPickerOption } from '@/components/ui/OptionPicker.vue'
+import InlineSearchAdd from '@/components/ui/InlineSearchAdd.vue'
+import OptionPicker from '@/components/ui/OptionPicker.vue'
+import type { PickerOption } from '@/components/ui/pickerOption.types'
 import Tooltip from '@/components/ui/Tooltip.vue'
 import VirtualList from '@/components/ui/VirtualList.vue'
 import CodeMirrorEditor from '@/components/CodeMirrorEditor.vue'
+
+type OptionPickerOption = PickerOption
 
 import { useOpencodeConfigPanelContext } from '../opencodeConfigContext'
 

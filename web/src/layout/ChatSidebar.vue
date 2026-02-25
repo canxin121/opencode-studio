@@ -25,7 +25,8 @@ import DirectoriesList from '@/layout/chatSidebar/components/DirectoriesList.vue
 import PinnedSessionsFooter from '@/layout/chatSidebar/components/PinnedSessionsFooter.vue'
 import RecentSessionsFooter from '@/layout/chatSidebar/components/RecentSessionsFooter.vue'
 import RunningSessionsFooter from '@/layout/chatSidebar/components/RunningSessionsFooter.vue'
-import OptionMenu, { type OptionMenuGroup, type OptionMenuItem } from '@/components/ui/OptionMenu.vue'
+import OptionMenu from '@/components/ui/OptionMenu.vue'
+import type { OptionMenuGroup, OptionMenuItem } from '@/components/ui/optionMenu.types'
 import {
   buildSessionActionItemsForSessionI18n,
   useSessionActionMenu,

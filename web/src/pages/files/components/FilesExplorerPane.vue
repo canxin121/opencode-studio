@@ -25,7 +25,8 @@ import {
 } from '@remixicon/vue'
 
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
-import OptionMenu, { type OptionMenuGroup, type OptionMenuItem } from '@/components/ui/OptionMenu.vue'
+import OptionMenu from '@/components/ui/OptionMenu.vue'
+import type { OptionMenuGroup, OptionMenuItem } from '@/components/ui/optionMenu.types'
 import SegmentedButton from '@/components/ui/SegmentedButton.vue'
 import SegmentedControl from '@/components/ui/SegmentedControl.vue'
 import SidebarIconButton from '@/components/ui/SidebarIconButton.vue'
