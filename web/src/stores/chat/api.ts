@@ -73,7 +73,7 @@ function firstCount(record: JsonObject, keys: string[]): number {
 
 function looksLikeSessionFileDiffRecord(record: JsonObject): boolean {
   return Boolean(
-    firstText(record, ['file', 'path', 'filename', 'name', 'target']) ||
+    firstText(record, ['file', 'path', 'filename', 'name', 'target', 'filePath', 'filepath', 'relativePath']) ||
     typeof record.before === 'string' ||
     typeof record.after === 'string' ||
     typeof record.patch === 'string' ||
@@ -127,7 +127,7 @@ function readSessionDiffItems(value: JsonValue, depth = 0): JsonValue[] {
 
 function parseSessionFileDiff(value: JsonValue): SessionFileDiff | null {
   const record = asRecord(value)
-  const file = firstText(record, ['file', 'path', 'filename', 'name', 'target'])
+  const file = firstText(record, ['file', 'path', 'filename', 'name', 'target', 'filePath', 'filepath', 'relativePath'])
   if (!file) return null
   return {
     file,

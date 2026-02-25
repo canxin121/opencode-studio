@@ -34,6 +34,7 @@ import {
 } from './chat/runConfig'
 import { STORAGE_LAST_SESSION, STORAGE_RUN_CONFIG } from './chat/storeKeys'
 import { applyStreamingEventToMessages } from './chat/streaming'
+import { buildSessionDiffFallbackFromMessages } from './chat/sessionDiffFallback'
 import type { JsonObject as UnknownRecord, JsonValue } from '@/types/json'
 
 import { ApiError } from '../lib/api'
@@ -686,7 +687,6 @@ export const useChatStore = defineStore('chat', () => {
     if (sid) {
       // Keep cached messages so switching sessions feels instant.
       ensureSessionMessages(sid)
-      void refreshSessionDiff(sid, { silent: true })
     }
 
     try {
@@ -748,6 +748,9 @@ export const useChatStore = defineStore('chat', () => {
     if (dir && dir.trim() && directoryStore.currentDirectory !== dir.trim()) {
       directoryStore.setDirectory(dir.trim())
     }
+
+    // Refresh diff after directory resolution so cross-directory sessions use the correct scope.
+    void refreshSessionDiff(sid, { silent: true })
 
     if (!messagesHydratedBySession.value[sid]) {
       await refreshMessages(sid)
@@ -821,6 +824,17 @@ export const useChatStore = defineStore('chat', () => {
       const exhausted = limit > 0 && afterLen < limit
       historyExhaustedBySession.value = { ...historyExhaustedBySession.value, [sid]: exhausted }
 
+      // Session file changes have two sources:
+      // 1) session diff stream/API
+      // 2) tool metadata captured in message parts
+      // Re-run diff once messages hydrate so source (2) can fill gaps when source (1) is empty.
+      if (!hasCache) {
+        const current = sessionDiffBySession.value[sid]
+        if (!Array.isArray(current) || current.length === 0) {
+          void refreshSessionDiff(sid, { silent: true })
+        }
+      }
+
       // Messages refresh is a good time to rehydrate pending prompts (page refresh / missed SSE).
       void refreshAttention(sid)
     } catch (err) {
@@ -884,6 +898,27 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  function resolveSessionDiffSources(
+    sessionId: string,
+    primary: SessionFileDiff[],
+    directory?: string | null,
+  ): SessionFileDiff[] {
+    const sid = (sessionId || '').trim()
+    if (!sid) return []
+    const sorted = [...primary].sort((a, b) => a.file.localeCompare(b.file))
+    if (sorted.length > 0) return sorted
+    return buildSessionDiffFallbackFromMessages(messagesBySession.value[sid] || [], directory)
+  }
+
+  function applySessionDiffSnapshot(sessionId: string, list: SessionFileDiff[], directory?: string | null) {
+    const sid = (sessionId || '').trim()
+    if (!sid) return
+    sessionDiffBySession.value = {
+      ...sessionDiffBySession.value,
+      [sid]: resolveSessionDiffSources(sid, list, directory),
+    }
+  }
+
   async function refreshSessionDiff(sessionId: string, opts?: { silent?: boolean; messageID?: string }) {
     const sid = (sessionId || '').trim()
     if (!sid) return
@@ -897,11 +932,11 @@ export const useChatStore = defineStore('chat', () => {
     sessionDiffErrorBySession.value = { ...sessionDiffErrorBySession.value, [sid]: null }
 
     try {
-      const list = await chatApi.getSessionDiff(sid, getDirectoryForSession(sid), {
+      const directory = getDirectoryForSession(sid)
+      const list = await chatApi.getSessionDiff(sid, directory, {
         ...(typeof opts?.messageID === 'string' && opts.messageID.trim() ? { messageID: opts.messageID.trim() } : {}),
       })
-      const sorted = [...list].sort((a, b) => a.file.localeCompare(b.file))
-      sessionDiffBySession.value = { ...sessionDiffBySession.value, [sid]: sorted }
+      applySessionDiffSnapshot(sid, list, directory)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       sessionDiffErrorBySession.value = {
@@ -1462,6 +1497,14 @@ export const useChatStore = defineStore('chat', () => {
     }
 
     if (sid && t === 'session.diff') {
+      const props = readEventProperties(evt)
+      if (Object.prototype.hasOwnProperty.call(props, 'diff')) {
+        const directory = getDirectoryForSession(sid)
+        const live = chatApi.normalizeSessionDiffPayload((props.diff ?? null) as JsonValue)
+        applySessionDiffSnapshot(sid, live, directory)
+        sessionDiffErrorBySession.value = { ...sessionDiffErrorBySession.value, [sid]: null }
+        sessionDiffLoadingBySession.value = { ...sessionDiffLoadingBySession.value, [sid]: false }
+      }
       void refreshSessionDiff(sid, { silent: true })
     }
 

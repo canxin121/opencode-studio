@@ -50,6 +50,42 @@ test('normalizeSessionDiffPayload: accepts direct entry object shape', () => {
   ])
 })
 
+test('normalizeSessionDiffPayload: accepts filePath and relativePath aliases', () => {
+  const payload = [
+    {
+      filePath: '/repo/src/index.ts',
+      before: 'a\n',
+      after: 'b\n',
+      additions: 1,
+      deletions: 1,
+    },
+    {
+      relativePath: 'docs/guide.md',
+      before: 'old\n',
+      after: 'new\n',
+      additions: 3,
+      deletions: 2,
+    },
+  ]
+
+  assert.deepEqual(normalizeSessionDiffPayload(payload), [
+    {
+      file: '/repo/src/index.ts',
+      before: 'a\n',
+      after: 'b\n',
+      additions: 1,
+      deletions: 1,
+    },
+    {
+      file: 'docs/guide.md',
+      before: 'old\n',
+      after: 'new\n',
+      additions: 3,
+      deletions: 2,
+    },
+  ])
+})
+
 test('extractSessionId: accepts camelCase and snake_case session keys', () => {
   assert.equal(
     extractSessionId({

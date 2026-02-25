@@ -60,7 +60,7 @@ fn rewrite_opencode_prompt_async_url(target_url: &str) -> Option<String> {
 }
 
 fn should_sanitize_chat_session_response(path: &str) -> bool {
-    let normalized = path.trim().trim_start_matches('/');
+    let normalized = path.trim().trim_matches('/');
     if normalized.is_empty() {
         return false;
     }
@@ -73,7 +73,13 @@ fn should_sanitize_chat_session_response(path: &str) -> bool {
     if normalized == "session/status" {
         return false;
     }
-    !normalized.ends_with("/message")
+
+    let tail = normalized.rsplit('/').next().unwrap_or_default();
+    if tail.eq_ignore_ascii_case("message") || tail.eq_ignore_ascii_case("diff") {
+        return false;
+    }
+
+    true
 }
 
 fn extract_session_id_from_delete_path(path: &str) -> Option<String> {
@@ -2025,7 +2031,27 @@ fn prune_tool_metadata_files(value: &mut serde_json::Value) {
     };
     for file in files.iter_mut() {
         if let Some(map) = file.as_object_mut() {
-            retain_only_keys(map, &["path", "diff"]);
+            retain_only_keys(
+                map,
+                &[
+                    "path",
+                    "file",
+                    "filename",
+                    "name",
+                    "target",
+                    "filePath",
+                    "filepath",
+                    "relativePath",
+                    "type",
+                    "diff",
+                    "before",
+                    "after",
+                    "additions",
+                    "deletions",
+                    "added",
+                    "removed",
+                ],
+            );
         }
     }
 }
@@ -2905,16 +2931,6 @@ fn prune_tool_metadata(part: &mut serde_json::Value) {
     };
     map.retain(|k, _| matches!(k.as_str(), "diff" | "files" | "truncated"));
 
-    // Diff text is sufficient for rendering; keep file list only as a fallback.
-    let has_diff = map
-        .get("diff")
-        .and_then(|v| v.as_str())
-        .map(|v| !v.trim().is_empty())
-        .unwrap_or(false);
-    if has_diff {
-        map.remove("files");
-    }
-
     if map.is_empty() {
         state.remove("metadata");
     }
@@ -3654,6 +3670,15 @@ mod tests {
     }
 
     #[test]
+    fn should_sanitize_chat_session_response_skips_session_diff() {
+        assert!(should_sanitize_chat_session_response("session"));
+        assert!(should_sanitize_chat_session_response("session/ses_123"));
+        assert!(!should_sanitize_chat_session_response("session/ses_123/message"));
+        assert!(!should_sanitize_chat_session_response("session/ses_123/diff"));
+        assert!(!should_sanitize_chat_session_response("/session/ses_123/diff/"));
+    }
+
+    #[test]
     fn sanitize_session_deleted_event_accepts_legacy_id_fields() {
         let mut props = serde_json::Map::new();
         props.insert("id".to_string(), json!("ses_from_id"));
@@ -3821,7 +3846,18 @@ mod tests {
                                 "diff": "@@ -1 +1 @@\n-a\n+b",
                                 "diagnostics": {"warning": 1},
                                 "files": [
-                                    {"path": "a.txt", "before": "a", "after": "b", "diff": "@@ -1 +1 @@"}
+                                    {
+                                        "path": "a.txt",
+                                        "filePath": "/tmp/a.txt",
+                                        "relativePath": "tmp/a.txt",
+                                        "type": "update",
+                                        "before": "a",
+                                        "after": "b",
+                                        "diff": "@@ -1 +1 @@",
+                                        "additions": 1,
+                                        "deletions": 1,
+                                        "noise": true
+                                    }
                                 ],
                                 "truncated": false
                             }
@@ -3836,7 +3872,18 @@ mod tests {
                             "input": {"patch": "*** Begin Patch\n*** End Patch"},
                             "metadata": {
                                 "files": [
-                                    {"path": "b.txt", "before": "x", "after": "y", "diff": "@@ -1 +1 @@"}
+                                    {
+                                        "path": "b.txt",
+                                        "filePath": "/tmp/b.txt",
+                                        "relativePath": "tmp/b.txt",
+                                        "type": "update",
+                                        "before": "x",
+                                        "after": "y",
+                                        "diff": "@@ -1 +1 @@",
+                                        "additions": 1,
+                                        "deletions": 1,
+                                        "noise": true
+                                    }
                                 ],
                                 "truncated": false
                             }
@@ -3927,9 +3974,28 @@ mod tests {
             .as_object()
             .expect("patch metadata");
         assert!(patch_meta.contains_key("diff"));
-        assert!(!patch_meta.contains_key("files"));
+        assert!(patch_meta.contains_key("files"));
         assert!(patch_meta.contains_key("truncated"));
         assert!(!patch_meta.contains_key("diagnostics"));
+
+        let patch_files = patch_meta
+            .get("files")
+            .and_then(|v| v.as_array())
+            .expect("patch files");
+        let patch_first_file = patch_files
+            .first()
+            .and_then(|v| v.as_object())
+            .expect("patch first file");
+        assert!(patch_first_file.contains_key("path"));
+        assert!(patch_first_file.contains_key("filePath"));
+        assert!(patch_first_file.contains_key("relativePath"));
+        assert!(patch_first_file.contains_key("type"));
+        assert!(patch_first_file.contains_key("diff"));
+        assert!(patch_first_file.contains_key("before"));
+        assert!(patch_first_file.contains_key("after"));
+        assert!(patch_first_file.contains_key("additions"));
+        assert!(patch_first_file.contains_key("deletions"));
+        assert!(!patch_first_file.contains_key("noise"));
 
         let files_only_part = parts
             .iter()
@@ -3947,8 +4013,16 @@ mod tests {
             .first()
             .and_then(|v| v.as_object())
             .expect("first file");
-        assert!(!first_file.contains_key("before"));
-        assert!(!first_file.contains_key("after"));
+        assert!(first_file.contains_key("path"));
+        assert!(first_file.contains_key("filePath"));
+        assert!(first_file.contains_key("relativePath"));
+        assert!(first_file.contains_key("type"));
+        assert!(first_file.contains_key("diff"));
+        assert!(first_file.contains_key("before"));
+        assert!(first_file.contains_key("after"));
+        assert!(first_file.contains_key("additions"));
+        assert!(first_file.contains_key("deletions"));
+        assert!(!first_file.contains_key("noise"));
 
         let patch_meta_part = parts
             .iter()
