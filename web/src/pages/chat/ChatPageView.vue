@@ -665,7 +665,7 @@ void sessionActionsMenuRef
                       <!-- Region 2: Tokens usage -->
                       <div
                         v-if="sessionUsage"
-                        class="flex-none flex items-center justify-end gap-1.5 text-[10px] leading-tight text-muted-foreground font-mono select-none sm:pr-2"
+                        class="flex-none flex flex-col items-end justify-center text-[10px] leading-tight text-muted-foreground font-mono select-none sm:pr-2"
                       >
                         <span class="opacity-80">
                           {{
@@ -674,13 +674,12 @@ void sessionActionsMenuRef
                               : t('chat.page.usage.tokensSuffix', { value: sessionUsage.tokensLabel })
                           }}
                         </span>
-                        <span v-if="sessionUsage.percentUsed !== null" class="opacity-80">
-                          {{ sessionUsage.percentUsed }}%
+                        <span class="inline-flex items-center gap-1 opacity-80">
+                          <span v-if="sessionUsage.percentUsed !== null">{{ sessionUsage.percentUsed }}%</span>
+                          <span v-if="sessionUsage.costLabel && sessionUsage.costLabel !== '$0.00' && !ui.isMobilePointer" class="text-[9px]">
+                            {{ sessionUsage.costLabel }}
+                          </span>
                         </span>
-                        <span
-                          v-if="sessionUsage.costLabel && sessionUsage.costLabel !== '$0.00' && !ui.isMobilePointer"
-                          class="opacity-80 text-[9px]"
-                        >{{ sessionUsage.costLabel }}</span>
                       </div>
 
                       <!-- Region 3: Stop & Send Actions -->
