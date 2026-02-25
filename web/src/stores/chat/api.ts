@@ -41,15 +41,6 @@ export type MessageListResponse = {
   consistency?: ApiConsistency
 }
 
-function toText(value: JsonValue): string {
-  return typeof value === 'string' ? value : ''
-}
-
-function toCount(value: JsonValue): number {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return 0
-  return Math.max(0, Math.floor(value))
-}
-
 function toTextTrimmed(value: JsonValue): string {
   return typeof value === 'string' ? value.trim() : ''
 }
