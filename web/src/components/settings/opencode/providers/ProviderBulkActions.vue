@@ -4,8 +4,11 @@ import { RiCloseLine, RiListCheck3 } from '@remixicon/vue'
 import { useI18n } from 'vue-i18n'
 
 import Button from '@/components/ui/Button.vue'
-import InlineSearchAdd, { type PickerOption } from '@/components/ui/InlineSearchAdd.vue'
-import OptionPicker, { type PickerOption as OptionPickerOption } from '@/components/ui/OptionPicker.vue'
+import InlineSearchAdd from '@/components/ui/InlineSearchAdd.vue'
+import OptionPicker from '@/components/ui/OptionPicker.vue'
+import type { PickerOption } from '@/components/ui/pickerOption.types'
+
+type OptionPickerOption = PickerOption
 import Tooltip from '@/components/ui/Tooltip.vue'
 
 import { useOpencodeConfigPanelContext } from '../opencodeConfigContext'

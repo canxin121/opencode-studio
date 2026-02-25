@@ -9,70 +9,15 @@ import MetaInvocation from '@/components/ui/MetaInvocation.vue'
 import Button from '@/components/ui/Button.vue'
 import MobileSidebarEmptyState from '@/components/ui/MobileSidebarEmptyState.vue'
 import MessageItem from '@/components/chat/MessageItem.vue'
+import type {
+  MessageLike,
+  MessagePartLike,
+  RenderBlock,
+  RetryStatusLike,
+  SessionErrorLike,
+} from '@/components/chat/messageList.types'
 import { formatTimeHMS } from '@/i18n/intl'
 import type { OptimisticUserMessage } from '@/composables/chat/useMessageStreaming'
-import type { JsonValue } from '@/types/json'
-
-type MessagePartLike = {
-  id?: string
-  type?: string
-  tool?: string
-  state?: JsonValue
-  text?: string
-  url?: string
-  filename?: string
-  mime?: string
-  synthetic?: boolean
-  ignored?: boolean
-  [k: string]: JsonValue
-}
-
-type MessageLike = {
-  info: {
-    id?: string
-    role?: string
-    time?: { created?: number }
-    finish?: string
-    agent?: string
-    modelID?: string
-  }
-  parts: MessagePartLike[]
-}
-
-type RevertLike = {
-  messageID: string
-  revertedUserCount: number
-  diffFiles: Array<{ filename: string; additions: number; deletions: number }>
-}
-
-type RetryStatusLike = {
-  next?: number
-  attempt?: number
-  message?: string
-  [k: string]: JsonValue
-} | null
-
-type SessionErrorLike = {
-  at: number
-  error: {
-    message: string
-    rendered?: string
-    code?: string
-    classification?: string
-  }
-} | null
-
-export type RenderBlock =
-  | { kind: 'message'; key: string; message: MessageLike; textParts: MessagePartLike[] }
-  | {
-      kind: 'activity'
-      key: string
-      parts: MessagePartLike[]
-      fromId: string | null
-      toId: string | null
-      timeLabel: string
-    }
-  | { kind: 'revert'; key: string; revert: RevertLike }
 
 const props = defineProps<{
   isMobile: boolean

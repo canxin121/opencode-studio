@@ -2,7 +2,8 @@
 import { type HTMLAttributes, computed, useAttrs } from 'vue'
 import { RiLoader4Line } from '@remixicon/vue'
 
-import Button, { type ButtonVariant } from '@/components/ui/Button.vue'
+import Button from '@/components/ui/Button.vue'
+import type { ButtonVariant } from '@/components/ui/button.variants'
 import { cn } from '@/lib/utils'
 
 type IconButtonSize = 'lg' | 'md' | 'sm' | 'xs'

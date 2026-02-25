@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch, type CSSProperties, type Component } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch, type CSSProperties } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   RiArrowDownSLine,
@@ -15,32 +15,8 @@ import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import IconButton from '@/components/ui/IconButton.vue'
 import Input from '@/components/ui/Input.vue'
 import ListRowButton from '@/components/ui/ListRowButton.vue'
+import type { OptionMenuGroup, OptionMenuItem } from '@/components/ui/optionMenu.types'
 import { cn } from '@/lib/utils'
-
-export type OptionMenuItem = {
-  id: string
-  label: string
-  description?: string
-  icon?: Component
-  disabled?: boolean
-  checked?: boolean
-  variant?: 'default' | 'destructive'
-  keywords?: string
-  monospace?: boolean
-  confirmTitle?: string
-  confirmDescription?: string
-  confirmText?: string
-  cancelText?: string
-}
-
-export type OptionMenuGroup = {
-  id?: string
-  title?: string
-  subtitle?: string
-  items: OptionMenuItem[]
-  collapsible?: boolean
-  defaultCollapsed?: boolean
-}
 
 type ResolvedGroup = OptionMenuGroup & {
   _key: string

@@ -5,7 +5,8 @@ import { useI18n } from 'vue-i18n'
 
 import Button from '@/components/ui/Button.vue'
 import Input from '@/components/ui/Input.vue'
-import InlineSearchAdd, { type PickerOption } from '@/components/ui/InlineSearchAdd.vue'
+import InlineSearchAdd from '@/components/ui/InlineSearchAdd.vue'
+import type { PickerOption } from '@/components/ui/pickerOption.types'
 import Tooltip from '@/components/ui/Tooltip.vue'
 import VirtualList from '@/components/ui/VirtualList.vue'
 

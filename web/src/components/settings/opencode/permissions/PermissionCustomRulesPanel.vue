@@ -12,7 +12,8 @@ import {
 
 import Button from '@/components/ui/Button.vue'
 import Input from '@/components/ui/Input.vue'
-import OptionPicker, { type PickerOption } from '@/components/ui/OptionPicker.vue'
+import OptionPicker from '@/components/ui/OptionPicker.vue'
+import type { PickerOption } from '@/components/ui/pickerOption.types'
 import Tooltip from '@/components/ui/Tooltip.vue'
 
 import { useOpencodeConfigPanelContext } from '../opencodeConfigContext'

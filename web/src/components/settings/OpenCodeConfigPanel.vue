@@ -895,7 +895,6 @@ const panelContext = reactive({
 
 provideOpencodeConfigPanelContext(panelContext)
 
-export type OpenCodeConfigPanelProvidedContext = typeof panelContext
 </script>
 
 <template>

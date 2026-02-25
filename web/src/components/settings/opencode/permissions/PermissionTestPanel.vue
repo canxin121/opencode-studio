@@ -2,7 +2,8 @@
 import { computed, defineComponent } from 'vue'
 
 import Input from '@/components/ui/Input.vue'
-import OptionPicker, { type PickerOption } from '@/components/ui/OptionPicker.vue'
+import OptionPicker from '@/components/ui/OptionPicker.vue'
+import type { PickerOption } from '@/components/ui/pickerOption.types'
 
 import { useOpencodeConfigPanelContext } from '../opencodeConfigContext'
 

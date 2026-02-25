@@ -3,7 +3,8 @@ import { computed, ref } from 'vue'
 import { RiFileTextLine, RiMore2Line } from '@remixicon/vue'
 import { useI18n } from 'vue-i18n'
 import IconButton from '@/components/ui/IconButton.vue'
-import OptionMenu, { type OptionMenuGroup, type OptionMenuItem } from '@/components/ui/OptionMenu.vue'
+import OptionMenu from '@/components/ui/OptionMenu.vue'
+import type { OptionMenuGroup, OptionMenuItem } from '@/components/ui/optionMenu.types'
 import SidebarListItem from '@/components/ui/SidebarListItem.vue'
 
 const props = withDefaults(

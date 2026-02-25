@@ -3,7 +3,8 @@ import { computed, defineComponent } from 'vue'
 import { RiCheckLine } from '@remixicon/vue'
 
 import Button from '@/components/ui/Button.vue'
-import OptionPicker, { type PickerOption } from '@/components/ui/OptionPicker.vue'
+import OptionPicker from '@/components/ui/OptionPicker.vue'
+import type { PickerOption } from '@/components/ui/pickerOption.types'
 import Tooltip from '@/components/ui/Tooltip.vue'
 
 import { useOpencodeConfigPanelContext } from '../opencodeConfigContext'

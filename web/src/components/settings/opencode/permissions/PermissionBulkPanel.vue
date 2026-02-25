@@ -3,10 +3,12 @@ import { computed, defineComponent } from 'vue'
 import { RiCheckLine, RiListCheck3 } from '@remixicon/vue'
 
 import Button from '@/components/ui/Button.vue'
-import type { PickerOption } from '@/components/ui/InlineSearchAdd.vue'
-import OptionPicker, { type PickerOption as OptionPickerOption } from '@/components/ui/OptionPicker.vue'
+import OptionPicker from '@/components/ui/OptionPicker.vue'
+import type { PickerOption } from '@/components/ui/pickerOption.types'
 import Tooltip from '@/components/ui/Tooltip.vue'
 import StringListEditor from '../StringListEditor.vue'
+
+type OptionPickerOption = PickerOption
 
 import { useOpencodeConfigPanelContext } from '../opencodeConfigContext'
 

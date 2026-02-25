@@ -5,7 +5,8 @@ import { useI18n } from 'vue-i18n'
 
 import Button from '@/components/ui/Button.vue'
 import Input from '@/components/ui/Input.vue'
-import OptionPicker, { type PickerOption } from '@/components/ui/OptionPicker.vue'
+import OptionPicker from '@/components/ui/OptionPicker.vue'
+import type { PickerOption } from '@/components/ui/pickerOption.types'
 import Tooltip from '@/components/ui/Tooltip.vue'
 import type { JsonValue as JsonLike } from '@/types/json'
 
