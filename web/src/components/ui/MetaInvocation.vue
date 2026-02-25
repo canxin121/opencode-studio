@@ -51,16 +51,10 @@ const kind = computed(() => String(props.part?.type || '').toLowerCase())
 
 const title = computed(() => {
   switch (kind.value) {
-    case 'step-start':
-      return 'Step start'
-    case 'step-finish':
-      return 'Step finish'
     case 'snapshot':
       return 'Snapshot'
     case 'patch':
       return 'Patch'
-    case 'agent':
-      return 'Agent'
     case 'retry':
       return 'Retry'
     case 'compaction':
@@ -94,14 +88,8 @@ function short(text: MetaValue, max = 72): string {
 
 const summary = computed(() => {
   const p = asRecord(props.part)
-  if (kind.value === 'agent' && typeof p.name === 'string') return short(p.name, 80)
-  if ((kind.value === 'step-start' || kind.value === 'snapshot') && typeof p.snapshot === 'string')
+  if (kind.value === 'snapshot' && typeof p.snapshot === 'string')
     return short(p.snapshot)
-  if (kind.value === 'step-finish') {
-    const reason = typeof p.reason === 'string' ? p.reason : ''
-    const cost = typeof p.cost === 'number' ? `$${p.cost.toFixed(4)}` : ''
-    return [short(reason, 48), cost].filter(Boolean).join(' · ')
-  }
   if (kind.value === 'patch') {
     const files = Array.isArray(p.files)
       ? p.files.length

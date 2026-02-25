@@ -24,6 +24,7 @@ import CodeBlock from './CodeBlock.vue'
 import DiffViewer from '@/components/DiffViewer.vue'
 import { useChatStore } from '@/stores/chat'
 import { formatTimeHM } from '@/i18n/intl'
+import { resolveToolInputDisplay } from './toolInvocationInput'
 
 type ToolValue = unknown
 type UnknownRecord = Record<string, ToolValue>
@@ -364,29 +365,10 @@ const displayOutput = computed(() => {
   return clean.trim()
 })
 
-const displayInput = computed(() => {
-  const t = toolName.value.toLowerCase()
-  const inp = input.value
-
-  if (t === 'write') {
-    if (typeof inp.content === 'string') return inp.content
-    if (typeof inp.text === 'string') return inp.text
-    return ''
-  }
-
-  if (t === 'edit' || t === 'multiedit') {
-    // If output is empty (often the case for edit success), showing the diff or input might be helpful.
-    // But input for edit is usually 'oldString'/'newString' or instruction.
-    // For now, let's skip complex edit input as diff is better handled in output if available.
-    return ''
-  }
-
-  return ''
-})
+const displayInputData = computed(() => resolveToolInputDisplay(toolName.value, input.value))
 
 const shouldShowInput = computed(() => {
-  // Only show input if we have it AND (output is empty OR it's a write operation where input is the main content)
-  return !!displayInput.value && (displayOutput.value.length === 0 || toolName.value === 'write')
+  return Boolean(displayInputData.value.text)
 })
 </script>
 
@@ -423,9 +405,9 @@ const shouldShowInput = computed(() => {
           <div v-if="shouldShowInput" class="text-xs">
             <div class="text-muted-foreground/80 mb-1 font-medium flex justify-between items-center">
               <span>Input</span>
-              <span class="text-[10px] uppercase tracking-wider opacity-70">{{ outputLang }}</span>
+              <span class="text-[10px] uppercase tracking-wider opacity-70">{{ displayInputData.lang }}</span>
             </div>
-            <CodeBlock :code="displayInput" :lang="outputLang" :compact="true" class="my-0" />
+            <CodeBlock :code="displayInputData.text" :lang="displayInputData.lang" :compact="true" class="my-0" />
           </div>
 
           <div v-if="diffText" class="text-xs">
