@@ -93,7 +93,7 @@ impl<'a> SettingsUpdateSanitizer<'a> {
         };
 
         let trimmed = v.trim();
-        if allowed.iter().any(|candidate| *candidate == trimmed) {
+        if allowed.contains(&trimmed) {
             self.output
                 .insert(key.to_string(), Value::String(trimmed.to_string()));
         }

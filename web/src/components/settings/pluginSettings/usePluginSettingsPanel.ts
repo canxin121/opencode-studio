@@ -628,7 +628,8 @@ export function usePluginSettingsPanel(props: PluginSettingsPanelProps) {
     }
 
     const current = draftValueAtPath(path)
-    const fallback = typeof prop.default === 'object' && prop.default && !Array.isArray(prop.default) ? prop.default : {}
+    const fallback =
+      typeof prop.default === 'object' && prop.default && !Array.isArray(prop.default) ? prop.default : {}
     const obj =
       typeof current === 'object' && current && !Array.isArray(current)
         ? (current as Record<string, JsonLike>)
