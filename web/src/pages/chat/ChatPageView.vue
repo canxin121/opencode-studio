@@ -480,7 +480,10 @@ void sessionActionsMenuRef
                       class="composer-controls-surface w-full flex flex-row items-center justify-between gap-2 rounded-b-xl border-t border-border/60 bg-background/60 p-2 sm:px-2.5"
                     >
                       <!-- Region 1: Attachments, Menu, Agent, Model, Variant -->
-                      <div class="flex-1 flex flex-nowrap items-center gap-1 sm:gap-1.5 min-w-0 overflow-x-auto oc-scrollbar-hidden [&>*]:shrink-0" data-oc-keyboard-tap="blur">
+                      <div
+                        class="flex-1 flex flex-nowrap items-center gap-1 sm:gap-1.5 min-w-0 overflow-x-auto oc-scrollbar-hidden [&>*]:shrink-0"
+                        data-oc-keyboard-tap="blur"
+                      >
                         <Tooltip v-if="!ui.isMobilePointer">
                           <ToolbarChipButton
                             ref="attachmentsTriggerRef"
@@ -573,7 +576,6 @@ void sessionActionsMenuRef
                         <!-- Agent Tooltip -->
                         <Tooltip v-if="!ui.isMobilePointer && agentHint">
                           <ToolbarChipButton
-                            
                             :active="composerPickerOpen === 'agent'"
                             :aria-label="t('chat.composer.picker.agentTitle')"
                             ref="agentTriggerRef"
@@ -587,7 +589,6 @@ void sessionActionsMenuRef
                         </Tooltip>
                         <ToolbarChipButton
                           v-else
-                          
                           :active="composerPickerOpen === 'agent'"
                           :title="t('chat.composer.picker.agentTitle')"
                           :aria-label="t('chat.composer.picker.agentTitle')"
@@ -602,7 +603,6 @@ void sessionActionsMenuRef
                         <!-- Model Tooltip -->
                         <Tooltip v-if="!ui.isMobilePointer && modelHint">
                           <ToolbarChipButton
-                            
                             :active="composerPickerOpen === 'model'"
                             :aria-label="t('chat.composer.picker.modelTitle')"
                             ref="modelTriggerRef"
@@ -618,7 +618,6 @@ void sessionActionsMenuRef
                         </Tooltip>
                         <ToolbarChipButton
                           v-else
-                          
                           :active="composerPickerOpen === 'model'"
                           :title="t('chat.composer.picker.modelTitle')"
                           :aria-label="t('chat.composer.picker.modelTitle')"
@@ -635,7 +634,6 @@ void sessionActionsMenuRef
                         <!-- Variant Tooltip -->
                         <Tooltip v-if="hasVariantsForSelection && !ui.isMobilePointer && variantHint">
                           <ToolbarChipButton
-                            
                             :active="composerPickerOpen === 'variant'"
                             :aria-label="t('chat.composer.picker.variantTitle')"
                             ref="variantTriggerRef"
@@ -649,7 +647,6 @@ void sessionActionsMenuRef
                         </Tooltip>
                         <ToolbarChipButton
                           v-else-if="hasVariantsForSelection"
-                          
                           :active="composerPickerOpen === 'variant'"
                           :title="t('chat.composer.picker.variantTitle')"
                           :aria-label="t('chat.composer.picker.variantTitle')"
@@ -676,7 +673,10 @@ void sessionActionsMenuRef
                         </span>
                         <span class="inline-flex items-center gap-1 opacity-80">
                           <span v-if="sessionUsage.percentUsed !== null">{{ sessionUsage.percentUsed }}%</span>
-                          <span v-if="sessionUsage.costLabel && sessionUsage.costLabel !== '$0.00' && !ui.isMobilePointer" class="text-[9px]">
+                          <span
+                            v-if="sessionUsage.costLabel && sessionUsage.costLabel !== '$0.00' && !ui.isMobilePointer"
+                            class="text-[9px]"
+                          >
                             {{ sessionUsage.costLabel }}
                           </span>
                         </span>
