@@ -25,7 +25,8 @@ use consistency::{DEFAULT_DEGRADED_RETRY_AFTER_MS, ResponseConsistency};
 use fallback::{ReadJsonError, ReadJsonOutcome, mark_consistency_read_error, read_json_value};
 use sqlite_dao::{
     load_session_message_page_from_sqlite, load_session_message_part_from_sqlite,
-    load_session_records_by_ids_from_sqlite, load_session_records_from_sqlite,
+    load_session_records_by_ids_from_sqlite, load_session_records_by_parent_ids_from_sqlite,
+    load_session_records_from_sqlite,
 };
 
 #[derive(Clone)]
@@ -684,6 +685,100 @@ async fn backfill_missing_parent_records(
     }
 }
 
+async fn backfill_missing_child_records_for_roots(
+    state: &Arc<crate::AppState>,
+    by_id: &mut std::collections::HashMap<String, SessionRecord>,
+    children_by_id: &mut std::collections::HashMap<String, Vec<String>>,
+    roots: &[String],
+) {
+    use std::collections::{HashMap, HashSet, VecDeque};
+
+    let mut queue = VecDeque::<String>::new();
+    for root in roots {
+        let id = root.trim();
+        if id.is_empty() {
+            continue;
+        }
+        queue.push_back(id.to_string());
+    }
+
+    const CHILD_BACKFILL_LIMIT: usize = 4096;
+    let mut visited = HashSet::<String>::new();
+
+    while !queue.is_empty() {
+        let mut batch = Vec::<String>::new();
+        while let Some(parent_id) = queue.pop_front() {
+            if !visited.insert(parent_id.clone()) {
+                continue;
+            }
+            if visited.len() > CHILD_BACKFILL_LIMIT {
+                return;
+            }
+            batch.push(parent_id);
+        }
+        if batch.is_empty() {
+            break;
+        }
+
+        let mut discovered_by_parent: HashMap<String, Vec<SessionRecord>> = HashMap::new();
+
+        for parent_id in &batch {
+            for summary in state.directory_session_index.child_summaries(parent_id) {
+                if let Some(record) = record_from_summary_unfiltered(summary) {
+                    discovered_by_parent
+                        .entry(parent_id.clone())
+                        .or_default()
+                        .push(record);
+                }
+            }
+        }
+
+        if let Some(sqlite_records) = load_session_records_by_parent_ids_from_sqlite(&batch).await {
+            for record in sqlite_records {
+                if let Some(parent_id) = record.parent_id.as_ref().cloned() {
+                    discovered_by_parent
+                        .entry(parent_id)
+                        .or_default()
+                        .push(record.clone());
+                }
+                state
+                    .directory_session_index
+                    .upsert_summary_from_value(&record.value);
+            }
+        }
+
+        for parent_id in batch {
+            let discovered = discovered_by_parent.remove(&parent_id).unwrap_or_default();
+            if discovered.is_empty() {
+                continue;
+            }
+
+            let mut child_ids = children_by_id.remove(&parent_id).unwrap_or_default();
+            let mut seen_child_ids = child_ids.iter().cloned().collect::<HashSet<_>>();
+
+            for record in discovered {
+                let child_id = record.id.clone();
+                if child_id.is_empty() || child_id == parent_id {
+                    continue;
+                }
+
+                if !seen_child_ids.contains(&child_id) {
+                    child_ids.push(child_id.clone());
+                    seen_child_ids.insert(child_id.clone());
+                }
+
+                if !by_id.contains_key(&child_id) {
+                    by_id.insert(child_id.clone(), record.clone());
+                }
+
+                queue.push_back(child_id);
+            }
+
+            children_by_id.insert(parent_id, child_ids);
+        }
+    }
+}
+
 pub async fn session_list(
     State(state): State<Arc<crate::AppState>>,
     headers: HeaderMap,
@@ -1214,6 +1309,14 @@ pub async fn session_list(
         };
 
         if include_children {
+            backfill_missing_child_records_for_roots(
+                &state,
+                &mut by_id,
+                &mut children_by_id,
+                &page_roots,
+            )
+            .await;
+
             for kids in children_by_id.values_mut() {
                 kids.sort_by(|a, b| {
                     let a_upd = by_id.get(a).map(|r| r.updated).unwrap_or(0.0);
@@ -2924,6 +3027,165 @@ mod tests {
             json.get("focusRootId").and_then(|v| v.as_str()),
             Some("parent_root")
         );
+    }
+
+    #[tokio::test]
+    async fn session_list_include_children_returns_cross_directory_children_for_parent_root() {
+        let _env_lock = ENV_LOCK.lock().unwrap();
+        STORAGE_CACHE.clear();
+
+        let tmp = unique_tmp_dir("session-list-cross-dir-children");
+        tokio::fs::create_dir_all(&tmp).await.unwrap();
+        let _xdg = EnvVarGuard::set("XDG_DATA_HOME", tmp.to_string_lossy().to_string());
+
+        let parent_dir = tmp.join("parent");
+        let child_dir_a = tmp.join("child-a");
+        let child_dir_b = tmp.join("child-b");
+        tokio::fs::create_dir_all(&parent_dir).await.unwrap();
+        tokio::fs::create_dir_all(&child_dir_a).await.unwrap();
+        tokio::fs::create_dir_all(&child_dir_b).await.unwrap();
+
+        let db_path = tmp.join("opencode").join("opencode.db");
+        if let Some(parent) = db_path.parent() {
+            tokio::fs::create_dir_all(parent).await.unwrap();
+        }
+
+        {
+            let conn = rusqlite::Connection::open(&db_path).unwrap();
+            conn.execute_batch(
+                "
+                CREATE TABLE session (
+                  id TEXT PRIMARY KEY,
+                  project_id TEXT NOT NULL,
+                  parent_id TEXT,
+                  slug TEXT NOT NULL,
+                  directory TEXT NOT NULL,
+                  title TEXT NOT NULL,
+                  version TEXT NOT NULL,
+                  share_url TEXT,
+                  summary_additions INTEGER,
+                  summary_deletions INTEGER,
+                  summary_files INTEGER,
+                  summary_diffs TEXT,
+                  revert TEXT,
+                  permission TEXT,
+                  time_created INTEGER NOT NULL,
+                  time_updated INTEGER NOT NULL,
+                  time_compacting INTEGER,
+                  time_archived INTEGER
+                );
+                ",
+            )
+            .unwrap();
+
+            conn.execute(
+                "INSERT INTO session (
+                    id, project_id, parent_id, slug, directory, title, version,
+                    share_url, summary_additions, summary_deletions, summary_files,
+                    summary_diffs, revert, permission, time_created, time_updated,
+                    time_compacting, time_archived
+                ) VALUES (?1, ?2, NULL, ?3, ?4, ?5, ?6, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?7, ?8, NULL, NULL)",
+                rusqlite::params![
+                    "parent_root",
+                    "global",
+                    "parent-root",
+                    parent_dir.to_string_lossy().to_string(),
+                    "Parent Root",
+                    "2",
+                    1000i64,
+                    3000i64
+                ],
+            )
+            .unwrap();
+
+            conn.execute(
+                "INSERT INTO session (
+                    id, project_id, parent_id, slug, directory, title, version,
+                    share_url, summary_additions, summary_deletions, summary_files,
+                    summary_diffs, revert, permission, time_created, time_updated,
+                    time_compacting, time_archived
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?8, ?9, NULL, NULL)",
+                rusqlite::params![
+                    "child_a",
+                    "global",
+                    "parent_root",
+                    "child-a",
+                    child_dir_a.to_string_lossy().to_string(),
+                    "Child A",
+                    "2",
+                    1100i64,
+                    4100i64
+                ],
+            )
+            .unwrap();
+
+            conn.execute(
+                "INSERT INTO session (
+                    id, project_id, parent_id, slug, directory, title, version,
+                    share_url, summary_additions, summary_deletions, summary_files,
+                    summary_diffs, revert, permission, time_created, time_updated,
+                    time_compacting, time_archived
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?8, ?9, NULL, NULL)",
+                rusqlite::params![
+                    "child_b",
+                    "global",
+                    "parent_root",
+                    "child-b",
+                    child_dir_b.to_string_lossy().to_string(),
+                    "Child B",
+                    "2",
+                    1200i64,
+                    4200i64
+                ],
+            )
+            .unwrap();
+        }
+
+        let resp = session_list(
+            State(dummy_state()),
+            HeaderMap::new(),
+            Query(SessionListQuery {
+                directory: Some(parent_dir.to_string_lossy().to_string()),
+                scope: Some("directory".to_string()),
+                roots: Some("true".to_string()),
+                start: None,
+                search: None,
+                offset: Some("0".to_string()),
+                limit: Some("20".to_string()),
+                include_total: Some("true".to_string()),
+                include_children: Some("true".to_string()),
+                ids: None,
+                focus_session_id: Some("parent_root".to_string()),
+            }),
+        )
+        .await
+        .unwrap();
+
+        let body = to_bytes(resp.into_body(), 1024 * 1024).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let sessions = json
+            .get("sessions")
+            .and_then(|v| v.as_array())
+            .expect("sessions array");
+
+        assert_eq!(json.get("total").and_then(|v| v.as_u64()), Some(1));
+        assert_eq!(sessions.len(), 3);
+        assert_eq!(
+            sessions[0].get("id").and_then(|v| v.as_str()),
+            Some("parent_root")
+        );
+        let child_ids = sessions[1..]
+            .iter()
+            .map(|session| {
+                session
+                    .get("id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default()
+            })
+            .collect::<std::collections::HashSet<_>>();
+        assert_eq!(child_ids.len(), 2);
+        assert!(child_ids.contains("child_a"));
+        assert!(child_ids.contains("child_b"));
     }
 
     #[tokio::test]

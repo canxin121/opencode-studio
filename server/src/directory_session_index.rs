@@ -330,6 +330,25 @@ impl DirectorySessionIndexManager {
         self.summaries_by_session.get(sid).map(|v| v.clone())
     }
 
+    pub fn child_summaries(&self, parent_session_id: &str) -> Vec<SessionSummaryRecord> {
+        let pid = parent_session_id.trim();
+        if pid.is_empty() {
+            return Vec::new();
+        }
+
+        self.summaries_by_session
+            .iter()
+            .filter_map(|entry| {
+                let summary = entry.value();
+                if summary.parent_id.as_deref() == Some(pid) {
+                    Some(summary.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
     pub fn recent_sessions_snapshot(&self) -> Vec<RecentSessionRecord> {
         self.recent_sessions.lock().unwrap().snapshot()
     }
@@ -715,6 +734,40 @@ mod tests {
     }
 
     #[test]
+    fn child_summaries_returns_cross_directory_children() {
+        let idx = DirectorySessionIndexManager::new();
+
+        idx.upsert_summary_from_value(&json!({
+            "id": "parent",
+            "directory": "/tmp/root",
+            "title": "parent",
+            "time": { "updated": 1.0 }
+        }));
+        idx.upsert_summary_from_value(&json!({
+            "id": "child_a",
+            "parentID": "parent",
+            "directory": "/tmp/worktree-a",
+            "title": "child a",
+            "time": { "updated": 2.0 }
+        }));
+        idx.upsert_summary_from_value(&json!({
+            "id": "child_b",
+            "parentID": "parent",
+            "directory": "/tmp/worktree-b",
+            "title": "child b",
+            "time": { "updated": 3.0 }
+        }));
+
+        let mut ids = idx
+            .child_summaries("parent")
+            .into_iter()
+            .map(|s| s.session_id)
+            .collect::<Vec<_>>();
+        ids.sort();
+        assert_eq!(ids, vec!["child_a".to_string(), "child_b".to_string()]);
+    }
+
+    #[test]
     fn runtime_effective_type_prefers_phase_when_idle_status() {
         let idx = DirectorySessionIndexManager::new();
 
@@ -785,6 +838,36 @@ mod tests {
         assert_eq!(
             snapshot
                 .get("s_target")
+                .and_then(|v| v.get("statusType"))
+                .and_then(|v| v.as_str()),
+            Some("busy")
+        );
+    }
+
+    #[test]
+    fn summary_refresh_does_not_drop_runtime_status() {
+        let idx = DirectorySessionIndexManager::new();
+
+        idx.upsert_runtime_status("child_a", "busy");
+        idx.upsert_summary_from_value(&json!({
+            "id": "child_a",
+            "parentID": "parent",
+            "directory": "/tmp/worktree-a",
+            "title": "child",
+            "time": { "updated": 1.0 }
+        }));
+        idx.upsert_summary_from_value(&json!({
+            "id": "child_a",
+            "parentID": "parent",
+            "directory": "/tmp/worktree-a",
+            "title": "child refreshed",
+            "time": { "updated": 2.0 }
+        }));
+
+        let snapshot = idx.runtime_snapshot_json();
+        assert_eq!(
+            snapshot
+                .get("child_a")
                 .and_then(|v| v.get("statusType"))
                 .and_then(|v| v.as_str()),
             Some("busy")
