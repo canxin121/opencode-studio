@@ -71,6 +71,66 @@ test('upsertSessionInPageState: inserts child only when parent is present in pag
   assert.equal(inserted.totalRoots, 1)
 })
 
+test('upsertSessionInPageState: respects maxRootCount for page-zero root inserts', () => {
+  const page = {
+    page: 0,
+    totalRoots: 10,
+    sessions: Array.from({ length: 10 }, (_, i) => ({ id: `root-${i + 1}` })),
+  }
+
+  const next = upsertSessionInPageState(
+    page,
+    { id: 'root-11' },
+    {
+      incrementRootTotal: true,
+      maxRootCount: 10,
+      readSessionId,
+      readParentId,
+      equals: sameSession,
+    },
+  )
+
+  assert.ok(next)
+  assert.equal(next.sessions.length, 10)
+  assert.deepEqual(
+    next.sessions.map((s) => s.id),
+    page.sessions.map((s) => s.id),
+  )
+  assert.equal(next.totalRoots, 11)
+})
+
+test('upsertSessionInPageState: trims root overflow to maxRootCount', () => {
+  const page = {
+    page: 0,
+    totalRoots: 12,
+    sessions: [
+      { id: 'root-a' },
+      { id: 'child-a1', parentID: 'root-a' },
+      { id: 'root-b' },
+      { id: 'root-c' },
+      { id: 'child-c1', parentID: 'root-c' },
+    ],
+  }
+
+  const next = upsertSessionInPageState(
+    page,
+    { id: 'root-a' },
+    {
+      maxRootCount: 2,
+      readSessionId,
+      readParentId,
+      equals: sameSession,
+    },
+  )
+
+  assert.ok(next)
+  assert.deepEqual(
+    next.sessions.map((s) => s.id),
+    ['root-a', 'child-a1', 'root-b'],
+  )
+  assert.equal(next.totalRoots, 12)
+})
+
 test('removeSessionFromPageState: decrements total even when root is outside cached slice', () => {
   const page = { page: 1, totalRoots: 5, sessions: [{ id: 's3' }] }
   const next = removeSessionFromPageState(page, 'missing-root', {

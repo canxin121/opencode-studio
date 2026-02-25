@@ -1381,6 +1381,7 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
       const patched = currentPage
         ? upsertSessionInPageState(currentPage, merged, {
             incrementRootTotal,
+            maxRootCount: 10,
             readSessionId: readObjectId,
             readParentId,
             equals: jsonLikeDeepEqual,
@@ -2385,6 +2386,7 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
         const patched = currentPage
           ? upsertSessionInPageState(currentPage, merged, {
               incrementRootTotal,
+              maxRootCount: 10,
               readSessionId: readObjectId,
               readParentId,
               equals: jsonLikeDeepEqual,
