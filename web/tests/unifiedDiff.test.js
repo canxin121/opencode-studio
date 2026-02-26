@@ -139,10 +139,7 @@ test('buildVirtualMonacoDiffModel can compact large snapshots into diff-focused 
 
 test('buildVirtualMonacoDiffModel falls back to snapshots when preferred patch has no change lines', () => {
   const patchWithoutChangedLines =
-    'diff --git a/a.txt b/a.txt\n' +
-    '--- a/a.txt\n' +
-    '+++ b/a.txt\n' +
-    '@@ -1,1 +1,1 @@\n'
+    'diff --git a/a.txt b/a.txt\n' + '--- a/a.txt\n' + '+++ b/a.txt\n' + '@@ -1,1 +1,1 @@\n'
 
   const model = buildVirtualMonacoDiffModel({
     path: 'a.txt',
