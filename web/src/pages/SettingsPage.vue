@@ -82,6 +82,7 @@ const desktopBackendHost = ref('127.0.0.1')
 const desktopBackendPortInput = ref('3000')
 const desktopCorsOriginsText = ref('')
 const desktopCorsAllowAll = ref(false)
+const desktopAutostartOnBoot = ref(true)
 
 function parseCorsOriginsText(input: string): string[] {
   return String(input || '')
@@ -92,6 +93,7 @@ function parseCorsOriginsText(input: string): string[] {
 }
 
 function applyDesktopRuntimeForm(cfg: DesktopConfig) {
+  desktopAutostartOnBoot.value = cfg.autostart_on_boot !== false
   desktopBackendHost.value = String(cfg.backend.host || '127.0.0.1').trim() || '127.0.0.1'
   desktopBackendPortInput.value = String(cfg.backend.port || 3000)
   desktopCorsOriginsText.value = (cfg.backend.cors_origins || []).join('\n')
@@ -127,6 +129,7 @@ async function saveDesktopRuntimeConfig() {
   try {
     const current = await desktopConfigGet()
     const next: DesktopConfig = {
+      autostart_on_boot: desktopAutostartOnBoot.value === true,
       backend: {
         host,
         port: parsedPort,
@@ -738,6 +741,15 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
                     :disabled="desktopRuntimeLoading || desktopRuntimeSaving"
                   />
                   {{ t('settings.desktopRuntime.fields.corsAllowAll') }}
+                </label>
+
+                <label class="inline-flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    v-model="desktopAutostartOnBoot"
+                    :disabled="desktopRuntimeLoading || desktopRuntimeSaving"
+                  />
+                  {{ t('settings.desktopRuntime.fields.autostartOnBoot') }}
                 </label>
 
                 <div class="flex items-center gap-2">

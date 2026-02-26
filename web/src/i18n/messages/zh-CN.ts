@@ -1376,6 +1376,7 @@ export default {
         port: '端口',
         corsOrigins: 'CORS 源',
         corsAllowAll: '放行所有来源（*）',
+        autostartOnBoot: '登录时自动启动',
       },
       placeholders: {
         host: '127.0.0.1',

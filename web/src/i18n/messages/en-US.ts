@@ -1377,6 +1377,7 @@ export default {
         port: 'Port',
         corsOrigins: 'CORS origins',
         corsAllowAll: 'Allow all origins (*)',
+        autostartOnBoot: 'Launch at login',
       },
       placeholders: {
         host: '127.0.0.1',
