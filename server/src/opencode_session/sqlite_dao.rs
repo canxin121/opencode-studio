@@ -1,7 +1,8 @@
 use serde_json::{Value, json};
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
+use std::time::Duration;
 use tokio::fs;
-use tokio::sync::Semaphore;
+use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
 use super::{ResponseConsistency, SessionRecord, opencode_db_path};
 
@@ -9,9 +10,11 @@ const SQLITE_BUSY_TIMEOUT_MS: u64 = 15000;
 const SQLITE_READ_CONCURRENCY: usize = 2;
 const SQLITE_BUSY_RETRY_ATTEMPTS: usize = 3;
 const SQLITE_BUSY_RETRY_DELAY_MS: u64 = 30;
+const SQLITE_READ_ACQUIRE_TIMEOUT_MS: u64 = 1500;
+const SQLITE_READ_OPERATION_TIMEOUT_MS: u64 = 20000;
 
-static SQLITE_READ_SEMAPHORE: LazyLock<Semaphore> =
-    LazyLock::new(|| Semaphore::new(SQLITE_READ_CONCURRENCY));
+static SQLITE_READ_SEMAPHORE: LazyLock<Arc<Semaphore>> =
+    LazyLock::new(|| Arc::new(Semaphore::new(SQLITE_READ_CONCURRENCY)));
 
 fn open_sqlite_readonly_connection(
     db_path: &std::path::Path,
@@ -51,6 +54,70 @@ where
         }
     }
     None
+}
+
+async fn acquire_sqlite_read_permit(op_name: &'static str) -> Option<OwnedSemaphorePermit> {
+    let semaphore = SQLITE_READ_SEMAPHORE.clone();
+    match tokio::time::timeout(
+        Duration::from_millis(SQLITE_READ_ACQUIRE_TIMEOUT_MS),
+        semaphore.acquire_owned(),
+    )
+    .await
+    {
+        Ok(Ok(permit)) => Some(permit),
+        Ok(Err(_)) => {
+            tracing::error!(
+                op = op_name,
+                "sqlite read semaphore closed unexpectedly; skipping sqlite read"
+            );
+            None
+        }
+        Err(_) => {
+            tracing::warn!(
+                op = op_name,
+                timeout_ms = SQLITE_READ_ACQUIRE_TIMEOUT_MS,
+                "sqlite read permit acquisition timed out; enabling fallback"
+            );
+            None
+        }
+    }
+}
+
+async fn run_sqlite_read_task<T, F>(op_name: &'static str, task: F) -> Option<T>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Option<T> + Send + 'static,
+{
+    let permit = acquire_sqlite_read_permit(op_name).await?;
+    let handle = tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+        task()
+    });
+
+    match tokio::time::timeout(
+        Duration::from_millis(SQLITE_READ_OPERATION_TIMEOUT_MS),
+        handle,
+    )
+    .await
+    {
+        Ok(Ok(result)) => result,
+        Ok(Err(err)) => {
+            tracing::error!(
+                op = op_name,
+                error = %err,
+                "sqlite read blocking task join failed"
+            );
+            None
+        }
+        Err(_) => {
+            tracing::error!(
+                op = op_name,
+                timeout_ms = SQLITE_READ_OPERATION_TIMEOUT_MS,
+                "sqlite read operation timed out; fallback path will be used"
+            );
+            None
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -137,9 +204,7 @@ pub(super) async fn load_session_records_from_sqlite(
         .filter(|v| !v.is_empty())
         .map(|v| v.to_string());
 
-    let _permit = SQLITE_READ_SEMAPHORE.acquire().await.ok()?;
-
-    tokio::task::spawn_blocking(move || {
+    run_sqlite_read_task("load_session_records_from_sqlite", move || {
         let conn = with_sqlite_busy_retry(|| open_sqlite_readonly_connection(&db_path))?;
 
         let sql = if project_id.is_some() {
@@ -161,8 +226,6 @@ pub(super) async fn load_session_records_from_sqlite(
         Some(mapped.filter_map(Result::ok).collect::<Vec<_>>())
     })
     .await
-    .ok()
-    .flatten()
 }
 
 pub(super) async fn load_session_records_by_ids_from_sqlite(
@@ -190,9 +253,7 @@ pub(super) async fn load_session_records_by_ids_from_sqlite(
         return Some(Vec::new());
     }
 
-    let _permit = SQLITE_READ_SEMAPHORE.acquire().await.ok()?;
-
-    tokio::task::spawn_blocking(move || {
+    run_sqlite_read_task("load_session_records_by_ids_from_sqlite", move || {
         let conn = with_sqlite_busy_retry(|| open_sqlite_readonly_connection(&db_path))?;
         let mut out = Vec::<SessionRecord>::new();
         const CHUNK_SIZE: usize = 300;
@@ -215,8 +276,6 @@ pub(super) async fn load_session_records_by_ids_from_sqlite(
         Some(out)
     })
     .await
-    .ok()
-    .flatten()
 }
 
 pub(super) async fn load_session_records_by_parent_ids_from_sqlite(
@@ -244,9 +303,7 @@ pub(super) async fn load_session_records_by_parent_ids_from_sqlite(
         return Some(Vec::new());
     }
 
-    let _permit = SQLITE_READ_SEMAPHORE.acquire().await.ok()?;
-
-    tokio::task::spawn_blocking(move || {
+    run_sqlite_read_task("load_session_records_by_parent_ids_from_sqlite", move || {
         let conn = with_sqlite_busy_retry(|| open_sqlite_readonly_connection(&db_path))?;
         let mut out = Vec::<SessionRecord>::new();
         const CHUNK_SIZE: usize = 300;
@@ -269,8 +326,6 @@ pub(super) async fn load_session_records_by_parent_ids_from_sqlite(
         Some(out)
     })
     .await
-    .ok()
-    .flatten()
 }
 
 fn sqlite_placeholders(count: usize) -> String {
@@ -294,9 +349,7 @@ pub(super) async fn load_session_message_page_from_sqlite(
     }
 
     let session_id = session_id.trim().to_string();
-    let _permit = SQLITE_READ_SEMAPHORE.acquire().await.ok()?;
-
-    tokio::task::spawn_blocking(move || {
+    run_sqlite_read_task("load_session_message_page_from_sqlite", move || {
         let conn = with_sqlite_busy_retry(|| open_sqlite_readonly_connection(&db_path))?;
 
         let mut consistency = ResponseConsistency::default();
@@ -500,8 +553,6 @@ pub(super) async fn load_session_message_page_from_sqlite(
         })
     })
     .await
-    .ok()
-    .flatten()
 }
 
 pub(super) async fn load_session_message_part_from_sqlite(
@@ -518,9 +569,7 @@ pub(super) async fn load_session_message_part_from_sqlite(
     let message_id = message_id.trim().to_string();
     let part_id = part_id.trim().to_string();
 
-    let _permit = SQLITE_READ_SEMAPHORE.acquire().await.ok()?;
-
-    tokio::task::spawn_blocking(move || {
+    run_sqlite_read_task("load_session_message_part_from_sqlite", move || {
         let conn = with_sqlite_busy_retry(|| open_sqlite_readonly_connection(&db_path))?;
 
         let info_raw = conn
@@ -553,6 +602,4 @@ pub(super) async fn load_session_message_part_from_sqlite(
         Some((info, part))
     })
     .await
-    .ok()
-    .flatten()
 }
