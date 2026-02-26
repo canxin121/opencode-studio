@@ -1,11 +1,7 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { RiCloseLine } from '@remixicon/vue'
 import { useI18n } from 'vue-i18n'
 
-import Button from '@/components/ui/Button.vue'
-import FormDialog from '@/components/ui/FormDialog.vue'
-import PathPicker from '@/components/ui/PathPicker.vue'
+import DirectoryPathDialog from '@/components/ui/DirectoryPathDialog.vue'
 
 const { t } = useI18n()
 
@@ -19,40 +15,19 @@ const emit = defineEmits<{
   (e: 'update:path', v: string): void
   (e: 'add'): void
 }>()
-
-const pathModel = computed({
-  get: () => props.path,
-  set: (v: string) => emit('update:path', v),
-})
 </script>
 
 <template>
-  <FormDialog
+  <DirectoryPathDialog
     :open="open"
+    :path="path"
     :title="String(t('chat.sidebar.addDirectoryDialog.title'))"
     :description="String(t('chat.sidebar.addDirectoryDialog.description'))"
+    :placeholder="String(t('chat.sidebar.addDirectoryDialog.placeholders.path'))"
+    :confirm-label="String(t('common.add'))"
+    :allow-create-directory="true"
     @update:open="(v) => emit('update:open', v)"
-  >
-    <div class="flex min-h-0 flex-col gap-3">
-      <PathPicker
-        v-model="pathModel"
-        :placeholder="String(t('chat.sidebar.addDirectoryDialog.placeholders.path'))"
-        view="browser"
-        mode="directory"
-        :resolve-to-absolute="true"
-        :show-options="true"
-        :show-gitignored="true"
-        :allow-create-directory="true"
-        input-class="h-9 font-mono"
-        browser-class="flex h-[min(56vh,34rem)] min-h-[14rem] flex-col"
-      />
-      <div class="flex items-center justify-end gap-2 flex-none">
-        <Button variant="ghost" @click="emit('update:open', false)">
-          <RiCloseLine class="h-4 w-4" />
-          {{ t('common.cancel') }}
-        </Button>
-        <Button @click="emit('add')" :disabled="!pathModel.trim()">{{ t('common.add') }}</Button>
-      </div>
-    </div>
-  </FormDialog>
+    @update:path="(v) => emit('update:path', v)"
+    @confirm="emit('add')"
+  />
 </template>

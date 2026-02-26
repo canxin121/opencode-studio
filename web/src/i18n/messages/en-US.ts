@@ -49,7 +49,7 @@ export default {
     useTerminal: 'Use Terminal',
     openTerminal: 'Open Terminal',
     scanning: 'Scanning...',
-    useProject: 'Use project',
+    useDirectory: 'Use directory',
     use: 'Use',
     searchActions: 'Search actions',
     select: 'Select',
@@ -237,8 +237,8 @@ export default {
     openTerminalPanel: 'Open terminal panel',
     openSourceControlPanel: 'Open source control panel',
     openSettingsPanel: 'Open settings panel',
-    noProjectSelected: 'No project selected',
-    changeProject: 'Change project',
+    noDirectorySelected: 'No directory selected',
+    changeDirectory: 'Change directory',
     changesAvailable: 'Changes available',
     connectionStatus: 'Connection status',
     status: {
@@ -248,10 +248,10 @@ export default {
     help: 'Help',
     locateSession: 'Locate session',
     locateCurrentSession: 'Locate current session in sidebar',
-    selectProject: {
-      title: 'Select Project',
-      description: 'Choose a directory to set as the current project',
-      placeholder: '/path/to/project',
+    selectDirectory: {
+      title: 'Select Directory',
+      description: 'Choose a directory to set as the current directory',
+      placeholder: '/path/to/directory',
     },
   },
   auth: {
@@ -1831,7 +1831,7 @@ export default {
         title: 'Add directory',
         description: 'Add a directory path to show sessions.',
         placeholders: {
-          path: '/path/to/project',
+          path: '/path/to/directory',
         },
       },
       header: {

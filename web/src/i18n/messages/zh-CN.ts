@@ -49,7 +49,7 @@ export default {
     useTerminal: '使用终端',
     openTerminal: '打开终端',
     scanning: '扫描中...',
-    useProject: '使用项目',
+    useDirectory: '使用目录',
     use: '使用',
     searchActions: '搜索操作',
     select: '选择',
@@ -237,8 +237,8 @@ export default {
     openTerminalPanel: '打开终端面板',
     openSourceControlPanel: '打开源代码管理面板',
     openSettingsPanel: '打开设置面板',
-    noProjectSelected: '未选择项目',
-    changeProject: '切换项目',
+    noDirectorySelected: '未选择目录',
+    changeDirectory: '切换目录',
     changesAvailable: '有改动',
     connectionStatus: '连接状态',
     status: {
@@ -248,10 +248,10 @@ export default {
     help: '帮助',
     locateSession: '定位会话',
     locateCurrentSession: '在侧边栏中定位当前会话',
-    selectProject: {
-      title: '选择项目',
-      description: '选择一个目录作为当前项目',
-      placeholder: '/path/to/project',
+    selectDirectory: {
+      title: '选择目录',
+      description: '选择一个目录作为当前目录',
+      placeholder: '/path/to/directory',
     },
   },
   auth: {
@@ -1831,7 +1831,7 @@ export default {
         title: '添加目录',
         description: '添加一个目录路径以显示会话。',
         placeholders: {
-          path: '/path/to/project',
+          path: '/path/to/directory',
         },
       },
       header: {

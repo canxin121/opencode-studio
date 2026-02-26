@@ -706,11 +706,19 @@ onBeforeUnmount(() => {
 
       <div
         v-if="lspPanelOpen"
-        class="pointer-events-auto w-full rounded-lg border border-border/70 bg-background/95 shadow-lg backdrop-blur overflow-hidden flex flex-col min-h-0"
+        class="pointer-events-auto w-full rounded-lg border border-border/70 bg-background/95 shadow-lg backdrop-blur overflow-hidden flex flex-col min-h-0 max-h-full"
         :style="sessionDiffPanelStyle"
       >
         <div class="flex items-center justify-between gap-2 px-3 py-0.5 border-b border-border/60">
-          <div class="text-xs font-medium leading-4 text-foreground">{{ t('chat.lspStatus.panelTitle') }}</div>
+          <div class="min-w-0 flex items-baseline gap-1.5">
+            <div class="text-xs font-medium leading-4 text-foreground">{{ t('chat.lspStatus.panelTitle') }}</div>
+            <div
+              v-if="!lspRuntimeLoading && !lspRuntimeError"
+              class="truncate text-[11px] leading-4 text-muted-foreground"
+            >
+              {{ t('chat.lspStatus.listTitle') }} · {{ lspRuntimeItems.length }}
+            </div>
+          </div>
           <div class="flex items-center gap-1">
             <IconButton
               size="sm"
@@ -748,46 +756,31 @@ onBeforeUnmount(() => {
           v-else
           class="flex min-h-0 flex-col max-h-[min(56dvh,calc(100dvh-var(--oc-safe-area-top,0px)-var(--oc-safe-area-bottom,0px)-9rem))]"
         >
-          <div class="px-3 py-2 text-[11px] font-medium text-muted-foreground border-b border-border/50">
-            {{ t('chat.lspStatus.listTitle') }} · {{ lspRuntimeItems.length }}
-          </div>
-          <div class="flex-1 min-h-0 overflow-auto px-3 py-2 space-y-3">
+          <div class="flex-1 min-h-0 overflow-auto px-3 py-2">
             <section
               v-for="group in lspRuntimeGroups"
               :key="group.key"
-              class="rounded-md border border-border/70 bg-background/70 shadow-sm overflow-hidden"
+              class="border-b border-border/50 py-1.5 last:border-b-0"
             >
-              <div
-                class="flex items-center justify-between gap-2 border-b border-border/50 bg-secondary/30 px-2.5 py-1.5"
-              >
-                <div class="truncate text-[11px] font-medium text-foreground" :title="group.label">
+              <div class="flex items-center justify-between gap-2 px-1 py-1">
+                <div class="truncate text-[11px] font-medium text-foreground/90" :title="group.label">
                   {{ group.label }}
                 </div>
-                <div
-                  class="inline-flex rounded-full bg-background px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground"
-                >
+                <div class="text-[10px] font-mono text-muted-foreground">
                   {{ group.items.length }}
                 </div>
               </div>
-              <div class="divide-y divide-border/40">
-                <div
-                  v-for="runtime in group.items"
-                  :key="runtime.id"
-                  class="w-full px-2.5 py-2 hover:bg-secondary/20 transition-colors"
-                >
+              <div class="divide-y divide-border/30">
+                <div v-for="runtime in group.items" :key="runtime.id" class="w-full px-1 py-1.5">
                   <div class="flex flex-wrap items-center gap-2">
                     <span class="min-w-0 truncate text-xs" :title="runtime.name">{{ runtime.name }}</span>
                     <span
-                      class="inline-flex rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide"
-                      :class="
-                        runtimeStatusTone(runtime.status) === 'ok'
-                          ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
-                          : runtimeStatusTone(runtime.status) === 'warn'
-                            ? 'bg-red-500/15 text-red-700 dark:text-red-300'
-                            : 'bg-muted text-muted-foreground'
-                      "
+                      class="inline-flex h-2 w-2 rounded-full"
+                      :class="runtimeStatusTone(runtime.status) === 'ok' ? 'bg-emerald-500' : 'bg-red-500'"
+                      :aria-label="runtime.status || t('common.unknown')"
+                      :title="runtime.status || t('common.unknown')"
                     >
-                      {{ runtime.status || t('common.unknown') }}
+                      <span class="sr-only">{{ runtime.status || t('common.unknown') }}</span>
                     </span>
                   </div>
                   <div class="mt-1 space-y-0.5 text-[11px] text-muted-foreground">
