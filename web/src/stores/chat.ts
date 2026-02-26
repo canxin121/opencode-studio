@@ -16,7 +16,14 @@ import type {
   SessionStatusEvent,
 } from '../types/chat'
 
-import { clampText, extractSessionId, normalizeMessageInfoFromSse, safeJson } from './chat/reducers'
+import {
+  clampText,
+  extractSessionId,
+  normalizeMessageInfoFromPartEvent,
+  normalizeMessageInfoFromSse,
+  safeJson,
+} from './chat/reducers'
+import { clearRevertBoundary, shouldClearRevertBoundary } from './chat/revertState'
 
 import { refreshAttentionForSession } from './chat/attention'
 import {
@@ -1375,6 +1382,15 @@ export const useChatStore = defineStore('chat', () => {
     directorySessions.upsertSessionSummaryPatch(merged)
   }
 
+  function clearSessionRevertBoundaryForMessage(sessionId: string, messageId: string) {
+    const sid = (sessionId || '').trim()
+    if (!sid) return
+    const current = getSessionById(sid)
+    if (!current) return
+    if (!shouldClearRevertBoundary(current, messageId)) return
+    upsertSessionCache(clearRevertBoundary(current))
+  }
+
   async function renameSession(sessionId: string, title: string) {
     const sid = (sessionId || '').trim()
     const trimmed = (title || '').trim()
@@ -1745,6 +1761,10 @@ export const useChatStore = defineStore('chat', () => {
     // Keep per-session timelines updated in-place via SSE.
     if (sid) {
       if (t === 'message.part.updated' || t === 'message.part.created') {
+        const info = normalizeMessageInfoFromPartEvent(evt)
+        if (info?.id) {
+          clearSessionRevertBoundaryForMessage(sid, info.id)
+        }
         if (applyStreamingEventToMessages({ evt, ensureSessionMessages, pruneSessionMessages })) return
       }
       if (t === 'message.updated') {
@@ -1752,6 +1772,7 @@ export const useChatStore = defineStore('chat', () => {
         if (info?.id) {
           const list = ensureSessionMessages(sid)
           upsertMessageEntryIn(list, info)
+          clearSessionRevertBoundaryForMessage(sid, info.id)
 
           const patch = extractRunConfigFromMessageInfo(info)
           if (patch.agent || patch.providerID || patch.modelID || patch.variant) {
