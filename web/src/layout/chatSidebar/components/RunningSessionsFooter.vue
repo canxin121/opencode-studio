@@ -88,10 +88,15 @@ function statusMeta(sessionId: string) {
 
 <template>
   <div class="flex-shrink-0 border-t border-sidebar-border/60 bg-sidebar/95">
-    <div class="h-10 px-3 flex items-center justify-between gap-2">
+    <div
+      :class="[
+        'group h-10 px-3 flex items-center justify-between gap-2 rounded-md transition-colors',
+        open ? 'bg-secondary/30' : 'hover:bg-secondary/30 focus-within:bg-secondary/30',
+      ]"
+    >
       <button
         type="button"
-        class="flex-1 h-full min-w-0 flex items-center gap-2 text-left hover:bg-secondary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+        class="flex-1 h-full min-w-0 flex items-center gap-2 text-left rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
         :aria-expanded="open"
         :aria-label="String(t('chat.sidebar.footers.running.toggleAria'))"
         @click="emit('update:open', !open)"
