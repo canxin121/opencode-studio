@@ -7,6 +7,7 @@ export type DesktopConfig = {
     port: number
     cors_origins: string[]
     cors_allow_all: boolean
+    backend_log_level?: string | null
     ui_password?: string | null
     opencode_host: string
     opencode_port?: number | null
@@ -43,6 +44,7 @@ function asDesktopConfig(value: unknown): DesktopConfig | null {
       port,
       cors_origins,
       cors_allow_all: backend.cors_allow_all === true,
+      backend_log_level: typeof backend.backend_log_level === 'string' ? backend.backend_log_level : null,
       ui_password: typeof backend.ui_password === 'string' ? backend.ui_password : null,
       opencode_host: typeof backend.opencode_host === 'string' ? backend.opencode_host : '127.0.0.1',
       opencode_port: typeof backend.opencode_port === 'number' ? backend.opencode_port : null,

@@ -145,6 +145,8 @@ async fn spawn_sidecar(
     ])
     .env("OPENCODE_STUDIO_DATA_DIR", data_dir.to_string_lossy().as_ref());
 
+  cmd = cmd.env("RUST_LOG", backend_rust_log_filter(cfg.backend.backend_log_level.as_deref()));
+
   if let Some(home) = home_env.as_deref() {
     cmd = cmd.env("HOME", home);
   }
@@ -165,11 +167,14 @@ async fn spawn_sidecar(
       .args(["--opencode-port", &opencode_port.to_string()]);
   }
 
-  if let Some(level) = cfg.backend.opencode_log_level.as_deref() {
-    let v = level.trim();
-    if !v.is_empty() {
-      cmd = cmd.args(["--opencode-log-level", v]);
-    }
+  if let Some(level) = normalize_log_level(cfg.backend.opencode_log_level.as_deref()) {
+    cmd = cmd
+      .env("OPENCODE_STUDIO_OPENCODE_LOG_LEVEL", level)
+      .env("OPENCODE_LOG_LEVEL", level)
+      .env("OPENCODE_STUDIO_OPENCODE_LOGS", "true")
+      .args(["--opencode-log-level", level]);
+  } else {
+    cmd = cmd.env("OPENCODE_STUDIO_OPENCODE_LOGS", "false");
   }
 
   for origin in merge_cors_origins(cfg) {
@@ -339,4 +344,28 @@ fn merge_cors_origins(cfg: &DesktopConfig) -> Vec<String> {
   }
 
   origins
+}
+
+fn normalize_log_level(raw: Option<&str>) -> Option<&'static str> {
+  let v = raw?.trim();
+  if v.eq_ignore_ascii_case("debug") {
+    Some("DEBUG")
+  } else if v.eq_ignore_ascii_case("info") {
+    Some("INFO")
+  } else if v.eq_ignore_ascii_case("warn") {
+    Some("WARN")
+  } else if v.eq_ignore_ascii_case("error") {
+    Some("ERROR")
+  } else {
+    None
+  }
+}
+
+fn backend_rust_log_filter(raw: Option<&str>) -> &'static str {
+  match normalize_log_level(raw) {
+    Some("DEBUG") => "debug,tower_http=debug",
+    Some("WARN") => "warn,tower_http=warn",
+    Some("ERROR") => "error,tower_http=error",
+    _ => "info,tower_http=info",
+  }
 }

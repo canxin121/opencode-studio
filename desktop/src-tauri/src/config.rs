@@ -21,6 +21,7 @@ pub struct BackendConfig {
     pub port: u16,
     pub cors_origins: Vec<String>,
     pub cors_allow_all: bool,
+    pub backend_log_level: Option<String>,
     pub ui_password: Option<String>,
 
     // OpenCode connectivity overrides.
@@ -50,6 +51,7 @@ impl Default for BackendConfig {
             port: 3000,
             cors_origins: Vec::new(),
             cors_allow_all: false,
+            backend_log_level: None,
             ui_password: None,
             opencode_host: "127.0.0.1".to_string(),
             opencode_port: None,
@@ -119,6 +121,8 @@ fn normalize_config(mut cfg: DesktopConfig) -> DesktopConfig {
     cfg.backend.host = normalize_host(&cfg.backend.host);
     cfg.backend.opencode_host = normalize_host(&cfg.backend.opencode_host);
     cfg.backend.cors_origins = normalize_cors_origins(cfg.backend.cors_origins);
+    cfg.backend.backend_log_level = normalize_log_level(cfg.backend.backend_log_level.take());
+    cfg.backend.opencode_log_level = normalize_log_level(cfg.backend.opencode_log_level.take());
     cfg
 }
 
@@ -143,4 +147,12 @@ fn normalize_cors_origins(values: Vec<String>) -> Vec<String> {
         }
     }
     out
+}
+
+fn normalize_log_level(raw: Option<String>) -> Option<String> {
+    let level = raw?.trim().to_ascii_uppercase();
+    match level.as_str() {
+        "DEBUG" | "INFO" | "WARN" | "ERROR" => Some(level),
+        _ => None,
+    }
 }

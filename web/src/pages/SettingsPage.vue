@@ -80,6 +80,25 @@ const desktopBackendPortInput = ref('3000')
 const desktopCorsOriginsText = ref('')
 const desktopCorsAllowAll = ref(false)
 const desktopAutostartOnBoot = ref(true)
+const desktopBackendLogLevel = ref('')
+const desktopUiPassword = ref('')
+const desktopOpencodeHost = ref('127.0.0.1')
+const desktopOpencodePortInput = ref('')
+const desktopSkipOpencodeStart = ref(false)
+const desktopOpencodeLogLevel = ref('')
+
+const desktopRuntimeLogLevelOptions = computed(() => [
+  { value: '', label: String(t('settings.desktopRuntime.options.logLevel.default')) },
+  { value: 'DEBUG', label: String(t('settings.desktopRuntime.options.logLevel.DEBUG')) },
+  { value: 'INFO', label: String(t('settings.desktopRuntime.options.logLevel.INFO')) },
+  { value: 'WARN', label: String(t('settings.desktopRuntime.options.logLevel.WARN')) },
+  { value: 'ERROR', label: String(t('settings.desktopRuntime.options.logLevel.ERROR')) },
+])
+
+function normalizeLogLevelInput(raw: string): string | null {
+  const v = String(raw || '').trim().toUpperCase()
+  return v === 'DEBUG' || v === 'INFO' || v === 'WARN' || v === 'ERROR' ? v : null
+}
 
 function parseCorsOriginsText(input: string): string[] {
   return String(input || '')
@@ -95,6 +114,12 @@ function applyDesktopRuntimeForm(cfg: DesktopConfig) {
   desktopBackendPortInput.value = String(cfg.backend.port || 3000)
   desktopCorsOriginsText.value = (cfg.backend.cors_origins || []).join('\n')
   desktopCorsAllowAll.value = cfg.backend.cors_allow_all === true
+  desktopBackendLogLevel.value = normalizeLogLevelInput(String(cfg.backend.backend_log_level || '')) || ''
+  desktopUiPassword.value = String(cfg.backend.ui_password || '')
+  desktopOpencodeHost.value = String(cfg.backend.opencode_host || '127.0.0.1').trim() || '127.0.0.1'
+  desktopOpencodePortInput.value = cfg.backend.opencode_port ? String(cfg.backend.opencode_port) : ''
+  desktopSkipOpencodeStart.value = cfg.backend.skip_opencode_start === true
+  desktopOpencodeLogLevel.value = normalizeLogLevelInput(String(cfg.backend.opencode_log_level || '')) || ''
 }
 
 async function loadDesktopRuntimeConfig() {
@@ -122,9 +147,23 @@ async function saveDesktopRuntimeConfig() {
     return
   }
 
+  const opencodeHost = String(desktopOpencodeHost.value || '').trim() || '127.0.0.1'
+  const opencodePortText = String(desktopOpencodePortInput.value || '').trim()
+  const parsedOpencodePort = Number.parseInt(opencodePortText, 10)
+  if (
+    opencodePortText.length > 0 &&
+    (!Number.isFinite(parsedOpencodePort) || parsedOpencodePort < 1 || parsedOpencodePort > 65535)
+  ) {
+    toasts.push('error', String(t('settings.desktopRuntime.toasts.invalidOpencodePort')))
+    return
+  }
+  const opencodePort = opencodePortText.length > 0 ? parsedOpencodePort : null
+
+  const uiPassword = String(desktopUiPassword.value || '')
+  const normalizedUiPassword = uiPassword.trim().length > 0 ? uiPassword : null
+
   desktopRuntimeSaving.value = true
   try {
-    const current = await desktopConfigGet()
     const next: DesktopConfig = {
       autostart_on_boot: desktopAutostartOnBoot.value === true,
       backend: {
@@ -132,11 +171,12 @@ async function saveDesktopRuntimeConfig() {
         port: parsedPort,
         cors_origins: parseCorsOriginsText(desktopCorsOriginsText.value),
         cors_allow_all: desktopCorsAllowAll.value === true,
-        ui_password: current?.backend.ui_password ?? null,
-        opencode_host: current?.backend.opencode_host || '127.0.0.1',
-        opencode_port: current?.backend.opencode_port ?? null,
-        skip_opencode_start: current?.backend.skip_opencode_start === true,
-        opencode_log_level: current?.backend.opencode_log_level ?? null,
+        backend_log_level: normalizeLogLevelInput(desktopBackendLogLevel.value),
+        ui_password: normalizedUiPassword,
+        opencode_host: opencodeHost,
+        opencode_port: opencodePort,
+        skip_opencode_start: desktopSkipOpencodeStart.value === true,
+        opencode_log_level: normalizeLogLevelInput(desktopOpencodeLogLevel.value),
       },
     }
 
@@ -723,6 +763,87 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
                   />
                   {{ t('settings.desktopRuntime.fields.corsAllowAll') }}
                 </label>
+
+                <div class="grid gap-1">
+                  <label class="text-xs text-muted-foreground">{{
+                    t('settings.desktopRuntime.fields.backendLogLevel')
+                  }}</label>
+                  <div class="w-56 max-w-full">
+                    <OptionPicker
+                      v-model="desktopBackendLogLevel"
+                      :options="desktopRuntimeLogLevelOptions"
+                      :title="String(t('settings.desktopRuntime.fields.backendLogLevel'))"
+                      :search-placeholder="String(t('settings.desktopRuntime.search.searchLogLevels'))"
+                      :include-empty="false"
+                      :disabled="desktopRuntimeLoading || desktopRuntimeSaving"
+                    />
+                  </div>
+                </div>
+
+                <div class="grid gap-1">
+                  <label class="text-xs text-muted-foreground">{{ t('settings.desktopRuntime.fields.uiPassword') }}</label>
+                  <Input
+                    v-model="desktopUiPassword"
+                    type="password"
+                    :placeholder="String(t('settings.desktopRuntime.placeholders.uiPassword'))"
+                    :disabled="desktopRuntimeLoading || desktopRuntimeSaving"
+                    class="h-10"
+                    autocomplete="new-password"
+                  />
+                </div>
+
+                <div class="grid gap-1">
+                  <label class="text-xs text-muted-foreground">{{ t('settings.desktopRuntime.fields.opencodeHost') }}</label>
+                  <Input
+                    v-model="desktopOpencodeHost"
+                    :placeholder="String(t('settings.desktopRuntime.placeholders.opencodeHost'))"
+                    :disabled="desktopRuntimeLoading || desktopRuntimeSaving"
+                    class="h-10"
+                    autocomplete="off"
+                  />
+                </div>
+
+                <div class="grid gap-1">
+                  <label class="text-xs text-muted-foreground">{{ t('settings.desktopRuntime.fields.opencodePort') }}</label>
+                  <Input
+                    v-model="desktopOpencodePortInput"
+                    type="number"
+                    min="1"
+                    max="65535"
+                    :placeholder="String(t('settings.desktopRuntime.placeholders.opencodePort'))"
+                    :disabled="desktopRuntimeLoading || desktopRuntimeSaving"
+                    class="h-10"
+                    inputmode="numeric"
+                  />
+                  <div class="text-[11px] text-muted-foreground">
+                    {{ t('settings.desktopRuntime.opencodePortHint') }}
+                  </div>
+                </div>
+
+                <label class="inline-flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    v-model="desktopSkipOpencodeStart"
+                    :disabled="desktopRuntimeLoading || desktopRuntimeSaving"
+                  />
+                  {{ t('settings.desktopRuntime.fields.skipOpencodeStart') }}
+                </label>
+
+                <div class="grid gap-1">
+                  <label class="text-xs text-muted-foreground">{{
+                    t('settings.desktopRuntime.fields.opencodeLogLevel')
+                  }}</label>
+                  <div class="w-56 max-w-full">
+                    <OptionPicker
+                      v-model="desktopOpencodeLogLevel"
+                      :options="desktopRuntimeLogLevelOptions"
+                      :title="String(t('settings.desktopRuntime.fields.opencodeLogLevel'))"
+                      :search-placeholder="String(t('settings.desktopRuntime.search.searchLogLevels'))"
+                      :include-empty="false"
+                      :disabled="desktopRuntimeLoading || desktopRuntimeSaving"
+                    />
+                  </div>
+                </div>
 
                 <label class="inline-flex items-center gap-2 text-sm">
                   <input
