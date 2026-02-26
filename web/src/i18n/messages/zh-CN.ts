@@ -1712,6 +1712,7 @@ export default {
       panelTitle: 'LSP 运行时状态',
       close: '关闭',
       listTitle: '运行时会话',
+      noRootGroup: '无工作区根目录',
       loading: '正在加载 LSP 运行时状态...',
       empty: '当前没有活跃的 LSP 运行时会话。',
     },

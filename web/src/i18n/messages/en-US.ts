@@ -1712,6 +1712,7 @@ export default {
       panelTitle: 'LSP Runtime Status',
       close: 'Close',
       listTitle: 'Runtime sessions',
+      noRootGroup: 'No workspace root',
       loading: 'Loading LSP runtime status...',
       empty: 'No active LSP runtime sessions.',
     },
