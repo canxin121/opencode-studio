@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import { RiArrowLeftRightLine } from '@remixicon/vue'
 import { useI18n } from 'vue-i18n'
 
@@ -8,6 +9,7 @@ import Input from '@/components/ui/Input.vue'
 import DiffViewer from '@/components/DiffViewer.vue'
 
 const { t } = useI18n()
+const wrapLines = ref(true)
 
 const props = defineProps<{
   open: boolean
@@ -84,11 +86,16 @@ function onUpdateText(key: 'base' | 'head' | 'path', v: string | number) {
       />
 
       <div class="rounded-md border border-border/50 bg-background/40 p-3 min-h-[20rem]">
+        <div class="mb-2 flex justify-end">
+          <Button variant="secondary" size="sm" class="h-7" @click="wrapLines = !wrapLines">{{
+            wrapLines ? t('git.ui.dialogs.compare.wrap.disable') : t('git.ui.dialogs.compare.wrap.enable')
+          }}</Button>
+        </div>
         <div v-if="error" class="text-xs text-red-500">{{ error }}</div>
         <div v-else-if="loading" class="text-xs text-muted-foreground">{{ t('git.ui.diffViewer.loading') }}</div>
         <div v-else-if="!diff" class="text-xs text-muted-foreground">{{ t('git.ui.dialogs.compare.empty') }}</div>
         <div v-else class="h-[420px] min-h-0">
-          <DiffViewer :diff="diff" :output-format="'side-by-side'" :draw-file-list="false" />
+          <DiffViewer :diff="diff" :output-format="'side-by-side'" :draw-file-list="false" :wrap="wrapLines" />
         </div>
       </div>
     </div>

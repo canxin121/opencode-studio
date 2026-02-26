@@ -61,6 +61,7 @@ const menuQuery = ref('')
 const diffPanelOpen = ref(false)
 const lspPanelOpen = ref(false)
 const selectedDiffFile = ref('')
+const sessionDiffWrap = ref(true)
 const mobileDiffView = ref<SessionDiffMobileView>('list')
 const diffListEl = ref<HTMLElement | null>(null)
 const lspRuntimeLoading = ref(false)
@@ -617,6 +618,14 @@ onBeforeUnmount(() => {
               <div class="min-w-0 text-[11px] font-medium text-foreground truncate" :title="selectedDiffPath">
                 {{ selectedDiffPath }}
               </div>
+              <button
+                type="button"
+                class="ml-auto inline-flex h-6 items-center rounded-md border border-border/60 px-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground transition-colors hover:bg-secondary/40 hover:text-foreground"
+                :aria-pressed="sessionDiffWrap"
+                @click.stop="sessionDiffWrap = !sessionDiffWrap"
+              >
+                {{ sessionDiffWrap ? t('chat.sessionDiff.wrap.disable') : t('chat.sessionDiff.wrap.enable') }}
+              </button>
             </div>
             <div class="min-w-0 flex-1 min-h-[200px]">
               <MonacoDiffEditor
@@ -629,11 +638,27 @@ onBeforeUnmount(() => {
                 :modified-value="selectedDiffPreview?.modified || ''"
                 :use-files-theme="true"
                 :read-only="true"
-                :wrap="true"
+                :wrap="sessionDiffWrap"
               />
             </div>
           </div>
-          <div v-else-if="sessionDiffNavigationView === 'split'" class="min-w-0 flex-1 min-h-[200px] sm:min-h-0">
+          <div
+            v-else-if="sessionDiffNavigationView === 'split'"
+            class="min-w-0 flex flex-1 min-h-[200px] flex-col sm:min-h-0"
+          >
+            <div class="flex items-center gap-2 border-b border-border/50 px-2 py-1">
+              <div class="min-w-0 flex-1 text-[11px] font-medium text-foreground truncate" :title="selectedDiffPath">
+                {{ selectedDiffPath }}
+              </div>
+              <button
+                type="button"
+                class="inline-flex h-6 items-center rounded-md border border-border/60 px-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground transition-colors hover:bg-secondary/40 hover:text-foreground"
+                :aria-pressed="sessionDiffWrap"
+                @click.stop="sessionDiffWrap = !sessionDiffWrap"
+              >
+                {{ sessionDiffWrap ? t('chat.sessionDiff.wrap.disable') : t('chat.sessionDiff.wrap.enable') }}
+              </button>
+            </div>
             <MonacoDiffEditor
               class="h-full"
               :path="selectedDiffPreview?.path || selectedDiffPath"
@@ -644,7 +669,7 @@ onBeforeUnmount(() => {
               :modified-value="selectedDiffPreview?.modified || ''"
               :use-files-theme="true"
               :read-only="true"
-              :wrap="true"
+              :wrap="sessionDiffWrap"
             />
           </div>
         </div>

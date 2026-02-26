@@ -1701,6 +1701,10 @@ export default {
       listTitle: '变更文件列表',
       loading: '正在加载文件变更...',
       empty: '当前会话暂无文件变更。',
+      wrap: {
+        enable: '自动换行：关',
+        disable: '自动换行：开',
+      },
     },
 
     lspStatus: {
@@ -2232,6 +2236,10 @@ export default {
           diffTitleAllFiles: 'Diff - 所有文件',
           loadingDiff: 'Diff 加载中...',
           emptyDiff: '无 diff 内容。',
+          wrap: {
+            enable: '启用自动换行',
+            disable: '关闭自动换行',
+          },
           confirmHardReset: {
             title: '确认硬重置',
             description: '这将重写工作区并丢弃本地更改。',
@@ -2385,6 +2393,10 @@ export default {
             compare: '对比',
           },
           empty: '没有可展示的 diff。',
+          wrap: {
+            enable: '启用自动换行',
+            disable: '关闭自动换行',
+          },
         },
 
         renameFile: {
@@ -2420,6 +2432,10 @@ export default {
         actions: {
           openFile: '打开文件',
           revealInFiles: '在文件中定位',
+        },
+        wrap: {
+          enable: '启用自动换行',
+          disable: '关闭自动换行',
         },
       },
 
