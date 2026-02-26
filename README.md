@@ -51,6 +51,49 @@ OpenCode Studio is a local-first web UI for OpenCode. It runs a Rust (Axum) serv
   - Either `opencode` is available on `PATH` (Studio can spawn `opencode serve`), or
   - You already have an OpenCode server running and can provide its host/port
 
+## One-line install (service + autostart bootstrap)
+
+The installer supports two modes:
+
+- `desktop`: installs backend + bundled web UI, then configures autostart service (default).
+- `headless`: installs backend only (API/service only), then configures autostart service.
+
+Unix (Linux/macOS):
+
+```bash
+# desktop mode (default)
+curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install.sh | bash -s -- --desktop
+
+# headless mode (API only)
+curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install.sh | bash -s -- --headless
+```
+
+Windows PowerShell (run as Administrator):
+
+```powershell
+# desktop mode (default)
+iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install.ps1) } -Variant desktop"
+
+# headless mode (API only)
+iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install.ps1) } -Variant headless"
+```
+
+Installer behavior by platform:
+
+- Linux: creates/enables `opencode-studio.service` via systemd (`--mode user|system`, default `user`).
+- macOS: writes and loads `~/Library/LaunchAgents/cn.cxits.opencode-studio.plist`.
+- Windows: creates/starts auto-start service `OpenCodeStudio` via `sc.exe`.
+
+Generated config/state files:
+
+- Unix: `~/.local/share/opencode-studio/service.env`.
+- Windows: `%LOCALAPPDATA%\\OpenCodeStudio\\service.env.ps1`.
+
+Common installer parameters:
+
+- Unix: `--desktop` / `--headless`, `--version`, `--repo`, `--install-dir`, `--host`, `--port`, `--mode`.
+- Windows: `-Variant desktop|headless`, `-Version`, `-Repo`, `-InstallDir`, `-Host`, `-Port`, `-ServiceName`.
+
 ## Quickstart (local)
 
 1) Install web dependencies
@@ -77,7 +120,7 @@ Open `http://127.0.0.1:3000`.
 Notes:
 
 - CI uses a frozen install (`bun install --cwd web --frozen-lockfile`). If Bun reports the lockfile would change, re-run without `--frozen-lockfile` to refresh `web/bun.lock`.
-- `--ui-dir` (or `OPENCODE_STUDIO_UI_DIR`) is required and must point at a Vite `dist/` folder that contains `index.html`.
+- `--ui-dir` (or `OPENCODE_STUDIO_UI_DIR`) is optional. Set it to serve the bundled web UI; leave it unset for API-only/headless mode.
 - On startup, Studio will try to ensure OpenCode is reachable. If you did not set `--opencode-port` / `OPENCODE_PORT`, it will try to spawn `opencode serve`.
 
 ## Connect to an existing OpenCode server
@@ -106,7 +149,7 @@ Core server settings:
 | --- | --- | --- |
 | `OPENCODE_STUDIO_HOST` / `--host` | `127.0.0.1` | Bind address |
 | `OPENCODE_STUDIO_PORT` / `--port` | `3000` | HTTP port |
-| `OPENCODE_STUDIO_UI_DIR` / `--ui-dir` | (required) | Built UI directory (Vite `dist/`) |
+| `OPENCODE_STUDIO_UI_DIR` / `--ui-dir` | (unset) | Built UI directory (Vite `dist/`); unset means API-only/headless |
 
 OpenCode connection:
 

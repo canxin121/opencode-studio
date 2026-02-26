@@ -51,6 +51,49 @@ OpenCode Studio 是一个面向 OpenCode 的本地优先 Web UI。它运行一�
   - `opencode` 可在 `PATH` 中找到（Studio 可自动拉起 `opencode serve`），或
   - 你已经单独运行了 OpenCode 服务，并能提供 host/port
 
+## 一行安装（含服务与自启动初始化）
+
+安装脚本支持两种模式：
+
+- `desktop`：安装后端 + 内置 Web UI，并配置自启动服务（默认）。
+- `headless`：仅安装后端（仅 API/服务），并配置自启动服务。
+
+Unix（Linux/macOS）：
+
+```bash
+# desktop 模式（默认）
+curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install.sh | bash -s -- --desktop
+
+# headless 模式（仅 API）
+curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install.sh | bash -s -- --headless
+```
+
+Windows PowerShell（请用管理员权限运行）：
+
+```powershell
+# desktop 模式（默认）
+iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install.ps1) } -Variant desktop"
+
+# headless 模式（仅 API）
+iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install.ps1) } -Variant headless"
+```
+
+各平台初始化行为：
+
+- Linux：通过 systemd 创建并启用 `opencode-studio.service`（`--mode user|system`，默认 `user`）。
+- macOS：写入并加载 `~/Library/LaunchAgents/cn.cxits.opencode-studio.plist`。
+- Windows：通过 `sc.exe` 创建并启动自动启动服务 `OpenCodeStudio`。
+
+生成的配置/状态文件：
+
+- Unix：`~/.local/share/opencode-studio/service.env`。
+- Windows：`%LOCALAPPDATA%\\OpenCodeStudio\\service.env.ps1`。
+
+常用安装参数：
+
+- Unix：`--desktop` / `--headless`、`--version`、`--repo`、`--install-dir`、`--host`、`--port`、`--mode`。
+- Windows：`-Variant desktop|headless`、`-Version`、`-Repo`、`-InstallDir`、`-Host`、`-Port`、`-ServiceName`。
+
 ## 快速开始（本地运行）
 
 1) 安装 Web 依赖
@@ -77,7 +120,7 @@ cargo run -p opencode-studio -- \
 说明：
 
 - CI 使用冻结安装（`bun install --cwd web --frozen-lockfile`）。如果 Bun 提示 lockfile 会发生变化，请先不带 `--frozen-lockfile` 重新安装以更新 `web/bun.lock`。
-- `--ui-dir`（或 `OPENCODE_STUDIO_UI_DIR`）是必填项，需要指向包含 `index.html` 的 Vite `dist/` 目录。
+- `--ui-dir`（或 `OPENCODE_STUDIO_UI_DIR`）为可选项。设置后可托管内置 Web UI；不设置时为仅 API/headless 模式。
 - 启动时 Studio 会确保 OpenCode 可用；若未提供 `--opencode-port` / `OPENCODE_PORT`，会尝试自动拉起 `opencode serve`。
 
 ## 连接到已运行的 OpenCode 服务
@@ -106,7 +149,7 @@ cargo run -p opencode-studio -- \
 | --- | --- | --- |
 | `OPENCODE_STUDIO_HOST` / `--host` | `127.0.0.1` | 监听地址 |
 | `OPENCODE_STUDIO_PORT` / `--port` | `3000` | 监听端口 |
-| `OPENCODE_STUDIO_UI_DIR` / `--ui-dir` |（必填）| 前端构建目录（Vite `dist/`）|
+| `OPENCODE_STUDIO_UI_DIR` / `--ui-dir` |（未设置）| 前端构建目录（Vite `dist/`）；不设置时仅提供 API/headless |
 
 OpenCode 连接配置：
 

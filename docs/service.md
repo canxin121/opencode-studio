@@ -2,32 +2,32 @@
 
 This document describes installing the Rust server (`opencode-studio`) as a background service.
 
-The service can run in two modes:
+The service installer supports two modes:
 
-- Backend-only: only provides `/api/*` and other endpoints; UI can be hosted elsewhere.
-- Backend + static UI: serve `web/dist` via `--ui-dir`.
+- Headless: backend-only (`/api/*` etc.); UI can be hosted elsewhere.
+- Desktop: backend + static UI (`--ui-dir`).
 
 The server also manages an OpenCode connection. If `opencode` is in `PATH`, Studio can spawn
 `opencode serve` automatically. Otherwise, configure it to connect to an existing OpenCode.
 
 ## Linux / macOS (curl | bash)
 
-Install backend-only:
+Install desktop mode (default):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install-service.sh | bash
+curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install.sh | bash -s -- --desktop
 ```
 
-Install backend + UI:
+Install headless mode:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install-service.sh | bash -s -- --with-frontend
+curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install.sh | bash -s -- --headless
 ```
 
 Pin a release version (recommended for production-like installs):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install-service.sh | bash -s -- --version v0.1.0 --with-frontend
+curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install.sh | bash -s -- --version v0.1.0 --desktop
 ```
 
 After installation:
@@ -48,16 +48,16 @@ The Windows installer script installs a Windows service via `sc.exe`.
 
 Run in an elevated PowerShell:
 
-Backend-only:
+Desktop mode:
 
 ```powershell
-iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install-service.ps1) }"
+iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install.ps1) } -Variant desktop"
 ```
 
-Backend + UI:
+Headless mode:
 
 ```powershell
-iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install-service.ps1) } -WithFrontend"
+iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install.ps1) } -Variant headless"
 ```
 
 Uninstall:
