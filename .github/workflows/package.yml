@@ -271,9 +271,9 @@ jobs:
             ~/.cargo/bin/cargo-tauri*
             ~/.cargo/.crates2.json
             ~/.cargo/.crates.toml
-          key: ${{ runner.os }}-tauri-cli-main-${{ env.CACHE_VERSION }}-${{ env.TAURI_CLI_VERSION }}
+          key: ${{ runner.os }}-${{ runner.arch }}-tauri-cli-main-${{ env.CACHE_VERSION }}-${{ env.TAURI_CLI_VERSION }}
           restore-keys: |
-            ${{ runner.os }}-tauri-cli-main-${{ env.CACHE_VERSION }}-
+            ${{ runner.os }}-${{ runner.arch }}-tauri-cli-main-${{ env.CACHE_VERSION }}-
 
       - name: Install Tauri CLI
         if: matrix.tauri == 'main' && steps.cache-tauri-cli-main.outputs.cache-hit != 'true'
@@ -543,9 +543,9 @@ jobs:
             ~/.cargo/bin/cargo-tauri*
             ~/.cargo/.crates2.json
             ~/.cargo/.crates.toml
-          key: ${{ runner.os }}-tauri-cli-cef-${{ env.CACHE_VERSION }}-feat-cef
+          key: ${{ runner.os }}-${{ runner.arch }}-tauri-cli-cef-${{ env.CACHE_VERSION }}-feat-cef
           restore-keys: |
-            ${{ runner.os }}-tauri-cli-cef-${{ env.CACHE_VERSION }}-
+            ${{ runner.os }}-${{ runner.arch }}-tauri-cli-cef-${{ env.CACHE_VERSION }}-
 
       - name: Install Tauri CLI
         if: matrix.tauri == 'cef' && steps.cache-tauri-cli-cef.outputs.cache-hit != 'true'

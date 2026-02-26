@@ -967,19 +967,13 @@ export const useChatStore = defineStore('chat', () => {
     return Array.from(merged.values()).sort((a, b) => a.file.localeCompare(b.file))
   }
 
-  function applySessionDiffPage(
-    sessionId: string,
-    page: chatApi.SessionDiffPageResponse,
-    opts?: { append?: boolean },
-  ) {
+  function applySessionDiffPage(sessionId: string, page: chatApi.SessionDiffPageResponse, opts?: { append?: boolean }) {
     const sid = (sessionId || '').trim()
     if (!sid) return
     const append = Boolean(opts?.append)
     const existing = Array.isArray(sessionDiffBySession.value[sid]) ? sessionDiffBySession.value[sid] : []
     const incoming = Array.isArray(page.items) ? page.items : []
-    const nextList = append
-      ? mergeSessionDiffEntries(existing, incoming)
-      : resolveSessionDiffSources(incoming)
+    const nextList = append ? mergeSessionDiffEntries(existing, incoming) : resolveSessionDiffSources(incoming)
 
     sessionDiffBySession.value = {
       ...sessionDiffBySession.value,

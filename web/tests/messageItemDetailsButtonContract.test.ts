@@ -22,6 +22,6 @@ test('session error copy-details action uses shared toolbar chip button', () => 
 
   assert.ok(source.includes("import ToolbarChipButton from '@/components/ui/ToolbarChipButton.vue'"))
   assert.ok(source.includes("import Tooltip from '@/components/ui/Tooltip.vue'"))
-  assert.ok(source.includes("chat.sessionError.actions.copyDetails"))
+  assert.ok(source.includes('chat.sessionError.actions.copyDetails'))
   assert.ok(source.includes('<ToolbarChipButton'))
 })

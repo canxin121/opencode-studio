@@ -353,7 +353,9 @@ function extractHeaderPath(fileHeader: string[]): string {
 }
 
 export function buildUnifiedMonacoDiffModel(diff: string, meta?: GitDiffMeta | null): UnifiedMonacoDiffModel {
-  const source = String(diff || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+  const source = String(diff || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
   const parsed = buildUnifiedDiffModel(source, meta)
   const path = extractHeaderPath(parsed.fileHeader) || 'activity.patch'
 
