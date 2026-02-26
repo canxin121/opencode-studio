@@ -40,7 +40,7 @@ type ToolPartLike = {
 }
 
 function isRecord(value: ToolValue): value is UnknownRecord {
-  return typeof value === 'object' && value !== null
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function asRecord(value: ToolValue): UnknownRecord {
@@ -68,16 +68,54 @@ function firstTrimmedString(record: UnknownRecord, keys: string[]): string {
 }
 
 function firstRawString(record: UnknownRecord, keys: string[]): string {
-  for (const key of keys) {
-    const value = record[key]
+  const parseTextLike = (value: ToolValue, depth = 0): string | null => {
+    if (depth > 4 || value == null) return null
     if (typeof value === 'string') return value
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+    if (Array.isArray(value)) {
+      const lines: string[] = []
+      for (const entry of value) {
+        const text = parseTextLike(entry, depth + 1)
+        if (text == null || !text.length) continue
+        lines.push(text)
+      }
+      return lines.length ? lines.join('\n') : ''
+    }
+    if (!isRecord(value)) return null
+
+    for (const key of ['text', 'content', 'value', 'line', 'raw']) {
+      const text = parseTextLike(value[key], depth + 1)
+      if (text != null) return text
+    }
+    if (Object.prototype.hasOwnProperty.call(value, 'lines')) {
+      const text = parseTextLike(value.lines, depth + 1)
+      if (text != null) return text
+    }
+    return null
+  }
+
+  for (const key of keys) {
+    const text = parseTextLike(record[key])
+    if (text != null) return text
   }
   return ''
 }
 
 function readDiffMeta(record: UnknownRecord): GitDiffMeta | null {
   const candidate = record.meta ?? record.diffMeta ?? record.diff_meta
-  return candidate && typeof candidate === 'object' ? (candidate as GitDiffMeta) : null
+  if (isRecord(candidate)) return candidate as unknown as GitDiffMeta
+  if (Array.isArray(record.fileHeader) || Array.isArray(record.hunks)) return record as unknown as GitDiffMeta
+  return null
+}
+
+function nonEmptyRecord(record: UnknownRecord): UnknownRecord | null {
+  return Object.keys(record).length ? record : null
+}
+
+function readMetadataFiles(value: ToolValue): ToolValue[] {
+  if (Array.isArray(value)) return value
+  if (isRecord(value)) return Object.values(value)
+  return []
 }
 
 const props = defineProps<{
@@ -139,12 +177,13 @@ const input = computed(() => asRecord(state.value.input))
 const output = computed(() => state.value.output)
 const error = computed(() => state.value.error)
 const metadata = computed(() => {
-  const stateMeta = isRecord(state.value.metadata) ? state.value.metadata : null
+  const stateMeta = nonEmptyRecord(asRecord(state.value.metadata))
   if (stateMeta) return stateMeta
-  const partMeta = isRecord(partRecord.value.metadata) ? partRecord.value.metadata : null
+  const partMeta = nonEmptyRecord(asRecord(partRecord.value.metadata))
   if (partMeta) return partMeta
-  const resultMeta = asRecord(asRecord(state.value.result).metadata)
-  return resultMeta
+  const resultMeta = nonEmptyRecord(asRecord(asRecord(state.value.result).metadata))
+  if (resultMeta) return resultMeta
+  return {}
 })
 
 const displayName = computed(() => {
@@ -362,17 +401,22 @@ const activityDiffPreview = computed(() => {
   if (!['edit', 'multiedit', 'apply_patch', 'str_replace', 'str_replace_based_edit_tool'].includes(t)) return null
 
   const meta = metadata.value
-  const files = Array.isArray(meta.files) ? meta.files : []
+  const files = readMetadataFiles(meta.files)
+  let fallbackCandidate: ReturnType<typeof buildVirtualMonacoDiffModel> | null = null
 
   const directDiff = firstRawString(meta, ['diff', 'patch'])
   const directMeta = readDiffMeta(meta)
   if (directDiff || directMeta) {
     const partId = String(partRecord.value.id || partRecord.value.partID || '').trim() || 'activity'
-    return buildVirtualMonacoDiffModel({
+    const candidate = buildVirtualMonacoDiffModel({
       modelId: `activity:${partId}`,
       diff: directDiff,
       meta: directMeta,
+      preferPatch: true,
+      compactSnapshots: true,
     })
+    if (candidate.hasChanges) return candidate
+    fallbackCandidate = candidate
   }
 
   for (const row of files) {
@@ -391,6 +435,8 @@ const activityDiffPreview = computed(() => {
       'before',
       'old',
       'oldText',
+      'beforeLines',
+      'oldLines',
       'original',
       'previous',
       'prev',
@@ -398,22 +444,38 @@ const activityDiffPreview = computed(() => {
       'left',
       'a',
     ])
-    const after = firstRawString(rec, ['after', 'new', 'newText', 'modified', 'current', 'next', 'to', 'right', 'b'])
+    const after = firstRawString(rec, [
+      'after',
+      'new',
+      'newText',
+      'afterLines',
+      'newLines',
+      'modified',
+      'current',
+      'next',
+      'to',
+      'right',
+      'b',
+    ])
     const rowDiff = firstRawString(rec, ['diff', 'patch'])
     const rowMeta = readDiffMeta(rec)
     if (!before && !after && !rowDiff && !rowMeta) continue
     const normalizedPath = filePath || 'activity.patch'
-    return buildVirtualMonacoDiffModel({
+    const candidate = buildVirtualMonacoDiffModel({
       modelId: `activity-file:${normalizedPath}`,
       path: normalizedPath,
       original: before,
       modified: after,
       diff: rowDiff,
       meta: rowMeta,
+      preferPatch: true,
+      compactSnapshots: true,
     })
+    if (candidate.hasChanges) return candidate
+    if (!fallbackCandidate) fallbackCandidate = candidate
   }
 
-  return null
+  return fallbackCandidate
 })
 
 const displayOutput = computed(() => {
@@ -482,15 +544,16 @@ const shouldShowInput = computed(() => {
               <span>Diff</span>
               <span class="text-[10px] uppercase tracking-wider opacity-70">diff</span>
             </div>
-            <div class="oc-activity-detail overflow-hidden">
+            <div class="oc-activity-detail h-96 overflow-hidden">
               <MonacoDiffEditor
-                class="h-96"
+                class="h-full"
                 :path="activityDiffPreview.path"
                 :language-path="activityDiffPreview.path"
                 :model-id="activityDiffPreview.modelId"
                 :original-model-id="`${activityDiffPreview.modelId}:base`"
                 :original-value="activityDiffPreview.original"
                 :modified-value="activityDiffPreview.modified"
+                :use-files-theme="true"
                 :read-only="true"
                 :wrap="true"
               />

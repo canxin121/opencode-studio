@@ -120,6 +120,46 @@ test('normalizeSessionDiffPayload: keeps optional diff metadata for virtual rend
   ])
 })
 
+test('normalizeSessionDiffPayload: accepts partial line arrays for before/after/diff', () => {
+  const payload = [
+    {
+      file: 'src/partial.ts',
+      beforeLines: ['const value = 1', 'const keep = true'],
+      afterLines: ['const value = 2', 'const keep = true'],
+      diff: [
+        'diff --git a/src/partial.ts b/src/partial.ts',
+        '--- a/src/partial.ts',
+        '+++ b/src/partial.ts',
+        '@@ -1,2 +1,2 @@',
+        '-const value = 1',
+        '+const value = 2',
+        ' const keep = true',
+      ],
+      additions: 1,
+      deletions: 1,
+    },
+  ]
+
+  assert.deepEqual(normalizeSessionDiffPayload(payload), [
+    {
+      file: 'src/partial.ts',
+      before: ['const value = 1', 'const keep = true'].join('\n'),
+      after: ['const value = 2', 'const keep = true'].join('\n'),
+      additions: 1,
+      deletions: 1,
+      diff: [
+        'diff --git a/src/partial.ts b/src/partial.ts',
+        '--- a/src/partial.ts',
+        '+++ b/src/partial.ts',
+        '@@ -1,2 +1,2 @@',
+        '-const value = 1',
+        '+const value = 2',
+        ' const keep = true',
+      ].join('\n'),
+    },
+  ])
+})
+
 test('extractSessionId: accepts camelCase and snake_case session keys', () => {
   assert.equal(
     extractSessionId({

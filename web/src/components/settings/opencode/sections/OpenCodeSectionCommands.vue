@@ -251,6 +251,7 @@ export default defineComponent({
                 :model-value="command.template || ''"
                 @update:model-value="(v) => setEntryField('command', commandId, 'template', v)"
                 :path="`command/${commandId}.md`"
+                :use-files-theme="true"
                 :wrap="true"
               />
             </div>

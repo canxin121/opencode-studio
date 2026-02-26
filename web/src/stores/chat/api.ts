@@ -64,9 +64,36 @@ function firstText(record: JsonObject, keys: string[]): string {
 }
 
 function firstString(record: JsonObject, keys: string[]): string {
-  for (const key of keys) {
-    const value = record[key]
+  const parseTextLike = (value: JsonValue, depth = 0): string | null => {
+    if (depth > 4 || value == null) return null
     if (typeof value === 'string') return value
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+    if (Array.isArray(value)) {
+      const lines: string[] = []
+      for (const entry of value) {
+        const text = parseTextLike(entry, depth + 1)
+        if (text == null || !text.length) continue
+        lines.push(text)
+      }
+      return lines.length ? lines.join('\n') : ''
+    }
+    const nested = asRecord(value)
+    if (!Object.keys(nested).length) return null
+
+    for (const key of ['text', 'content', 'value', 'line', 'raw']) {
+      const text = parseTextLike(nested[key], depth + 1)
+      if (text != null) return text
+    }
+    if (Object.prototype.hasOwnProperty.call(nested, 'lines')) {
+      const text = parseTextLike(nested.lines, depth + 1)
+      if (text != null) return text
+    }
+    return null
+  }
+
+  for (const key of keys) {
+    const text = parseTextLike(record[key])
+    if (text != null) return text
   }
   return ''
 }
@@ -83,17 +110,32 @@ function firstCount(record: JsonObject, keys: string[]): number {
 
 function readDiffMeta(record: JsonObject): GitDiffMeta | null {
   const candidate = record.meta ?? record.diffMeta ?? record.diff_meta
-  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return null
-  return candidate as unknown as GitDiffMeta
+  if (candidate && typeof candidate === 'object' && !Array.isArray(candidate)) {
+    return candidate as unknown as GitDiffMeta
+  }
+  if (Array.isArray(record.fileHeader) || Array.isArray(record.hunks)) {
+    return record as unknown as GitDiffMeta
+  }
+  return null
 }
 
 function looksLikeSessionFileDiffRecord(record: JsonObject): boolean {
-  return Boolean(
-    firstText(record, ['file', 'path', 'filename', 'name', 'target', 'filePath', 'filepath', 'relativePath']) ||
+  const hasBeforeAfter =
     typeof record.before === 'string' ||
     typeof record.after === 'string' ||
+    Array.isArray(record.before) ||
+    Array.isArray(record.after) ||
+    Array.isArray(record.old) ||
+    Array.isArray(record.new) ||
+    Array.isArray(record.beforeLines) ||
+    Array.isArray(record.afterLines)
+  return Boolean(
+    firstText(record, ['file', 'path', 'filename', 'name', 'target', 'filePath', 'filepath', 'relativePath']) ||
+    hasBeforeAfter ||
     typeof record.patch === 'string' ||
     typeof record.diff === 'string' ||
+    Array.isArray(record.patch) ||
+    Array.isArray(record.diff) ||
     typeof record.additions === 'number' ||
     typeof record.deletions === 'number',
   )
@@ -149,8 +191,32 @@ function parseSessionFileDiff(value: JsonValue): SessionFileDiff | null {
   const meta = readDiffMeta(record)
   return {
     file,
-    before: firstString(record, ['before', 'old', 'oldText', 'original', 'previous', 'prev', 'from', 'left', 'a']),
-    after: firstString(record, ['after', 'new', 'newText', 'modified', 'current', 'next', 'to', 'right', 'b']),
+    before: firstString(record, [
+      'before',
+      'old',
+      'oldText',
+      'beforeLines',
+      'oldLines',
+      'original',
+      'previous',
+      'prev',
+      'from',
+      'left',
+      'a',
+    ]),
+    after: firstString(record, [
+      'after',
+      'new',
+      'newText',
+      'afterLines',
+      'newLines',
+      'modified',
+      'current',
+      'next',
+      'to',
+      'right',
+      'b',
+    ]),
     additions: firstCount(record, ['additions', 'added', 'insertions', 'linesAdded', 'add']),
     deletions: firstCount(record, ['deletions', 'removed', 'linesDeleted', 'del']),
     ...(diff ? { diff } : {}),
@@ -230,7 +296,7 @@ type AttentionListOptions = {
 }
 
 function isRecord(value: JsonValue): value is JsonObject {
-  return typeof value === 'object' && value !== null
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function asRecord(value: JsonValue): JsonObject {

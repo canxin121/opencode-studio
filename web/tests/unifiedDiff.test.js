@@ -106,3 +106,54 @@ test('buildVirtualMonacoDiffModel falls back to diff/meta when snapshots missing
   assert.match(model.original, /old/)
   assert.match(model.modified, /new/)
 })
+
+test('buildVirtualMonacoDiffModel can prefer patch rendering over full snapshots', () => {
+  const model = buildVirtualMonacoDiffModel({
+    path: 'src/a.ts',
+    original: 'keep\nold\nkeep\n',
+    modified: 'keep\nnew\nkeep\n',
+    diff: SAMPLE_DIFF,
+    preferPatch: true,
+  })
+  assert.equal(model.path, 'src/a.ts')
+  assert.equal(model.hasChanges, true)
+  assert.match(model.original, /@@ -1,3 \+1,3 @@\nkeep\nold\nkeep/)
+  assert.match(model.modified, /@@ -1,3 \+1,3 @@\nkeep\nnew\nkeep/)
+})
+
+test('buildVirtualMonacoDiffModel can compact large snapshots into diff-focused windows', () => {
+  const original = ['line 1', 'line 2', 'line 3', 'old', 'line 5', 'line 6', 'line 7'].join('\n')
+  const modified = ['line 1', 'line 2', 'line 3', 'new', 'line 5', 'line 6', 'line 7'].join('\n')
+  const model = buildVirtualMonacoDiffModel({
+    original,
+    modified,
+    compactSnapshots: true,
+    contextLines: 1,
+  })
+  assert.equal(model.hasChanges, true)
+  assert.match(model.original, /\.\.\. \(omitted\)/)
+  assert.match(model.modified, /\.\.\. \(omitted\)/)
+  assert.match(model.original, /old/)
+  assert.match(model.modified, /new/)
+})
+
+test('buildVirtualMonacoDiffModel falls back to snapshots when preferred patch has no change lines', () => {
+  const patchWithoutChangedLines =
+    'diff --git a/a.txt b/a.txt\n' +
+    '--- a/a.txt\n' +
+    '+++ b/a.txt\n' +
+    '@@ -1,1 +1,1 @@\n'
+
+  const model = buildVirtualMonacoDiffModel({
+    path: 'a.txt',
+    original: 'old\n',
+    modified: 'new\n',
+    diff: patchWithoutChangedLines,
+    preferPatch: true,
+  })
+
+  assert.equal(model.path, 'a.txt')
+  assert.equal(model.hasChanges, true)
+  assert.equal(model.original, 'old\n')
+  assert.equal(model.modified, 'new\n')
+})

@@ -38,6 +38,9 @@ export type VirtualDiffInput = {
   modified?: string | null
   diff?: string | null
   meta?: GitDiffMeta | null
+  preferPatch?: boolean
+  compactSnapshots?: boolean
+  contextLines?: number
 }
 
 type ParsedHunkHeader = {
@@ -58,6 +61,66 @@ function asSafeInt(value: unknown, fallback: number): number {
 
 function normalizeLine(line: unknown): string {
   return String(line || '').replace(/\r$/, '')
+}
+
+function normalizeTextBlock(text: string): string {
+  return String(text || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+}
+
+function compactSnapshotPair(
+  originalText: string,
+  modifiedText: string,
+  contextLines: number,
+): { original: string; modified: string } {
+  const originalLines = normalizeTextBlock(originalText).split('\n')
+  const modifiedLines = normalizeTextBlock(modifiedText).split('\n')
+
+  const maxHead = Math.min(originalLines.length, modifiedLines.length)
+  let sharedPrefix = 0
+  while (sharedPrefix < maxHead && originalLines[sharedPrefix] === modifiedLines[sharedPrefix]) {
+    sharedPrefix += 1
+  }
+
+  const maxTail = Math.min(originalLines.length - sharedPrefix, modifiedLines.length - sharedPrefix)
+  let sharedSuffix = 0
+  while (
+    sharedSuffix < maxTail &&
+    originalLines[originalLines.length - 1 - sharedSuffix] === modifiedLines[modifiedLines.length - 1 - sharedSuffix]
+  ) {
+    sharedSuffix += 1
+  }
+
+  if (sharedPrefix === originalLines.length && sharedPrefix === modifiedLines.length) {
+    return {
+      original: normalizeTextBlock(originalText),
+      modified: normalizeTextBlock(modifiedText),
+    }
+  }
+
+  const context = Math.max(0, Math.floor(contextLines))
+  const start = Math.max(0, sharedPrefix - context)
+  const originalEnd = Math.min(originalLines.length, originalLines.length - sharedSuffix + context)
+  const modifiedEnd = Math.min(modifiedLines.length, modifiedLines.length - sharedSuffix + context)
+
+  const originalSlice = originalLines.slice(start, originalEnd)
+  const modifiedSlice = modifiedLines.slice(start, modifiedEnd)
+
+  if (start > 0) {
+    originalSlice.unshift('... (omitted)')
+    modifiedSlice.unshift('... (omitted)')
+  }
+
+  if (originalEnd < originalLines.length || modifiedEnd < modifiedLines.length) {
+    originalSlice.push('... (omitted)')
+    modifiedSlice.push('... (omitted)')
+  }
+
+  return {
+    original: originalSlice.join('\n'),
+    modified: modifiedSlice.join('\n'),
+  }
 }
 
 function parseHunkHeader(header: string): ParsedHunkHeader {
@@ -440,24 +503,39 @@ export function buildUnifiedMonacoDiffModel(diff: string, meta?: GitDiffMeta | n
 }
 
 export function buildVirtualMonacoDiffModel(input: VirtualDiffInput): UnifiedMonacoDiffModel {
-  const explicitOriginal = typeof input.original === 'string' ? input.original : ''
-  const explicitModified = typeof input.modified === 'string' ? input.modified : ''
+  const explicitOriginal = typeof input.original === 'string' ? normalizeTextBlock(input.original) : ''
+  const explicitModified = typeof input.modified === 'string' ? normalizeTextBlock(input.modified) : ''
   const hasExplicitContent = typeof input.original === 'string' || typeof input.modified === 'string'
+  const preferPatch = input.preferPatch === true
+  const compactSnapshots = input.compactSnapshots === true
+  const contextLines = Math.max(0, Math.floor(input.contextLines || 3))
 
   let path = String(input.path || '').trim()
   let original = explicitOriginal
   let modified = explicitModified
   let hasChanges = original !== modified
+  let usedPatchFallback = false
 
   const diffText = typeof input.diff === 'string' ? input.diff : ''
   const hasPatchFallback = diffText.trim().length > 0 || Boolean(input.meta)
 
-  if ((!hasExplicitContent || (!original && !modified)) && hasPatchFallback) {
+  if (hasPatchFallback && (preferPatch || !hasExplicitContent || (!original && !modified))) {
     const fallback = buildUnifiedMonacoDiffModel(diffText, input.meta)
     if (!path) path = fallback.path
-    original = fallback.original
-    modified = fallback.modified
-    hasChanges = fallback.hasChanges
+    const hasSnapshotFallback = hasExplicitContent && (explicitOriginal.length > 0 || explicitModified.length > 0)
+    if (!preferPatch || fallback.hasChanges || !hasSnapshotFallback) {
+      original = fallback.original
+      modified = fallback.modified
+      hasChanges = fallback.hasChanges
+      usedPatchFallback = true
+    }
+  }
+
+  if (!usedPatchFallback && compactSnapshots && (original || modified)) {
+    const compacted = compactSnapshotPair(original, modified, contextLines)
+    original = compacted.original
+    modified = compacted.modified
+    hasChanges = original !== modified
   }
 
   if (!path) path = 'virtual.diff'

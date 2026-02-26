@@ -422,6 +422,7 @@ export default defineComponent({
             :model-value="agent.prompt || ''"
             @update:model-value="(v) => setEntryField('agent', agentId, 'prompt', v)"
             :path="`agent/${agentId}.md`"
+            :use-files-theme="true"
             :wrap="true"
           />
         </div>

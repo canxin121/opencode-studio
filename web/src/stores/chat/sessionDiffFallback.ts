@@ -26,9 +26,36 @@ function firstTrimmed(record: UnknownRecord, keys: string[]): string {
 }
 
 function firstString(record: UnknownRecord, keys: string[]): string {
-  for (const key of keys) {
-    const value = record[key]
+  const parseTextLike = (value: unknown, depth = 0): string | null => {
+    if (depth > 4 || value == null) return null
     if (typeof value === 'string') return value
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+    if (Array.isArray(value)) {
+      const lines: string[] = []
+      for (const entry of value) {
+        const text = parseTextLike(entry, depth + 1)
+        if (text == null || !text.length) continue
+        lines.push(text)
+      }
+      return lines.length ? lines.join('\n') : ''
+    }
+    const nested = asRecord(value)
+    if (!Object.keys(nested).length) return null
+
+    for (const key of ['text', 'content', 'value', 'line', 'raw']) {
+      const text = parseTextLike(nested[key], depth + 1)
+      if (text != null) return text
+    }
+    if (Object.prototype.hasOwnProperty.call(nested, 'lines')) {
+      const text = parseTextLike(nested.lines, depth + 1)
+      if (text != null) return text
+    }
+    return null
+  }
+
+  for (const key of keys) {
+    const text = parseTextLike(record[key])
+    if (text != null) return text
   }
   return ''
 }
@@ -45,7 +72,9 @@ function firstCount(record: UnknownRecord, keys: string[]): number {
 
 function readDiffMeta(record: UnknownRecord): GitDiffMeta | null {
   const candidate = record.meta ?? record.diffMeta ?? record.diff_meta
-  return candidate && typeof candidate === 'object' && !Array.isArray(candidate) ? (candidate as GitDiffMeta) : null
+  if (candidate && typeof candidate === 'object' && !Array.isArray(candidate)) return candidate as GitDiffMeta
+  if (Array.isArray(record.fileHeader) || Array.isArray(record.hunks)) return record as unknown as GitDiffMeta
+  return null
 }
 
 function normalizeDiffPath(rawPath: string, directory?: string | null): string {
@@ -146,8 +175,32 @@ function parseMetadataFileEntry(row: unknown, directory?: string | null): Sessio
   const meta = readDiffMeta(record)
   return {
     file,
-    before: firstString(record, ['before', 'old', 'oldText', 'original', 'previous', 'prev', 'from', 'left', 'a']),
-    after: firstString(record, ['after', 'new', 'newText', 'modified', 'current', 'next', 'to', 'right', 'b']),
+    before: firstString(record, [
+      'before',
+      'old',
+      'oldText',
+      'beforeLines',
+      'oldLines',
+      'original',
+      'previous',
+      'prev',
+      'from',
+      'left',
+      'a',
+    ]),
+    after: firstString(record, [
+      'after',
+      'new',
+      'newText',
+      'afterLines',
+      'newLines',
+      'modified',
+      'current',
+      'next',
+      'to',
+      'right',
+      'b',
+    ]),
     additions: firstCount(record, ['additions', 'added', 'insertions', 'linesAdded', 'add']),
     deletions: firstCount(record, ['deletions', 'removed', 'linesDeleted', 'del']),
     ...(diff ? { diff } : {}),
@@ -169,7 +222,11 @@ function parsePartFallbackDiff(part: unknown, directory?: string | null): Sessio
 
   const byFile = new Map<string, SessionFileDiff>()
 
-  const rawFiles = Array.isArray(metadata.files) ? metadata.files : []
+  const rawFiles = Array.isArray(metadata.files)
+    ? metadata.files
+    : metadata.files && typeof metadata.files === 'object'
+      ? Object.values(asRecord(metadata.files))
+      : []
   for (const row of rawFiles) {
     const parsed = parseMetadataFileEntry(row, directory)
     if (!parsed) continue

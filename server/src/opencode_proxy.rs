@@ -685,16 +685,40 @@ fn normalize_session_diff_payload(
 }
 
 fn merge_session_diff_items(
-    primary: Vec<SessionDiffItem>,
-    secondary: Vec<SessionDiffItem>,
+    upstream: Vec<SessionDiffItem>,
+    computed: Vec<SessionDiffItem>,
 ) -> Vec<SessionDiffItem> {
+    if computed.is_empty() {
+        return upstream;
+    }
+
+    let mut upstream_by_file = BTreeMap::<String, SessionDiffItem>::new();
+    for item in upstream {
+        upstream_by_file.insert(item.file.clone(), item);
+    }
+
     let mut merged = BTreeMap::<String, SessionDiffItem>::new();
-    for item in secondary {
+    for mut item in computed {
+        if let Some(upstream_item) = upstream_by_file.get(&item.file) {
+            if item.before.is_empty() {
+                item.before = upstream_item.before.clone();
+            }
+            if item.after.is_empty() {
+                item.after = upstream_item.after.clone();
+            }
+            if item.additions == 0 && upstream_item.additions > 0 {
+                item.additions = upstream_item.additions;
+            }
+            if item.deletions == 0 && upstream_item.deletions > 0 {
+                item.deletions = upstream_item.deletions;
+            }
+            if item.diff.trim().is_empty() && !upstream_item.diff.trim().is_empty() {
+                item.diff = upstream_item.diff.clone();
+            }
+        }
         merged.insert(item.file.clone(), item);
     }
-    for item in primary {
-        merged.insert(item.file.clone(), item);
-    }
+
     merged.into_values().collect()
 }
 
@@ -3536,6 +3560,39 @@ fn prune_tool_metadata(part: &mut serde_json::Value) {
         prune_tool_input(state, &tool_id);
     }
 
+    if is_diff_tool(&tool_id) {
+        let has_metadata = state
+            .get("metadata")
+            .and_then(|v| v.as_object())
+            .is_some_and(|meta| !meta.is_empty());
+        if !has_metadata {
+            let promoted = state
+                .get("result")
+                .and_then(|v| v.as_object())
+                .and_then(|result| {
+                    if let Some(meta) = result.get("metadata") {
+                        return Some(meta.clone());
+                    }
+
+                    let mut map = serde_json::Map::new();
+                    for key in ["diff", "patch", "files", "meta", "diffMeta", "diff_meta"] {
+                        if let Some(value) = result.get(key) {
+                            map.insert(key.to_string(), value.clone());
+                        }
+                    }
+                    if map.is_empty() {
+                        None
+                    } else {
+                        Some(serde_json::Value::Object(map))
+                    }
+                });
+
+            if let Some(meta) = promoted {
+                state.insert("metadata".to_string(), meta);
+            }
+        }
+    }
+
     // Web UI reads explicit `output`; avoid carrying duplicate `result` payloads.
     state.remove("result");
 
@@ -5655,5 +5712,101 @@ mod tests {
                 .diff
                 .contains("diff --git a/src/old.ts b/src/old.ts")
         );
+    }
+
+    #[test]
+    fn merge_session_diff_items_prefers_computed_file_scope() {
+        let upstream = vec![
+            SessionDiffItem {
+                file: "src/a.ts".to_string(),
+                before: "upstream-before".to_string(),
+                after: "upstream-after".to_string(),
+                additions: 8,
+                deletions: 5,
+                diff: "".to_string(),
+            },
+            SessionDiffItem {
+                file: "src/unrelated.ts".to_string(),
+                before: "x".to_string(),
+                after: "y".to_string(),
+                additions: 1,
+                deletions: 1,
+                diff: "diff --git a/src/unrelated.ts b/src/unrelated.ts".to_string(),
+            },
+        ];
+        let computed = vec![SessionDiffItem {
+            file: "src/a.ts".to_string(),
+            before: "".to_string(),
+            after: "".to_string(),
+            additions: 2,
+            deletions: 1,
+            diff: "diff --git a/src/a.ts b/src/a.ts".to_string(),
+        }];
+
+        let merged = merge_session_diff_items(upstream, computed);
+        assert_eq!(merged.len(), 1);
+        assert_eq!(merged[0].file, "src/a.ts");
+        assert_eq!(merged[0].before, "upstream-before");
+        assert_eq!(merged[0].after, "upstream-after");
+        assert_eq!(merged[0].additions, 2);
+        assert_eq!(merged[0].deletions, 1);
+        assert!(merged[0].diff.contains("diff --git a/src/a.ts b/src/a.ts"));
+    }
+
+    #[test]
+    fn filter_message_payload_promotes_diff_metadata_from_result() {
+        let mut payload = json!([
+            {
+                "info": {"id": "msg_patch", "role": "assistant"},
+                "parts": [
+                    {
+                        "id": "p_patch",
+                        "type": "tool",
+                        "tool": "apply_patch",
+                        "state": {
+                            "status": "completed",
+                            "result": {
+                                "metadata": {
+                                    "diff": "diff --git a/src/main.ts b/src/main.ts\n--- a/src/main.ts\n+++ b/src/main.ts\n@@ -1 +1 @@\n-old\n+new\n",
+                                    "files": [
+                                        {
+                                            "path": "src/main.ts",
+                                            "before": "old\n",
+                                            "after": "new\n",
+                                            "additions": 1,
+                                            "deletions": 1
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                ]
+            }
+        ]);
+
+        let filter = ActivityFilter {
+            allowed: ["tool"].into_iter().map(String::from).collect(),
+            tool_allowed: ["apply_patch"].into_iter().map(String::from).collect(),
+            tool_explicit: true,
+            show_reasoning: false,
+            show_justification: false,
+        };
+        let detail = ActivityDetailPolicy {
+            enabled: false,
+            expanded: HashSet::new(),
+            expanded_tools: HashSet::new(),
+        };
+
+        filter_message_payload(&mut payload, &filter, &detail);
+
+        let part = payload[0]["parts"]
+            .as_array()
+            .and_then(|parts| parts.first())
+            .expect("part");
+        let metadata = part["state"]["metadata"].as_object().expect("metadata");
+        assert!(metadata.contains_key("diff"));
+        assert!(metadata.contains_key("files"));
+        assert!(part["state"].get("result").is_none());
     }
 }

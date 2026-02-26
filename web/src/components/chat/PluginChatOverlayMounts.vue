@@ -130,6 +130,8 @@ const selectedDiffPreview = computed(() => {
     modified: entry.after,
     diff: entry.diff,
     meta: entry.meta,
+    preferPatch: true,
+    compactSnapshots: true,
   })
 })
 const isNarrowViewport = computed(() => viewportWidth.value < 640)
@@ -551,6 +553,7 @@ onBeforeUnmount(() => {
                 :original-model-id="selectedDiffPreview ? `${selectedDiffPreview.modelId}:base` : ''"
                 :original-value="selectedDiffPreview?.original || ''"
                 :modified-value="selectedDiffPreview?.modified || ''"
+                :use-files-theme="true"
                 :read-only="true"
                 :wrap="true"
               />
@@ -565,6 +568,7 @@ onBeforeUnmount(() => {
               :original-model-id="selectedDiffPreview ? `${selectedDiffPreview.modelId}:base` : ''"
               :original-value="selectedDiffPreview?.original || ''"
               :modified-value="selectedDiffPreview?.modified || ''"
+              :use-files-theme="true"
               :read-only="true"
               :wrap="true"
             />
