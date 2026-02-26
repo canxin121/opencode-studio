@@ -461,9 +461,22 @@ function onFilterRefTypeChange(value: string | number) {
                       : t('git.ui.dialogs.history.diffTitleAllFiles')
                   }}
                 </div>
-                <Button variant="secondary" size="sm" class="h-7" @click="wrapLines = !wrapLines">{{
-                  wrapLines ? t('git.ui.dialogs.history.wrap.disable') : t('git.ui.dialogs.history.wrap.enable')
-                }}</Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  class="h-7 transition-colors"
+                  :class="wrapLines ? 'bg-secondary/70 text-foreground shadow-inner' : 'text-muted-foreground'"
+                  :title="
+                    wrapLines ? t('git.ui.dialogs.history.wrap.disable') : t('git.ui.dialogs.history.wrap.enable')
+                  "
+                  :aria-label="
+                    wrapLines ? t('git.ui.dialogs.history.wrap.disable') : t('git.ui.dialogs.history.wrap.enable')
+                  "
+                  :aria-pressed="wrapLines"
+                  @click="wrapLines = !wrapLines"
+                >
+                  {{ t('git.ui.dialogs.history.wrap.label') }}
+                </Button>
               </div>
               <div v-if="selectedFileLabel">
                 <div v-if="fileDiffError" class="text-xs text-red-500">{{ fileDiffError }}</div>

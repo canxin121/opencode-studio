@@ -635,11 +635,18 @@ onBeforeUnmount(() => {
               </div>
               <button
                 type="button"
-                class="ml-auto inline-flex h-6 items-center rounded-md border border-border/60 px-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground transition-colors hover:bg-secondary/40 hover:text-foreground"
+                class="ml-auto inline-flex h-6 items-center rounded-md border border-border/60 px-2 text-[10px] font-medium uppercase tracking-wide transition-colors"
+                :class="
+                  sessionDiffWrap
+                    ? 'bg-secondary/70 text-foreground shadow-inner'
+                    : 'text-muted-foreground hover:bg-secondary/40 hover:text-foreground'
+                "
                 :aria-pressed="sessionDiffWrap"
+                :title="sessionDiffWrap ? t('chat.sessionDiff.wrap.disable') : t('chat.sessionDiff.wrap.enable')"
+                :aria-label="sessionDiffWrap ? t('chat.sessionDiff.wrap.disable') : t('chat.sessionDiff.wrap.enable')"
                 @click.stop="sessionDiffWrap = !sessionDiffWrap"
               >
-                {{ sessionDiffWrap ? t('chat.sessionDiff.wrap.disable') : t('chat.sessionDiff.wrap.enable') }}
+                {{ t('chat.sessionDiff.wrap.label') }}
               </button>
             </div>
             <div class="min-w-0 flex-1 min-h-[200px]">
@@ -667,11 +674,18 @@ onBeforeUnmount(() => {
               </div>
               <button
                 type="button"
-                class="inline-flex h-6 items-center rounded-md border border-border/60 px-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground transition-colors hover:bg-secondary/40 hover:text-foreground"
+                class="inline-flex h-6 items-center rounded-md border border-border/60 px-2 text-[10px] font-medium uppercase tracking-wide transition-colors"
+                :class="
+                  sessionDiffWrap
+                    ? 'bg-secondary/70 text-foreground shadow-inner'
+                    : 'text-muted-foreground hover:bg-secondary/40 hover:text-foreground'
+                "
                 :aria-pressed="sessionDiffWrap"
+                :title="sessionDiffWrap ? t('chat.sessionDiff.wrap.disable') : t('chat.sessionDiff.wrap.enable')"
+                :aria-label="sessionDiffWrap ? t('chat.sessionDiff.wrap.disable') : t('chat.sessionDiff.wrap.enable')"
                 @click.stop="sessionDiffWrap = !sessionDiffWrap"
               >
-                {{ sessionDiffWrap ? t('chat.sessionDiff.wrap.disable') : t('chat.sessionDiff.wrap.enable') }}
+                {{ t('chat.sessionDiff.wrap.label') }}
               </button>
             </div>
             <MonacoDiffEditor

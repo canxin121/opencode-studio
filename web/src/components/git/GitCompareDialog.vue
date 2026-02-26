@@ -87,9 +87,18 @@ function onUpdateText(key: 'base' | 'head' | 'path', v: string | number) {
 
       <div class="rounded-md border border-border/50 bg-background/40 p-3 min-h-[20rem]">
         <div class="mb-2 flex justify-end">
-          <Button variant="secondary" size="sm" class="h-7" @click="wrapLines = !wrapLines">{{
-            wrapLines ? t('git.ui.dialogs.compare.wrap.disable') : t('git.ui.dialogs.compare.wrap.enable')
-          }}</Button>
+          <Button
+            variant="outline"
+            size="sm"
+            class="h-7 transition-colors"
+            :class="wrapLines ? 'bg-secondary/70 text-foreground shadow-inner' : 'text-muted-foreground'"
+            :title="wrapLines ? t('git.ui.dialogs.compare.wrap.disable') : t('git.ui.dialogs.compare.wrap.enable')"
+            :aria-label="wrapLines ? t('git.ui.dialogs.compare.wrap.disable') : t('git.ui.dialogs.compare.wrap.enable')"
+            :aria-pressed="wrapLines"
+            @click="wrapLines = !wrapLines"
+          >
+            {{ t('git.ui.dialogs.compare.wrap.label') }}
+          </Button>
         </div>
         <div v-if="error" class="text-xs text-red-500">{{ error }}</div>
         <div v-else-if="loading" class="text-xs text-muted-foreground">{{ t('git.ui.diffViewer.loading') }}</div>

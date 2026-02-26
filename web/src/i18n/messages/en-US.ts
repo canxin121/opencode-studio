@@ -1702,6 +1702,7 @@ export default {
       loading: 'Loading file changes...',
       empty: 'No file changes in this session yet.',
       wrap: {
+        label: 'Wrap',
         enable: 'Wrap off',
         disable: 'Wrap on',
       },
@@ -2239,6 +2240,7 @@ export default {
           loadingDiff: 'Loading diff...',
           emptyDiff: 'No diff content.',
           wrap: {
+            label: 'Wrap',
             enable: 'Enable wrap lines',
             disable: 'Disable wrap lines',
           },
@@ -2396,6 +2398,7 @@ export default {
           },
           empty: 'No diff to show.',
           wrap: {
+            label: 'Wrap',
             enable: 'Enable wrap lines',
             disable: 'Disable wrap lines',
           },
@@ -2436,6 +2439,7 @@ export default {
           revealInFiles: 'Reveal in Files',
         },
         wrap: {
+          label: 'Wrap',
           enable: 'Enable wrap lines',
           disable: 'Disable wrap lines',
         },

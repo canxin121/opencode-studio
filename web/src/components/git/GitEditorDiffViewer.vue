@@ -330,9 +330,18 @@ watch(
       <div class="toolbar">
         <div v-if="path" class="path">{{ path }}</div>
         <div class="toolbar-actions">
-          <Button variant="secondary" size="sm" class="h-7" @click="wrapLines = !wrapLines">{{
-            wrapLines ? t('git.ui.diffViewer.wrap.disable') : t('git.ui.diffViewer.wrap.enable')
-          }}</Button>
+          <Button
+            variant="outline"
+            size="sm"
+            class="h-7 transition-colors"
+            :class="wrapLines ? 'bg-secondary/70 text-foreground shadow-inner' : 'text-muted-foreground'"
+            :title="wrapLines ? t('git.ui.diffViewer.wrap.disable') : t('git.ui.diffViewer.wrap.enable')"
+            :aria-label="wrapLines ? t('git.ui.diffViewer.wrap.disable') : t('git.ui.diffViewer.wrap.enable')"
+            :aria-pressed="wrapLines"
+            @click="wrapLines = !wrapLines"
+          >
+            {{ t('git.ui.diffViewer.wrap.label') }}
+          </Button>
           <Button v-if="canOpenFile" variant="secondary" size="sm" class="h-7" @click="openFile">{{
             t('git.ui.diffViewer.actions.openFile')
           }}</Button>
