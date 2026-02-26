@@ -141,6 +141,7 @@ impl OpenCodeStorageCache {
         self.touch_file(key);
     }
 
+    #[cfg(test)]
     fn clear(&self) {
         self.dir_cache.clear();
         self.file_cache.clear();
@@ -177,11 +178,6 @@ impl OpenCodeStorageCache {
 }
 
 static STORAGE_CACHE: LazyLock<OpenCodeStorageCache> = LazyLock::new(OpenCodeStorageCache::new);
-
-pub async fn opencode_storage_cache_clear() -> ApiResult<Response> {
-    STORAGE_CACHE.clear();
-    Ok(Json(serde_json::json!({"ok": true})).into_response())
-}
 
 fn opencode_data_dir() -> PathBuf {
     crate::path_utils::opencode_data_dir()

@@ -287,7 +287,6 @@ export default {
       opencode: 'OpenCode',
       plugins: '插件',
       backends: '后端',
-      troubleshooting: '排障',
       appearance: '外观',
     },
     backendsPanel: {
@@ -1359,14 +1358,6 @@ export default {
           },
         },
       },
-    },
-    troubleshooting: {
-      title: '故障排查',
-      description: '清除 OpenCode Studio 的内存缓存（用于读取 OpenCode 会话存储）。当会话列表看起来过旧时使用。',
-      clearSessionCache: '清除会话缓存',
-      clearing: '清除中...',
-      cacheCleared: '后端缓存已清除',
-      cacheClearFailed: '清除缓存失败',
     },
     desktopRuntime: {
       title: '桌面后端运行配置',

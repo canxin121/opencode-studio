@@ -565,10 +565,6 @@ pub(crate) async fn run(args: crate::Args) {
             "/opencode-studio/session-locate",
             get(crate::opencode_proxy::opencode_studio_session_locate),
         )
-        .route(
-            "/opencode-studio/cache/clear",
-            post(crate::opencode_session::opencode_storage_cache_clear),
-        )
         // Filesystem
         .route("/fs/home", get(crate::fs::fs_home))
         .route("/fs/mkdir", post(crate::fs::fs_mkdir))
