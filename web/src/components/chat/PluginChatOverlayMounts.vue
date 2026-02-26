@@ -2,7 +2,14 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type CSSProperties } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useWindowSize } from '@vueuse/core'
-import { RiArrowLeftSLine, RiCloseLine, RiFileList2Line, RiPlugLine } from '@remixicon/vue'
+import {
+  RiArrowLeftSLine,
+  RiCloseLine,
+  RiFileList2Line,
+  RiLoader4Line,
+  RiPlugLine,
+  RiRefreshLine,
+} from '@remixicon/vue'
 
 import MonacoDiffEditor from '@/components/MonacoDiffEditor.vue'
 import PluginMountHost from '@/components/plugins/PluginMountHost.vue'
@@ -10,6 +17,13 @@ import IconButton from '@/components/ui/IconButton.vue'
 import OptionMenu from '@/components/ui/OptionMenu.vue'
 import type { OptionMenuGroup, OptionMenuItem } from '@/components/ui/optionMenu.types'
 import { buildVirtualMonacoDiffModel } from '@/features/git/diff/unifiedDiff'
+import { apiJson } from '@/lib/api'
+import {
+  normalizeLspRuntimeList,
+  runtimeStatusTone,
+  type LspRuntimeItem,
+  type LspRuntimeListResponse,
+} from '@/lib/lspRuntime'
 import type { ChatMount } from '@/plugins/host/mounts'
 import { useChatStore } from '@/stores/chat'
 import type { SessionFileDiff } from '@/types/chat'
@@ -45,9 +59,13 @@ const menuOpen = ref(false)
 const activeMountKey = ref('')
 const menuQuery = ref('')
 const diffPanelOpen = ref(false)
+const lspPanelOpen = ref(false)
 const selectedDiffFile = ref('')
 const mobileDiffView = ref<SessionDiffMobileView>('list')
 const diffListEl = ref<HTMLElement | null>(null)
+const lspRuntimeLoading = ref(false)
+const lspRuntimeError = ref('')
+const lspRuntimeItems = ref<LspRuntimeItem[]>([])
 const { width: viewportWidth } = useWindowSize()
 
 let reserveObserver: ResizeObserver | null = null
@@ -110,6 +128,12 @@ const sessionDiffPanelView = computed(() =>
 )
 const sessionDiffBadge = computed(() => {
   const count = sessionDiffCount.value
+  if (count <= 0) return ''
+  if (count > 99) return '99+'
+  return String(count)
+})
+const lspRuntimeBadge = computed(() => {
+  const count = lspRuntimeItems.value.length
   if (count <= 0) return ''
   if (count > 99) return '99+'
   return String(count)
@@ -177,7 +201,11 @@ const launcherAria = computed(() =>
 )
 
 const launcherHidden = computed(
-  () => menuOpen.value || Boolean(activeMountWithHostMode.value) || Boolean(diffPanelOpen.value),
+  () =>
+    menuOpen.value ||
+    Boolean(activeMountWithHostMode.value) ||
+    Boolean(diffPanelOpen.value) ||
+    Boolean(lspPanelOpen.value),
 )
 const optionMenuAnchorEl = computed(() => launcherBtnEl.value || launcherAnchorEl.value)
 
@@ -217,7 +245,7 @@ function recomputeReserve() {
     emit('reserve-change', 0)
     return
   }
-  if (!hasMounts.value && !diffPanelOpen.value) {
+  if (!hasMounts.value && !diffPanelOpen.value && !lspPanelOpen.value) {
     emit('reserve-change', 0)
     return
   }
@@ -256,9 +284,16 @@ function closeDiffPanel() {
   scheduleReserveUpdate()
 }
 
+function closeLspPanel() {
+  if (!lspPanelOpen.value) return
+  lspPanelOpen.value = false
+  scheduleReserveUpdate()
+}
+
 function toggleMenu() {
   if (!hasMounts.value) return
   closeDiffPanel()
+  closeLspPanel()
   menuOpen.value = !menuOpen.value
   if (!menuOpen.value) menuQuery.value = ''
   scheduleReserveUpdate()
@@ -269,11 +304,39 @@ function toggleDiffPanel() {
   if (!sid) return
   if (!diffPanelOpen.value) {
     closeMenu()
+    closeLspPanel()
     activeMountKey.value = ''
     mobileDiffView.value = 'list'
     void chat.refreshSessionDiff(sid, { silent: true })
   }
   diffPanelOpen.value = !diffPanelOpen.value
+  scheduleReserveUpdate()
+}
+
+async function refreshLspRuntimeStatus() {
+  lspRuntimeLoading.value = true
+  lspRuntimeError.value = ''
+  try {
+    const payload = await apiJson<LspRuntimeListResponse>('/api/lsp')
+    lspRuntimeItems.value = normalizeLspRuntimeList(payload)
+  } catch (err) {
+    lspRuntimeError.value = err instanceof Error ? err.message : String(err)
+    lspRuntimeItems.value = []
+  } finally {
+    lspRuntimeLoading.value = false
+  }
+}
+
+function toggleLspPanel() {
+  const sid = String(chat.selectedSessionId || '').trim()
+  if (!sid) return
+  if (!lspPanelOpen.value) {
+    closeMenu()
+    closeDiffPanel()
+    activeMountKey.value = ''
+    void refreshLspRuntimeStatus()
+  }
+  lspPanelOpen.value = !lspPanelOpen.value
   scheduleReserveUpdate()
 }
 
@@ -306,6 +369,7 @@ function backToDiffList() {
 
 function selectMount(key: string) {
   closeDiffPanel()
+  closeLspPanel()
   activeMountKey.value = activeMountKey.value === key ? '' : key
   closeMenu()
   scheduleReserveUpdate()
@@ -315,11 +379,13 @@ function clearActiveMount() {
   activeMountKey.value = ''
   closeMenu()
   closeDiffPanel()
+  closeLspPanel()
   scheduleReserveUpdate()
 }
 
 function handleMenuOpenChange(open: boolean) {
   if (open) closeDiffPanel()
+  if (open) closeLspPanel()
   menuOpen.value = Boolean(open)
   if (!open) menuQuery.value = ''
   scheduleReserveUpdate()
@@ -376,13 +442,21 @@ watch(
   () => chat.selectedSessionId,
   () => {
     diffPanelOpen.value = false
+    lspPanelOpen.value = false
     selectedDiffFile.value = ''
     mobileDiffView.value = 'list'
   },
 )
 
 watch(
-  () => [menuOpen.value, activeMountKey.value, hasMounts.value, isComposerPlacement.value, diffPanelOpen.value],
+  () => [
+    menuOpen.value,
+    activeMountKey.value,
+    hasMounts.value,
+    isComposerPlacement.value,
+    diffPanelOpen.value,
+    lspPanelOpen.value,
+  ],
   () => {
     scheduleReserveUpdate()
     if (diffPanelOpen.value) {
@@ -577,6 +651,87 @@ onBeforeUnmount(() => {
       </div>
 
       <div
+        v-if="lspPanelOpen"
+        class="pointer-events-auto w-full rounded-lg border border-border/70 bg-background/95 shadow-lg backdrop-blur overflow-hidden flex flex-col min-h-0"
+        :style="sessionDiffPanelStyle"
+      >
+        <div class="flex items-center justify-between gap-2 px-3 py-0.5 border-b border-border/60">
+          <div class="text-xs font-medium leading-4 text-foreground">{{ t('chat.lspStatus.panelTitle') }}</div>
+          <div class="flex items-center gap-1">
+            <button
+              type="button"
+              class="inline-flex h-7 items-center gap-1 rounded-md border border-border/60 px-2 text-[11px] text-muted-foreground transition-colors hover:bg-secondary/40 hover:text-foreground"
+              :disabled="lspRuntimeLoading"
+              :title="t('common.refresh')"
+              :aria-label="t('common.refresh')"
+              @click.stop="refreshLspRuntimeStatus"
+            >
+              <RiLoader4Line v-if="lspRuntimeLoading" class="h-3 w-3 animate-spin" />
+              <RiRefreshLine v-else class="h-3 w-3" />
+              <span>{{ t('common.refresh') }}</span>
+            </button>
+            <IconButton
+              size="sm"
+              class="text-muted-foreground hover:text-foreground"
+              :title="t('chat.lspStatus.close')"
+              :aria-label="t('chat.lspStatus.close')"
+              @click.stop="closeLspPanel"
+            >
+              <RiCloseLine class="h-4 w-4" />
+            </IconButton>
+          </div>
+        </div>
+
+        <div v-if="lspRuntimeLoading" class="px-3 py-6 text-xs text-muted-foreground">
+          {{ t('chat.lspStatus.loading') }}
+        </div>
+        <div v-else-if="lspRuntimeError" class="px-3 py-6 text-xs text-destructive">
+          {{ lspRuntimeError }}
+        </div>
+        <div v-else-if="lspRuntimeItems.length === 0" class="px-3 py-6 text-xs text-muted-foreground">
+          {{ t('chat.lspStatus.empty') }}
+        </div>
+        <div
+          v-else
+          class="flex min-h-0 flex-col h-[min(56dvh,calc(100dvh-var(--oc-safe-area-top,0px)-var(--oc-safe-area-bottom,0px)-9rem))] max-h-[520px] min-h-[240px]"
+        >
+          <div class="px-3 py-2 text-[11px] font-medium text-muted-foreground">
+            {{ t('chat.lspStatus.listTitle') }}
+          </div>
+          <div class="flex-1 min-h-0 overflow-auto">
+            <div
+              v-for="runtime in lspRuntimeItems"
+              :key="runtime.id"
+              class="w-full px-3 py-2 border-b border-border/50 hover:bg-secondary/30 transition-colors"
+            >
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="min-w-0 truncate text-xs" :title="runtime.name">{{ runtime.name }}</span>
+                <span
+                  class="inline-flex rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide"
+                  :class="
+                    runtimeStatusTone(runtime.status) === 'ok'
+                      ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                      : runtimeStatusTone(runtime.status) === 'warn'
+                        ? 'bg-red-500/15 text-red-700 dark:text-red-300'
+                        : 'bg-muted text-muted-foreground'
+                  "
+                >
+                  {{ runtime.status || t('common.unknown') }}
+                </span>
+              </div>
+              <div class="mt-1 space-y-0.5 text-[11px] text-muted-foreground">
+                <div v-if="runtime.rootDir" class="truncate" :title="runtime.rootDir">{{ runtime.rootDir }}</div>
+                <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-[10px]">
+                  <span>{{ runtime.id }}</span>
+                  <span v-if="runtime.transport">{{ runtime.transport }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div
         v-if="!launcherHidden"
         :class="
           isComposerPlacement
@@ -603,6 +758,27 @@ onBeforeUnmount(() => {
               aria-hidden="true"
             >
               {{ sessionDiffBadge }}
+            </span>
+          </button>
+
+          <button
+            v-if="chat.selectedSessionId"
+            type="button"
+            class="pointer-events-auto relative h-7 sm:h-8 min-w-7 sm:min-w-8 px-1 sm:px-1.5 inline-flex items-center justify-center rounded-md border border-border/60 bg-background/80 shadow-sm backdrop-blur transition-colors text-muted-foreground hover:text-foreground hover:bg-background"
+            :title="t('chat.lspStatus.toggleAria')"
+            :aria-label="t('chat.lspStatus.toggleAria')"
+            :aria-expanded="lspPanelOpen"
+            data-oc-keyboard-tap="keep"
+            @pointerdown.prevent.stop
+            @click.stop="toggleLspPanel"
+          >
+            <span class="text-[9px] font-semibold leading-none">LSP</span>
+            <span
+              v-if="lspRuntimeBadge"
+              class="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] leading-4 font-mono text-center"
+              aria-hidden="true"
+            >
+              {{ lspRuntimeBadge }}
             </span>
           </button>
 

@@ -1703,6 +1703,15 @@ export default {
       empty: 'No file changes in this session yet.',
     },
 
+    lspStatus: {
+      toggleAria: 'Toggle LSP runtime status',
+      panelTitle: 'LSP Runtime Status',
+      close: 'Close',
+      listTitle: 'Runtime sessions',
+      loading: 'Loading LSP runtime status...',
+      empty: 'No active LSP runtime sessions.',
+    },
+
     attachments: {
       title: 'Attachments',
       attaching: 'Attaching…',
