@@ -10,7 +10,7 @@ import {
   RiLoader4Line,
 } from '@remixicon/vue'
 
-import Markdown from '@/components/Markdown.vue'
+import MarkdownRenderer from '@/components/markdown/MarkdownRenderer.vue'
 import Button from '@/components/ui/Button.vue'
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import ToolbarChipButton from '@/components/ui/ToolbarChipButton.vue'
@@ -240,12 +240,12 @@ const assistantHasError = () => role() === 'assistant' && Boolean(assistantError
           />
           <div v-for="p in textParts" :key="p.id" class="space-y-2">
             <div class="break-words">
-              <Markdown :content="p.text || ''" mode="markdown" :stream="isStreaming" />
+              <MarkdownRenderer :content="p.text || ''" mode="markdown" :stream="isStreaming" />
             </div>
           </div>
 
           <div v-if="assistantErrorMessage()" class="mt-2 break-words">
-            <Markdown :content="assistantErrorMessage()" mode="markdown" :stream="false" />
+            <MarkdownRenderer :content="assistantErrorMessage()" mode="markdown" :stream="false" />
           </div>
 
           <div v-if="assistantErrorMetaEntries().length" class="mt-2 flex flex-wrap gap-1.5">

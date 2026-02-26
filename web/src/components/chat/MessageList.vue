@@ -2,7 +2,7 @@
 import { RiCheckLine, RiFileLine, RiLoader4Line, RiSparkling2Line } from '@remixicon/vue'
 import { useI18n } from 'vue-i18n'
 
-import Markdown from '@/components/Markdown.vue'
+import MarkdownRenderer from '@/components/markdown/MarkdownRenderer.vue'
 import ToolInvocation from '@/components/ui/ToolInvocation.vue'
 import ReasoningInvocation from '@/components/ui/ReasoningInvocation.vue'
 import MetaInvocation from '@/components/ui/MetaInvocation.vue'
@@ -315,7 +315,7 @@ function sessionErrorAtLabel(): string {
             <div class="rounded-lg border border-border/60 px-4 py-3 text-sm leading-relaxed bg-secondary/50 relative">
               <div class="pointer-events-none absolute inset-y-0 left-0 w-1 rounded-l-lg bg-secondary/90" />
               <div v-if="optimisticUser.text" class="break-words">
-                <Markdown :content="optimisticUser.text" />
+                <MarkdownRenderer :content="optimisticUser.text" />
               </div>
 
               <div v-if="optimisticUser.files.length" class="mt-3">
