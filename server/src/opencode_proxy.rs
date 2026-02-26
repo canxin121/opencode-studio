@@ -4091,6 +4091,153 @@ fn filter_attention_list(
     filtered
 }
 
+fn lsp_item_session_id(value: &serde_json::Value) -> Option<String> {
+    let obj = value.as_object()?;
+
+    if let Some(session_id) = read_trimmed_from_map(obj, &["sessionID", "sessionId", "session_id"])
+    {
+        return Some(session_id);
+    }
+
+    if let Some(session) = obj.get("session") {
+        if let Some(v) = trim_string_value(session) {
+            return Some(v);
+        }
+        if let Some(session_obj) = session.as_object()
+            && let Some(v) =
+                read_trimmed_from_map(session_obj, &["id", "sessionID", "sessionId", "session_id"])
+        {
+            return Some(v);
+        }
+    }
+
+    None
+}
+
+fn filter_lsp_list_by_session(
+    items: &[serde_json::Value],
+    session_id: &str,
+) -> Vec<serde_json::Value> {
+    items
+        .iter()
+        .filter(|item| {
+            lsp_item_session_id(item)
+                .as_deref()
+                .is_some_and(|sid| sid == session_id)
+        })
+        .cloned()
+        .collect()
+}
+
+fn filter_lsp_payload(
+    payload: &serde_json::Value,
+    query: &AttentionListQuery,
+) -> serde_json::Value {
+    let Some(session_id) = normalize_session_id(&query.session_id) else {
+        return payload.clone();
+    };
+
+    if let Some(arr) = payload.as_array() {
+        return serde_json::Value::Array(filter_lsp_list_by_session(arr, &session_id));
+    }
+
+    let Some(obj) = payload.as_object() else {
+        return serde_json::Value::Array(Vec::new());
+    };
+
+    if let Some(value) = obj.get(&session_id) {
+        let mut out = serde_json::Map::new();
+        out.insert(session_id, value.clone());
+        return serde_json::Value::Object(out);
+    }
+
+    let mut out = obj.clone();
+    let mut filtered_list = false;
+    for key in ["items", "servers", "list"] {
+        if let Some(items) = obj.get(key).and_then(|v| v.as_array()) {
+            out.insert(
+                key.to_string(),
+                serde_json::Value::Array(filter_lsp_list_by_session(items, &session_id)),
+            );
+            filtered_list = true;
+        }
+    }
+
+    if filtered_list {
+        return serde_json::Value::Object(out);
+    }
+
+    if lsp_item_session_id(payload)
+        .as_deref()
+        .is_some_and(|sid| sid == session_id)
+    {
+        return payload.clone();
+    }
+
+    serde_json::Value::Array(Vec::new())
+}
+
+pub(crate) async fn lsp_list(
+    State(state): State<Arc<crate::AppState>>,
+    uri: Uri,
+    Query(q): Query<AttentionListQuery>,
+) -> ApiResult<Response> {
+    let oc = state.opencode.status().await;
+    if oc.restarting || !oc.ready {
+        return Ok(open_code_restarting());
+    }
+    let Some(bridge) = state.opencode.bridge().await else {
+        return Ok(open_code_unavailable());
+    };
+
+    let target = match bridge.build_url("/lsp", Some(&uri)) {
+        Ok(url) => url,
+        Err(_) => return Ok(open_code_unavailable()),
+    };
+
+    let resp = bridge
+        .client
+        .get(target)
+        .send()
+        .await
+        .map_err(|_| AppError::bad_gateway("OpenCode request failed"))?;
+
+    let resp_status = resp.status();
+    let status = StatusCode::from_u16(resp_status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
+    let bytes = resp
+        .bytes()
+        .await
+        .map_err(|_| AppError::bad_gateway("Failed to read OpenCode response"))?;
+
+    if !resp_status.is_success() {
+        return Ok(Response::builder()
+            .status(status)
+            .body(axum::body::Body::from(bytes))
+            .unwrap_or_else(|_| StatusCode::BAD_GATEWAY.into_response()));
+    }
+
+    let payload: serde_json::Value = match serde_json::from_slice(&bytes) {
+        Ok(v) => v,
+        Err(_) => {
+            return Ok(Response::builder()
+                .status(status)
+                .body(axum::body::Body::from(bytes))
+                .unwrap_or_else(|_| StatusCode::BAD_GATEWAY.into_response()));
+        }
+    };
+
+    let filtered = filter_lsp_payload(&payload, &q);
+    let body = serde_json::to_vec(&filtered)
+        .map_err(|_| AppError::bad_gateway("Failed to encode OpenCode response"))?;
+    let mut out = Response::new(axum::body::Body::from(body));
+    *out.status_mut() = status;
+    out.headers_mut().insert(
+        axum::http::header::CONTENT_TYPE,
+        "application/json".parse().unwrap(),
+    );
+    Ok(out)
+}
+
 pub(crate) async fn permission_list(
     State(state): State<Arc<crate::AppState>>,
     uri: Uri,
@@ -5585,6 +5732,66 @@ mod tests {
                 .get("noise")
                 .is_none()
         );
+    }
+
+    #[test]
+    fn filter_lsp_payload_scopes_array_items_to_session() {
+        let payload = json!([
+            {
+                "id": "rust-analyzer",
+                "sessionID": "ses_1",
+                "rootDir": "/tmp/a"
+            },
+            {
+                "id": "tsserver",
+                "sessionID": "ses_2",
+                "rootDir": "/tmp/b"
+            },
+            {
+                "id": "no-session"
+            }
+        ]);
+
+        let query = AttentionListQuery {
+            session_id: Some("ses_2".to_string()),
+            offset: None,
+            limit: None,
+        };
+        let filtered = filter_lsp_payload(&payload, &query);
+        let list = filtered.as_array().expect("array payload");
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].get("id"), Some(&json!("tsserver")));
+    }
+
+    #[test]
+    fn filter_lsp_payload_scopes_wrapped_items_to_session() {
+        let payload = json!({
+            "items": [
+                {
+                    "id": "rust-analyzer",
+                    "sessionId": "ses_1"
+                },
+                {
+                    "id": "tsserver",
+                    "sessionId": "ses_2"
+                }
+            ],
+            "total": 2
+        });
+
+        let query = AttentionListQuery {
+            session_id: Some("ses_1".to_string()),
+            offset: None,
+            limit: None,
+        };
+        let filtered = filter_lsp_payload(&payload, &query);
+        let items = filtered
+            .get("items")
+            .and_then(|v| v.as_array())
+            .expect("wrapped items payload");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].get("id"), Some(&json!("rust-analyzer")));
+        assert_eq!(filtered.get("total"), Some(&json!(2)));
     }
 
     #[test]

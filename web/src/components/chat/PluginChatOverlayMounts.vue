@@ -330,11 +330,19 @@ function toggleDiffPanel() {
 }
 
 async function refreshLspRuntimeStatus() {
+  const sessionId = String(chat.selectedSessionId || '').trim()
+  if (!sessionId) {
+    lspRuntimeItems.value = []
+    lspRuntimeError.value = ''
+    return
+  }
+
   lspRuntimeLoading.value = true
   lspRuntimeError.value = ''
   try {
-    const payload = await apiJson<LspRuntimeListResponse>('/api/lsp')
-    lspRuntimeItems.value = normalizeLspRuntimeList(payload)
+    const payload = await apiJson<LspRuntimeListResponse>(`/api/lsp?sessionId=${encodeURIComponent(sessionId)}`)
+    if (sessionId !== String(chat.selectedSessionId || '').trim()) return
+    lspRuntimeItems.value = normalizeLspRuntimeList(payload, { sessionId })
   } catch (err) {
     lspRuntimeError.value = err instanceof Error ? err.message : String(err)
     lspRuntimeItems.value = []
@@ -459,6 +467,8 @@ watch(
   () => {
     diffPanelOpen.value = false
     lspPanelOpen.value = false
+    lspRuntimeItems.value = []
+    lspRuntimeError.value = ''
     selectedDiffFile.value = ''
     mobileDiffView.value = 'list'
   },

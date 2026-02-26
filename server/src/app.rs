@@ -552,6 +552,7 @@ pub(crate) async fn run(args: crate::Args) {
             "/session/{session_id}/message/{message_id}/part/{part_id}",
             get(crate::opencode_session::session_message_part_get),
         )
+        .route("/lsp", get(crate::opencode_proxy::lsp_list))
         .route("/permission", get(crate::opencode_proxy::permission_list))
         .route("/question", get(crate::opencode_proxy::question_list))
         // OpenCode Studio activity tracking

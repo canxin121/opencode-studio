@@ -18,4 +18,7 @@ test('lsp runtime panel uses grouped rows, adaptive height, and icon-only refres
   assert.ok(source.includes(':title="t(\'common.refresh\')"'))
   assert.ok(source.includes('<RiRefreshLine v-else class="h-4 w-4" />'))
   assert.ok(!source.includes("<span>{{ t('common.refresh') }}</span>"))
+
+  assert.ok(source.includes('`/api/lsp?sessionId=${encodeURIComponent(sessionId)}`'))
+  assert.ok(source.includes('normalizeLspRuntimeList(payload, { sessionId })'))
 })

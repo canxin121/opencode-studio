@@ -63,7 +63,7 @@ function handleMobileOpenActionsClick(event: MouseEvent) {
   <SidebarListItem
     :active="focused"
     :actions-always-visible="actionsAlwaysVisible"
-    class="relative gap-2"
+    class="relative gap-1.5"
     @click="emit('toggle-collapse')"
   >
     <template #icon>
@@ -83,7 +83,10 @@ function handleMobileOpenActionsClick(event: MouseEvent) {
     </template>
 
     <div class="flex min-w-0 flex-col justify-center">
-      <span class="typography-ui-label truncate text-left" :class="focused ? 'text-primary' : 'text-foreground'">
+      <span
+        class="typography-ui-label truncate text-left leading-tight"
+        :class="focused ? 'text-primary' : 'text-foreground'"
+      >
         <span class="inline-flex items-center gap-2 min-w-0">
           <span class="truncate">{{ directoryEntryLabel(directory) }}</span>
           <span
@@ -94,7 +97,9 @@ function handleMobileOpenActionsClick(event: MouseEvent) {
           />
         </span>
       </span>
-      <span class="typography-micro truncate font-mono text-left text-muted-foreground/60">{{ directory.path }}</span>
+      <span class="typography-micro truncate font-mono text-left leading-tight text-muted-foreground/60">{{
+        directory.path
+      }}</span>
     </div>
 
     <template #actions>
