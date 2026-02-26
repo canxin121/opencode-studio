@@ -15,6 +15,8 @@ export type LspRuntimeItem = {
   sessionID: string
 }
 
+const RUNTIME_LIST_KEYS = ['items', 'servers', 'list'] as const
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   return value as Record<string, unknown>
@@ -48,6 +50,30 @@ function pickSessionID(obj: Record<string, unknown>): string {
   return ''
 }
 
+function resolveRawRuntimeList(payload: LspRuntimeListResponse, activeSessionId: string): unknown[] {
+  if (Array.isArray(payload)) return payload
+
+  const root = asRecord(payload)
+  if (!root) return []
+
+  if (activeSessionId) {
+    const scopedPayload = root[activeSessionId]
+    if (Array.isArray(scopedPayload)) return scopedPayload
+    const scopedRecord = asRecord(scopedPayload)
+    if (scopedRecord) {
+      for (const key of RUNTIME_LIST_KEYS) {
+        if (Array.isArray(scopedRecord[key])) return scopedRecord[key] as unknown[]
+      }
+    }
+  }
+
+  for (const key of RUNTIME_LIST_KEYS) {
+    if (Array.isArray(root[key])) return root[key] as unknown[]
+  }
+
+  return []
+}
+
 export function normalizeLspRuntimeList(
   payload: LspRuntimeListResponse,
   opts?: {
@@ -55,15 +81,7 @@ export function normalizeLspRuntimeList(
   },
 ): LspRuntimeItem[] {
   const activeSessionId = typeof opts?.sessionId === 'string' ? opts.sessionId.trim() : ''
-  const list = Array.isArray(payload)
-    ? payload
-    : Array.isArray(payload?.items)
-      ? payload.items
-      : Array.isArray(payload?.servers)
-        ? payload.servers
-        : Array.isArray(payload?.list)
-          ? payload.list
-          : []
+  const list = resolveRawRuntimeList(payload, activeSessionId)
 
   const items = list
     .map((raw) => {

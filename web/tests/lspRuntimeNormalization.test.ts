@@ -28,3 +28,18 @@ test('normalizeLspRuntimeList keeps payload when session ids are omitted', () =>
   const items = normalizeLspRuntimeList(payload, { sessionId: 'ses_1' })
   assert.equal(items.length, 2)
 })
+
+test('normalizeLspRuntimeList reads current-session bucket payloads', () => {
+  const payload = {
+    ses_1: {
+      items: [{ id: 'rust-analyzer', rootDir: '/repo/a', status: 'connected' }],
+    },
+    ses_2: {
+      items: [{ id: 'tsserver', rootDir: '/repo/b', status: 'connected' }],
+    },
+  }
+
+  const items = normalizeLspRuntimeList(payload, { sessionId: 'ses_1' })
+  assert.equal(items.length, 1)
+  assert.equal(items[0]?.id, 'rust-analyzer')
+})

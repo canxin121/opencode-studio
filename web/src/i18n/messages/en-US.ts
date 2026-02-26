@@ -1777,7 +1777,7 @@ export default {
       toggleAria: 'Toggle LSP runtime status',
       panelTitle: 'LSP Runtime Status',
       close: 'Close',
-      listTitle: 'Runtime sessions',
+      listTitle: 'Current session',
       noRootGroup: 'No workspace root',
       loading: 'Loading LSP runtime status...',
       empty: 'No active LSP runtime sessions.',
