@@ -19,6 +19,7 @@ import type {
 import {
   clampText,
   extractSessionId,
+  normalizeSessionDiffEventMode,
   normalizeMessageInfoFromPartEvent,
   normalizeMessageInfoFromSse,
   safeJson,
@@ -125,6 +126,7 @@ export const useChatStore = defineStore('chat', () => {
   let refreshTimer: number | null = null
   let refreshMessagesTimer: number | null = null
   const refreshMessagesRetryTimerBySession = new Map<string, number>()
+  const refreshSessionDiffInvalidateTimerBySession = new Map<string, number>()
   let selectSeq = 0
   let lastGlobalErrorToastAt = 0
   const lastSessionErrorToastByKey = new Map<string, { at: number; message: string }>()
@@ -900,6 +902,12 @@ export const useChatStore = defineStore('chat', () => {
     const sid = (sessionId || '').trim()
     if (!sid) return
 
+    const invalidateTimer = refreshSessionDiffInvalidateTimerBySession.get(sid)
+    if (typeof invalidateTimer === 'number') {
+      window.clearTimeout(invalidateTimer)
+      refreshSessionDiffInvalidateTimerBySession.delete(sid)
+    }
+
     if (Object.prototype.hasOwnProperty.call(sessionDiffBySession.value, sid)) {
       const next = { ...sessionDiffBySession.value }
       delete next[sid]
@@ -941,6 +949,18 @@ export const useChatStore = defineStore('chat', () => {
       delete next[sid]
       sessionDiffErrorBySession.value = next
     }
+  }
+
+  function scheduleSessionDiffInvalidateRefresh(sessionId: string, delayMs = 180) {
+    const sid = (sessionId || '').trim()
+    if (!sid) return
+    if (refreshSessionDiffInvalidateTimerBySession.has(sid)) return
+    const delay = Math.max(80, Math.min(1200, Math.floor(delayMs)))
+    const timer = window.setTimeout(() => {
+      refreshSessionDiffInvalidateTimerBySession.delete(sid)
+      void refreshSessionDiff(sid, { silent: true })
+    }, delay)
+    refreshSessionDiffInvalidateTimerBySession.set(sid, timer)
   }
 
   function resolveSessionDiffSources(primary: SessionFileDiff[]): SessionFileDiff[] {
@@ -1639,13 +1659,23 @@ export const useChatStore = defineStore('chat', () => {
 
     if (sid && t === 'session.diff') {
       const props = readEventProperties(evt)
-      if (Object.prototype.hasOwnProperty.call(props, 'diff')) {
+      const mode = normalizeSessionDiffEventMode(evt)
+
+      if (mode === 'invalidate') {
+        scheduleSessionDiffInvalidateRefresh(sid)
+        sessionDiffErrorBySession.value = { ...sessionDiffErrorBySession.value, [sid]: null }
+      } else if (Object.prototype.hasOwnProperty.call(props, 'diff')) {
         const live = chatApi.normalizeSessionDiffPayload((props.diff ?? null) as JsonValue)
-        applySessionDiffSnapshot(sid, live)
+        if (mode === 'merge') {
+          const base = Array.isArray(sessionDiffBySession.value[sid]) ? sessionDiffBySession.value[sid] : []
+          const merged = mergeSessionDiffEntries(base, live)
+          applySessionDiffSnapshot(sid, merged)
+        } else {
+          applySessionDiffSnapshot(sid, live)
+        }
         sessionDiffErrorBySession.value = { ...sessionDiffErrorBySession.value, [sid]: null }
         sessionDiffLoadingBySession.value = { ...sessionDiffLoadingBySession.value, [sid]: false }
       }
-      void refreshSessionDiff(sid, { silent: true })
     }
 
     if (sid && t === 'session.error') {

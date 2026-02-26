@@ -68,6 +68,14 @@ export function extractSessionId(evt: SseEvent): string | null {
   return typeof session === 'string' && session.trim() ? session.trim() : null
 }
 
+export function normalizeSessionDiffEventMode(evt: SseEvent): 'merge' | 'invalidate' | '' {
+  if (evt.type !== 'session.diff') return ''
+  const props = asRecord(evt.properties)
+  const mode = typeof props.mode === 'string' ? props.mode.trim().toLowerCase() : ''
+  if (mode === 'merge' || mode === 'invalidate') return mode
+  return ''
+}
+
 export function normalizeMessageInfoFromSse(evt: SseEvent): MessageInfo | null {
   const props = asRecord(evt.properties)
   const raw = isRecord(props.info) ? props.info : null
