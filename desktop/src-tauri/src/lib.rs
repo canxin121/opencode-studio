@@ -57,8 +57,18 @@ pub fn run() {
       let restart_i = MenuItem::with_id(app, "backend_restart", "Restart backend", true, None::<&str>)?;
       let logs_i = MenuItem::with_id(app, "open_logs", "Open logs", true, None::<&str>)?;
       let cfg_i = MenuItem::with_id(app, "open_config", "Open config", true, None::<&str>)?;
+      let autostart_i = MenuItem::with_id(
+        app,
+        "toggle_autostart_on_boot",
+        "Toggle launch at login",
+        true,
+        None::<&str>,
+      )?;
       let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-      let menu = Menu::with_items(app, &[&open_i, &start_i, &stop_i, &restart_i, &logs_i, &cfg_i, &quit_i])?;
+      let menu = Menu::with_items(
+        app,
+        &[&open_i, &start_i, &stop_i, &restart_i, &logs_i, &cfg_i, &autostart_i, &quit_i],
+      )?;
 
       let tray = TrayIconBuilder::<AppRuntime>::new()
         .icon(app.default_window_icon().unwrap().clone())
@@ -144,9 +154,7 @@ fn desktop_config_get(app: AppHandle) -> Result<config::DesktopConfig, String> {
 
 #[tauri::command]
 fn desktop_config_save(app: AppHandle, config: config::DesktopConfig) -> Result<config::DesktopConfig, String> {
-  let saved = config::save(&app, config)?;
-  apply_autostart_on_boot(&app, saved.autostart_on_boot)?;
-  Ok(saved)
+  save_desktop_config(&app, config)
 }
 
 #[tauri::command]
@@ -191,6 +199,9 @@ async fn handle_tray_menu(app: &AppHandle, id: &str) {
     "open_config" => {
       let _ = config::open_config_file(app);
     }
+    "toggle_autostart_on_boot" => {
+      let _ = toggle_autostart_on_boot(app);
+    }
     "quit" => {
       let manager = app.state::<BackendManager>().inner().clone();
       let _ = manager.stop(app).await;
@@ -198,6 +209,18 @@ async fn handle_tray_menu(app: &AppHandle, id: &str) {
     }
     _ => {}
   }
+}
+
+fn toggle_autostart_on_boot(app: &AppHandle) -> Result<config::DesktopConfig, String> {
+  let mut cfg = config::load_or_create(app)?;
+  cfg.autostart_on_boot = !cfg.autostart_on_boot;
+  save_desktop_config(app, cfg)
+}
+
+fn save_desktop_config(app: &AppHandle, cfg: config::DesktopConfig) -> Result<config::DesktopConfig, String> {
+  let saved = config::save(app, cfg)?;
+  apply_autostart_on_boot(app, saved.autostart_on_boot)?;
+  Ok(saved)
 }
 
 fn apply_autostart_on_boot(app: &AppHandle, enabled: bool) -> Result<(), String> {

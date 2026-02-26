@@ -287,7 +287,6 @@ export default {
       opencode: 'OpenCode',
       plugins: 'Plugins',
       backends: 'Backends',
-      troubleshooting: 'Troubleshooting',
       appearance: 'Appearance',
     },
     backendsPanel: {
@@ -1360,15 +1359,6 @@ export default {
         },
       },
     },
-    troubleshooting: {
-      title: 'Troubleshooting',
-      description:
-        "Clear OpenCode Studio's in-memory cache used for reading OpenCode session storage. Use this when session lists look stale.",
-      clearSessionCache: 'Clear session cache',
-      clearing: 'Clearing...',
-      cacheCleared: 'Backend cache cleared',
-      cacheClearFailed: 'Failed to clear cache',
-    },
     desktopRuntime: {
       title: 'Desktop backend runtime',
       description: 'Configure sidecar backend host/port and CORS policy. Saving restarts the desktop backend.',
@@ -1377,6 +1367,7 @@ export default {
         port: 'Port',
         corsOrigins: 'CORS origins',
         corsAllowAll: 'Allow all origins (*)',
+        autostartOnBoot: 'Launch at login',
       },
       placeholders: {
         host: '127.0.0.1',

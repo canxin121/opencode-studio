@@ -1,6 +1,7 @@
 type TauriInvoke = (cmd: string, args?: Record<string, unknown>) => Promise<unknown>
 
 export type DesktopConfig = {
+  autostart_on_boot: boolean
   backend: {
     host: string
     port: number
@@ -36,6 +37,7 @@ function asDesktopConfig(value: unknown): DesktopConfig | null {
   const cors_origins = corsRaw.map((v) => String(v || '').trim()).filter((v) => v.length > 0)
 
   return {
+    autostart_on_boot: root.autostart_on_boot !== false,
     backend: {
       host: typeof backend.host === 'string' ? backend.host : '127.0.0.1',
       port,

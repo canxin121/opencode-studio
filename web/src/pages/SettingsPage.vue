@@ -5,7 +5,6 @@ import { RiArrowDownSLine, RiRefreshLine } from '@remixicon/vue'
 import { useI18n } from 'vue-i18n'
 
 import { useSettingsStore, type Settings } from '../stores/settings'
-import { useChatStore } from '@/stores/chat'
 import { usePluginHostStore } from '@/stores/pluginHost'
 import { useToastsStore } from '@/stores/toasts'
 import { useUiStore } from '@/stores/ui'
@@ -21,7 +20,6 @@ import PluginSettingsPanel from '@/components/settings/PluginSettingsPanel.vue'
 import BackendsPanel from '@/components/settings/BackendsPanel.vue'
 import Input from '@/components/ui/Input.vue'
 import { opencodeSections } from '@/components/settings/opencodeSections'
-import { clearBackendSessionCache } from '@/features/settings/api/settingsApi'
 import { useDesktopSidebarResize } from '@/composables/useDesktopSidebarResize'
 import {
   desktopBackendRestart,
@@ -45,10 +43,9 @@ import {
   type ChatToolActivityType,
 } from '@/lib/chatActivity'
 
-type SettingsTab = 'opencode' | 'plugins' | 'backends' | 'troubleshooting' | 'appearance'
+type SettingsTab = 'opencode' | 'plugins' | 'backends' | 'appearance'
 
 const settings = useSettingsStore()
-const chat = useChatStore()
 const pluginHost = usePluginHostStore()
 const toasts = useToastsStore()
 const ui = useUiStore()
@@ -74,7 +71,6 @@ const settingsSidebarClass = computed(() =>
     : 'relative h-full border-r border-border bg-muted/10 shrink-0',
 )
 
-const clearingBackendCache = ref(false)
 const desktopRuntimeEnabled = isDesktopRuntime()
 const desktopRuntimeLoading = ref(false)
 const desktopRuntimeSaving = ref(false)
@@ -82,6 +78,7 @@ const desktopBackendHost = ref('127.0.0.1')
 const desktopBackendPortInput = ref('3000')
 const desktopCorsOriginsText = ref('')
 const desktopCorsAllowAll = ref(false)
+const desktopAutostartOnBoot = ref(true)
 
 function parseCorsOriginsText(input: string): string[] {
   return String(input || '')
@@ -92,6 +89,7 @@ function parseCorsOriginsText(input: string): string[] {
 }
 
 function applyDesktopRuntimeForm(cfg: DesktopConfig) {
+  desktopAutostartOnBoot.value = cfg.autostart_on_boot !== false
   desktopBackendHost.value = String(cfg.backend.host || '127.0.0.1').trim() || '127.0.0.1'
   desktopBackendPortInput.value = String(cfg.backend.port || 3000)
   desktopCorsOriginsText.value = (cfg.backend.cors_origins || []).join('\n')
@@ -127,6 +125,7 @@ async function saveDesktopRuntimeConfig() {
   try {
     const current = await desktopConfigGet()
     const next: DesktopConfig = {
+      autostart_on_boot: desktopAutostartOnBoot.value === true,
       backend: {
         host,
         port: parsedPort,
@@ -157,27 +156,10 @@ async function saveDesktopRuntimeConfig() {
   }
 }
 
-async function clearSessionCache() {
-  if (clearingBackendCache.value) return
-  clearingBackendCache.value = true
-  try {
-    await clearBackendSessionCache()
-    toasts.push('success', String(t('settings.troubleshooting.cacheCleared')))
-    // Best-effort refresh so session lists pick up new data immediately.
-    await chat.refreshSessions().catch(() => {})
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    toasts.push('error', msg || String(t('settings.troubleshooting.cacheClearFailed')))
-  } finally {
-    clearingBackendCache.value = false
-  }
-}
-
 const tabs = computed<Array<{ id: SettingsTab; label: string }>>(() => [
   { id: 'opencode', label: String(t('settings.tabs.opencode')) },
   { id: 'plugins', label: String(t('settings.tabs.plugins')) },
   { id: 'backends', label: String(t('settings.tabs.backends')) },
-  { id: 'troubleshooting', label: String(t('settings.tabs.troubleshooting')) },
   { id: 'appearance', label: String(t('settings.tabs.appearance')) },
 ])
 
@@ -740,6 +722,15 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
                   {{ t('settings.desktopRuntime.fields.corsAllowAll') }}
                 </label>
 
+                <label class="inline-flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    v-model="desktopAutostartOnBoot"
+                    :disabled="desktopRuntimeLoading || desktopRuntimeSaving"
+                  />
+                  {{ t('settings.desktopRuntime.fields.autostartOnBoot') }}
+                </label>
+
                 <div class="flex items-center gap-2">
                   <Button
                     variant="outline"
@@ -752,25 +743,6 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
                     {{ desktopRuntimeSaving ? t('common.saving') : t('settings.desktopRuntime.saveAndRestart') }}
                   </Button>
                 </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Troubleshooting Tab -->
-          <div v-else-if="activeTab === 'troubleshooting'" class="space-y-6">
-            <div class="rounded-lg border border-border bg-muted/10 p-4">
-              <div class="text-sm font-medium">{{ t('settings.troubleshooting.title') }}</div>
-              <div class="mt-1 text-xs text-muted-foreground">
-                {{ t('settings.troubleshooting.description') }}
-              </div>
-              <div class="mt-3 flex items-center gap-2">
-                <Button variant="outline" :disabled="clearingBackendCache" @click="clearSessionCache">
-                  {{
-                    clearingBackendCache
-                      ? t('settings.troubleshooting.clearing')
-                      : t('settings.troubleshooting.clearSessionCache')
-                  }}
-                </Button>
               </div>
             </div>
           </div>
