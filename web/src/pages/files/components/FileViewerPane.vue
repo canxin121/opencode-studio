@@ -16,7 +16,7 @@ import {
 } from '@remixicon/vue'
 
 import CodeMirrorEditor from '@/components/CodeMirrorEditor.vue'
-import Markdown from '@/components/Markdown.vue'
+import MarkdownRenderer from '@/components/markdown/MarkdownRenderer.vue'
 import MonacoDiffEditor from '@/components/MonacoDiffEditor.vue'
 import Button from '@/components/ui/Button.vue'
 import IconButton from '@/components/ui/IconButton.vue'
@@ -1208,7 +1208,7 @@ function onSendSelection() {
           :class="showMarkdownSplit ? 'flex-1' : 'flex-1'"
         >
           <div class="mx-auto w-full max-w-4xl p-4">
-            <Markdown :content="draftContent" mode="markdown" />
+            <MarkdownRenderer :content="draftContent" mode="markdown" />
           </div>
         </div>
       </div>
