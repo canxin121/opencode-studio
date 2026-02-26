@@ -7,12 +7,18 @@ import 'diff2html/bundles/css/diff2html.min.css'
 
 import { hljs } from '@/lib/highlight'
 
-const props = defineProps<{
-  diff: string // Unified diff string
-  outputFormat?: 'line-by-line' | 'side-by-side'
-  drawFileList?: boolean
-  highlight?: boolean
-}>()
+const props = withDefaults(
+  defineProps<{
+    diff: string // Unified diff string
+    outputFormat?: 'line-by-line' | 'side-by-side'
+    drawFileList?: boolean
+    highlight?: boolean
+    wrap?: boolean
+  }>(),
+  {
+    wrap: false,
+  },
+)
 
 const container = ref<HTMLElement | null>(null)
 const error = ref<string | null>(null)
@@ -100,7 +106,7 @@ watchEffect(() => {
   <div class="diff-container">
     <div v-if="!trimmed" class="p-4 text-center text-muted-foreground">No diff content.</div>
     <div v-else-if="error" class="p-4 text-red-500 bg-red-500/10 rounded">{{ error }}</div>
-    <div v-else ref="container" class="diff-content" />
+    <div v-else ref="container" class="diff-content" :class="{ 'diff-content--wrapped': props.wrap }" />
   </div>
 </template>
 
@@ -217,6 +223,16 @@ watchEffect(() => {
   white-space: pre;
   word-break: normal;
   overflow-wrap: normal;
+}
+
+.diff-content.diff-content--wrapped .d2h-code-line,
+.diff-content.diff-content--wrapped .d2h-code-side-line,
+.diff-content.diff-content--wrapped .d2h-code-line-prefix,
+.diff-content.diff-content--wrapped .d2h-code-line-ctn,
+.diff-content.diff-content--wrapped .d2h-code-side-line-ctn {
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 .diff-content .d2h-diff-table,
 .diff-content .d2h-code-line,

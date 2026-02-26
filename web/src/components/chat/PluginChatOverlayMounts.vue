@@ -61,6 +61,7 @@ const menuQuery = ref('')
 const diffPanelOpen = ref(false)
 const lspPanelOpen = ref(false)
 const selectedDiffFile = ref('')
+const sessionDiffWrap = ref(true)
 const mobileDiffView = ref<SessionDiffMobileView>('list')
 const diffListEl = ref<HTMLElement | null>(null)
 const lspRuntimeLoading = ref(false)
@@ -137,6 +138,21 @@ const lspRuntimeBadge = computed(() => {
   if (count <= 0) return ''
   if (count > 99) return '99+'
   return String(count)
+})
+const lspRuntimeGroups = computed(() => {
+  const groups = new Map<string, { key: string; label: string; items: LspRuntimeItem[] }>()
+  for (const runtime of lspRuntimeItems.value) {
+    const rootDir = String(runtime.rootDir || '').trim()
+    const key = rootDir || '__no-root__'
+    const label = rootDir || String(t('chat.lspStatus.noRootGroup'))
+    const existing = groups.get(key)
+    if (existing) {
+      existing.items.push(runtime)
+      continue
+    }
+    groups.set(key, { key, label, items: [runtime] })
+  }
+  return [...groups.values()].sort((a, b) => a.label.localeCompare(b.label))
 })
 const selectedDiff = computed(() => {
   const target = selectedDiffFile.value
@@ -617,6 +633,14 @@ onBeforeUnmount(() => {
               <div class="min-w-0 text-[11px] font-medium text-foreground truncate" :title="selectedDiffPath">
                 {{ selectedDiffPath }}
               </div>
+              <button
+                type="button"
+                class="ml-auto inline-flex h-6 items-center rounded-md border border-border/60 px-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground transition-colors hover:bg-secondary/40 hover:text-foreground"
+                :aria-pressed="sessionDiffWrap"
+                @click.stop="sessionDiffWrap = !sessionDiffWrap"
+              >
+                {{ sessionDiffWrap ? t('chat.sessionDiff.wrap.disable') : t('chat.sessionDiff.wrap.enable') }}
+              </button>
             </div>
             <div class="min-w-0 flex-1 min-h-[200px]">
               <MonacoDiffEditor
@@ -629,11 +653,27 @@ onBeforeUnmount(() => {
                 :modified-value="selectedDiffPreview?.modified || ''"
                 :use-files-theme="true"
                 :read-only="true"
-                :wrap="true"
+                :wrap="sessionDiffWrap"
               />
             </div>
           </div>
-          <div v-else-if="sessionDiffNavigationView === 'split'" class="min-w-0 flex-1 min-h-[200px] sm:min-h-0">
+          <div
+            v-else-if="sessionDiffNavigationView === 'split'"
+            class="min-w-0 flex flex-1 min-h-[200px] flex-col sm:min-h-0"
+          >
+            <div class="flex items-center gap-2 border-b border-border/50 px-2 py-1">
+              <div class="min-w-0 flex-1 text-[11px] font-medium text-foreground truncate" :title="selectedDiffPath">
+                {{ selectedDiffPath }}
+              </div>
+              <button
+                type="button"
+                class="inline-flex h-6 items-center rounded-md border border-border/60 px-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground transition-colors hover:bg-secondary/40 hover:text-foreground"
+                :aria-pressed="sessionDiffWrap"
+                @click.stop="sessionDiffWrap = !sessionDiffWrap"
+              >
+                {{ sessionDiffWrap ? t('chat.sessionDiff.wrap.disable') : t('chat.sessionDiff.wrap.enable') }}
+              </button>
+            </div>
             <MonacoDiffEditor
               class="h-full"
               :path="selectedDiffPreview?.path || selectedDiffPath"
@@ -644,7 +684,7 @@ onBeforeUnmount(() => {
               :modified-value="selectedDiffPreview?.modified || ''"
               :use-files-theme="true"
               :read-only="true"
-              :wrap="true"
+              :wrap="sessionDiffWrap"
             />
           </div>
         </div>
@@ -658,18 +698,17 @@ onBeforeUnmount(() => {
         <div class="flex items-center justify-between gap-2 px-3 py-0.5 border-b border-border/60">
           <div class="text-xs font-medium leading-4 text-foreground">{{ t('chat.lspStatus.panelTitle') }}</div>
           <div class="flex items-center gap-1">
-            <button
-              type="button"
-              class="inline-flex h-7 items-center gap-1 rounded-md border border-border/60 px-2 text-[11px] text-muted-foreground transition-colors hover:bg-secondary/40 hover:text-foreground"
+            <IconButton
+              size="sm"
+              class="text-muted-foreground hover:text-foreground"
               :disabled="lspRuntimeLoading"
               :title="t('common.refresh')"
               :aria-label="t('common.refresh')"
               @click.stop="refreshLspRuntimeStatus"
             >
-              <RiLoader4Line v-if="lspRuntimeLoading" class="h-3 w-3 animate-spin" />
-              <RiRefreshLine v-else class="h-3 w-3" />
-              <span>{{ t('common.refresh') }}</span>
-            </button>
+              <RiLoader4Line v-if="lspRuntimeLoading" class="h-4 w-4 animate-spin" />
+              <RiRefreshLine v-else class="h-4 w-4" />
+            </IconButton>
             <IconButton
               size="sm"
               class="text-muted-foreground hover:text-foreground"
@@ -693,40 +732,59 @@ onBeforeUnmount(() => {
         </div>
         <div
           v-else
-          class="flex min-h-0 flex-col h-[min(56dvh,calc(100dvh-var(--oc-safe-area-top,0px)-var(--oc-safe-area-bottom,0px)-9rem))] max-h-[520px] min-h-[240px]"
+          class="flex min-h-0 flex-col max-h-[min(56dvh,calc(100dvh-var(--oc-safe-area-top,0px)-var(--oc-safe-area-bottom,0px)-9rem))]"
         >
-          <div class="px-3 py-2 text-[11px] font-medium text-muted-foreground">
-            {{ t('chat.lspStatus.listTitle') }}
+          <div class="px-3 py-2 text-[11px] font-medium text-muted-foreground border-b border-border/50">
+            {{ t('chat.lspStatus.listTitle') }} · {{ lspRuntimeItems.length }}
           </div>
-          <div class="flex-1 min-h-0 overflow-auto">
-            <div
-              v-for="runtime in lspRuntimeItems"
-              :key="runtime.id"
-              class="w-full px-3 py-2 border-b border-border/50 hover:bg-secondary/30 transition-colors"
+          <div class="flex-1 min-h-0 overflow-auto px-3 py-2 space-y-3">
+            <section
+              v-for="group in lspRuntimeGroups"
+              :key="group.key"
+              class="rounded-md border border-border/70 bg-background/70 shadow-sm overflow-hidden"
             >
-              <div class="flex flex-wrap items-center gap-2">
-                <span class="min-w-0 truncate text-xs" :title="runtime.name">{{ runtime.name }}</span>
-                <span
-                  class="inline-flex rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide"
-                  :class="
-                    runtimeStatusTone(runtime.status) === 'ok'
-                      ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
-                      : runtimeStatusTone(runtime.status) === 'warn'
-                        ? 'bg-red-500/15 text-red-700 dark:text-red-300'
-                        : 'bg-muted text-muted-foreground'
-                  "
+              <div
+                class="flex items-center justify-between gap-2 border-b border-border/50 bg-secondary/30 px-2.5 py-1.5"
+              >
+                <div class="truncate text-[11px] font-medium text-foreground" :title="group.label">
+                  {{ group.label }}
+                </div>
+                <div
+                  class="inline-flex rounded-full bg-background px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground"
                 >
-                  {{ runtime.status || t('common.unknown') }}
-                </span>
-              </div>
-              <div class="mt-1 space-y-0.5 text-[11px] text-muted-foreground">
-                <div v-if="runtime.rootDir" class="truncate" :title="runtime.rootDir">{{ runtime.rootDir }}</div>
-                <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-[10px]">
-                  <span>{{ runtime.id }}</span>
-                  <span v-if="runtime.transport">{{ runtime.transport }}</span>
+                  {{ group.items.length }}
                 </div>
               </div>
-            </div>
+              <div class="divide-y divide-border/40">
+                <div
+                  v-for="runtime in group.items"
+                  :key="runtime.id"
+                  class="w-full px-2.5 py-2 hover:bg-secondary/20 transition-colors"
+                >
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span class="min-w-0 truncate text-xs" :title="runtime.name">{{ runtime.name }}</span>
+                    <span
+                      class="inline-flex rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide"
+                      :class="
+                        runtimeStatusTone(runtime.status) === 'ok'
+                          ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                          : runtimeStatusTone(runtime.status) === 'warn'
+                            ? 'bg-red-500/15 text-red-700 dark:text-red-300'
+                            : 'bg-muted text-muted-foreground'
+                      "
+                    >
+                      {{ runtime.status || t('common.unknown') }}
+                    </span>
+                  </div>
+                  <div class="mt-1 space-y-0.5 text-[11px] text-muted-foreground">
+                    <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-[10px]">
+                      <span>{{ runtime.id }}</span>
+                      <span v-if="runtime.transport">{{ runtime.transport }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
           </div>
         </div>
       </div>

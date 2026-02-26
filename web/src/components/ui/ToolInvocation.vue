@@ -128,6 +128,7 @@ const props = defineProps<{
 }>()
 
 const isOpen = ref(Boolean(props.initiallyExpanded))
+const activityDiffWrap = ref(true)
 
 const chat = useChatStore()
 const detailLoading = ref(false)
@@ -542,7 +543,17 @@ const shouldShowInput = computed(() => {
           <div v-if="activityDiffPreview" class="text-xs">
             <div class="text-muted-foreground/80 mb-1 font-medium flex justify-between items-center">
               <span>Diff</span>
-              <span class="text-[10px] uppercase tracking-wider opacity-70">diff</span>
+              <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  class="rounded border border-border/60 px-1.5 py-0.5 text-[10px] uppercase tracking-wider opacity-80 transition-colors hover:bg-secondary/40 hover:opacity-100"
+                  :aria-pressed="activityDiffWrap"
+                  @click="activityDiffWrap = !activityDiffWrap"
+                >
+                  {{ activityDiffWrap ? 'Wrap: On' : 'Wrap: Off' }}
+                </button>
+                <span class="text-[10px] uppercase tracking-wider opacity-70">diff</span>
+              </div>
             </div>
             <div class="oc-activity-detail h-96 overflow-hidden">
               <MonacoDiffEditor
@@ -555,7 +566,7 @@ const shouldShowInput = computed(() => {
                 :modified-value="activityDiffPreview.modified"
                 :use-files-theme="true"
                 :read-only="true"
-                :wrap="true"
+                :wrap="activityDiffWrap"
               />
             </div>
           </div>

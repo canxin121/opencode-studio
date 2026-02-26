@@ -111,6 +111,7 @@ const resetModePickerOptions = computed<PickerOption[]>(() => [
 const hardResetOpen = ref(false)
 const hardResetText = ref('')
 const hardResetTarget = ref<GitLogCommit | null>(null)
+const wrapLines = ref(true)
 
 const hardResetReady = computed(() => hardResetText.value.trim().toUpperCase() === 'RESET')
 const compareSelectionShort = computed(() => {
@@ -452,12 +453,17 @@ function onFilterRefTypeChange(value: string | number) {
             </div>
 
             <div class="pt-2">
-              <div class="text-xs font-medium text-muted-foreground mb-1">
-                {{
-                  selectedFileLabel
-                    ? t('git.ui.dialogs.history.diffTitleFile', { file: selectedFileLabel })
-                    : t('git.ui.dialogs.history.diffTitleAllFiles')
-                }}
+              <div class="mb-1 flex items-center justify-between gap-2">
+                <div class="text-xs font-medium text-muted-foreground">
+                  {{
+                    selectedFileLabel
+                      ? t('git.ui.dialogs.history.diffTitleFile', { file: selectedFileLabel })
+                      : t('git.ui.dialogs.history.diffTitleAllFiles')
+                  }}
+                </div>
+                <Button variant="secondary" size="sm" class="h-7" @click="wrapLines = !wrapLines">{{
+                  wrapLines ? t('git.ui.dialogs.history.wrap.disable') : t('git.ui.dialogs.history.wrap.enable')
+                }}</Button>
               </div>
               <div v-if="selectedFileLabel">
                 <div v-if="fileDiffError" class="text-xs text-red-500">{{ fileDiffError }}</div>
@@ -468,7 +474,12 @@ function onFilterRefTypeChange(value: string | number) {
                   {{ t('git.ui.dialogs.history.emptyDiff') }}
                 </div>
                 <div v-else class="h-[320px] min-h-0">
-                  <DiffViewer :diff="fileDiff" :output-format="'side-by-side'" :draw-file-list="false" />
+                  <DiffViewer
+                    :diff="fileDiff"
+                    :output-format="'side-by-side'"
+                    :draw-file-list="false"
+                    :wrap="wrapLines"
+                  />
                 </div>
               </div>
               <div v-else>
@@ -480,7 +491,7 @@ function onFilterRefTypeChange(value: string | number) {
                   {{ t('git.ui.dialogs.history.emptyDiff') }}
                 </div>
                 <div v-else class="h-[320px] min-h-0">
-                  <DiffViewer :diff="diff" :output-format="'side-by-side'" :draw-file-list="false" />
+                  <DiffViewer :diff="diff" :output-format="'side-by-side'" :draw-file-list="false" :wrap="wrapLines" />
                 </div>
               </div>
             </div>

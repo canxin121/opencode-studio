@@ -1701,6 +1701,10 @@ export default {
       listTitle: 'Changed files',
       loading: 'Loading file changes...',
       empty: 'No file changes in this session yet.',
+      wrap: {
+        enable: 'Wrap off',
+        disable: 'Wrap on',
+      },
     },
 
     lspStatus: {
@@ -1708,6 +1712,7 @@ export default {
       panelTitle: 'LSP Runtime Status',
       close: 'Close',
       listTitle: 'Runtime sessions',
+      noRootGroup: 'No workspace root',
       loading: 'Loading LSP runtime status...',
       empty: 'No active LSP runtime sessions.',
     },
@@ -2233,6 +2238,10 @@ export default {
           diffTitleAllFiles: 'Diff - All files',
           loadingDiff: 'Loading diff...',
           emptyDiff: 'No diff content.',
+          wrap: {
+            enable: 'Enable wrap lines',
+            disable: 'Disable wrap lines',
+          },
           confirmHardReset: {
             title: 'Confirm hard reset',
             description: 'This will rewrite the working tree and discard local changes.',
@@ -2386,6 +2395,10 @@ export default {
             compare: 'Compare',
           },
           empty: 'No diff to show.',
+          wrap: {
+            enable: 'Enable wrap lines',
+            disable: 'Disable wrap lines',
+          },
         },
 
         renameFile: {
@@ -2421,6 +2434,10 @@ export default {
         actions: {
           openFile: 'Open file',
           revealInFiles: 'Reveal in Files',
+        },
+        wrap: {
+          enable: 'Enable wrap lines',
+          disable: 'Disable wrap lines',
         },
       },
 

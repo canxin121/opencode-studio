@@ -56,6 +56,7 @@ const props = defineProps<{
 
 const loading = ref(false)
 const error = ref<string | null>(null)
+const wrapLines = ref(true)
 
 const diffText = ref('')
 const diffMeta = ref<GitDiffMeta | null>(null)
@@ -326,9 +327,12 @@ watch(
     </div>
 
     <div v-else class="editor-shell">
-      <div v-if="canOpenFile || canRevealFile" class="toolbar">
+      <div class="toolbar">
         <div v-if="path" class="path">{{ path }}</div>
         <div class="toolbar-actions">
+          <Button variant="secondary" size="sm" class="h-7" @click="wrapLines = !wrapLines">{{
+            wrapLines ? t('git.ui.diffViewer.wrap.disable') : t('git.ui.diffViewer.wrap.enable')
+          }}</Button>
           <Button v-if="canOpenFile" variant="secondary" size="sm" class="h-7" @click="openFile">{{
             t('git.ui.diffViewer.actions.openFile')
           }}</Button>
@@ -345,7 +349,7 @@ watch(
           :path="modifiedModelPath"
           :original-path="originalModelPath"
           :use-files-theme="true"
-          :wrap="true"
+          :wrap="wrapLines"
           :read-only="true"
           :hunk-actions="editorHunkActions"
           :hunk-actions-enabled="hasAnyHunkAction && editorHunkActions.length > 0"

@@ -1,23 +1,14 @@
 <script setup lang="ts">
 import type { ComponentPublicInstance } from 'vue'
-import {
-  RiAddLine,
-  RiArrowDownSLine,
-  RiArrowRightSLine,
-  RiDeleteBinLine,
-  RiMore2Line,
-  RiRefreshLine,
-} from '@remixicon/vue'
 import { useI18n } from 'vue-i18n'
 
-import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
-import IconButton from '@/components/ui/IconButton.vue'
 import SidebarTextButton from '@/components/ui/SidebarTextButton.vue'
 import { directoryEntryLabel, sessionLabel } from '@/features/sessions/model/labels'
 import type { DirectoryEntry } from '@/features/sessions/model/types'
 import type { FlatTreeRow } from '@/features/sessions/model/tree'
 import type { SessionActionItem } from '@/layout/chatSidebar/useSessionActionMenu'
 import type { JsonValue } from '@/types/json'
+import DirectoryRow from '@/layout/chatSidebar/components/DirectoryRow.vue'
 import SidebarPager from '@/layout/chatSidebar/components/SidebarPager.vue'
 import SessionRow from '@/layout/chatSidebar/components/SessionRow.vue'
 
@@ -197,102 +188,20 @@ function statusMeta(sessionId: string) {
                   : 'bg-sidebar border-sidebar-border/60'
               "
             >
-              <div class="flex items-center gap-1 px-1">
-                <button
-                  type="button"
-                  class="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-                  :aria-label="
-                    props.isDirectoryCollapsed(directory.id)
-                      ? String(t('chat.sidebar.directoriesList.expandDirectory'))
-                      : String(t('chat.sidebar.directoriesList.collapseDirectory'))
-                  "
-                  @click="props.toggleDirectoryCollapse(directory.id, directory.path)"
-                >
-                  <RiArrowRightSLine v-if="props.isDirectoryCollapsed(directory.id)" class="h-4 w-4" />
-                  <RiArrowDownSLine v-else class="h-4 w-4" />
-                </button>
-
-                <SidebarTextButton
-                  class="flex-1 rounded-sm"
-                  :title="directory.path"
-                  @click="props.toggleDirectoryCollapse(directory.id, directory.path)"
-                >
-                  <div
-                    class="typography-ui font-semibold truncate"
-                    :class="props.isDirectoryFocused(directory) ? 'text-primary' : 'text-foreground'"
-                  >
-                    <span class="inline-flex items-center gap-2 min-w-0">
-                      <span class="truncate">{{ directoryEntryLabel(directory) }}</span>
-                      <span
-                        v-if="props.directoryHasActiveOrBlocked(directory)"
-                        class="inline-flex h-1.5 w-1.5 rounded-full bg-primary animate-pulse flex-shrink-0"
-                        :title="String(t('chat.sidebar.directoriesList.activeSessions'))"
-                        :aria-label="String(t('chat.sidebar.directoriesList.activeSessions'))"
-                      />
-                    </span>
-                  </div>
-                  <div class="typography-micro text-muted-foreground/60 truncate font-mono">{{ directory.path }}</div>
-                </SidebarTextButton>
-
-                <div class="flex items-center gap-1">
-                  <IconButton
-                    v-if="uiIsMobile"
-                    size="sm"
-                    class="text-muted-foreground hover:text-foreground hover:dark:bg-accent/40 hover:bg-primary/6"
-                    :title="String(t('chat.sidebar.directoriesList.directoryActions'))"
-                    :aria-label="String(t('chat.sidebar.directoriesList.directoryActions'))"
-                    @click.stop="props.openDirectoryActions(directory)"
-                  >
-                    <RiMore2Line class="h-4 w-4" />
-                  </IconButton>
-
-                  <div
-                    v-else
-                    class="flex items-center gap-1 w-0 overflow-hidden opacity-0 pointer-events-none transition-opacity group-hover:w-20 group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:w-20 group-focus-within:opacity-100 group-focus-within:pointer-events-auto"
-                  >
-                    <IconButton
-                      size="xs"
-                      class="text-muted-foreground hover:text-foreground hover:dark:bg-accent/40 hover:bg-primary/6"
-                      :title="String(t('chat.sidebar.directoryActions.refresh.label'))"
-                      :aria-label="String(t('chat.sidebar.directoryActions.refresh.label'))"
-                      :disabled="aggregateLoadingByDirectoryId[directory.id]"
-                      @click.stop="props.refreshDirectoryInline(directory)"
-                    >
-                      <RiRefreshLine class="h-4 w-4" />
-                    </IconButton>
-
-                    <IconButton
-                      size="xs"
-                      class="text-muted-foreground hover:text-primary hover:dark:bg-accent/40 hover:bg-primary/6"
-                      :title="String(t('chat.sidebar.directoryActions.newSession.label'))"
-                      :aria-label="String(t('chat.sidebar.directoryActions.newSession.label'))"
-                      :disabled="props.creatingSession"
-                      @click.stop="props.newSessionInline(directory)"
-                    >
-                      <RiAddLine class="h-4 w-4" />
-                    </IconButton>
-
-                    <ConfirmPopover
-                      :title="String(t('chat.sidebar.directoryActions.remove.confirmTitle'))"
-                      :description="String(t('chat.sidebar.directoryActions.remove.confirmDescription'))"
-                      :confirm-text="String(t('common.remove'))"
-                      :cancel-text="String(t('common.cancel'))"
-                      variant="destructive"
-                      @confirm="props.removeDirectoryInline(directory)"
-                    >
-                      <IconButton
-                        size="xs"
-                        class="text-muted-foreground hover:text-destructive hover:dark:bg-accent/40 hover:bg-primary/6"
-                        :title="String(t('chat.sidebar.directoryActions.remove.label'))"
-                        :aria-label="String(t('chat.sidebar.directoryActions.remove.label'))"
-                        @click.stop
-                      >
-                        <RiDeleteBinLine class="h-4 w-4" />
-                      </IconButton>
-                    </ConfirmPopover>
-                  </div>
-                </div>
-              </div>
+              <DirectoryRow
+                :directory="directory"
+                :ui-is-mobile="uiIsMobile"
+                :collapsed="props.isDirectoryCollapsed(directory.id)"
+                :focused="props.isDirectoryFocused(directory)"
+                :has-active-or-blocked="props.directoryHasActiveOrBlocked(directory)"
+                :loading="aggregateLoadingByDirectoryId[directory.id]"
+                :creating-session="props.creatingSession"
+                @toggle-collapse="props.toggleDirectoryCollapse(directory.id, directory.path)"
+                @open-actions="props.openDirectoryActions(directory)"
+                @refresh="props.refreshDirectoryInline(directory)"
+                @new-session="props.newSessionInline(directory)"
+                @remove="props.removeDirectoryInline(directory)"
+              />
             </div>
 
             <div v-if="!props.isDirectoryCollapsed(directory.id)" class="py-1 pl-1">
