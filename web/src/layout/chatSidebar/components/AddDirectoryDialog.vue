@@ -25,6 +25,7 @@ const emit = defineEmits<{
     :description="String(t('chat.sidebar.addDirectoryDialog.description'))"
     :placeholder="String(t('chat.sidebar.addDirectoryDialog.placeholders.path'))"
     :confirm-label="String(t('common.add'))"
+    :allow-create-directory="true"
     @update:open="(v) => emit('update:open', v)"
     @update:path="(v) => emit('update:path', v)"
     @confirm="emit('add')"

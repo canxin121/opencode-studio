@@ -17,6 +17,7 @@ const props = defineProps<{
   confirmLabel: string
   confirmDisabled?: boolean
   basePath?: string
+  allowCreateDirectory?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -53,7 +54,7 @@ const confirmButtonDisabled = computed(() => {
         :base-path="basePath || ''"
         :show-options="true"
         :show-gitignored="true"
-        :allow-create-directory="true"
+        :allow-create-directory="allowCreateDirectory ?? true"
         input-class="h-9 font-mono"
         browser-class="flex h-[min(56vh,34rem)] min-h-[14rem] min-h-0 flex-col overflow-hidden"
       />
