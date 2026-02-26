@@ -6,6 +6,10 @@ OpenCode Studio is a local-first web UI for OpenCode. It runs a Rust (Axum) serv
 
 > Note: This is a community project and is not built by the OpenCode team and is not affiliated with them. Upstream OpenCode: https://github.com/anomalyco/opencode
 
+<p align="center">
+  <img src="web/public/apple-touch-icon-180x180.png" width="128" alt="OpenCode Studio desktop app icon" />
+</p>
+
 <details>
 <summary><strong>Screenshots</strong> (click to expand)</summary>
 

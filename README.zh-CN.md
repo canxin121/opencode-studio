@@ -6,6 +6,10 @@ OpenCode Studio 是一个面向 OpenCode 的本地优先 Web UI。它运行一�
 
 > 说明：本项目为社区实现，非 OpenCode 团队官方项目，与其不存在官方隶属关系。OpenCode 上游项目：https://github.com/anomalyco/opencode
 
+<p align="center">
+  <img src="web/public/apple-touch-icon-180x180.png" width="128" alt="OpenCode Studio 桌面版图标" />
+</p>
+
 <details>
 <summary><strong>界面截图</strong>（点击展开）</summary>
 
