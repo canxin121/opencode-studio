@@ -132,7 +132,7 @@ function statusMeta(sessionId: string) {
 
 <template>
   <div class="min-h-0 overflow-x-hidden" :class="uiIsMobile ? 'overflow-visible' : 'flex-1 overflow-y-auto'">
-    <div class="space-y-1 pb-1 pl-2.5 pr-1">
+    <div class="space-y-0.5 pb-0.5 pl-2 pr-1">
       <div v-if="directories.length === 0" class="px-2 py-6 text-center text-muted-foreground">
         <div class="typography-ui-label font-semibold">{{ t('chat.sidebar.directoriesList.empty.title') }}</div>
         <div class="typography-meta mt-1">{{ t('chat.sidebar.directoriesList.empty.description') }}</div>
@@ -149,11 +149,11 @@ function statusMeta(sessionId: string) {
             </div>
           </div>
 
-          <div v-if="sessionSearchHits.length" class="mt-1 space-y-1">
+          <div v-if="sessionSearchHits.length" class="mt-1 space-y-0.5">
             <SidebarTextButton
               v-for="hit in sessionSearchHits"
               :key="String(hit.session.id)"
-              class="w-full rounded-md px-2 py-1.5 hover:dark:bg-accent/40 hover:bg-primary/6"
+              class="w-full rounded-md px-2 py-1 hover:dark:bg-accent/40 hover:bg-primary/6"
               @click="props.locateFromSearch(hit)"
             >
               <div class="typography-ui-label font-medium truncate">{{ sessionLabel(hit.session) }}</div>
@@ -178,10 +178,10 @@ function statusMeta(sessionId: string) {
           </div>
         </div>
 
-        <div v-else class="space-y-1">
+        <div v-else class="space-y-0.5">
           <div v-for="directory in pagedDirectories" :key="directory.id" class="relative">
             <div
-              class="sticky top-0 z-20 pt-2 pb-1.5 w-full border-b select-none bg-sidebar group"
+              class="sticky top-0 z-20 w-full border-b bg-sidebar pt-1.5 pb-1 select-none group"
               :class="
                 props.isDirectoryCollapsed(directory.id)
                   ? 'bg-sidebar border-sidebar-border/30'
@@ -204,14 +204,14 @@ function statusMeta(sessionId: string) {
               />
             </div>
 
-            <div v-if="!props.isDirectoryCollapsed(directory.id)" class="py-1 pl-1">
-              <div class="space-y-1">
+            <div v-if="!props.isDirectoryCollapsed(directory.id)" class="py-0.5 pl-1">
+              <div class="space-y-0.5">
                 <div
                   v-if="
                     (aggregateLoadingByDirectoryId[directory.id] || !aggregateAttemptedByDirectoryId[directory.id]) &&
                     !props.hasCachedSessionsForDirectory(directory.id)
                   "
-                  class="px-1.5 py-2"
+                  class="px-1.5 py-1.5"
                 >
                   <div class="text-xs text-muted-foreground">
                     {{ t('chat.sidebar.directoriesList.loadingSessions') }}
@@ -225,13 +225,13 @@ function statusMeta(sessionId: string) {
 
                 <div
                   v-else-if="sessionsForDirectory(directory).length === 0"
-                  class="px-1.5 py-1 text-xs text-muted-foreground"
+                  class="px-1.5 py-0.5 text-xs text-muted-foreground"
                 >
                   {{ t('chat.sidebar.directoriesList.noSessionsYet') }}
                 </div>
 
                 <template v-else>
-                  <div v-if="pinnedRows(directory.id).length" class="space-y-1">
+                  <div v-if="pinnedRows(directory.id).length" class="space-y-0.5">
                     <div class="px-1.5 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
                       {{ t('chat.sidebar.directoriesList.pinnedTitle') }}
                     </div>
@@ -294,7 +294,7 @@ function statusMeta(sessionId: string) {
                     </div>
                   </div>
 
-                  <div class="space-y-1">
+                  <div class="space-y-0.5">
                     <div class="px-1.5 flex items-center justify-between gap-2">
                       <div class="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
                         {{ t('chat.sidebar.directoriesList.recentTitle') }}
