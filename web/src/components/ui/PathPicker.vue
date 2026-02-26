@@ -410,6 +410,19 @@ watch(
           </Button>
         </div>
 
+        <div class="flex flex-wrap items-center gap-1 text-xs">
+          <button
+            v-for="crumb in browserBreadcrumbs"
+            :key="crumb.path"
+            type="button"
+            class="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-muted-foreground hover:bg-accent"
+            @click="loadBrowser(crumb.path)"
+          >
+            <span>{{ crumb.label }}</span>
+            <RiArrowRightSLine class="h-3 w-3" />
+          </button>
+        </div>
+
         <div class="flex items-center justify-between gap-2 flex-wrap">
           <Input v-model="browserQuery" :placeholder="t('ui.pathPicker.placeholders.filter')" class="min-w-0 flex-1" />
 
@@ -460,19 +473,6 @@ watch(
               {{ browserFoldersOnly ? t('ui.pathPicker.actions.foldersOnly') : t('common.all') }}
             </Button>
           </div>
-        </div>
-
-        <div class="flex flex-wrap items-center gap-1 text-xs">
-          <button
-            v-for="crumb in browserBreadcrumbs"
-            :key="crumb.path"
-            type="button"
-            class="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-muted-foreground hover:bg-accent"
-            @click="loadBrowser(crumb.path)"
-          >
-            <span>{{ crumb.label }}</span>
-            <RiArrowRightSLine class="h-3 w-3" />
-          </button>
         </div>
 
         <div v-if="allowCreateDirectory" class="grid gap-1">

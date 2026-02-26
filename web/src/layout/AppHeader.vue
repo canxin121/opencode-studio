@@ -25,10 +25,8 @@ import { useChatStore } from '@/stores/chat'
 import { apiJson } from '@/lib/api'
 import type { GitStatusResponse } from '@/types/git'
 
-import FormDialog from '@/components/ui/FormDialog.vue'
-import Button from '@/components/ui/Button.vue'
 import IconButton from '@/components/ui/IconButton.vue'
-import PathPicker from '@/components/ui/PathPicker.vue'
+import DirectoryPathDialog from '@/components/ui/DirectoryPathDialog.vue'
 
 type Tab = { id: MainTabId; path: string; label: string; icon: Component; badge?: number; showDot?: boolean }
 
@@ -69,27 +67,27 @@ onBeforeUnmount(() => {
   window.removeEventListener('orientationchange', updateHeaderHeight)
 })
 
-// -- Project Picker --
-const projectPath = computed(() => (directoryStore.currentDirectory || '').trim())
-const projectDisplay = computed(() => directoryStore.displayDirectory || '')
-const projectPickerOpen = ref(false)
-const projectPickerDraft = ref('')
+// -- Directory Picker --
+const directoryPath = computed(() => (directoryStore.currentDirectory || '').trim())
+const directoryDisplay = computed(() => directoryStore.displayDirectory || '')
+const directoryPickerOpen = ref(false)
+const directoryPickerDraft = ref('')
 
-watch(projectPickerOpen, (open) => {
-  if (open) projectPickerDraft.value = projectPath.value
+watch(directoryPickerOpen, (open) => {
+  if (open) directoryPickerDraft.value = directoryPath.value
 })
 
-const projectPickerDisabled = computed(() => !(projectPickerDraft.value || '').trim())
+const directoryPickerDisabled = computed(() => !(directoryPickerDraft.value || '').trim())
 
-async function applyProjectPicker() {
-  const next = (projectPickerDraft.value || '').trim()
+async function applyDirectoryPicker() {
+  const next = (directoryPickerDraft.value || '').trim()
   if (!next) return
   const existing = settings.data?.projects || []
-  if (!existing.some((project) => project.path.trim() === next)) {
+  if (!existing.some((directory) => directory.path.trim() === next)) {
     await settings.addProject(next)
   }
   directoryStore.setDirectory(next)
-  projectPickerOpen.value = false
+  directoryPickerOpen.value = false
 }
 
 // -- Git Status / Badge --
@@ -330,17 +328,17 @@ function openHelpDialog() {
         <div class="typography-ui-label font-semibold truncate">{{ mobileTitle }}</div>
       </div>
 
-      <!-- Desktop Project Picker -->
+      <!-- Desktop Directory Picker -->
       <button
         v-else
         type="button"
         class="flex items-center gap-2 px-2.5 h-9 rounded-md text-[11px] font-medium hover:bg-secondary/40 transition-colors select-none max-w-[36vw]"
-        :title="projectPath || String(t('header.noProjectSelected'))"
-        :aria-label="String(t('header.changeProject'))"
-        @click="projectPickerOpen = true"
+        :title="directoryPath || String(t('header.noDirectorySelected'))"
+        :aria-label="String(t('header.changeDirectory'))"
+        @click="directoryPickerOpen = true"
       >
         <RiFolder6Line class="h-4 w-4 text-muted-foreground" />
-        <span class="font-mono truncate">{{ projectDisplay || String(t('header.noProjectSelected')) }}</span>
+        <span class="font-mono truncate">{{ directoryDisplay || String(t('header.noDirectorySelected')) }}</span>
         <RiArrowDownSLine class="h-4 w-4 text-muted-foreground flex-shrink-0" />
       </button>
 
@@ -382,9 +380,9 @@ function openHelpDialog() {
           <IconButton
             v-if="ui.isMobile"
             size="lg"
-            :aria-label="String(t('header.changeProject'))"
-            :title="projectPath || String(t('header.noProjectSelected'))"
-            @click="projectPickerOpen = true"
+            :aria-label="String(t('header.changeDirectory'))"
+            :title="directoryPath || String(t('header.noDirectorySelected'))"
+            @click="directoryPickerOpen = true"
           >
             <RiFolder6Line class="h-5 w-5" />
           </IconButton>
@@ -397,30 +395,17 @@ function openHelpDialog() {
     </div>
   </header>
 
-  <FormDialog
-    :open="projectPickerOpen"
-    :title="String(t('header.selectProject.title'))"
-    :description="String(t('header.selectProject.description'))"
-    @update:open="(v) => (projectPickerOpen = v)"
-  >
-    <div class="flex min-h-0 flex-col gap-3">
-      <PathPicker
-        v-model="projectPickerDraft"
-        :placeholder="String(t('header.selectProject.placeholder'))"
-        view="browser"
-        mode="directory"
-        :resolve-to-absolute="true"
-        :base-path="directoryStore.currentDirectory || ''"
-        :show-options="true"
-        :show-gitignored="true"
-        :allow-create-directory="true"
-        input-class="h-9 font-mono"
-        browser-class="flex max-h-[52vh] min-h-[14rem] flex-col"
-      />
-      <div class="flex items-center justify-end gap-2 flex-none">
-        <Button variant="ghost" @click="projectPickerOpen = false">{{ t('common.cancel') }}</Button>
-        <Button @click="applyProjectPicker" :disabled="projectPickerDisabled">{{ t('common.useProject') }}</Button>
-      </div>
-    </div>
-  </FormDialog>
+  <DirectoryPathDialog
+    :open="directoryPickerOpen"
+    :path="directoryPickerDraft"
+    :title="String(t('header.selectDirectory.title'))"
+    :description="String(t('header.selectDirectory.description'))"
+    :placeholder="String(t('header.selectDirectory.placeholder'))"
+    :confirm-label="String(t('common.useDirectory'))"
+    :confirm-disabled="directoryPickerDisabled"
+    :base-path="directoryStore.currentDirectory || ''"
+    @update:open="(v) => (directoryPickerOpen = v)"
+    @update:path="(v) => (directoryPickerDraft = v)"
+    @confirm="applyDirectoryPicker"
+  />
 </template>
