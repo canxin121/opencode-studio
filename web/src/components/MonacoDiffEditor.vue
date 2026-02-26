@@ -26,6 +26,9 @@ const props = defineProps<{
   modifiedValue: string
   path?: string | null
   originalPath?: string | null
+  modelId?: string | null
+  originalModelId?: string | null
+  languagePath?: string | null
   wrap?: boolean
   readOnly?: boolean
   useFilesTheme?: boolean
@@ -81,15 +84,15 @@ function languageByPath(path?: string | null): string {
   return 'plaintext'
 }
 
-const language = computed(() => languageByPath(props.path))
+const language = computed(() => languageByPath(props.languagePath || props.path))
 
 const modelPath = computed(() => {
-  const raw = String(props.path || '').trim()
+  const raw = String(props.modelId || props.path || '').trim()
   return raw || 'timeline/current'
 })
 
 const originalModelPath = computed(() => {
-  const raw = String(props.originalPath || '').trim()
+  const raw = String(props.originalModelId || props.originalPath || '').trim()
   return raw || `${modelPath.value}:base`
 })
 
@@ -467,7 +470,16 @@ watch(
 )
 
 watch(
-  () => [props.originalValue, props.modifiedValue, props.path, props.originalPath, language.value],
+  () => [
+    props.originalValue,
+    props.modifiedValue,
+    props.path,
+    props.originalPath,
+    props.modelId,
+    props.originalModelId,
+    props.languagePath,
+    language.value,
+  ],
   () => {
     syncModels()
   },

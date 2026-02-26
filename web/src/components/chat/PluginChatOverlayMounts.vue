@@ -1,16 +1,19 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type CSSProperties } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { RiCloseLine, RiFileList2Line, RiPlugLine } from '@remixicon/vue'
+import { useWindowSize } from '@vueuse/core'
+import { RiArrowLeftSLine, RiCloseLine, RiFileList2Line, RiPlugLine } from '@remixicon/vue'
 
 import MonacoDiffEditor from '@/components/MonacoDiffEditor.vue'
 import PluginMountHost from '@/components/plugins/PluginMountHost.vue'
 import IconButton from '@/components/ui/IconButton.vue'
 import OptionMenu from '@/components/ui/OptionMenu.vue'
 import type { OptionMenuGroup, OptionMenuItem } from '@/components/ui/optionMenu.types'
+import { buildVirtualMonacoDiffModel } from '@/features/git/diff/unifiedDiff'
 import type { ChatMount } from '@/plugins/host/mounts'
 import { useChatStore } from '@/stores/chat'
 import type { SessionFileDiff } from '@/types/chat'
+import { resolveSessionDiffNavigationView, type SessionDiffMobileView } from './sessionDiffMobileNav'
 import { resolveSessionDiffPanelView } from './sessionDiffPanelState'
 
 const props = withDefaults(
@@ -43,7 +46,9 @@ const activeMountKey = ref('')
 const menuQuery = ref('')
 const diffPanelOpen = ref(false)
 const selectedDiffFile = ref('')
+const mobileDiffView = ref<SessionDiffMobileView>('list')
 const diffListEl = ref<HTMLElement | null>(null)
+const { width: viewportWidth } = useWindowSize()
 
 let reserveObserver: ResizeObserver | null = null
 let reserveRaf = 0
@@ -115,8 +120,27 @@ const selectedDiff = computed(() => {
   return sessionDiff.value.find((entry) => entry.file === target) || null
 })
 const selectedDiffPath = computed(() => selectedDiff.value?.file || '')
-const selectedDiffBefore = computed(() => selectedDiff.value?.before || '')
-const selectedDiffAfter = computed(() => selectedDiff.value?.after || '')
+const selectedDiffPreview = computed(() => {
+  const entry = selectedDiff.value
+  if (!entry) return null
+  return buildVirtualMonacoDiffModel({
+    modelId: `session-diff:${entry.file}`,
+    path: entry.file,
+    original: entry.before,
+    modified: entry.after,
+    diff: entry.diff,
+    meta: entry.meta,
+  })
+})
+const isNarrowViewport = computed(() => viewportWidth.value < 640)
+const sessionDiffNavigationView = computed(() =>
+  resolveSessionDiffNavigationView({
+    isNarrowViewport: isNarrowViewport.value,
+    hasDiffEntries: sessionDiffCount.value > 0,
+    selectedDiffPath: selectedDiffPath.value,
+    mobileView: mobileDiffView.value,
+  }),
+)
 const sessionDiffHasMore = computed(() => chat.selectedSessionDiffHasMore)
 const sessionDiffLoadingMore = computed(() => chat.selectedSessionDiffLoadingMore)
 const sessionDiffPanelStyle = computed<CSSProperties | undefined>(() => {
@@ -226,6 +250,7 @@ function closeMenu() {
 function closeDiffPanel() {
   if (!diffPanelOpen.value) return
   diffPanelOpen.value = false
+  mobileDiffView.value = 'list'
   scheduleReserveUpdate()
 }
 
@@ -243,6 +268,7 @@ function toggleDiffPanel() {
   if (!diffPanelOpen.value) {
     closeMenu()
     activeMountKey.value = ''
+    mobileDiffView.value = 'list'
     void chat.refreshSessionDiff(sid, { silent: true })
   }
   diffPanelOpen.value = !diffPanelOpen.value
@@ -263,6 +289,17 @@ function maybeLoadMoreSessionDiff() {
 
 function handleDiffListScroll() {
   maybeLoadMoreSessionDiff()
+}
+
+function selectDiffFile(path: string) {
+  selectedDiffFile.value = path
+  if (isNarrowViewport.value) {
+    mobileDiffView.value = 'detail'
+  }
+}
+
+function backToDiffList() {
+  mobileDiffView.value = 'list'
 }
 
 function selectMount(key: string) {
@@ -338,6 +375,7 @@ watch(
   () => {
     diffPanelOpen.value = false
     selectedDiffFile.value = ''
+    mobileDiffView.value = 'list'
   },
 )
 
@@ -455,20 +493,28 @@ onBeforeUnmount(() => {
         </div>
         <div
           v-else
-          class="flex min-h-0 flex-col sm:flex-row h-[min(56dvh,calc(100dvh-var(--oc-safe-area-top,0px)-var(--oc-safe-area-bottom,0px)-9rem))] max-h-[520px] min-h-[280px] sm:min-h-[320px]"
+          class="flex min-h-0 flex-col h-[min(56dvh,calc(100dvh-var(--oc-safe-area-top,0px)-var(--oc-safe-area-bottom,0px)-9rem))] max-h-[520px] min-h-[280px] sm:min-h-[320px]"
+          :class="sessionDiffNavigationView === 'split' ? 'sm:flex-row' : ''"
         >
           <div
+            v-if="sessionDiffNavigationView !== 'detail'"
             ref="diffListEl"
-            class="max-h-[38dvh] sm:max-h-none sm:w-72 sm:max-w-72 sm:min-w-72 border-b sm:border-b-0 sm:border-r border-border/60 overflow-auto"
+            class="flex-1 min-h-0 overflow-auto border-border/60 sm:w-72 sm:max-w-72 sm:min-w-72 sm:border-r"
             @scroll.passive="handleDiffListScroll"
           >
+            <div
+              v-if="sessionDiffNavigationView === 'list'"
+              class="px-3 py-2 text-[11px] font-medium text-muted-foreground"
+            >
+              {{ t('chat.sessionDiff.listTitle') }}
+            </div>
             <button
               v-for="entry in sessionDiff"
               :key="entry.file"
               type="button"
               class="w-full px-3 py-2 text-left border-b border-border/50 hover:bg-secondary/40 transition-colors"
               :class="selectedDiffPath === entry.file ? 'bg-secondary/60' : ''"
-              @click.stop="selectedDiffFile = entry.file"
+              @click.stop="selectDiffFile(entry.file)"
             >
               <div class="text-xs truncate" :title="entry.file">{{ entry.file }}</div>
               <div class="mt-1 text-[11px] font-mono">
@@ -480,13 +526,45 @@ onBeforeUnmount(() => {
               {{ t('chat.sessionDiff.loading') }}
             </div>
           </div>
-          <div class="min-w-0 flex-1 min-h-[200px] sm:min-h-0">
+          <div v-if="sessionDiffNavigationView === 'detail'" class="flex min-h-0 flex-1 flex-col">
+            <div class="flex items-center gap-2 border-b border-border/50 px-2 py-1">
+              <button
+                type="button"
+                class="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary/40 transition-colors"
+                :title="t('chat.sessionDiff.backToList')"
+                :aria-label="t('chat.sessionDiff.backToList')"
+                @click.stop="backToDiffList"
+              >
+                <RiArrowLeftSLine class="h-4 w-4" />
+                <span>{{ t('chat.sessionDiff.backToList') }}</span>
+              </button>
+              <div class="min-w-0 text-[11px] font-medium text-foreground truncate" :title="selectedDiffPath">
+                {{ selectedDiffPath }}
+              </div>
+            </div>
+            <div class="min-w-0 flex-1 min-h-[200px]">
+              <MonacoDiffEditor
+                class="h-full"
+                :path="selectedDiffPreview?.path || selectedDiffPath"
+                :language-path="selectedDiffPreview?.path || selectedDiffPath"
+                :model-id="selectedDiffPreview?.modelId || ''"
+                :original-model-id="selectedDiffPreview ? `${selectedDiffPreview.modelId}:base` : ''"
+                :original-value="selectedDiffPreview?.original || ''"
+                :modified-value="selectedDiffPreview?.modified || ''"
+                :read-only="true"
+                :wrap="true"
+              />
+            </div>
+          </div>
+          <div v-else-if="sessionDiffNavigationView === 'split'" class="min-w-0 flex-1 min-h-[200px] sm:min-h-0">
             <MonacoDiffEditor
               class="h-full"
-              :path="selectedDiffPath"
-              :original-path="selectedDiffPath"
-              :original-value="selectedDiffBefore"
-              :modified-value="selectedDiffAfter"
+              :path="selectedDiffPreview?.path || selectedDiffPath"
+              :language-path="selectedDiffPreview?.path || selectedDiffPath"
+              :model-id="selectedDiffPreview?.modelId || ''"
+              :original-model-id="selectedDiffPreview ? `${selectedDiffPreview.modelId}:base` : ''"
+              :original-value="selectedDiffPreview?.original || ''"
+              :modified-value="selectedDiffPreview?.modified || ''"
               :read-only="true"
               :wrap="true"
             />

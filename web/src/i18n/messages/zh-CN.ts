@@ -1705,6 +1705,8 @@ export default {
       toggleAria: '切换会话文件变更',
       panelTitle: '会话文件变更',
       close: '关闭',
+      backToList: '返回文件列表',
+      listTitle: '变更文件列表',
       loading: '正在加载文件变更...',
       empty: '当前会话暂无文件变更。',
     },

@@ -2,6 +2,7 @@ import { apiJson } from '../../lib/api'
 import { parseSessionPayloadConsistency, type SessionPayloadConsistency } from '../sessionConsistency'
 
 import type { MessageEntry, Session, SessionFileDiff } from '../../types/chat'
+import type { GitDiffMeta } from '@/types/git'
 import type { JsonObject, JsonValue } from '@/types/json'
 
 type SessionListOptions = {
@@ -80,6 +81,12 @@ function firstCount(record: JsonObject, keys: string[]): number {
   return 0
 }
 
+function readDiffMeta(record: JsonObject): GitDiffMeta | null {
+  const candidate = record.meta ?? record.diffMeta ?? record.diff_meta
+  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return null
+  return candidate as unknown as GitDiffMeta
+}
+
 function looksLikeSessionFileDiffRecord(record: JsonObject): boolean {
   return Boolean(
     firstText(record, ['file', 'path', 'filename', 'name', 'target', 'filePath', 'filepath', 'relativePath']) ||
@@ -138,12 +145,16 @@ function parseSessionFileDiff(value: JsonValue): SessionFileDiff | null {
   const record = asRecord(value)
   const file = firstText(record, ['file', 'path', 'filename', 'name', 'target', 'filePath', 'filepath', 'relativePath'])
   if (!file) return null
+  const diff = firstString(record, ['diff', 'patch'])
+  const meta = readDiffMeta(record)
   return {
     file,
     before: firstString(record, ['before', 'old', 'oldText', 'original', 'previous', 'prev', 'from', 'left', 'a']),
     after: firstString(record, ['after', 'new', 'newText', 'modified', 'current', 'next', 'to', 'right', 'b']),
     additions: firstCount(record, ['additions', 'added', 'insertions', 'linesAdded', 'add']),
     deletions: firstCount(record, ['deletions', 'removed', 'linesDeleted', 'del']),
+    ...(diff ? { diff } : {}),
+    ...(meta ? { meta } : {}),
   }
 }
 

@@ -24,10 +24,20 @@ export type ParsedUnifiedDiffModel = {
 }
 
 export type UnifiedMonacoDiffModel = {
+  modelId: string
   path: string
   original: string
   modified: string
   hasChanges: boolean
+}
+
+export type VirtualDiffInput = {
+  modelId?: string | null
+  path?: string | null
+  original?: string | null
+  modified?: string | null
+  diff?: string | null
+  meta?: GitDiffMeta | null
 }
 
 type ParsedHunkHeader = {
@@ -361,6 +371,7 @@ export function buildUnifiedMonacoDiffModel(diff: string, meta?: GitDiffMeta | n
 
   if (!parsed.hunks.length) {
     return {
+      modelId: `diff:${path}`,
       path,
       original: source,
       modified: source,
@@ -420,9 +431,44 @@ export function buildUnifiedMonacoDiffModel(diff: string, meta?: GitDiffMeta | n
   }
 
   return {
+    modelId: `diff:${path}`,
     path,
     original: original.join('\n'),
     modified: modified.join('\n'),
+    hasChanges,
+  }
+}
+
+export function buildVirtualMonacoDiffModel(input: VirtualDiffInput): UnifiedMonacoDiffModel {
+  const explicitOriginal = typeof input.original === 'string' ? input.original : ''
+  const explicitModified = typeof input.modified === 'string' ? input.modified : ''
+  const hasExplicitContent = typeof input.original === 'string' || typeof input.modified === 'string'
+
+  let path = String(input.path || '').trim()
+  let original = explicitOriginal
+  let modified = explicitModified
+  let hasChanges = original !== modified
+
+  const diffText = typeof input.diff === 'string' ? input.diff : ''
+  const hasPatchFallback = diffText.trim().length > 0 || Boolean(input.meta)
+
+  if ((!hasExplicitContent || (!original && !modified)) && hasPatchFallback) {
+    const fallback = buildUnifiedMonacoDiffModel(diffText, input.meta)
+    if (!path) path = fallback.path
+    original = fallback.original
+    modified = fallback.modified
+    hasChanges = fallback.hasChanges
+  }
+
+  if (!path) path = 'virtual.diff'
+
+  const modelId = String(input.modelId || '').trim() || `virtual:${path}`
+
+  return {
+    modelId,
+    path,
+    original,
+    modified,
     hasChanges,
   }
 }
