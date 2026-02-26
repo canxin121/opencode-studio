@@ -1702,6 +1702,7 @@ export default {
       loading: '正在加载文件变更...',
       empty: '当前会话暂无文件变更。',
       wrap: {
+        label: '自动换行',
         enable: '自动换行：关',
         disable: '自动换行：开',
       },
@@ -2238,6 +2239,7 @@ export default {
           loadingDiff: 'Diff 加载中...',
           emptyDiff: '无 diff 内容。',
           wrap: {
+            label: '自动换行',
             enable: '启用自动换行',
             disable: '关闭自动换行',
           },
@@ -2395,6 +2397,7 @@ export default {
           },
           empty: '没有可展示的 diff。',
           wrap: {
+            label: '自动换行',
             enable: '启用自动换行',
             disable: '关闭自动换行',
           },
@@ -2435,6 +2438,7 @@ export default {
           revealInFiles: '在文件中定位',
         },
         wrap: {
+          label: '自动换行',
           enable: '启用自动换行',
           disable: '关闭自动换行',
         },

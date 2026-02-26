@@ -546,11 +546,18 @@ const shouldShowInput = computed(() => {
               <div class="flex items-center gap-2">
                 <button
                   type="button"
-                  class="rounded border border-border/60 px-1.5 py-0.5 text-[10px] uppercase tracking-wider opacity-80 transition-colors hover:bg-secondary/40 hover:opacity-100"
+                  class="rounded border border-border/60 px-1.5 py-0.5 text-[10px] uppercase tracking-wider transition-colors"
+                  :class="
+                    activityDiffWrap
+                      ? 'bg-secondary/70 text-foreground shadow-inner'
+                      : 'text-muted-foreground opacity-80 hover:bg-secondary/40 hover:text-foreground hover:opacity-100'
+                  "
+                  :title="activityDiffWrap ? 'Disable wrap lines' : 'Enable wrap lines'"
+                  :aria-label="activityDiffWrap ? 'Disable wrap lines' : 'Enable wrap lines'"
                   :aria-pressed="activityDiffWrap"
                   @click="activityDiffWrap = !activityDiffWrap"
                 >
-                  {{ activityDiffWrap ? 'Wrap: On' : 'Wrap: Off' }}
+                  Wrap
                 </button>
                 <span class="text-[10px] uppercase tracking-wider opacity-70">diff</span>
               </div>
