@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { normalizeSessionDiffPagePayload, normalizeSessionDiffPayload } from '../src/stores/chat/api'
-import { extractSessionId } from '../src/stores/chat/reducers'
+import { extractSessionId, normalizeSessionDiffEventMode } from '../src/stores/chat/reducers'
 
 test('normalizeSessionDiffPayload: accepts wrapped payload and alternate field names', () => {
   const payload = {
@@ -175,6 +175,32 @@ test('extractSessionId: accepts camelCase and snake_case session keys', () => {
       properties: { part: { session_id: 'session-snake' } },
     }),
     'session-snake',
+  )
+})
+
+test('normalizeSessionDiffEventMode: parses merge/invalidate modes', () => {
+  assert.equal(
+    normalizeSessionDiffEventMode({
+      type: 'session.diff',
+      properties: { mode: 'merge' },
+    }),
+    'merge',
+  )
+
+  assert.equal(
+    normalizeSessionDiffEventMode({
+      type: 'session.diff',
+      properties: { mode: 'invalidate' },
+    }),
+    'invalidate',
+  )
+
+  assert.equal(
+    normalizeSessionDiffEventMode({
+      type: 'session.diff',
+      properties: { mode: 'unknown' },
+    }),
+    '',
   )
 })
 

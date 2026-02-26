@@ -46,6 +46,11 @@ fn opencode_studio_session_activity_bytes(session_id: &str, phase: &str) -> Byte
     Bytes::from(format!("data: {}\n\n", payload))
 }
 
+fn opencode_studio_sse_data_bytes(payload: &serde_json::Value) -> Option<Bytes> {
+    let encoded = serde_json::to_string(payload).ok()?;
+    Some(Bytes::from(format!("data: {}\n\n", encoded)))
+}
+
 fn rewrite_opencode_prompt_async_url(target_url: &str) -> Option<String> {
     let mut parsed = url::Url::parse(target_url).ok()?;
     if !parsed.path().ends_with("/message") {
@@ -527,15 +532,107 @@ fn parse_unified_diff_entries(
     by_file
 }
 
-fn metadata_map_from_tool_part(
+fn session_diff_metadata_values_from_tool_part(
     part_map: &serde_json::Map<String, serde_json::Value>,
-) -> Option<&serde_json::Map<String, serde_json::Value>> {
-    if let Some(state_map) = part_map.get("state").and_then(|v| v.as_object())
-        && let Some(meta) = state_map.get("metadata").and_then(|v| v.as_object())
-    {
-        return Some(meta);
+) -> Vec<&serde_json::Value> {
+    let mut out = Vec::new();
+
+    if let Some(state_map) = part_map.get("state").and_then(|v| v.as_object()) {
+        if let Some(meta) = state_map.get("metadata") {
+            out.push(meta);
+        }
+
+        if let Some(result) = state_map.get("result")
+            && let Some(result_map) = result.as_object()
+        {
+            if let Some(meta) = result_map.get("metadata") {
+                out.push(meta);
+            }
+            if [
+                "diff", "patch", "files", "changes", "diffs", "entries", "items", "list", "value",
+                "data", "payload",
+            ]
+            .iter()
+            .any(|key| result_map.contains_key(*key))
+            {
+                out.push(result);
+            }
+        }
     }
-    part_map.get("metadata").and_then(|v| v.as_object())
+
+    if let Some(meta) = part_map.get("metadata") {
+        out.push(meta);
+    }
+
+    out
+}
+
+fn append_diff_text_entries(
+    by_file: &mut BTreeMap<String, SessionDiffItem>,
+    diff_text: &str,
+    directory: Option<&str>,
+) {
+    if diff_text.trim().is_empty() {
+        return;
+    }
+
+    let entries = parse_unified_diff_entries(diff_text, directory);
+    for (file, parsed) in entries {
+        let prev = by_file.get(&file).cloned();
+        by_file.insert(
+            file.clone(),
+            SessionDiffItem {
+                file,
+                before: prev.as_ref().map(|v| v.before.clone()).unwrap_or_default(),
+                after: prev.as_ref().map(|v| v.after.clone()).unwrap_or_default(),
+                additions: parsed.additions,
+                deletions: parsed.deletions,
+                diff: if parsed.diff.trim().is_empty() {
+                    prev.as_ref().map(|v| v.diff.clone()).unwrap_or_default()
+                } else {
+                    parsed.diff
+                },
+            },
+        );
+    }
+}
+
+fn append_session_diff_from_metadata_value(
+    by_file: &mut BTreeMap<String, SessionDiffItem>,
+    metadata_value: &serde_json::Value,
+    directory: Option<&str>,
+) {
+    for entry in read_session_diff_items(metadata_value, 0) {
+        if let Some(parsed) = parse_metadata_file_entry(&entry, directory) {
+            by_file.insert(parsed.file.clone(), parsed);
+        }
+    }
+
+    if let Some(metadata_map) = metadata_value.as_object() {
+        let diff_text = first_string(metadata_map, &["diff", "patch"]);
+        append_diff_text_entries(by_file, &diff_text, directory);
+    }
+}
+
+fn session_diff_items_from_part(
+    part_map: &serde_json::Map<String, serde_json::Value>,
+    directory: Option<&str>,
+) -> Vec<SessionDiffItem> {
+    let part_type = part_map
+        .get("type")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase();
+    if part_type != "tool" && part_type != "patch" {
+        return Vec::new();
+    }
+
+    let mut by_file = BTreeMap::<String, SessionDiffItem>::new();
+    for value in session_diff_metadata_values_from_tool_part(part_map) {
+        append_session_diff_from_metadata_value(&mut by_file, value, directory);
+    }
+    by_file.into_values().collect()
 }
 
 fn build_session_diff_from_messages(
@@ -557,50 +654,8 @@ fn build_session_diff_from_messages(
             let Some(part_map) = part.as_object() else {
                 continue;
             };
-            let part_type = part_map
-                .get("type")
-                .and_then(|v| v.as_str())
-                .unwrap_or_default()
-                .trim()
-                .to_ascii_lowercase();
-            if part_type != "tool" && part_type != "patch" {
-                continue;
-            }
-
-            let Some(metadata) = metadata_map_from_tool_part(part_map) else {
-                continue;
-            };
-
-            if let Some(files) = metadata.get("files").and_then(|v| v.as_array()) {
-                for row in files {
-                    if let Some(parsed) = parse_metadata_file_entry(row, directory) {
-                        by_file.insert(parsed.file.clone(), parsed);
-                    }
-                }
-            }
-
-            let diff_text = first_string(metadata, &["diff", "patch"]);
-            if diff_text.is_empty() {
-                continue;
-            }
-            let entries = parse_unified_diff_entries(&diff_text, directory);
-            for (file, parsed) in entries {
-                let prev = by_file.get(&file).cloned();
-                by_file.insert(
-                    file.clone(),
-                    SessionDiffItem {
-                        file,
-                        before: prev.as_ref().map(|v| v.before.clone()).unwrap_or_default(),
-                        after: prev.as_ref().map(|v| v.after.clone()).unwrap_or_default(),
-                        additions: parsed.additions,
-                        deletions: parsed.deletions,
-                        diff: if parsed.diff.trim().is_empty() {
-                            prev.as_ref().map(|v| v.diff.clone()).unwrap_or_default()
-                        } else {
-                            parsed.diff
-                        },
-                    },
-                );
+            for item in session_diff_items_from_part(part_map, directory) {
+                by_file.insert(item.file.clone(), item);
             }
         }
     }
@@ -674,81 +729,7 @@ fn read_session_diff_items(value: &serde_json::Value, depth: usize) -> Vec<serde
     Vec::new()
 }
 
-fn normalize_session_diff_payload(
-    payload: &serde_json::Value,
-    directory: Option<&str>,
-) -> Vec<SessionDiffItem> {
-    read_session_diff_items(payload, 0)
-        .into_iter()
-        .filter_map(|entry| parse_metadata_file_entry(&entry, directory))
-        .collect()
-}
-
-fn merge_session_diff_items(
-    upstream: Vec<SessionDiffItem>,
-    computed: Vec<SessionDiffItem>,
-) -> Vec<SessionDiffItem> {
-    if computed.is_empty() {
-        return upstream;
-    }
-
-    let mut upstream_by_file = BTreeMap::<String, SessionDiffItem>::new();
-    for item in upstream {
-        upstream_by_file.insert(item.file.clone(), item);
-    }
-
-    let mut merged = BTreeMap::<String, SessionDiffItem>::new();
-    for mut item in computed {
-        if let Some(upstream_item) = upstream_by_file.get(&item.file) {
-            if item.before.is_empty() {
-                item.before = upstream_item.before.clone();
-            }
-            if item.after.is_empty() {
-                item.after = upstream_item.after.clone();
-            }
-            if item.additions == 0 && upstream_item.additions > 0 {
-                item.additions = upstream_item.additions;
-            }
-            if item.deletions == 0 && upstream_item.deletions > 0 {
-                item.deletions = upstream_item.deletions;
-            }
-            if item.diff.trim().is_empty() && !upstream_item.diff.trim().is_empty() {
-                item.diff = upstream_item.diff.clone();
-            }
-        }
-        merged.insert(item.file.clone(), item);
-    }
-
-    merged.into_values().collect()
-}
-
-async fn load_upstream_session_diff(
-    state: &crate::AppState,
-    uri: &Uri,
-    path: &str,
-) -> Option<Vec<SessionDiffItem>> {
-    if state.opencode.is_restarting().await {
-        return None;
-    }
-    let bridge = state.opencode.bridge().await?;
-    let upstream_path = format!("/{path}");
-    let target = bridge.build_url(&upstream_path, Some(uri)).ok()?;
-    let resp = bridge.client.get(target).send().await.ok()?;
-    if !resp.status().is_success() {
-        return None;
-    }
-    let payload = resp.json::<serde_json::Value>().await.ok()?;
-    Some(normalize_session_diff_payload(
-        &payload,
-        directory_from_uri_query(uri).as_deref(),
-    ))
-}
-
-async fn session_diff_get_authoritative(
-    state: Arc<crate::AppState>,
-    uri: Uri,
-    path: &str,
-) -> ApiResult<Response> {
+async fn session_diff_get_authoritative(uri: Uri, path: &str) -> ApiResult<Response> {
     let Some(session_id) = extract_session_id_from_diff_path(path) else {
         return Ok((
             StatusCode::BAD_REQUEST,
@@ -765,11 +746,7 @@ async fn session_diff_get_authoritative(
     let directory = directory_from_uri_query(&uri);
     let local_messages =
         crate::opencode_session::load_session_messages_unfiltered(&session_id).await;
-    let computed = build_session_diff_from_messages(&local_messages, directory.as_deref());
-    let upstream = load_upstream_session_diff(state.as_ref(), &uri, path)
-        .await
-        .unwrap_or_default();
-    let items = merge_session_diff_items(upstream, computed);
+    let items = build_session_diff_from_messages(&local_messages, directory.as_deref());
 
     let total = items.len();
     let start = offset.min(total);
@@ -1019,8 +996,10 @@ fn sse_passthrough_with_heartbeat_and_activity(
                         if !block.is_empty() {
                             let activity_payload = crate::session_activity::parse_sse_data_payload(&block);
 
+                            let mut injected_diff_event: Option<serde_json::Value> = None;
                             let forwarded = if let Some(mut raw_data) = parse_sse_block_data_json(&block) {
                                 if sanitize_sse_event_data(&mut raw_data, &filter, &detail) {
+                                    injected_diff_event = derive_session_diff_injected_event(&raw_data);
                                     rewrite_sse_block_data_json(&block, &raw_data)
                                         .unwrap_or(block.clone())
                                 } else {
@@ -1035,6 +1014,12 @@ fn sse_passthrough_with_heartbeat_and_activity(
                                 out.put_slice(forwarded.as_bytes());
                                 out.put_slice(b"\n\n");
                                 yield Ok(out.freeze());
+                            }
+
+                            if let Some(diff_event) = injected_diff_event
+                                && let Some(bytes) = opencode_studio_sse_data_bytes(&diff_event)
+                            {
+                                yield Ok(bytes);
                             }
 
                             // Derive and inject activity signal.
@@ -1064,8 +1049,10 @@ fn sse_passthrough_with_heartbeat_and_activity(
         if !trailing.is_empty() {
             let activity_payload = crate::session_activity::parse_sse_data_payload(trailing);
 
+            let mut injected_diff_event: Option<serde_json::Value> = None;
             let forwarded = if let Some(mut raw_data) = parse_sse_block_data_json(trailing) {
                 if sanitize_sse_event_data(&mut raw_data, &filter, &detail) {
+                    injected_diff_event = derive_session_diff_injected_event(&raw_data);
                     rewrite_sse_block_data_json(trailing, &raw_data)
                         .unwrap_or_else(|| trailing.to_string())
                 } else {
@@ -1080,6 +1067,12 @@ fn sse_passthrough_with_heartbeat_and_activity(
                 out.put_slice(forwarded.as_bytes());
                 out.put_slice(b"\n\n");
                 yield Ok(out.freeze());
+            }
+
+            if let Some(diff_event) = injected_diff_event
+                && let Some(bytes) = opencode_studio_sse_data_bytes(&diff_event)
+            {
+                yield Ok(bytes);
             }
 
             // Best-effort: upstream may close without a terminating "\n\n".
@@ -1121,7 +1114,7 @@ pub(crate) async fn proxy_opencode_rest_inner(
         && extract_session_id_from_diff_path(normalized_path).is_some()
         && !query_has_message_id(&uri);
     if is_session_diff_get {
-        return session_diff_get_authoritative(state, uri, normalized_path).await;
+        return session_diff_get_authoritative(uri, normalized_path).await;
     }
 
     let oc = state.opencode.status().await;
@@ -3387,6 +3380,67 @@ fn sse_event_payload_mut(raw: &mut serde_json::Value) -> Option<&mut serde_json:
     None
 }
 
+fn sse_event_payload(raw: &serde_json::Value) -> Option<&serde_json::Value> {
+    if raw
+        .as_object()
+        .and_then(|obj| obj.get("type"))
+        .and_then(|v| v.as_str())
+        .is_some()
+    {
+        return Some(raw);
+    }
+
+    let payload = raw.get("payload")?;
+    if payload
+        .as_object()
+        .and_then(|obj| obj.get("type"))
+        .and_then(|v| v.as_str())
+        .is_some()
+    {
+        return Some(payload);
+    }
+    None
+}
+
+fn derive_session_diff_injected_event(raw: &serde_json::Value) -> Option<serde_json::Value> {
+    let event = sse_event_payload(raw)?;
+    let event_obj = event.as_object()?;
+    let event_type = event_obj
+        .get("type")
+        .and_then(|v| v.as_str())
+        .map(|v| v.trim().to_ascii_lowercase())
+        .unwrap_or_default();
+    let props = event_obj.get("properties")?.as_object()?;
+
+    let session_id = read_trimmed_from_map(props, &["sessionID", "sessionId", "session_id"])?;
+
+    match event_type.as_str() {
+        "message.part.updated" | "message.part.created" => {
+            let part = props.get("part")?.as_object()?;
+            let diff = session_diff_items_from_part(part, None);
+            if diff.is_empty() {
+                return None;
+            }
+            Some(serde_json::json!({
+                "type": "session.diff",
+                "properties": {
+                    "sessionID": session_id,
+                    "mode": "merge",
+                    "diff": diff,
+                }
+            }))
+        }
+        "message.removed" | "message.part.removed" => Some(serde_json::json!({
+            "type": "session.diff",
+            "properties": {
+                "sessionID": session_id,
+                "mode": "invalidate",
+            }
+        })),
+        _ => None,
+    }
+}
+
 pub(crate) fn sanitize_sse_event_data(
     raw: &mut serde_json::Value,
     filter: &ActivityFilter,
@@ -3437,6 +3491,7 @@ pub(crate) fn sanitize_sse_event_data(
             sanitize_session_created_updated_event_properties(&mut props)
         }
         "session.deleted" => sanitize_session_deleted_event_properties(&mut props),
+        "session.diff" => false,
         "opencode-studio:session-activity" => {
             sanitize_session_activity_event_properties(&mut props)
         }
@@ -5922,42 +5977,138 @@ mod tests {
     }
 
     #[test]
-    fn merge_session_diff_items_prefers_computed_file_scope() {
-        let upstream = vec![
-            SessionDiffItem {
-                file: "src/a.ts".to_string(),
-                before: "upstream-before".to_string(),
-                after: "upstream-after".to_string(),
-                additions: 8,
-                deletions: 5,
-                diff: "".to_string(),
+    fn build_session_diff_from_messages_reads_result_metadata_and_result_diff_keys() {
+        let messages = json!([
+            {
+                "info": {"id": "msg_result_meta", "sessionID": "ses_1"},
+                "parts": [
+                    {
+                        "id": "part_result_meta",
+                        "type": "tool",
+                        "state": {
+                            "result": {
+                                "metadata": {
+                                    "files": [
+                                        {
+                                            "path": "/repo/src/from_result_metadata.ts",
+                                            "before": "old\n",
+                                            "after": "new\n",
+                                            "additions": 1,
+                                            "deletions": 1
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                ]
             },
-            SessionDiffItem {
-                file: "src/unrelated.ts".to_string(),
-                before: "x".to_string(),
-                after: "y".to_string(),
-                additions: 1,
-                deletions: 1,
-                diff: "diff --git a/src/unrelated.ts b/src/unrelated.ts".to_string(),
-            },
-        ];
-        let computed = vec![SessionDiffItem {
-            file: "src/a.ts".to_string(),
-            before: "".to_string(),
-            after: "".to_string(),
-            additions: 2,
-            deletions: 1,
-            diff: "diff --git a/src/a.ts b/src/a.ts".to_string(),
-        }];
+            {
+                "info": {"id": "msg_result_direct", "sessionID": "ses_1"},
+                "parts": [
+                    {
+                        "id": "part_result_direct",
+                        "type": "tool",
+                        "state": {
+                            "result": {
+                                "diff": "diff --git a/src/from_result_diff.ts b/src/from_result_diff.ts\n--- a/src/from_result_diff.ts\n+++ b/src/from_result_diff.ts\n@@ -1 +1 @@\n-old\n+new\n"
+                            }
+                        }
+                    }
+                ]
+            }
+        ]);
 
-        let merged = merge_session_diff_items(upstream, computed);
-        assert_eq!(merged.len(), 1);
-        assert_eq!(merged[0].file, "src/a.ts");
-        assert_eq!(merged[0].before, "upstream-before");
-        assert_eq!(merged[0].after, "upstream-after");
-        assert_eq!(merged[0].additions, 2);
-        assert_eq!(merged[0].deletions, 1);
-        assert!(merged[0].diff.contains("diff --git a/src/a.ts b/src/a.ts"));
+        let computed =
+            build_session_diff_from_messages(messages.as_array().expect("messages"), Some("/repo"));
+        let files = computed.iter().map(|v| v.file.as_str()).collect::<Vec<_>>();
+
+        assert_eq!(
+            files,
+            vec!["src/from_result_diff.ts", "src/from_result_metadata.ts"]
+        );
+        assert!(
+            computed[0]
+                .diff
+                .contains("diff --git a/src/from_result_diff.ts b/src/from_result_diff.ts")
+        );
+        assert_eq!(computed[1].before, "old\n");
+        assert_eq!(computed[1].after, "new\n");
+    }
+
+    #[test]
+    fn sanitize_sse_event_data_drops_upstream_session_diff() {
+        let mut event = json!({
+            "type": "session.diff",
+            "properties": {
+                "sessionID": "ses_1",
+                "diff": [{"file": "src/a.ts"}]
+            }
+        });
+
+        let filter = ActivityFilter {
+            allowed: HashSet::new(),
+            tool_allowed: HashSet::new(),
+            tool_explicit: true,
+            show_reasoning: false,
+            show_justification: false,
+        };
+        let detail = ActivityDetailPolicy {
+            enabled: false,
+            expanded: HashSet::new(),
+            expanded_tools: HashSet::new(),
+        };
+
+        assert!(!sanitize_sse_event_data(&mut event, &filter, &detail));
+    }
+
+    #[test]
+    fn derive_session_diff_injected_event_emits_merge_and_invalidate_modes() {
+        let updated = json!({
+            "type": "message.part.updated",
+            "properties": {
+                "sessionID": "ses_1",
+                "messageID": "msg_1",
+                "partID": "part_1",
+                "part": {
+                    "id": "part_1",
+                    "type": "tool",
+                    "state": {
+                        "metadata": {
+                            "files": [
+                                {
+                                    "path": "src/a.ts",
+                                    "before": "old\n",
+                                    "after": "new\n",
+                                    "additions": 1,
+                                    "deletions": 1
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        });
+
+        let merged = derive_session_diff_injected_event(&updated).expect("merge diff event");
+        assert_eq!(merged["type"], json!("session.diff"));
+        assert_eq!(merged["properties"]["sessionID"], json!("ses_1"));
+        assert_eq!(merged["properties"]["mode"], json!("merge"));
+        assert_eq!(merged["properties"]["diff"][0]["file"], json!("src/a.ts"));
+
+        let removed = json!({
+            "type": "message.part.removed",
+            "properties": {
+                "sessionID": "ses_1",
+                "messageID": "msg_1",
+                "partID": "part_1"
+            }
+        });
+        let invalidated = derive_session_diff_injected_event(&removed).expect("invalidate event");
+        assert_eq!(invalidated["type"], json!("session.diff"));
+        assert_eq!(invalidated["properties"]["sessionID"], json!("ses_1"));
+        assert_eq!(invalidated["properties"]["mode"], json!("invalidate"));
+        assert!(invalidated["properties"].get("diff").is_none());
     }
 
     #[test]
