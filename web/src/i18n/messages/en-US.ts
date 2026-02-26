@@ -1706,6 +1706,8 @@ export default {
       toggleAria: 'Toggle session file changes',
       panelTitle: 'Session File Changes',
       close: 'Close',
+      backToList: 'Back to files',
+      listTitle: 'Changed files',
       loading: 'Loading file changes...',
       empty: 'No file changes in this session yet.',
     },
