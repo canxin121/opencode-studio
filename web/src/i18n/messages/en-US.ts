@@ -288,6 +288,48 @@ export default {
       plugins: 'Plugins',
       backends: 'Backends',
       appearance: 'Appearance',
+      debug: 'Debug',
+    },
+    debug: {
+      title: 'Debug Tools',
+      intro: 'Use this page to quickly verify UI behavior and interaction wiring.',
+      toast: {
+        title: 'Toast Test Bench',
+        description: 'Trigger different toast types, action callbacks, and dedupe behavior.',
+        fields: {
+          message: 'Message',
+          timeoutMs: 'Duration (ms)',
+          actionLabel: 'Action label',
+        },
+        placeholders: {
+          message: 'Leave empty to auto-generate a message',
+          actionLabel: 'Undo',
+        },
+        options: {
+          uniqueMessage: 'Append unique suffix',
+        },
+        actions: {
+          info: 'Show info',
+          success: 'Show success',
+          error: 'Show error',
+          withAction: 'Show action toast',
+          persistent: 'Show persistent',
+          burst: 'Burst x3 (dedupe)',
+        },
+        hints: {
+          dedupe: 'Toasts dedupe the same kind + message within 1.5s and keep up to 4 visible items.',
+          action: 'Clicking the action button emits a follow-up success toast.',
+        },
+        defaults: {
+          info: 'Debug info toast',
+          success: 'Debug success toast',
+          error: 'Debug error toast',
+          action: 'Debug action toast',
+          persistent: 'Debug persistent toast',
+          burst: 'Debug burst toast',
+          actionFollowup: 'Action callback executed',
+        },
+      },
     },
     backendsPanel: {
       title: 'Backends',

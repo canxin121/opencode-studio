@@ -288,6 +288,48 @@ export default {
       plugins: '插件',
       backends: '后端',
       appearance: '外观',
+      debug: '调试',
+    },
+    debug: {
+      title: '调试工具',
+      intro: '用于快速验证 UI 行为与交互链路。',
+      toast: {
+        title: 'Toast 测试台',
+        description: '触发不同类型的 toast、动作回调与去重行为。',
+        fields: {
+          message: '消息内容',
+          timeoutMs: '持续时间 (ms)',
+          actionLabel: '动作按钮文案',
+        },
+        placeholders: {
+          message: '留空则自动生成消息',
+          actionLabel: '撤销',
+        },
+        options: {
+          uniqueMessage: '追加唯一后缀',
+        },
+        actions: {
+          info: '触发 info',
+          success: '触发 success',
+          error: '触发 error',
+          withAction: '触发带动作 toast',
+          persistent: '触发常驻 toast',
+          burst: '连续触发 x3（去重）',
+        },
+        hints: {
+          dedupe: '同 kind + message 在 1.5 秒内会去重，最多同时保留 4 条可见 toast。',
+          action: '点击动作按钮后会再触发一条 success toast。',
+        },
+        defaults: {
+          info: '调试 info 提示',
+          success: '调试 success 提示',
+          error: '调试 error 提示',
+          action: '调试动作提示',
+          persistent: '调试常驻提示',
+          burst: '调试连续提示',
+          actionFollowup: '动作回调已执行',
+        },
+      },
     },
     backendsPanel: {
       title: '后端',

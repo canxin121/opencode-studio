@@ -8,6 +8,7 @@ import '@fontsource/ibm-plex-mono/400.css'
 import '@fontsource/ibm-plex-mono/500.css'
 
 import 'katex/dist/katex.min.css'
+import 'vue-sonner/style.css'
 
 import './style.css'
 import App from './App.vue'

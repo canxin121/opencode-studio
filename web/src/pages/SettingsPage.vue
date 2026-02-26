@@ -18,6 +18,7 @@ import ScrollArea from '@/components/ui/ScrollArea.vue'
 import OpenCodeConfigPanel from '@/components/settings/OpenCodeConfigPanel.vue'
 import PluginSettingsPanel from '@/components/settings/PluginSettingsPanel.vue'
 import BackendsPanel from '@/components/settings/BackendsPanel.vue'
+import DebugPanel from '@/components/settings/DebugPanel.vue'
 import Input from '@/components/ui/Input.vue'
 import { opencodeSections } from '@/components/settings/opencodeSections'
 import { useDesktopSidebarResize } from '@/composables/useDesktopSidebarResize'
@@ -43,7 +44,7 @@ import {
   type ChatToolActivityType,
 } from '@/lib/chatActivity'
 
-type SettingsTab = 'opencode' | 'plugins' | 'backends' | 'appearance'
+type SettingsTab = 'opencode' | 'plugins' | 'backends' | 'appearance' | 'debug'
 
 const settings = useSettingsStore()
 const pluginHost = usePluginHostStore()
@@ -161,6 +162,7 @@ const tabs = computed<Array<{ id: SettingsTab; label: string }>>(() => [
   { id: 'plugins', label: String(t('settings.tabs.plugins')) },
   { id: 'backends', label: String(t('settings.tabs.backends')) },
   { id: 'appearance', label: String(t('settings.tabs.appearance')) },
+  { id: 'debug', label: String(t('settings.tabs.debug')) },
 ])
 
 function normalizeOpencodeSection(raw?: string): string {
@@ -982,6 +984,11 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
                 </div>
               </div>
             </div>
+          </div>
+
+          <!-- Debug Tab -->
+          <div v-else-if="activeTab === 'debug'" class="space-y-6">
+            <DebugPanel />
           </div>
 
           <div v-else class="flex flex-col items-center justify-center h-64 text-muted-foreground">
