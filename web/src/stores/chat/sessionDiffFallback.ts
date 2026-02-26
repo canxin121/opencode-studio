@@ -1,4 +1,5 @@
 import type { MessageEntry, SessionFileDiff } from '../../types/chat'
+import type { GitDiffMeta } from '@/types/git'
 
 type UnknownRecord = Record<string, unknown>
 
@@ -40,6 +41,11 @@ function firstCount(record: UnknownRecord, keys: string[]): number {
     }
   }
   return 0
+}
+
+function readDiffMeta(record: UnknownRecord): GitDiffMeta | null {
+  const candidate = record.meta ?? record.diffMeta ?? record.diff_meta
+  return candidate && typeof candidate === 'object' && !Array.isArray(candidate) ? (candidate as GitDiffMeta) : null
 }
 
 function normalizeDiffPath(rawPath: string, directory?: string | null): string {
@@ -136,12 +142,16 @@ function parseMetadataFileEntry(row: unknown, directory?: string | null): Sessio
     directory,
   )
   if (!file) return null
+  const diff = firstString(record, ['diff', 'patch'])
+  const meta = readDiffMeta(record)
   return {
     file,
     before: firstString(record, ['before', 'old', 'oldText', 'original', 'previous', 'prev', 'from', 'left', 'a']),
     after: firstString(record, ['after', 'new', 'newText', 'modified', 'current', 'next', 'to', 'right', 'b']),
     additions: firstCount(record, ['additions', 'added', 'insertions', 'linesAdded', 'add']),
     deletions: firstCount(record, ['deletions', 'removed', 'linesDeleted', 'del']),
+    ...(diff ? { diff } : {}),
+    ...(meta ? { meta } : {}),
   }
 }
 
@@ -170,13 +180,15 @@ function parsePartFallbackDiff(part: unknown, directory?: string | null): Sessio
   const parsedStats = parseUnifiedDiffStats(diffText, directory)
   for (const stat of parsedStats) {
     const previous = byFile.get(stat.file)
-    byFile.set(stat.file, {
-      file: stat.file,
-      before: previous?.before || '',
-      after: previous?.after || '',
-      additions: stat.additions,
-      deletions: stat.deletions,
-    })
+      byFile.set(stat.file, {
+        file: stat.file,
+        before: previous?.before || '',
+        after: previous?.after || '',
+        additions: stat.additions,
+        deletions: stat.deletions,
+        ...(previous?.diff || diffText ? { diff: previous?.diff || diffText } : {}),
+        ...(previous?.meta ? { meta: previous.meta } : {}),
+      })
   }
 
   return [...byFile.values()].sort((a, b) => a.file.localeCompare(b.file))
@@ -203,6 +215,8 @@ export function buildSessionDiffFallbackFromMessages(
           after: entry.after || previous?.after || '',
           additions: entry.additions,
           deletions: entry.deletions,
+          ...(entry.diff || previous?.diff ? { diff: entry.diff || previous?.diff } : {}),
+          ...(entry.meta || previous?.meta ? { meta: entry.meta || previous?.meta } : {}),
         })
       }
     }

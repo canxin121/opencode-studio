@@ -39,6 +39,17 @@ test('buildSessionDiffFallbackFromMessages: parses unified diff metadata and nor
       after: '',
       additions: 2,
       deletions: 1,
+      diff: [
+        'Index: /repo/docs/guide.md',
+        '===================================================================',
+        '--- /repo/docs/guide.md',
+        '+++ /repo/docs/guide.md',
+        '@@ -1,2 +1,3 @@',
+        ' intro',
+        '-old line',
+        '+new line',
+        '+added line',
+      ].join('\n'),
     },
   ])
 })
@@ -100,6 +111,16 @@ test('buildSessionDiffFallbackFromMessages: latest patch updates counts and keep
       after: 'const a = 2\n',
       additions: 3,
       deletions: 1,
+      diff: [
+        'diff --git a/src/main.ts b/src/main.ts',
+        '--- a/src/main.ts',
+        '+++ b/src/main.ts',
+        '@@ -1 +1,3 @@',
+        '-const a = 2',
+        '+const a = 2',
+        '+const b = 3',
+        '+const c = 4',
+      ].join('\n'),
     },
   ])
 })

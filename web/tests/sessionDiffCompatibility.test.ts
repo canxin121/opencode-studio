@@ -86,6 +86,40 @@ test('normalizeSessionDiffPayload: accepts filePath and relativePath aliases', (
   ])
 })
 
+test('normalizeSessionDiffPayload: keeps optional diff metadata for virtual rendering', () => {
+  const payload = [
+    {
+      file: 'src/main.ts',
+      additions: 1,
+      deletions: 1,
+      patch: 'diff --git a/src/main.ts b/src/main.ts\n--- a/src/main.ts\n+++ b/src/main.ts\n@@ -1 +1 @@\n-old\n+new\n',
+      meta: {
+        fileHeader: ['diff --git a/src/main.ts b/src/main.ts', '--- a/src/main.ts', '+++ b/src/main.ts'],
+        hasPatchHeader: true,
+        hunks: [],
+        summary: { files: 1, hunks: 0, changedLines: 2 },
+      },
+    },
+  ]
+
+  assert.deepEqual(normalizeSessionDiffPayload(payload), [
+    {
+      file: 'src/main.ts',
+      before: '',
+      after: '',
+      additions: 1,
+      deletions: 1,
+      diff: 'diff --git a/src/main.ts b/src/main.ts\n--- a/src/main.ts\n+++ b/src/main.ts\n@@ -1 +1 @@\n-old\n+new\n',
+      meta: {
+        fileHeader: ['diff --git a/src/main.ts b/src/main.ts', '--- a/src/main.ts', '+++ b/src/main.ts'],
+        hasPatchHeader: true,
+        hunks: [],
+        summary: { files: 1, hunks: 0, changedLines: 2 },
+      },
+    },
+  ])
+})
+
 test('extractSessionId: accepts camelCase and snake_case session keys', () => {
   assert.equal(
     extractSessionId({

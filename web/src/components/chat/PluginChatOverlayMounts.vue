@@ -8,6 +8,7 @@ import PluginMountHost from '@/components/plugins/PluginMountHost.vue'
 import IconButton from '@/components/ui/IconButton.vue'
 import OptionMenu from '@/components/ui/OptionMenu.vue'
 import type { OptionMenuGroup, OptionMenuItem } from '@/components/ui/optionMenu.types'
+import { buildVirtualMonacoDiffModel } from '@/features/git/diff/unifiedDiff'
 import type { ChatMount } from '@/plugins/host/mounts'
 import { useChatStore } from '@/stores/chat'
 import type { SessionFileDiff } from '@/types/chat'
@@ -115,8 +116,18 @@ const selectedDiff = computed(() => {
   return sessionDiff.value.find((entry) => entry.file === target) || null
 })
 const selectedDiffPath = computed(() => selectedDiff.value?.file || '')
-const selectedDiffBefore = computed(() => selectedDiff.value?.before || '')
-const selectedDiffAfter = computed(() => selectedDiff.value?.after || '')
+const selectedDiffPreview = computed(() => {
+  const entry = selectedDiff.value
+  if (!entry) return null
+  return buildVirtualMonacoDiffModel({
+    modelId: `session-diff:${entry.file}`,
+    path: entry.file,
+    original: entry.before,
+    modified: entry.after,
+    diff: entry.diff,
+    meta: entry.meta,
+  })
+})
 const sessionDiffHasMore = computed(() => chat.selectedSessionDiffHasMore)
 const sessionDiffLoadingMore = computed(() => chat.selectedSessionDiffLoadingMore)
 const sessionDiffPanelStyle = computed<CSSProperties | undefined>(() => {
@@ -483,10 +494,12 @@ onBeforeUnmount(() => {
           <div class="min-w-0 flex-1 min-h-[200px] sm:min-h-0">
             <MonacoDiffEditor
               class="h-full"
-              :path="selectedDiffPath"
-              :original-path="selectedDiffPath"
-              :original-value="selectedDiffBefore"
-              :modified-value="selectedDiffAfter"
+              :path="selectedDiffPreview?.path || selectedDiffPath"
+              :language-path="selectedDiffPreview?.path || selectedDiffPath"
+              :model-id="selectedDiffPreview?.modelId || ''"
+              :original-model-id="selectedDiffPreview ? `${selectedDiffPreview.modelId}:base` : ''"
+              :original-value="selectedDiffPreview?.original || ''"
+              :modified-value="selectedDiffPreview?.modified || ''"
               :read-only="true"
               :wrap="true"
             />

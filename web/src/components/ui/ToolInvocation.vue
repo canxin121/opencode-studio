@@ -22,7 +22,8 @@ import {
 import ActivityDisclosureButton from '@/components/ui/ActivityDisclosureButton.vue'
 import CodeBlock from './CodeBlock.vue'
 import MonacoDiffEditor from '@/components/MonacoDiffEditor.vue'
-import { buildUnifiedMonacoDiffModel } from '@/features/git/diff/unifiedDiff'
+import { buildVirtualMonacoDiffModel } from '@/features/git/diff/unifiedDiff'
+import type { GitDiffMeta } from '@/types/git'
 import { useChatStore } from '@/stores/chat'
 import { formatTimeHM } from '@/i18n/intl'
 import { resolveToolInputDisplay } from './toolInvocationInput'
@@ -54,6 +55,29 @@ function toDisplayString(value: ToolValue): string {
   } catch {
     return String(value)
   }
+}
+
+function firstTrimmedString(record: UnknownRecord, keys: string[]): string {
+  for (const key of keys) {
+    const value = record[key]
+    if (typeof value !== 'string') continue
+    const text = value.trim()
+    if (text) return text
+  }
+  return ''
+}
+
+function firstRawString(record: UnknownRecord, keys: string[]): string {
+  for (const key of keys) {
+    const value = record[key]
+    if (typeof value === 'string') return value
+  }
+  return ''
+}
+
+function readDiffMeta(record: UnknownRecord): GitDiffMeta | null {
+  const candidate = record.meta ?? record.diffMeta ?? record.diff_meta
+  return candidate && typeof candidate === 'object' ? (candidate as GitDiffMeta) : null
 }
 
 const props = defineProps<{
@@ -333,27 +357,53 @@ const outputLang = computed(() => {
   return 'text'
 })
 
-const diffText = computed(() => {
-  const t = toolName.value.toLowerCase()
-  if (!['edit', 'multiedit', 'apply_patch', 'str_replace', 'str_replace_based_edit_tool'].includes(t)) return ''
-  const m = metadata.value
-  const direct = typeof m.diff === 'string' ? m.diff.trim() : ''
-  if (direct) return direct
-  const files = Array.isArray(m.files) ? m.files : []
-  const joined = files
-    .map((f) => {
-      const rec = asRecord(f)
-      return typeof rec.diff === 'string' ? rec.diff.trim() : ''
-    })
-    .filter(Boolean)
-    .join('\n\n')
-  return joined
-})
-
 const activityDiffPreview = computed(() => {
-  const text = diffText.value
-  if (!text) return null
-  return buildUnifiedMonacoDiffModel(text)
+  const t = toolName.value.toLowerCase()
+  if (!['edit', 'multiedit', 'apply_patch', 'str_replace', 'str_replace_based_edit_tool'].includes(t)) return null
+
+  const meta = metadata.value
+  const files = Array.isArray(meta.files) ? meta.files : []
+
+  const directDiff = firstRawString(meta, ['diff', 'patch'])
+  const directMeta = readDiffMeta(meta)
+  if (directDiff || directMeta) {
+    const partId = String(partRecord.value.id || partRecord.value.partID || '').trim() || 'activity'
+    return buildVirtualMonacoDiffModel({
+      modelId: `activity:${partId}`,
+      diff: directDiff,
+      meta: directMeta,
+    })
+  }
+
+  for (const row of files) {
+    const rec = asRecord(row)
+    const filePath = firstTrimmedString(rec, [
+      'file',
+      'path',
+      'filename',
+      'name',
+      'target',
+      'filePath',
+      'filepath',
+      'relativePath',
+    ])
+    const before = firstRawString(rec, ['before', 'old', 'oldText', 'original', 'previous', 'prev', 'from', 'left', 'a'])
+    const after = firstRawString(rec, ['after', 'new', 'newText', 'modified', 'current', 'next', 'to', 'right', 'b'])
+    const rowDiff = firstRawString(rec, ['diff', 'patch'])
+    const rowMeta = readDiffMeta(rec)
+    if (!before && !after && !rowDiff && !rowMeta) continue
+    const normalizedPath = filePath || 'activity.patch'
+    return buildVirtualMonacoDiffModel({
+      modelId: `activity-file:${normalizedPath}`,
+      path: normalizedPath,
+      original: before,
+      modified: after,
+      diff: rowDiff,
+      meta: rowMeta,
+    })
+  }
+
+  return null
 })
 
 const displayOutput = computed(() => {
@@ -426,7 +476,9 @@ const shouldShowInput = computed(() => {
               <MonacoDiffEditor
                 class="h-96"
                 :path="activityDiffPreview.path"
-                :original-path="`${activityDiffPreview.path}:base`"
+                :language-path="activityDiffPreview.path"
+                :model-id="activityDiffPreview.modelId"
+                :original-model-id="`${activityDiffPreview.modelId}:base`"
                 :original-value="activityDiffPreview.original"
                 :modified-value="activityDiffPreview.modified"
                 :read-only="true"

@@ -242,6 +242,8 @@ struct SessionDiffItem {
     after: String,
     additions: usize,
     deletions: usize,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    diff: String,
 }
 
 fn normalize_diff_path(raw_path: &str, directory: Option<&str>) -> Option<String> {
@@ -364,48 +366,130 @@ fn parse_metadata_file_entry(
             &["additions", "added", "insertions", "linesAdded", "add"],
         ),
         deletions: first_count(map, &["deletions", "removed", "linesDeleted", "del"]),
+        diff: first_string(map, &["diff", "patch"]),
     })
 }
 
-fn parse_unified_diff_stats(
+#[derive(Clone, Debug)]
+struct ParsedDiffEntry {
+    additions: usize,
+    deletions: usize,
+    diff: String,
+}
+
+fn parse_unified_diff_entries(
     diff_text: &str,
     directory: Option<&str>,
-) -> BTreeMap<String, (usize, usize)> {
-    let mut by_file = BTreeMap::<String, (usize, usize)>::new();
+) -> BTreeMap<String, ParsedDiffEntry> {
+    let mut by_file = BTreeMap::<String, ParsedDiffEntry>::new();
     let text = diff_text.trim();
     if text.is_empty() {
         return by_file;
     }
 
     let mut current = String::new();
+    let mut current_lines = Vec::<String>::new();
+    let mut additions = 0usize;
+    let mut deletions = 0usize;
+
+    let flush_current = |file: &str,
+                         lines: &mut Vec<String>,
+                         additions: &mut usize,
+                         deletions: &mut usize,
+                         out: &mut BTreeMap<String, ParsedDiffEntry>| {
+        if file.is_empty() {
+            lines.clear();
+            *additions = 0;
+            *deletions = 0;
+            return;
+        }
+        let diff = if lines.is_empty() {
+            String::new()
+        } else {
+            let mut joined = lines.join("\n");
+            joined.push('\n');
+            joined
+        };
+        out.insert(
+            file.to_string(),
+            ParsedDiffEntry {
+                additions: *additions,
+                deletions: *deletions,
+                diff,
+            },
+        );
+        lines.clear();
+        *additions = 0;
+        *deletions = 0;
+    };
+
+    let set_current_file = |next: Option<String>,
+                            current: &mut String,
+                            current_lines: &mut Vec<String>,
+                            additions: &mut usize,
+                            deletions: &mut usize,
+                            out: &mut BTreeMap<String, ParsedDiffEntry>| {
+        flush_current(
+            current,
+            current_lines,
+            additions,
+            deletions,
+            out,
+        );
+        *current = next.unwrap_or_default();
+    };
+
     for line in text.replace("\r\n", "\n").replace('\r', "\n").lines() {
         if line.starts_with("diff --git ") {
             if let Some(rest) = line.strip_prefix("diff --git ") {
                 let mut parts = rest.split_whitespace();
                 let left = parts.next().unwrap_or_default();
                 let right = parts.next().unwrap_or_default();
-                if let Some(file) =
-                    normalize_diff_path(if !right.is_empty() { right } else { left }, directory)
-                {
-                    current = file;
-                    by_file.entry(current.clone()).or_insert((0, 0));
+                set_current_file(
+                    normalize_diff_path(if !right.is_empty() { right } else { left }, directory),
+                    &mut current,
+                    &mut current_lines,
+                    &mut additions,
+                    &mut deletions,
+                    &mut by_file,
+                );
+                if !current.is_empty() {
+                    current_lines.push(line.to_string());
                 }
             }
             continue;
         }
 
         if let Some(path) = line.strip_prefix("Index: ") {
-            if let Some(file) = normalize_diff_path(path, directory) {
-                current = file;
-                by_file.entry(current.clone()).or_insert((0, 0));
+            set_current_file(
+                normalize_diff_path(path, directory),
+                &mut current,
+                &mut current_lines,
+                &mut additions,
+                &mut deletions,
+                &mut by_file,
+            );
+            if !current.is_empty() {
+                current_lines.push(line.to_string());
             }
             continue;
         }
 
         if let Some(path) = line.strip_prefix("+++ ") {
-            if let Some(file) = normalize_diff_path(path, directory) {
-                current = file;
-                by_file.entry(current.clone()).or_insert((0, 0));
+            if current.is_empty()
+                && let Some(file) = normalize_diff_path(path, directory)
+            {
+                set_current_file(
+                    Some(file),
+                    &mut current,
+                    &mut current_lines,
+                    &mut additions,
+                    &mut deletions,
+                    &mut by_file,
+                );
+            }
+            if !current.is_empty() {
+                current_lines.push(line.to_string());
             }
             continue;
         }
@@ -414,23 +498,36 @@ fn parse_unified_diff_stats(
             && let Some(path) = line.strip_prefix("--- ")
             && let Some(file) = normalize_diff_path(path, directory)
         {
-            current = file;
-            by_file.entry(current.clone()).or_insert((0, 0));
+            set_current_file(
+                Some(file),
+                &mut current,
+                &mut current_lines,
+                &mut additions,
+                &mut deletions,
+                &mut by_file,
+            );
+            current_lines.push(line.to_string());
             continue;
         }
 
         if current.is_empty() {
             continue;
         }
-        let Some(counts) = by_file.get_mut(&current) else {
-            continue;
-        };
+        current_lines.push(line.to_string());
         if line.starts_with('+') && !line.starts_with("+++") {
-            counts.0 += 1;
+            additions += 1;
         } else if line.starts_with('-') && !line.starts_with("---") {
-            counts.1 += 1;
+            deletions += 1;
         }
     }
+
+    flush_current(
+        &current,
+        &mut current_lines,
+        &mut additions,
+        &mut deletions,
+        &mut by_file,
+    );
 
     by_file
 }
@@ -491,8 +588,8 @@ fn build_session_diff_from_messages(
             if diff_text.is_empty() {
                 continue;
             }
-            let stats = parse_unified_diff_stats(&diff_text, directory);
-            for (file, (additions, deletions)) in stats {
+            let entries = parse_unified_diff_entries(&diff_text, directory);
+            for (file, parsed) in entries {
                 let prev = by_file.get(&file).cloned();
                 by_file.insert(
                     file.clone(),
@@ -500,8 +597,13 @@ fn build_session_diff_from_messages(
                         file,
                         before: prev.as_ref().map(|v| v.before.clone()).unwrap_or_default(),
                         after: prev.as_ref().map(|v| v.after.clone()).unwrap_or_default(),
-                        additions,
-                        deletions,
+                        additions: parsed.additions,
+                        deletions: parsed.deletions,
+                        diff: if parsed.diff.trim().is_empty() {
+                            prev.as_ref().map(|v| v.diff.clone()).unwrap_or_default()
+                        } else {
+                            parsed.diff
+                        },
                     },
                 );
             }
@@ -5553,5 +5655,6 @@ mod tests {
         assert_eq!(files, vec!["src/new.ts", "src/old.ts"]);
         assert_eq!(computed[1].additions, 2);
         assert_eq!(computed[1].deletions, 1);
+        assert!(computed[1].diff.contains("diff --git a/src/old.ts b/src/old.ts"));
     }
 }

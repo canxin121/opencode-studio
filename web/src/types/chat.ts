@@ -1,4 +1,5 @@
 import type { SseEvent } from '../lib/sse'
+import type { GitDiffMeta } from './git'
 import type { JsonValue as JsonLike } from './json'
 
 export type Session = {
@@ -18,6 +19,8 @@ export type SessionFileDiff = {
   after: string
   additions: number
   deletions: number
+  diff?: string
+  meta?: GitDiffMeta | null
 }
 
 export type MessageInfo = {
