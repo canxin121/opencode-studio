@@ -1403,7 +1403,8 @@ export default {
     },
     desktopRuntime: {
       title: 'Desktop backend runtime',
-      description: 'Configure sidecar backend, OpenCode connectivity, and log levels. Saving restarts the desktop backend.',
+      description:
+        'Configure sidecar backend, OpenCode connectivity, and log levels. Saving restarts the desktop backend.',
       fields: {
         host: 'Host',
         port: 'Port',

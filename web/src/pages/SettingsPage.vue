@@ -96,7 +96,9 @@ const desktopRuntimeLogLevelOptions = computed(() => [
 ])
 
 function normalizeLogLevelInput(raw: string): string | null {
-  const v = String(raw || '').trim().toUpperCase()
+  const v = String(raw || '')
+    .trim()
+    .toUpperCase()
   return v === 'DEBUG' || v === 'INFO' || v === 'WARN' || v === 'ERROR' ? v : null
 }
 
@@ -781,7 +783,9 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
                 </div>
 
                 <div class="grid gap-1">
-                  <label class="text-xs text-muted-foreground">{{ t('settings.desktopRuntime.fields.uiPassword') }}</label>
+                  <label class="text-xs text-muted-foreground">{{
+                    t('settings.desktopRuntime.fields.uiPassword')
+                  }}</label>
                   <Input
                     v-model="desktopUiPassword"
                     type="password"
@@ -793,7 +797,9 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
                 </div>
 
                 <div class="grid gap-1">
-                  <label class="text-xs text-muted-foreground">{{ t('settings.desktopRuntime.fields.opencodeHost') }}</label>
+                  <label class="text-xs text-muted-foreground">{{
+                    t('settings.desktopRuntime.fields.opencodeHost')
+                  }}</label>
                   <Input
                     v-model="desktopOpencodeHost"
                     :placeholder="String(t('settings.desktopRuntime.placeholders.opencodeHost'))"
@@ -804,7 +810,9 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
                 </div>
 
                 <div class="grid gap-1">
-                  <label class="text-xs text-muted-foreground">{{ t('settings.desktopRuntime.fields.opencodePort') }}</label>
+                  <label class="text-xs text-muted-foreground">{{
+                    t('settings.desktopRuntime.fields.opencodePort')
+                  }}</label>
                   <Input
                     v-model="desktopOpencodePortInput"
                     type="number"
