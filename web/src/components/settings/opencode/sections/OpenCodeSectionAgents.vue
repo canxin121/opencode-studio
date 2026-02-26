@@ -3,6 +3,7 @@ import { defineComponent } from 'vue'
 import { RiAddLine, RiArrowDownSLine, RiArrowUpSLine, RiRestartLine } from '@remixicon/vue'
 
 import Button from '@/components/ui/Button.vue'
+import IconButton from '@/components/ui/IconButton.vue'
 import Input from '@/components/ui/Input.vue'
 import Tooltip from '@/components/ui/Tooltip.vue'
 
@@ -16,6 +17,7 @@ export default defineComponent({
     AgentEditorPanel,
     AgentPickerPanel,
     Button,
+    IconButton,
     Input,
     Tooltip,
     RiAddLine,
@@ -36,39 +38,33 @@ export default defineComponent({
         <div class="text-base font-semibold leading-snug">{{ t('settings.opencodeConfig.sections.agents.title') }}</div>
       </div>
       <div class="flex items-center gap-2">
-        <Tooltip>
-          <Button
-            size="icon"
-            variant="ghost"
-            class="h-8 w-8"
-            :title="t('settings.opencodeConfig.sections.common.resetSection')"
-            @click="resetSection('agents')"
-          >
-            <RiRestartLine class="h-4 w-4" />
-          </Button>
-          <template #content>{{ t('settings.opencodeConfig.sections.common.resetSection') }}</template>
-        </Tooltip>
-        <Tooltip>
-          <Button
-            size="icon"
-            variant="outline"
-            class="h-8 w-8"
-            :title="
-              isSectionOpen('agents')
-                ? t('settings.opencodeConfig.sections.common.collapse')
-                : t('settings.opencodeConfig.sections.common.expand')
-            "
-            @click="toggleSection('agents')"
-          >
-            <RiArrowUpSLine v-if="isSectionOpen('agents')" class="h-4 w-4" />
-            <RiArrowDownSLine v-else class="h-4 w-4" />
-          </Button>
-          <template #content>{{
+        <IconButton
+          variant="ghost"
+          class="h-8 w-8"
+          :title="t('settings.opencodeConfig.sections.common.resetSection')"
+          @click="resetSection('agents')"
+          :tooltip="t('settings.opencodeConfig.sections.common.resetSection')"
+        >
+          <RiRestartLine class="h-4 w-4" />
+        </IconButton>
+        <IconButton
+          variant="outline"
+          class="h-8 w-8"
+          :title="
             isSectionOpen('agents')
               ? t('settings.opencodeConfig.sections.common.collapse')
               : t('settings.opencodeConfig.sections.common.expand')
-          }}</template>
-        </Tooltip>
+          "
+          @click="toggleSection('agents')"
+          :tooltip="
+            isSectionOpen('agents')
+              ? t('settings.opencodeConfig.sections.common.collapse')
+              : t('settings.opencodeConfig.sections.common.expand')
+          "
+        >
+          <RiArrowUpSLine v-if="isSectionOpen('agents')" class="h-4 w-4" />
+          <RiArrowDownSLine v-else class="h-4 w-4" />
+        </IconButton>
       </div>
     </div>
 
@@ -79,20 +75,17 @@ export default defineComponent({
           :placeholder="t('settings.opencodeConfig.sections.agents.placeholders.agentName')"
           class="max-w-xs"
         />
-        <Tooltip>
-          <Button
-            size="icon"
-            variant="outline"
-            class="h-9 w-9"
-            :title="t('settings.opencodeConfig.sections.agents.actions.addAgent')"
-            :aria-label="t('settings.opencodeConfig.sections.agents.actions.addAgentAria')"
-            @click="addAgent"
-            :disabled="!newAgentName.trim()"
-          >
-            <RiAddLine class="h-4 w-4" />
-          </Button>
-          <template #content>{{ t('settings.opencodeConfig.sections.agents.actions.addAgent') }}</template>
-        </Tooltip>
+        <IconButton
+          variant="outline"
+          class="h-9 w-9"
+          :title="t('settings.opencodeConfig.sections.agents.actions.addAgent')"
+          :aria-label="t('settings.opencodeConfig.sections.agents.actions.addAgentAria')"
+          @click="addAgent"
+          :disabled="!newAgentName.trim()"
+          :tooltip="t('settings.opencodeConfig.sections.agents.actions.addAgent')"
+        >
+          <RiAddLine class="h-4 w-4" />
+        </IconButton>
         <div class="flex-1" />
         <Input
           v-model="agentFilter"

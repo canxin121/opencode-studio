@@ -16,6 +16,7 @@ import {
 } from '@remixicon/vue'
 
 import Button from '@/components/ui/Button.vue'
+import IconButton from '@/components/ui/IconButton.vue'
 import Input from '@/components/ui/Input.vue'
 import OptionPicker from '@/components/ui/OptionPicker.vue'
 import type { PickerOption } from '@/components/ui/pickerOption.types'
@@ -28,6 +29,7 @@ import { useOpencodeConfigPanelContext } from '../opencodeConfigContext'
 export default defineComponent({
   components: {
     Button,
+    IconButton,
     Input,
     OptionPicker,
     Tooltip,
@@ -109,71 +111,59 @@ export default defineComponent({
           </div>
         </div>
         <div class="flex items-center gap-2">
-          <Tooltip>
-            <Button
-              size="icon"
-              variant="ghost"
-              class="h-8 w-8"
-              :title="t('settings.opencodeConfig.sections.agents.editor.actions.copyJson')"
-              :aria-label="t('settings.opencodeConfig.sections.agents.editor.actions.copyJson')"
-              @click="copyEntryJson('agent', agentId)"
-            >
-              <RiClipboardLine class="h-4 w-4" />
-            </Button>
-            <template #content>{{ t('settings.opencodeConfig.sections.agents.editor.actions.copyJson') }}</template>
-          </Tooltip>
-          <Tooltip>
-            <Button
-              size="icon"
-              variant="ghost"
-              class="h-8 w-8"
-              :title="t('settings.opencodeConfig.sections.agents.editor.actions.importJson')"
-              :aria-label="t('settings.opencodeConfig.sections.agents.editor.actions.importJson')"
-              @click="importEntryJson('agent', agentId)"
-            >
-              <RiFileUploadLine class="h-4 w-4" />
-            </Button>
-            <template #content>{{ t('settings.opencodeConfig.sections.agents.editor.actions.importJson') }}</template>
-          </Tooltip>
-          <Tooltip>
-            <Button
-              size="icon"
-              variant="ghost"
-              class="h-8 w-8"
-              :title="
-                showAgentAdvanced[agentId]
-                  ? t('settings.opencodeConfig.sections.agents.editor.actions.hideAdvanced')
-                  : t('settings.opencodeConfig.sections.agents.editor.actions.showAdvanced')
-              "
-              :aria-label="t('settings.opencodeConfig.sections.agents.editor.actions.toggleAdvancedAria')"
-              @click="toggleAgentAdvanced(agentId)"
-            >
-              <RiSettings3Line class="h-4 w-4" />
-            </Button>
-            <template #content>{{
+          <IconButton
+            variant="ghost"
+            class="h-8 w-8"
+            :title="t('settings.opencodeConfig.sections.agents.editor.actions.copyJson')"
+            :aria-label="t('settings.opencodeConfig.sections.agents.editor.actions.copyJson')"
+            @click="copyEntryJson('agent', agentId)"
+            :tooltip="t('settings.opencodeConfig.sections.agents.editor.actions.copyJson')"
+          >
+            <RiClipboardLine class="h-4 w-4" />
+          </IconButton>
+          <IconButton
+            variant="ghost"
+            class="h-8 w-8"
+            :title="t('settings.opencodeConfig.sections.agents.editor.actions.importJson')"
+            :aria-label="t('settings.opencodeConfig.sections.agents.editor.actions.importJson')"
+            @click="importEntryJson('agent', agentId)"
+            :tooltip="t('settings.opencodeConfig.sections.agents.editor.actions.importJson')"
+          >
+            <RiFileUploadLine class="h-4 w-4" />
+          </IconButton>
+          <IconButton
+            variant="ghost"
+            class="h-8 w-8"
+            :title="
               showAgentAdvanced[agentId]
                 ? t('settings.opencodeConfig.sections.agents.editor.actions.hideAdvanced')
                 : t('settings.opencodeConfig.sections.agents.editor.actions.showAdvanced')
-            }}</template>
-          </Tooltip>
-          <Tooltip>
-            <Button
-              size="icon"
-              variant="ghost-destructive"
-              class="h-8 w-8"
-              :title="t('common.remove')"
-              :aria-label="t('settings.opencodeConfig.sections.agents.editor.actions.removeAgentAria')"
-              @click="
-                () => {
-                  removeEntry('agent', agentId)
-                  selectedAgentId = null
-                }
-              "
-            >
-              <RiDeleteBinLine class="h-4 w-4" />
-            </Button>
-            <template #content>{{ t('common.remove') }}</template>
-          </Tooltip>
+            "
+            :aria-label="t('settings.opencodeConfig.sections.agents.editor.actions.toggleAdvancedAria')"
+            @click="toggleAgentAdvanced(agentId)"
+            :tooltip="
+              showAgentAdvanced[agentId]
+                ? t('settings.opencodeConfig.sections.agents.editor.actions.hideAdvanced')
+                : t('settings.opencodeConfig.sections.agents.editor.actions.showAdvanced')
+            "
+          >
+            <RiSettings3Line class="h-4 w-4" />
+          </IconButton>
+          <IconButton
+            variant="ghost-destructive"
+            class="h-8 w-8"
+            :title="t('common.remove')"
+            :aria-label="t('settings.opencodeConfig.sections.agents.editor.actions.removeAgentAria')"
+            :tooltip="t('common.remove')"
+            @click="
+              () => {
+                removeEntry('agent', agentId)
+                selectedAgentId = null
+              }
+            "
+          >
+            <RiDeleteBinLine class="h-4 w-4" />
+          </IconButton>
         </div>
       </div>
 
@@ -384,36 +374,26 @@ export default defineComponent({
             t('settings.opencodeConfig.sections.agents.editor.tabs.prompt')
           }}</span>
           <div class="flex items-center gap-2">
-            <Tooltip>
-              <Button
-                size="icon"
-                variant="ghost"
-                class="h-8 w-8"
-                :title="t('settings.opencodeConfig.sections.agents.editor.prompt.actions.insertSkeleton')"
-                :aria-label="t('settings.opencodeConfig.sections.agents.editor.prompt.actions.insertSkeleton')"
-                @click="insertAgentPromptSnippet(agentId, PROMPT_SKELETON)"
-              >
-                <RiFileTextLine class="h-4 w-4" />
-              </Button>
-              <template #content>{{
-                t('settings.opencodeConfig.sections.agents.editor.prompt.actions.insertSkeleton')
-              }}</template>
-            </Tooltip>
-            <Tooltip>
-              <Button
-                size="icon"
-                variant="ghost"
-                class="h-8 w-8"
-                :title="t('settings.opencodeConfig.sections.agents.editor.prompt.actions.insertFrontmatter')"
-                :aria-label="t('settings.opencodeConfig.sections.agents.editor.prompt.actions.insertFrontmatter')"
-                @click="insertAgentPromptSnippet(agentId, FRONTMATTER_SKELETON)"
-              >
-                <RiFileTextLine class="h-4 w-4" />
-              </Button>
-              <template #content>{{
-                t('settings.opencodeConfig.sections.agents.editor.prompt.actions.insertFrontmatter')
-              }}</template>
-            </Tooltip>
+            <IconButton
+              variant="ghost"
+              class="h-8 w-8"
+              :title="t('settings.opencodeConfig.sections.agents.editor.prompt.actions.insertSkeleton')"
+              :aria-label="t('settings.opencodeConfig.sections.agents.editor.prompt.actions.insertSkeleton')"
+              @click="insertAgentPromptSnippet(agentId, PROMPT_SKELETON)"
+              :tooltip="t('settings.opencodeConfig.sections.agents.editor.prompt.actions.insertSkeleton')"
+            >
+              <RiFileTextLine class="h-4 w-4" />
+            </IconButton>
+            <IconButton
+              variant="ghost"
+              class="h-8 w-8"
+              :title="t('settings.opencodeConfig.sections.agents.editor.prompt.actions.insertFrontmatter')"
+              :aria-label="t('settings.opencodeConfig.sections.agents.editor.prompt.actions.insertFrontmatter')"
+              @click="insertAgentPromptSnippet(agentId, FRONTMATTER_SKELETON)"
+              :tooltip="t('settings.opencodeConfig.sections.agents.editor.prompt.actions.insertFrontmatter')"
+            >
+              <RiFileTextLine class="h-4 w-4" />
+            </IconButton>
           </div>
         </div>
         <div class="h-56 rounded-md border border-input overflow-hidden">
@@ -463,20 +443,17 @@ export default defineComponent({
                   :include-empty="false"
                 />
               </div>
-              <Tooltip>
-                <Button
-                  size="icon"
-                  variant="outline"
-                  class="h-9 w-9"
-                  :title="t('common.add')"
-                  :aria-label="t('settings.opencodeConfig.sections.permissions.customRules.actions.addRule')"
-                  @click="addAgentPermissionRule(agentId)"
-                  :disabled="!String(agentPermissionNewTool[agentId] || '').trim()"
-                >
-                  <RiAddLine class="h-4 w-4" />
-                </Button>
-                <template #content>{{ t('common.add') }}</template>
-              </Tooltip>
+              <IconButton
+                variant="outline"
+                class="h-9 w-9"
+                :title="t('common.add')"
+                :aria-label="t('settings.opencodeConfig.sections.permissions.customRules.actions.addRule')"
+                @click="addAgentPermissionRule(agentId)"
+                :disabled="!String(agentPermissionNewTool[agentId] || '').trim()"
+                :tooltip="t('common.add')"
+              >
+                <RiAddLine class="h-4 w-4" />
+              </IconButton>
             </div>
 
             <div class="grid gap-3">
@@ -524,47 +501,36 @@ export default defineComponent({
                           }}
                         </div>
                         <div class="flex items-center gap-2">
-                          <Tooltip>
-                            <Button
-                              size="icon"
-                              variant="outline"
-                              class="h-8 w-8"
-                              :title="t('settings.opencodeConfig.sections.permissions.rules.actions.addPattern')"
-                              :aria-label="t('settings.opencodeConfig.sections.permissions.rules.actions.addPattern')"
-                              @click="addAgentPermissionPatternRow(agentId, item.key)"
-                            >
-                              <RiAddLine class="h-4 w-4" />
-                            </Button>
-                            <template #content>{{
-                              t('settings.opencodeConfig.sections.permissions.rules.actions.addPattern')
-                            }}</template>
-                          </Tooltip>
-                          <Tooltip>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              class="h-8 w-8"
-                              :title="t('common.reset')"
-                              :aria-label="t('common.reset')"
-                              @click="resetAgentPermissionPatternEditor(agentId, item.key)"
-                            >
-                              <RiRestartLine class="h-4 w-4" />
-                            </Button>
-                            <template #content>{{ t('common.reset') }}</template>
-                          </Tooltip>
-                          <Tooltip>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              class="h-8 w-8"
-                              :title="t('common.close')"
-                              :aria-label="t('common.close')"
-                              @click="toggleAgentPermissionPatternEditor(agentId, item.key)"
-                            >
-                              <RiCloseLine class="h-4 w-4" />
-                            </Button>
-                            <template #content>{{ t('common.close') }}</template>
-                          </Tooltip>
+                          <IconButton
+                            variant="outline"
+                            class="h-8 w-8"
+                            :title="t('settings.opencodeConfig.sections.permissions.rules.actions.addPattern')"
+                            :aria-label="t('settings.opencodeConfig.sections.permissions.rules.actions.addPattern')"
+                            @click="addAgentPermissionPatternRow(agentId, item.key)"
+                            :tooltip="t('settings.opencodeConfig.sections.permissions.rules.actions.addPattern')"
+                          >
+                            <RiAddLine class="h-4 w-4" />
+                          </IconButton>
+                          <IconButton
+                            variant="ghost"
+                            class="h-8 w-8"
+                            :title="t('common.reset')"
+                            :aria-label="t('common.reset')"
+                            @click="resetAgentPermissionPatternEditor(agentId, item.key)"
+                            :tooltip="t('common.reset')"
+                          >
+                            <RiRestartLine class="h-4 w-4" />
+                          </IconButton>
+                          <IconButton
+                            variant="ghost"
+                            class="h-8 w-8"
+                            :title="t('common.close')"
+                            :aria-label="t('common.close')"
+                            @click="toggleAgentPermissionPatternEditor(agentId, item.key)"
+                            :tooltip="t('common.close')"
+                          >
+                            <RiCloseLine class="h-4 w-4" />
+                          </IconButton>
                         </div>
                       </div>
 
@@ -592,56 +558,51 @@ export default defineComponent({
                             :include-empty="false"
                           />
                           <div class="flex items-center gap-1">
-                            <Button
-                              size="icon"
+                            <IconButton
                               variant="ghost"
                               class="h-8 w-8"
                               :title="t('common.moveUp')"
+                              :tooltip="t('common.moveUp')"
                               :aria-label="t('common.moveUp')"
                               @click="moveAgentPermissionPatternRow(agentId, item.key, idx, -1)"
                             >
                               <RiArrowUpLine class="h-4 w-4" />
-                            </Button>
-                            <Button
-                              size="icon"
+                            </IconButton>
+                            <IconButton
                               variant="ghost"
                               class="h-8 w-8"
                               :title="t('common.moveDown')"
+                              :tooltip="t('common.moveDown')"
                               :aria-label="t('common.moveDown')"
                               @click="moveAgentPermissionPatternRow(agentId, item.key, idx, 1)"
                             >
                               <RiArrowDownLine class="h-4 w-4" />
-                            </Button>
-                            <Button
-                              size="icon"
+                            </IconButton>
+                            <IconButton
                               variant="ghost-destructive"
                               class="h-8 w-8"
                               :title="t('common.remove')"
+                              :tooltip="t('common.remove')"
                               :aria-label="t('common.remove')"
                               @click="removeAgentPermissionPatternRow(agentId, item.key, idx)"
                             >
                               <RiDeleteBinLine class="h-4 w-4" />
-                            </Button>
+                            </IconButton>
                           </div>
                         </div>
                       </div>
 
                       <div class="flex items-center gap-2">
-                        <Tooltip>
-                          <Button
-                            size="icon"
-                            variant="outline"
-                            class="h-8 w-8"
-                            :title="t('settings.opencodeConfig.sections.permissions.rules.actions.applyPatterns')"
-                            :aria-label="t('settings.opencodeConfig.sections.permissions.rules.actions.applyPatterns')"
-                            @click="applyAgentPermissionPatternEditor(agentId, item.key)"
-                          >
-                            <RiCheckLine class="h-4 w-4" />
-                          </Button>
-                          <template #content>{{
-                            t('settings.opencodeConfig.sections.permissions.rules.actions.applyPatterns')
-                          }}</template>
-                        </Tooltip>
+                        <IconButton
+                          variant="outline"
+                          class="h-8 w-8"
+                          :title="t('settings.opencodeConfig.sections.permissions.rules.actions.applyPatterns')"
+                          :aria-label="t('settings.opencodeConfig.sections.permissions.rules.actions.applyPatterns')"
+                          @click="applyAgentPermissionPatternEditor(agentId, item.key)"
+                          :tooltip="t('settings.opencodeConfig.sections.permissions.rules.actions.applyPatterns')"
+                        >
+                          <RiCheckLine class="h-4 w-4" />
+                        </IconButton>
                         <span
                           v-if="agentPermissionPatternEditors[`${agentId}::${item.key}`]?.error"
                           class="text-xs text-destructive"
@@ -679,19 +640,16 @@ export default defineComponent({
             class="w-full rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs"
           />
           <div class="flex items-center gap-2">
-            <Tooltip>
-              <Button
-                size="icon"
-                variant="outline"
-                class="h-8 w-8"
-                :title="t('common.apply')"
-                :aria-label="t('settings.opencodeConfig.sections.common.applyJson')"
-                @click="applyJsonBuffer(`agent:${agentId}:options`)"
-              >
-                <RiCheckLine class="h-4 w-4" />
-              </Button>
-              <template #content>{{ t('common.apply') }}</template>
-            </Tooltip>
+            <IconButton
+              variant="outline"
+              class="h-8 w-8"
+              :title="t('common.apply')"
+              :aria-label="t('settings.opencodeConfig.sections.common.applyJson')"
+              @click="applyJsonBuffer(`agent:${agentId}:options`)"
+              :tooltip="t('common.apply')"
+            >
+              <RiCheckLine class="h-4 w-4" />
+            </IconButton>
             <span v-if="jsonBuffers[`agent:${agentId}:options`]?.error" class="text-xs text-destructive">{{
               jsonBuffers[`agent:${agentId}:options`]?.error
             }}</span>
@@ -715,19 +673,16 @@ export default defineComponent({
             class="w-full rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs"
           />
           <div class="flex items-center gap-2">
-            <Tooltip>
-              <Button
-                size="icon"
-                variant="outline"
-                class="h-8 w-8"
-                :title="t('common.apply')"
-                :aria-label="t('settings.opencodeConfig.sections.common.applyJson')"
-                @click="applyJsonBuffer(`agent:${agentId}:permission`)"
-              >
-                <RiCheckLine class="h-4 w-4" />
-              </Button>
-              <template #content>{{ t('common.apply') }}</template>
-            </Tooltip>
+            <IconButton
+              variant="outline"
+              class="h-8 w-8"
+              :title="t('common.apply')"
+              :aria-label="t('settings.opencodeConfig.sections.common.applyJson')"
+              @click="applyJsonBuffer(`agent:${agentId}:permission`)"
+              :tooltip="t('common.apply')"
+            >
+              <RiCheckLine class="h-4 w-4" />
+            </IconButton>
             <span v-if="jsonBuffers[`agent:${agentId}:permission`]?.error" class="text-xs text-destructive">{{
               jsonBuffers[`agent:${agentId}:permission`]?.error
             }}</span>

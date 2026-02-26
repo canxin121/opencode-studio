@@ -99,7 +99,8 @@ function runMobileAction(path: string, actionId: string) {
         <template #actions>
           <SidebarIconButton
             size="sm"
-            :title="t('git.ui.workingTree.actions.history')"
+            :tooltip="t('git.ui.workingTree.actions.history')"
+            :is-mobile-pointer="isMobilePointer"
             :aria-label="t('git.ui.workingTree.actions.history')"
             @click.stop="$emit('history', f.path)"
           >
@@ -116,7 +117,8 @@ function runMobileAction(path: string, actionId: string) {
             <SidebarIconButton
               size="sm"
               destructive
-              :title="t('git.ui.workingTree.actions.discardChanges')"
+              :tooltip="t('git.ui.workingTree.actions.discardChanges')"
+              :is-mobile-pointer="isMobilePointer"
               :aria-label="t('git.ui.workingTree.actions.discardChanges')"
               @click.stop
             >

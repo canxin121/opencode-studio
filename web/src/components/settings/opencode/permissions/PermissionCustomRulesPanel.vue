@@ -11,6 +11,7 @@ import {
 } from '@remixicon/vue'
 
 import Button from '@/components/ui/Button.vue'
+import IconButton from '@/components/ui/IconButton.vue'
 import Input from '@/components/ui/Input.vue'
 import OptionPicker from '@/components/ui/OptionPicker.vue'
 import type { PickerOption } from '@/components/ui/pickerOption.types'
@@ -21,6 +22,7 @@ import { useOpencodeConfigPanelContext } from '../opencodeConfigContext'
 export default defineComponent({
   components: {
     Button,
+    IconButton,
     Input,
     OptionPicker,
     Tooltip,
@@ -98,22 +100,17 @@ export default defineComponent({
           :include-empty="false"
         />
       </div>
-      <Tooltip>
-        <Button
-          size="icon"
-          variant="outline"
-          class="h-9 w-9"
-          :title="t('settings.opencodeConfig.sections.permissions.customRules.actions.addRule')"
-          :aria-label="t('settings.opencodeConfig.sections.permissions.customRules.actions.addRule')"
-          @click="addCustomPermissionRule"
-          :disabled="!newPermissionTool"
-        >
-          <RiAddLine class="h-4 w-4" />
-        </Button>
-        <template #content>{{
-          t('settings.opencodeConfig.sections.permissions.customRules.actions.addRule')
-        }}</template>
-      </Tooltip>
+      <IconButton
+        variant="outline"
+        class="h-9 w-9"
+        :title="t('settings.opencodeConfig.sections.permissions.customRules.actions.addRule')"
+        :aria-label="t('settings.opencodeConfig.sections.permissions.customRules.actions.addRule')"
+        @click="addCustomPermissionRule"
+        :disabled="!newPermissionTool"
+        :tooltip="t('settings.opencodeConfig.sections.permissions.customRules.actions.addRule')"
+      >
+        <RiAddLine class="h-4 w-4" />
+      </IconButton>
     </div>
 
     <div v-if="toolIdsError" class="text-[11px] text-muted-foreground break-all">
@@ -152,19 +149,16 @@ export default defineComponent({
           <span v-if="permissionRuleValue(key) === 'pattern'" class="text-[11px] text-muted-foreground">{{
             t('settings.opencodeConfig.sections.permissions.rules.rulesCount', { count: permissionPatternCount(key) })
           }}</span>
-          <Tooltip>
-            <Button
-              size="icon"
-              variant="ghost-destructive"
-              class="h-8 w-8"
-              :title="t('common.remove')"
-              :aria-label="t('common.remove')"
-              @click="setPermissionRule(key, 'default')"
-            >
-              <RiDeleteBinLine class="h-4 w-4" />
-            </Button>
-            <template #content>{{ t('common.remove') }}</template>
-          </Tooltip>
+          <IconButton
+            variant="ghost-destructive"
+            class="h-8 w-8"
+            :title="t('common.remove')"
+            :aria-label="t('common.remove')"
+            @click="setPermissionRule(key, 'default')"
+            :tooltip="t('common.remove')"
+          >
+            <RiDeleteBinLine class="h-4 w-4" />
+          </IconButton>
         </div>
 
         <div v-if="permissionPatternEditors[key]?.open" class="grid gap-2">
@@ -173,47 +167,36 @@ export default defineComponent({
               {{ t('settings.opencodeConfig.sections.permissions.rules.patternMapLabel') }}
             </div>
             <div class="flex items-center gap-2">
-              <Tooltip>
-                <Button
-                  size="icon"
-                  variant="outline"
-                  class="h-8 w-8"
-                  :title="t('settings.opencodeConfig.sections.permissions.rules.actions.addPattern')"
-                  :aria-label="t('settings.opencodeConfig.sections.permissions.rules.actions.addPattern')"
-                  @click="addPatternRow(key)"
-                >
-                  <RiAddLine class="h-4 w-4" />
-                </Button>
-                <template #content>{{
-                  t('settings.opencodeConfig.sections.permissions.rules.actions.addPattern')
-                }}</template>
-              </Tooltip>
-              <Tooltip>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  class="h-8 w-8"
-                  :title="t('common.reset')"
-                  :aria-label="t('common.reset')"
-                  @click="resetPermissionPatternEditor(key)"
-                >
-                  <RiRestartLine class="h-4 w-4" />
-                </Button>
-                <template #content>{{ t('common.reset') }}</template>
-              </Tooltip>
-              <Tooltip>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  class="h-8 w-8"
-                  :title="t('common.close')"
-                  :aria-label="t('common.close')"
-                  @click="togglePermissionPatternEditor(key)"
-                >
-                  <RiCloseLine class="h-4 w-4" />
-                </Button>
-                <template #content>{{ t('common.close') }}</template>
-              </Tooltip>
+              <IconButton
+                variant="outline"
+                class="h-8 w-8"
+                :title="t('settings.opencodeConfig.sections.permissions.rules.actions.addPattern')"
+                :aria-label="t('settings.opencodeConfig.sections.permissions.rules.actions.addPattern')"
+                @click="addPatternRow(key)"
+                :tooltip="t('settings.opencodeConfig.sections.permissions.rules.actions.addPattern')"
+              >
+                <RiAddLine class="h-4 w-4" />
+              </IconButton>
+              <IconButton
+                variant="ghost"
+                class="h-8 w-8"
+                :title="t('common.reset')"
+                :aria-label="t('common.reset')"
+                @click="resetPermissionPatternEditor(key)"
+                :tooltip="t('common.reset')"
+              >
+                <RiRestartLine class="h-4 w-4" />
+              </IconButton>
+              <IconButton
+                variant="ghost"
+                class="h-8 w-8"
+                :title="t('common.close')"
+                :aria-label="t('common.close')"
+                @click="togglePermissionPatternEditor(key)"
+                :tooltip="t('common.close')"
+              >
+                <RiCloseLine class="h-4 w-4" />
+              </IconButton>
             </div>
           </div>
 
@@ -237,56 +220,51 @@ export default defineComponent({
                 :include-empty="false"
               />
               <div class="flex items-center gap-1">
-                <Button
-                  size="icon"
+                <IconButton
                   variant="ghost"
                   class="h-8 w-8"
                   :title="t('common.moveUp')"
+                  :tooltip="t('common.moveUp')"
                   :aria-label="t('common.moveUp')"
                   @click="movePatternRow(key, idx, -1)"
                 >
                   <RiArrowUpLine class="h-4 w-4" />
-                </Button>
-                <Button
-                  size="icon"
+                </IconButton>
+                <IconButton
                   variant="ghost"
                   class="h-8 w-8"
                   :title="t('common.moveDown')"
+                  :tooltip="t('common.moveDown')"
                   :aria-label="t('common.moveDown')"
                   @click="movePatternRow(key, idx, 1)"
                 >
                   <RiArrowDownLine class="h-4 w-4" />
-                </Button>
-                <Button
-                  size="icon"
+                </IconButton>
+                <IconButton
                   variant="ghost-destructive"
                   class="h-8 w-8"
                   :title="t('common.remove')"
+                  :tooltip="t('common.remove')"
                   :aria-label="t('common.remove')"
                   @click="removePatternRow(key, idx)"
                 >
                   <RiDeleteBinLine class="h-4 w-4" />
-                </Button>
+                </IconButton>
               </div>
             </div>
           </div>
 
           <div class="flex items-center gap-2">
-            <Tooltip>
-              <Button
-                size="icon"
-                variant="outline"
-                class="h-8 w-8"
-                :title="t('settings.opencodeConfig.sections.permissions.rules.actions.applyPatterns')"
-                :aria-label="t('settings.opencodeConfig.sections.permissions.rules.actions.applyPatterns')"
-                @click="applyPermissionPatternEditor(key)"
-              >
-                <RiCheckLine class="h-4 w-4" />
-              </Button>
-              <template #content>{{
-                t('settings.opencodeConfig.sections.permissions.rules.actions.applyPatterns')
-              }}</template>
-            </Tooltip>
+            <IconButton
+              variant="outline"
+              class="h-8 w-8"
+              :title="t('settings.opencodeConfig.sections.permissions.rules.actions.applyPatterns')"
+              :aria-label="t('settings.opencodeConfig.sections.permissions.rules.actions.applyPatterns')"
+              @click="applyPermissionPatternEditor(key)"
+              :tooltip="t('settings.opencodeConfig.sections.permissions.rules.actions.applyPatterns')"
+            >
+              <RiCheckLine class="h-4 w-4" />
+            </IconButton>
             <span v-if="permissionPatternEditors[key]?.error" class="text-xs text-destructive">{{
               permissionPatternEditors[key]?.error
             }}</span>

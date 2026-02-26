@@ -969,6 +969,8 @@ function onSendSelection() {
       <IconButton
         v-if="isMobile && showMobileViewer"
         size="lg"
+        :tooltip="t('nav.back')"
+        :is-mobile-pointer="isMobile"
         :aria-label="t('nav.back')"
         @click="showMobileViewer = false"
       >
@@ -1018,36 +1020,42 @@ function onSendSelection() {
       />
 
       <div class="flex items-center gap-1">
-        <Button
+        <IconButton
           v-if="supportsSourceEditor && canEdit && !autoSaveEnabled"
           variant="ghost"
-          size="icon"
+          size="sm"
           class="h-7 w-7"
+          :tooltip="dirty ? t('files.viewer.save.titleDirty') : t('files.viewer.save.titleSaved')"
+          :is-mobile-pointer="isMobile"
           :disabled="!dirty || isSaving"
           :title="dirty ? t('files.viewer.save.titleDirty') : t('files.viewer.save.titleSaved')"
           @click="() => save()"
         >
           <RiLoader4Line v-if="isSaving" class="h-4 w-4 animate-spin" />
           <RiSave3Line v-else class="h-4 w-4" />
-        </Button>
+        </IconButton>
 
-        <Button
+        <IconButton
           v-if="supportsSourceEditor && displayedContent"
           variant="ghost"
-          size="icon"
+          size="sm"
           class="h-7 w-7"
+          :tooltip="t('files.viewer.actions.copyContents')"
+          :is-mobile-pointer="isMobile"
           :title="t('files.viewer.actions.copyContents')"
           @click="copyToClipboard(displayedContent)"
         >
           <RiClipboardLine class="h-4 w-4" />
-        </Button>
+        </IconButton>
 
         <div v-if="canShowViewMenu" ref="viewMenuAnchorEl" class="relative">
-          <Button
+          <IconButton
             variant="ghost"
-            size="icon"
+            size="sm"
             class="h-7 w-7"
             :class="viewMenuOpen ? 'bg-secondary/60 text-foreground' : ''"
+            :tooltip="t('files.viewer.viewMenu.title')"
+            :is-mobile-pointer="isMobile"
             :title="t('files.viewer.viewMenu.title')"
             :aria-label="t('files.viewer.viewMenu.title')"
             @mousedown.prevent
@@ -1059,7 +1067,7 @@ function onSendSelection() {
             "
           >
             <RiMore2Line class="h-4 w-4" />
-          </Button>
+          </IconButton>
         </div>
       </div>
     </div>
@@ -1341,7 +1349,13 @@ function onSendSelection() {
         <div class="pointer-events-auto w-full max-w-xl rounded-xl border border-border bg-background/95 p-3 shadow-lg">
           <div class="flex items-center justify-between text-xs text-muted-foreground">
             <span>{{ selectedFile?.name }}:{{ selection.start }}-{{ selection.end }}</span>
-            <IconButton size="xs" :aria-label="t('files.viewer.selection.clearAria')" @click="clearSelection">
+            <IconButton
+              size="xs"
+              :tooltip="t('files.viewer.selection.clearAria')"
+              :is-mobile-pointer="isMobile"
+              :aria-label="t('files.viewer.selection.clearAria')"
+              @click="clearSelection"
+            >
               <RiCloseLine class="h-4 w-4" />
             </IconButton>
           </div>

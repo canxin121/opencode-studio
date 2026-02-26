@@ -134,7 +134,8 @@ function runMobileAction(path: string, actionId: string) {
       <template #actions>
         <SidebarIconButton
           size="sm"
-          :title="t('git.ui.workingTree.actions.stageAll')"
+          :tooltip="t('git.ui.workingTree.actions.stageAll')"
+          :is-mobile-pointer="isMobilePointer"
           :aria-label="t('git.ui.workingTree.actions.stageAll')"
           @click.stop="$emit('stageAll')"
         >
@@ -162,7 +163,8 @@ function runMobileAction(path: string, actionId: string) {
         <template #actions>
           <SidebarIconButton
             size="sm"
-            :title="t('git.ui.workingTree.actions.stage')"
+            :tooltip="t('git.ui.workingTree.actions.stage')"
+            :is-mobile-pointer="isMobilePointer"
             :aria-label="t('git.ui.workingTree.actions.stage')"
             @click.stop="$emit('stage', f.path)"
           >
@@ -170,7 +172,8 @@ function runMobileAction(path: string, actionId: string) {
           </SidebarIconButton>
           <SidebarIconButton
             size="sm"
-            :title="t('git.ui.workingTree.actions.history')"
+            :tooltip="t('git.ui.workingTree.actions.history')"
+            :is-mobile-pointer="isMobilePointer"
             :aria-label="t('git.ui.workingTree.actions.history')"
             @click.stop="$emit('history', f.path)"
           >
@@ -178,7 +181,8 @@ function runMobileAction(path: string, actionId: string) {
           </SidebarIconButton>
           <SidebarIconButton
             size="sm"
-            :title="t('common.rename')"
+            :tooltip="t('common.rename')"
+            :is-mobile-pointer="isMobilePointer"
             :aria-label="t('common.rename')"
             @click.stop="$emit('rename', f.path)"
           >
@@ -195,7 +199,8 @@ function runMobileAction(path: string, actionId: string) {
             <SidebarIconButton
               size="sm"
               destructive
-              :title="t('git.ui.workingTree.actions.discardChanges')"
+              :tooltip="t('git.ui.workingTree.actions.discardChanges')"
+              :is-mobile-pointer="isMobilePointer"
               :aria-label="t('git.ui.workingTree.actions.discardChanges')"
               @click.stop
             >
@@ -213,7 +218,8 @@ function runMobileAction(path: string, actionId: string) {
             <SidebarIconButton
               size="sm"
               destructive
-              :title="t('common.delete')"
+              :tooltip="t('common.delete')"
+              :is-mobile-pointer="isMobilePointer"
               :aria-label="t('common.delete')"
               @click.stop
             >

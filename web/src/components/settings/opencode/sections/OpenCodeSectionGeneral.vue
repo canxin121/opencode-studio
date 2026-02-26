@@ -12,6 +12,7 @@ import {
 } from '@remixicon/vue'
 
 import Button from '@/components/ui/Button.vue'
+import IconButton from '@/components/ui/IconButton.vue'
 import Input from '@/components/ui/Input.vue'
 import OptionPicker from '@/components/ui/OptionPicker.vue'
 import type { PickerOption } from '@/components/ui/pickerOption.types'
@@ -25,6 +26,7 @@ import { useOpencodeConfigPanelContext } from '../opencodeConfigContext'
 export default defineComponent({
   components: {
     Button,
+    IconButton,
     Input,
     OptionPicker,
     Tooltip,
@@ -179,39 +181,33 @@ export default defineComponent({
         </div>
       </div>
       <div class="flex items-center gap-2">
-        <Tooltip>
-          <Button
-            size="icon"
-            variant="ghost"
-            class="h-8 w-8"
-            :title="t('settings.opencodeConfig.sections.common.resetSection')"
-            @click="resetSection('general')"
-          >
-            <RiRestartLine class="h-4 w-4" />
-          </Button>
-          <template #content>{{ t('settings.opencodeConfig.sections.common.resetSection') }}</template>
-        </Tooltip>
-        <Tooltip>
-          <Button
-            size="icon"
-            variant="outline"
-            class="h-8 w-8"
-            :title="
-              isSectionOpen('general')
-                ? t('settings.opencodeConfig.sections.common.collapse')
-                : t('settings.opencodeConfig.sections.common.expand')
-            "
-            @click="toggleSection('general')"
-          >
-            <RiArrowUpSLine v-if="isSectionOpen('general')" class="h-4 w-4" />
-            <RiArrowDownSLine v-else class="h-4 w-4" />
-          </Button>
-          <template #content>{{
+        <IconButton
+          variant="ghost"
+          class="h-8 w-8"
+          :title="t('settings.opencodeConfig.sections.common.resetSection')"
+          @click="resetSection('general')"
+          :tooltip="t('settings.opencodeConfig.sections.common.resetSection')"
+        >
+          <RiRestartLine class="h-4 w-4" />
+        </IconButton>
+        <IconButton
+          variant="outline"
+          class="h-8 w-8"
+          :title="
             isSectionOpen('general')
               ? t('settings.opencodeConfig.sections.common.collapse')
               : t('settings.opencodeConfig.sections.common.expand')
-          }}</template>
-        </Tooltip>
+          "
+          @click="toggleSection('general')"
+          :tooltip="
+            isSectionOpen('general')
+              ? t('settings.opencodeConfig.sections.common.collapse')
+              : t('settings.opencodeConfig.sections.common.expand')
+          "
+        >
+          <RiArrowUpSLine v-if="isSectionOpen('general')" class="h-4 w-4" />
+          <RiArrowDownSLine v-else class="h-4 w-4" />
+        </IconButton>
       </div>
     </div>
 
@@ -271,22 +267,17 @@ export default defineComponent({
                 allow-custom
               />
             </div>
-            <Tooltip>
-              <Button
-                size="icon"
-                variant="outline"
-                class="h-9 w-9"
-                :title="t('settings.opencodeConfig.sections.general.actions.refreshOptionLists')"
-                :aria-label="t('settings.opencodeConfig.sections.general.actions.refreshOptionLists')"
-                @click="refreshOptionLists({ toast: true })"
-                :disabled="optionsLoading"
-              >
-                <RiRefreshLine class="h-4 w-4" :class="optionsLoading ? 'animate-spin' : ''" />
-              </Button>
-              <template #content>{{
-                t('settings.opencodeConfig.sections.general.actions.refreshOptionLists')
-              }}</template>
-            </Tooltip>
+            <IconButton
+              variant="outline"
+              class="h-9 w-9"
+              :title="t('settings.opencodeConfig.sections.general.actions.refreshOptionLists')"
+              :aria-label="t('settings.opencodeConfig.sections.general.actions.refreshOptionLists')"
+              @click="refreshOptionLists({ toast: true })"
+              :disabled="optionsLoading"
+              :tooltip="t('settings.opencodeConfig.sections.general.actions.refreshOptionLists')"
+            >
+              <RiRefreshLine class="h-4 w-4" :class="optionsLoading ? 'animate-spin' : ''" />
+            </IconButton>
           </div>
           <span class="text-[11px] text-muted-foreground">{{
             t('settings.opencodeConfig.sections.general.help.defaultAgentRequirement')
@@ -313,22 +304,17 @@ export default defineComponent({
                 monospace
               />
             </div>
-            <Tooltip>
-              <Button
-                size="icon"
-                variant="outline"
-                class="h-9 w-9"
-                :title="t('settings.opencodeConfig.sections.general.actions.refreshOptionLists')"
-                :aria-label="t('settings.opencodeConfig.sections.general.actions.refreshOptionLists')"
-                @click="refreshOptionLists({ toast: true })"
-                :disabled="optionsLoading"
-              >
-                <RiRefreshLine class="h-4 w-4" :class="optionsLoading ? 'animate-spin' : ''" />
-              </Button>
-              <template #content>{{
-                t('settings.opencodeConfig.sections.general.actions.refreshOptionLists')
-              }}</template>
-            </Tooltip>
+            <IconButton
+              variant="outline"
+              class="h-9 w-9"
+              :title="t('settings.opencodeConfig.sections.general.actions.refreshOptionLists')"
+              :aria-label="t('settings.opencodeConfig.sections.general.actions.refreshOptionLists')"
+              @click="refreshOptionLists({ toast: true })"
+              :disabled="optionsLoading"
+              :tooltip="t('settings.opencodeConfig.sections.general.actions.refreshOptionLists')"
+            >
+              <RiRefreshLine class="h-4 w-4" :class="optionsLoading ? 'animate-spin' : ''" />
+            </IconButton>
           </div>
           <button
             type="button"
@@ -362,22 +348,17 @@ export default defineComponent({
                 monospace
               />
             </div>
-            <Tooltip>
-              <Button
-                size="icon"
-                variant="outline"
-                class="h-9 w-9"
-                :title="t('settings.opencodeConfig.sections.general.actions.refreshOptionLists')"
-                :aria-label="t('settings.opencodeConfig.sections.general.actions.refreshOptionLists')"
-                @click="refreshOptionLists({ toast: true })"
-                :disabled="optionsLoading"
-              >
-                <RiRefreshLine class="h-4 w-4" :class="optionsLoading ? 'animate-spin' : ''" />
-              </Button>
-              <template #content>{{
-                t('settings.opencodeConfig.sections.general.actions.refreshOptionLists')
-              }}</template>
-            </Tooltip>
+            <IconButton
+              variant="outline"
+              class="h-9 w-9"
+              :title="t('settings.opencodeConfig.sections.general.actions.refreshOptionLists')"
+              :aria-label="t('settings.opencodeConfig.sections.general.actions.refreshOptionLists')"
+              @click="refreshOptionLists({ toast: true })"
+              :disabled="optionsLoading"
+              :tooltip="t('settings.opencodeConfig.sections.general.actions.refreshOptionLists')"
+            >
+              <RiRefreshLine class="h-4 w-4" :class="optionsLoading ? 'animate-spin' : ''" />
+            </IconButton>
           </div>
           <span class="text-[11px] text-muted-foreground">{{
             t('settings.opencodeConfig.sections.general.help.smallModel')
@@ -396,19 +377,16 @@ export default defineComponent({
             <div class="text-sm font-semibold">
               {{ t('settings.opencodeConfig.sections.general.modelBrowser.title') }}
             </div>
-            <Tooltip>
-              <Button
-                size="icon"
-                variant="ghost"
-                class="h-8 w-8"
-                :title="t('settings.opencodeConfig.sections.general.modelBrowser.actions.closeAria')"
-                :aria-label="t('settings.opencodeConfig.sections.general.modelBrowser.actions.closeAria')"
-                @click="showModelBrowse = false"
-              >
-                <RiCloseLine class="h-4 w-4" />
-              </Button>
-              <template #content>{{ t('common.close') }}</template>
-            </Tooltip>
+            <IconButton
+              variant="ghost"
+              class="h-8 w-8"
+              :title="t('settings.opencodeConfig.sections.general.modelBrowser.actions.closeAria')"
+              :aria-label="t('settings.opencodeConfig.sections.general.modelBrowser.actions.closeAria')"
+              @click="showModelBrowse = false"
+              :tooltip="t('common.close')"
+            >
+              <RiCloseLine class="h-4 w-4" />
+            </IconButton>
           </div>
           <div class="grid gap-3 lg:grid-cols-3">
             <label class="grid gap-1">
@@ -550,36 +528,26 @@ export default defineComponent({
                   <div class="font-mono text-xs break-all truncate">{{ row.entry.slug }}</div>
                 </div>
                 <div class="flex items-center gap-2 flex-shrink-0">
-                  <Tooltip>
-                    <Button
-                      size="icon"
-                      variant="outline"
-                      class="h-8 w-8"
-                      :title="t('settings.opencodeConfig.sections.general.modelBrowser.actions.setDefaultModel')"
-                      :aria-label="t('settings.opencodeConfig.sections.general.modelBrowser.actions.setDefaultModel')"
-                      @click="model = row.entry.slug"
-                    >
-                      <RiStackLine class="h-4 w-4" />
-                    </Button>
-                    <template #content>{{
-                      t('settings.opencodeConfig.sections.general.modelBrowser.actions.defaultLabel')
-                    }}</template>
-                  </Tooltip>
-                  <Tooltip>
-                    <Button
-                      size="icon"
-                      variant="outline"
-                      class="h-8 w-8"
-                      :title="t('settings.opencodeConfig.sections.general.modelBrowser.actions.setSmallModel')"
-                      :aria-label="t('settings.opencodeConfig.sections.general.modelBrowser.actions.setSmallModel')"
-                      @click="smallModel = row.entry.slug"
-                    >
-                      <RiSparkling2Line class="h-4 w-4" />
-                    </Button>
-                    <template #content>{{
-                      t('settings.opencodeConfig.sections.general.modelBrowser.actions.smallLabel')
-                    }}</template>
-                  </Tooltip>
+                  <IconButton
+                    variant="outline"
+                    class="h-8 w-8"
+                    :title="t('settings.opencodeConfig.sections.general.modelBrowser.actions.setDefaultModel')"
+                    :aria-label="t('settings.opencodeConfig.sections.general.modelBrowser.actions.setDefaultModel')"
+                    @click="model = row.entry.slug"
+                    :tooltip="t('settings.opencodeConfig.sections.general.modelBrowser.actions.defaultLabel')"
+                  >
+                    <RiStackLine class="h-4 w-4" />
+                  </IconButton>
+                  <IconButton
+                    variant="outline"
+                    class="h-8 w-8"
+                    :title="t('settings.opencodeConfig.sections.general.modelBrowser.actions.setSmallModel')"
+                    :aria-label="t('settings.opencodeConfig.sections.general.modelBrowser.actions.setSmallModel')"
+                    @click="smallModel = row.entry.slug"
+                    :tooltip="t('settings.opencodeConfig.sections.general.modelBrowser.actions.smallLabel')"
+                  >
+                    <RiSparkling2Line class="h-4 w-4" />
+                  </IconButton>
                 </div>
               </div>
             </template>

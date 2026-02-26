@@ -282,6 +282,8 @@ function openHelpDialog() {
       <!-- Sidebar Toggle / Mobile Back -->
       <IconButton
         size="lg"
+        :tooltip="ui.isMobile ? mobilePanelToggleLabel : String(t('header.toggleSidebar'))"
+        :is-mobile-pointer="ui.isMobilePointer"
         :aria-label="ui.isMobile ? mobilePanelToggleLabel : String(t('header.toggleSidebar'))"
         @click="handleOpenSessionSwitcher"
       >
@@ -360,6 +362,8 @@ function openHelpDialog() {
         <div class="flex items-center gap-1">
           <IconButton
             size="lg"
+            :tooltip="String(t('header.help'))"
+            :is-mobile-pointer="ui.isMobilePointer"
             :aria-label="String(t('header.help'))"
             :title="String(t('header.help'))"
             @click="openHelpDialog"
@@ -370,6 +374,8 @@ function openHelpDialog() {
           <IconButton
             v-if="chat.selectedSessionId"
             size="lg"
+            :tooltip="String(t('header.locateSession'))"
+            :is-mobile-pointer="ui.isMobilePointer"
             :aria-label="String(t('header.locateCurrentSession'))"
             :title="String(t('header.locateSession'))"
             @click="locateCurrentSessionInSidebar"
@@ -380,6 +386,8 @@ function openHelpDialog() {
           <IconButton
             v-if="ui.isMobile"
             size="lg"
+            :tooltip="directoryPath || String(t('header.noDirectorySelected'))"
+            :is-mobile-pointer="ui.isMobilePointer"
             :aria-label="String(t('header.changeDirectory'))"
             :title="directoryPath || String(t('header.noDirectorySelected'))"
             @click="directoryPickerOpen = true"
@@ -387,7 +395,13 @@ function openHelpDialog() {
             <RiFolder6Line class="h-5 w-5" />
           </IconButton>
 
-          <IconButton size="lg" :aria-label="String(t('nav.settings'))" @click="openSettings">
+          <IconButton
+            size="lg"
+            :tooltip="String(t('nav.settings'))"
+            :is-mobile-pointer="ui.isMobilePointer"
+            :aria-label="String(t('nav.settings'))"
+            @click="openSettings"
+          >
             <RiSettings3Line class="h-5 w-5" />
           </IconButton>
         </div>

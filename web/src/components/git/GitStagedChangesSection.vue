@@ -117,7 +117,8 @@ function runMobileAction(path: string, actionId: string) {
       <template #actions>
         <SidebarIconButton
           size="sm"
-          :title="t('git.ui.workingTree.actions.unstageAll')"
+          :tooltip="t('git.ui.workingTree.actions.unstageAll')"
+          :is-mobile-pointer="isMobilePointer"
           :aria-label="t('git.ui.workingTree.actions.unstageAll')"
           @click.stop="$emit('unstageAll')"
         >
@@ -145,7 +146,8 @@ function runMobileAction(path: string, actionId: string) {
         <template #actions>
           <SidebarIconButton
             size="sm"
-            :title="t('git.ui.workingTree.actions.unstage')"
+            :tooltip="t('git.ui.workingTree.actions.unstage')"
+            :is-mobile-pointer="isMobilePointer"
             :aria-label="t('git.ui.workingTree.actions.unstage')"
             @click.stop="$emit('unstage', f.path)"
           >
@@ -153,7 +155,8 @@ function runMobileAction(path: string, actionId: string) {
           </SidebarIconButton>
           <SidebarIconButton
             size="sm"
-            :title="t('git.ui.workingTree.actions.history')"
+            :tooltip="t('git.ui.workingTree.actions.history')"
+            :is-mobile-pointer="isMobilePointer"
             :aria-label="t('git.ui.workingTree.actions.history')"
             @click.stop="$emit('history', f.path)"
           >
@@ -161,7 +164,8 @@ function runMobileAction(path: string, actionId: string) {
           </SidebarIconButton>
           <SidebarIconButton
             size="sm"
-            :title="t('common.rename')"
+            :tooltip="t('common.rename')"
+            :is-mobile-pointer="isMobilePointer"
             :aria-label="t('common.rename')"
             @click.stop="$emit('rename', f.path)"
           >
@@ -178,7 +182,8 @@ function runMobileAction(path: string, actionId: string) {
             <SidebarIconButton
               size="sm"
               destructive
-              :title="t('common.delete')"
+              :tooltip="t('common.delete')"
+              :is-mobile-pointer="isMobilePointer"
               :aria-label="t('common.delete')"
               @click.stop
             >

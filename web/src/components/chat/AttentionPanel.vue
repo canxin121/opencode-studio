@@ -3,8 +3,8 @@ import { computed, ref, watch } from 'vue'
 import { RiArrowLeftSLine, RiArrowRightSLine, RiCheckLine, RiCloseLine, RiShieldKeyholeLine } from '@remixicon/vue'
 import { useI18n } from 'vue-i18n'
 
-import Button from '@/components/ui/Button.vue'
 import Card from '@/components/ui/Card.vue'
+import IconButton from '@/components/ui/IconButton.vue'
 import Input from '@/components/ui/Input.vue'
 import { useChatStore } from '@/stores/chat'
 import { useToastsStore } from '@/stores/toasts'
@@ -306,63 +306,58 @@ async function rejectQuestion() {
 
         <div class="flex items-center justify-end gap-1.5 shrink-0">
           <template v-if="kind === 'permission'">
-            <Button
-              size="icon"
+            <IconButton
               variant="ghost"
               class="h-8 w-8"
               :disabled="busy"
-              :title="t('chat.attention.ui.rejectPermission')"
+              :tooltip="t('chat.attention.ui.rejectPermission')"
               :aria-label="t('chat.attention.ui.rejectPermission')"
               @click="submitPermission('reject')"
             >
               <RiCloseLine class="h-4 w-4" />
-            </Button>
-            <Button
-              size="icon"
+            </IconButton>
+            <IconButton
               variant="outline"
               class="h-8 w-8"
               :disabled="busy"
-              :title="t('chat.attention.ui.allowOnce')"
+              :tooltip="t('chat.attention.ui.allowOnce')"
               :aria-label="t('chat.attention.ui.allowOnce')"
               @click="submitPermission('once')"
             >
               <RiCheckLine class="h-4 w-4" />
-            </Button>
-            <Button
-              size="icon"
+            </IconButton>
+            <IconButton
               variant="default"
               class="h-8 w-8"
               :disabled="busy"
-              :title="t('chat.attention.ui.alwaysAllow')"
+              :tooltip="t('chat.attention.ui.alwaysAllow')"
               :aria-label="t('chat.attention.ui.alwaysAllow')"
               @click="submitPermission('always')"
             >
               <RiShieldKeyholeLine class="h-4 w-4" />
-            </Button>
+            </IconButton>
           </template>
           <template v-else>
-            <Button
-              size="icon"
+            <IconButton
               variant="ghost"
               class="h-8 w-8"
               :disabled="busy"
-              :title="t('chat.attention.ui.rejectQuestion')"
+              :tooltip="t('chat.attention.ui.rejectQuestion')"
               :aria-label="t('chat.attention.ui.rejectQuestion')"
               @click="rejectQuestion"
             >
               <RiCloseLine class="h-4 w-4" />
-            </Button>
-            <Button
-              size="icon"
+            </IconButton>
+            <IconButton
               variant="default"
               class="h-8 w-8"
               :disabled="!canSendQuestion"
-              :title="t('chat.attention.ui.sendAnswers')"
+              :tooltip="t('chat.attention.ui.sendAnswers')"
               :aria-label="t('chat.attention.ui.sendAnswers')"
               @click="submitQuestion"
             >
               <RiCheckLine class="h-4 w-4" />
-            </Button>
+            </IconButton>
           </template>
         </div>
       </div>
@@ -404,34 +399,32 @@ async function rejectQuestion() {
 
       <div v-else class="space-y-3 min-w-0">
         <div v-if="questionCount > 1" class="flex items-center justify-between gap-2 px-0.5">
-          <Button
-            size="icon"
+          <IconButton
             variant="ghost"
             class="h-7 w-7"
             :disabled="busy || questionIndex <= 0"
-            :title="t('chat.attention.ui.previousQuestion')"
+            :tooltip="t('chat.attention.ui.previousQuestion')"
             :aria-label="t('chat.attention.ui.previousQuestion')"
             @click="prevQuestionPage"
           >
             <RiArrowLeftSLine class="h-4 w-4" />
-          </Button>
+          </IconButton>
           <div class="inline-flex items-center gap-1.5 text-[11px] font-mono text-muted-foreground">
             <span>{{
               t('chat.attention.ui.questionPager', { current: questionIndex + 1, total: questionCount })
             }}</span>
             <RiCheckLine v-if="currentQuestionAnswered" class="h-3.5 w-3.5 text-emerald-500" />
           </div>
-          <Button
-            size="icon"
+          <IconButton
             variant="ghost"
             class="h-7 w-7"
             :disabled="busy || questionIndex >= questionCount - 1"
-            :title="t('chat.attention.ui.nextQuestion')"
+            :tooltip="t('chat.attention.ui.nextQuestion')"
             :aria-label="t('chat.attention.ui.nextQuestion')"
             @click="nextQuestionPage"
           >
             <RiArrowRightSLine class="h-4 w-4" />
-          </Button>
+          </IconButton>
         </div>
 
         <div v-if="currentQuestion && questionIndex >= 0" :key="`${requestId}:${questionIndex}`" class="space-y-3">

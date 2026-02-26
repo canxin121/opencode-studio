@@ -2222,28 +2222,32 @@ watch(el, () => {
           </div>
 
           <div class="flex items-center gap-1">
-            <Button
+            <IconButton
               variant="ghost"
-              size="icon"
+              size="md"
               class="h-8 w-8"
+              :tooltip="String(t('terminal.sidebar.newFolder'))"
+              :is-mobile-pointer="ui.isMobilePointer"
               :title="String(t('terminal.sidebar.newFolder'))"
               :aria-label="String(t('terminal.sidebar.newFolder'))"
               @click="startFolderCreate"
             >
               <RiAddLine class="h-4 w-4" />
-            </Button>
+            </IconButton>
 
-            <Button
+            <IconButton
               variant="ghost"
-              size="icon"
+              size="md"
               class="h-8 w-8"
+              :tooltip="String(t('terminal.sidebar.refreshSessions'))"
+              :is-mobile-pointer="ui.isMobilePointer"
               :title="String(t('terminal.sidebar.refreshSessions'))"
               :aria-label="String(t('terminal.sidebar.refreshSessions'))"
               :disabled="sessionListRefreshing"
               @click="refreshTrackedSessions"
             >
               <RiRefreshLine class="h-4 w-4" :class="sessionListRefreshing ? 'animate-spin' : ''" />
-            </Button>
+            </IconButton>
           </div>
         </div>
       </div>
@@ -2829,30 +2833,34 @@ watch(el, () => {
             :anchor-to-cursor="false"
             @confirm="toggleConnection"
           >
-            <Button
+            <IconButton
               variant="destructive"
-              size="icon"
+              size="md"
               class="h-8 w-8 shrink-0"
               :disabled="connectionToggleDisabled"
+              :tooltip="connectionToggleLabel"
+              :is-mobile-pointer="ui.isMobilePointer"
               :aria-label="connectionToggleLabel"
               :title="connectionToggleLabel"
             >
               <RiStopCircleLine class="h-4 w-4" />
-            </Button>
+            </IconButton>
           </ConfirmPopover>
 
-          <Button
+          <IconButton
             v-else
             variant="outline"
-            size="icon"
+            size="md"
             class="h-8 w-8 shrink-0 border-emerald-500/45 text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-300"
             :disabled="connectionToggleDisabled"
+            :tooltip="connectionToggleLabel"
+            :is-mobile-pointer="ui.isMobilePointer"
             :aria-label="connectionToggleLabel"
             :title="connectionToggleLabel"
             @click="toggleConnection"
           >
             <RiPlugLine class="h-4 w-4" />
-          </Button>
+          </IconButton>
         </div>
 
         <div

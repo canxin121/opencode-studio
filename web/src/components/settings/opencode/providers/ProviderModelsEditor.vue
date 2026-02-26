@@ -3,11 +3,10 @@ import { computed } from 'vue'
 import { RiAddLine, RiArrowDownSLine, RiArrowUpSLine, RiCheckLine, RiDeleteBinLine } from '@remixicon/vue'
 import { useI18n } from 'vue-i18n'
 
-import Button from '@/components/ui/Button.vue'
+import IconButton from '@/components/ui/IconButton.vue'
 import Input from '@/components/ui/Input.vue'
 import OptionPicker from '@/components/ui/OptionPicker.vue'
 import type { PickerOption } from '@/components/ui/pickerOption.types'
-import Tooltip from '@/components/ui/Tooltip.vue'
 
 import { useOpencodeConfigPanelContext } from '../opencodeConfigContext'
 
@@ -155,21 +154,16 @@ const providerId = props.providerId
           :placeholder="t('settings.opencodeConfig.sections.providers.modelsEditor.placeholders.modelId')"
           class="max-w-xs"
         />
-        <Tooltip>
-          <Button
-            size="icon"
-            variant="outline"
-            class="h-9 w-9"
-            :title="t('settings.opencodeConfig.sections.providers.modelsEditor.actions.addModel')"
-            :aria-label="t('settings.opencodeConfig.sections.providers.modelsEditor.actions.addModel')"
-            @click="addProviderModel(providerId)"
-          >
-            <RiAddLine class="h-4 w-4" />
-          </Button>
-          <template #content>{{
-            t('settings.opencodeConfig.sections.providers.modelsEditor.actions.addModel')
-          }}</template>
-        </Tooltip>
+        <IconButton
+          variant="outline"
+          class="h-9 w-9"
+          :title="t('settings.opencodeConfig.sections.providers.modelsEditor.actions.addModel')"
+          :aria-label="t('settings.opencodeConfig.sections.providers.modelsEditor.actions.addModel')"
+          @click="addProviderModel(providerId)"
+          :tooltip="t('settings.opencodeConfig.sections.providers.modelsEditor.actions.addModel')"
+        >
+          <RiAddLine class="h-4 w-4" />
+        </IconButton>
       </div>
     </div>
 
@@ -183,47 +177,41 @@ const providerId = props.providerId
     >
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-1 min-w-0">
-          <Tooltip>
-            <Button
-              size="icon"
-              variant="ghost"
-              class="h-8 w-8"
-              :title="
-                isModelExpanded(providerId, modelId as string)
-                  ? t('settings.opencodeConfig.sections.common.collapse')
-                  : t('settings.opencodeConfig.sections.common.expand')
-              "
-              :aria-label="
-                isModelExpanded(providerId, modelId as string)
-                  ? t('settings.opencodeConfig.sections.providers.modelsEditor.actions.collapseModelAria')
-                  : t('settings.opencodeConfig.sections.providers.modelsEditor.actions.expandModelAria')
-              "
-              @click="toggleModelExpanded(providerId, modelId as string)"
-            >
-              <RiArrowUpSLine v-if="isModelExpanded(providerId, modelId as string)" class="h-4 w-4" />
-              <RiArrowDownSLine v-else class="h-4 w-4" />
-            </Button>
-            <template #content>{{
+          <IconButton
+            variant="ghost"
+            class="h-8 w-8"
+            :title="
               isModelExpanded(providerId, modelId as string)
                 ? t('settings.opencodeConfig.sections.common.collapse')
                 : t('settings.opencodeConfig.sections.common.expand')
-            }}</template>
-          </Tooltip>
+            "
+            :aria-label="
+              isModelExpanded(providerId, modelId as string)
+                ? t('settings.opencodeConfig.sections.providers.modelsEditor.actions.collapseModelAria')
+                : t('settings.opencodeConfig.sections.providers.modelsEditor.actions.expandModelAria')
+            "
+            @click="toggleModelExpanded(providerId, modelId as string)"
+            :tooltip="
+              isModelExpanded(providerId, modelId as string)
+                ? t('settings.opencodeConfig.sections.common.collapse')
+                : t('settings.opencodeConfig.sections.common.expand')
+            "
+          >
+            <RiArrowUpSLine v-if="isModelExpanded(providerId, modelId as string)" class="h-4 w-4" />
+            <RiArrowDownSLine v-else class="h-4 w-4" />
+          </IconButton>
           <div class="font-mono text-sm break-all">{{ modelId }}</div>
         </div>
-        <Tooltip>
-          <Button
-            size="icon"
-            variant="ghost-destructive"
-            class="h-8 w-8"
-            :title="t('common.remove')"
-            :aria-label="t('settings.opencodeConfig.sections.providers.modelsEditor.actions.removeModelAria')"
-            @click="removeProviderModel(providerId, modelId as string)"
-          >
-            <RiDeleteBinLine class="h-4 w-4" />
-          </Button>
-          <template #content>{{ t('common.remove') }}</template>
-        </Tooltip>
+        <IconButton
+          variant="ghost-destructive"
+          class="h-8 w-8"
+          :title="t('common.remove')"
+          :aria-label="t('settings.opencodeConfig.sections.providers.modelsEditor.actions.removeModelAria')"
+          @click="removeProviderModel(providerId, modelId as string)"
+          :tooltip="t('common.remove')"
+        >
+          <RiDeleteBinLine class="h-4 w-4" />
+        </IconButton>
       </div>
 
       <div v-if="isModelExpanded(providerId, modelId as string)" class="space-y-4">
@@ -575,19 +563,16 @@ const providerId = props.providerId
               class="w-full rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs"
             />
             <div class="flex items-center gap-2">
-              <Tooltip>
-                <Button
-                  size="icon"
-                  variant="outline"
-                  class="h-8 w-8"
-                  :title="t('common.apply')"
-                  :aria-label="t('settings.opencodeConfig.sections.common.applyJson')"
-                  @click="applyJsonBuffer(`model:${providerId}:${modelId}:options`)"
-                >
-                  <RiCheckLine class="h-4 w-4" />
-                </Button>
-                <template #content>{{ t('common.apply') }}</template>
-              </Tooltip>
+              <IconButton
+                variant="outline"
+                class="h-8 w-8"
+                :title="t('common.apply')"
+                :aria-label="t('settings.opencodeConfig.sections.common.applyJson')"
+                @click="applyJsonBuffer(`model:${providerId}:${modelId}:options`)"
+                :tooltip="t('common.apply')"
+              >
+                <RiCheckLine class="h-4 w-4" />
+              </IconButton>
               <span
                 v-if="
                   ensureJsonBuffer(
@@ -627,19 +612,16 @@ const providerId = props.providerId
               class="w-full rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs"
             />
             <div class="flex items-center gap-2">
-              <Tooltip>
-                <Button
-                  size="icon"
-                  variant="outline"
-                  class="h-8 w-8"
-                  :title="t('common.apply')"
-                  :aria-label="t('settings.opencodeConfig.sections.common.applyJson')"
-                  @click="applyJsonBuffer(`model:${providerId}:${modelId}:headers`)"
-                >
-                  <RiCheckLine class="h-4 w-4" />
-                </Button>
-                <template #content>{{ t('common.apply') }}</template>
-              </Tooltip>
+              <IconButton
+                variant="outline"
+                class="h-8 w-8"
+                :title="t('common.apply')"
+                :aria-label="t('settings.opencodeConfig.sections.common.applyJson')"
+                @click="applyJsonBuffer(`model:${providerId}:${modelId}:headers`)"
+                :tooltip="t('common.apply')"
+              >
+                <RiCheckLine class="h-4 w-4" />
+              </IconButton>
               <span
                 v-if="
                   ensureJsonBuffer(
@@ -688,21 +670,16 @@ const providerId = props.providerId
                 "
                 class="max-w-xs"
               />
-              <Tooltip>
-                <Button
-                  size="icon"
-                  variant="outline"
-                  class="h-9 w-9"
-                  :title="t('settings.opencodeConfig.sections.providers.modelsEditor.variants.actions.addVariant')"
-                  :aria-label="t('settings.opencodeConfig.sections.providers.modelsEditor.variants.actions.addVariant')"
-                  @click="addVariant(providerId, modelId as string)"
-                >
-                  <RiAddLine class="h-4 w-4" />
-                </Button>
-                <template #content>{{
-                  t('settings.opencodeConfig.sections.providers.modelsEditor.variants.actions.addVariant')
-                }}</template>
-              </Tooltip>
+              <IconButton
+                variant="outline"
+                class="h-9 w-9"
+                :title="t('settings.opencodeConfig.sections.providers.modelsEditor.variants.actions.addVariant')"
+                :aria-label="t('settings.opencodeConfig.sections.providers.modelsEditor.variants.actions.addVariant')"
+                @click="addVariant(providerId, modelId as string)"
+                :tooltip="t('settings.opencodeConfig.sections.providers.modelsEditor.variants.actions.addVariant')"
+              >
+                <RiAddLine class="h-4 w-4" />
+              </IconButton>
             </div>
           </div>
           <div
@@ -718,21 +695,18 @@ const providerId = props.providerId
           >
             <div class="flex items-center justify-between">
               <div class="font-mono text-sm break-all">{{ variantId }}</div>
-              <Tooltip>
-                <Button
-                  size="icon"
-                  variant="ghost-destructive"
-                  class="h-8 w-8"
-                  :title="t('common.remove')"
-                  :aria-label="
-                    t('settings.opencodeConfig.sections.providers.modelsEditor.variants.actions.removeVariantAria')
-                  "
-                  @click="removeVariant(providerId, modelId as string, variantId as string)"
-                >
-                  <RiDeleteBinLine class="h-4 w-4" />
-                </Button>
-                <template #content>{{ t('common.remove') }}</template>
-              </Tooltip>
+              <IconButton
+                variant="ghost-destructive"
+                class="h-8 w-8"
+                :title="t('common.remove')"
+                :aria-label="
+                  t('settings.opencodeConfig.sections.providers.modelsEditor.variants.actions.removeVariantAria')
+                "
+                @click="removeVariant(providerId, modelId as string, variantId as string)"
+                :tooltip="t('common.remove')"
+              >
+                <RiDeleteBinLine class="h-4 w-4" />
+              </IconButton>
             </div>
             <label class="inline-flex items-center gap-2 text-sm">
               <input
@@ -768,19 +742,16 @@ const providerId = props.providerId
                 class="w-full rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs"
               />
               <div class="flex items-center gap-2">
-                <Tooltip>
-                  <Button
-                    size="icon"
-                    variant="outline"
-                    class="h-8 w-8"
-                    :title="t('common.apply')"
-                    :aria-label="t('settings.opencodeConfig.sections.common.applyJson')"
-                    @click="applyJsonBuffer(`variant:${providerId}:${modelId}:${variantId}:extra`)"
-                  >
-                    <RiCheckLine class="h-4 w-4" />
-                  </Button>
-                  <template #content>{{ t('common.apply') }}</template>
-                </Tooltip>
+                <IconButton
+                  variant="outline"
+                  class="h-8 w-8"
+                  :title="t('common.apply')"
+                  :aria-label="t('settings.opencodeConfig.sections.common.applyJson')"
+                  @click="applyJsonBuffer(`variant:${providerId}:${modelId}:${variantId}:extra`)"
+                  :tooltip="t('common.apply')"
+                >
+                  <RiCheckLine class="h-4 w-4" />
+                </IconButton>
                 <span
                   v-if="
                     ensureJsonBuffer(

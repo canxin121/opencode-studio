@@ -10,6 +10,7 @@ import {
 } from '@remixicon/vue'
 
 import Button from '@/components/ui/Button.vue'
+import IconButton from '@/components/ui/IconButton.vue'
 import Input from '@/components/ui/Input.vue'
 import OptionPicker from '@/components/ui/OptionPicker.vue'
 import type { PickerOption } from '@/components/ui/pickerOption.types'
@@ -22,6 +23,7 @@ import { useOpencodeConfigPanelContext } from '../opencodeConfigContext'
 export default defineComponent({
   components: {
     Button,
+    IconButton,
     Input,
     OptionPicker,
     Tooltip,
@@ -87,39 +89,33 @@ export default defineComponent({
         </div>
       </div>
       <div class="flex items-center gap-2">
-        <Tooltip>
-          <Button
-            size="icon"
-            variant="ghost"
-            class="h-8 w-8"
-            :title="t('settings.opencodeConfig.sections.common.resetSection')"
-            @click="resetSection('formatter')"
-          >
-            <RiRestartLine class="h-4 w-4" />
-          </Button>
-          <template #content>{{ t('settings.opencodeConfig.sections.common.resetSection') }}</template>
-        </Tooltip>
-        <Tooltip>
-          <Button
-            size="icon"
-            variant="outline"
-            class="h-8 w-8"
-            :title="
-              isSectionOpen('formatter')
-                ? t('settings.opencodeConfig.sections.common.collapse')
-                : t('settings.opencodeConfig.sections.common.expand')
-            "
-            @click="toggleSection('formatter')"
-          >
-            <RiArrowUpSLine v-if="isSectionOpen('formatter')" class="h-4 w-4" />
-            <RiArrowDownSLine v-else class="h-4 w-4" />
-          </Button>
-          <template #content>{{
+        <IconButton
+          variant="ghost"
+          class="h-8 w-8"
+          :title="t('settings.opencodeConfig.sections.common.resetSection')"
+          @click="resetSection('formatter')"
+          :tooltip="t('settings.opencodeConfig.sections.common.resetSection')"
+        >
+          <RiRestartLine class="h-4 w-4" />
+        </IconButton>
+        <IconButton
+          variant="outline"
+          class="h-8 w-8"
+          :title="
             isSectionOpen('formatter')
               ? t('settings.opencodeConfig.sections.common.collapse')
               : t('settings.opencodeConfig.sections.common.expand')
-          }}</template>
-        </Tooltip>
+          "
+          @click="toggleSection('formatter')"
+          :tooltip="
+            isSectionOpen('formatter')
+              ? t('settings.opencodeConfig.sections.common.collapse')
+              : t('settings.opencodeConfig.sections.common.expand')
+          "
+        >
+          <RiArrowUpSLine v-if="isSectionOpen('formatter')" class="h-4 w-4" />
+          <RiArrowDownSLine v-else class="h-4 w-4" />
+        </IconButton>
       </div>
     </div>
 
@@ -135,19 +131,16 @@ export default defineComponent({
             :placeholder="t('settings.opencodeConfig.sections.formatter.formatters.placeholders.formatterId')"
             class="max-w-xs"
           />
-          <Tooltip>
-            <Button
-              size="icon"
-              variant="outline"
-              class="h-9 w-9"
-              :title="t('settings.opencodeConfig.sections.formatter.formatters.actions.add')"
-              :aria-label="t('settings.opencodeConfig.sections.formatter.formatters.actions.addAria')"
-              @click="addFormatter"
-            >
-              <RiAddLine class="h-4 w-4" />
-            </Button>
-            <template #content>{{ t('settings.opencodeConfig.sections.formatter.formatters.actions.add') }}</template>
-          </Tooltip>
+          <IconButton
+            variant="outline"
+            class="h-9 w-9"
+            :title="t('settings.opencodeConfig.sections.formatter.formatters.actions.add')"
+            :aria-label="t('settings.opencodeConfig.sections.formatter.formatters.actions.addAria')"
+            @click="addFormatter"
+            :tooltip="t('settings.opencodeConfig.sections.formatter.formatters.actions.add')"
+          >
+            <RiAddLine class="h-4 w-4" />
+          </IconButton>
         </div>
         <div v-if="!formatterDisabled && formatterList.length === 0" class="text-xs text-muted-foreground">
           {{ t('settings.opencodeConfig.sections.formatter.formatters.empty') }}
@@ -160,19 +153,16 @@ export default defineComponent({
         >
           <div class="flex items-center justify-between">
             <div class="font-mono text-sm break-all">{{ fmtId }}</div>
-            <Tooltip>
-              <Button
-                size="icon"
-                variant="ghost-destructive"
-                class="h-8 w-8"
-                :title="t('common.remove')"
-                :aria-label="t('settings.opencodeConfig.sections.formatter.formatters.actions.removeAria')"
-                @click="removeEntry('formatter', fmtId)"
-              >
-                <RiDeleteBinLine class="h-4 w-4" />
-              </Button>
-              <template #content>{{ t('common.remove') }}</template>
-            </Tooltip>
+            <IconButton
+              variant="ghost-destructive"
+              class="h-8 w-8"
+              :title="t('common.remove')"
+              :aria-label="t('settings.opencodeConfig.sections.formatter.formatters.actions.removeAria')"
+              @click="removeEntry('formatter', fmtId)"
+              :tooltip="t('common.remove')"
+            >
+              <RiDeleteBinLine class="h-4 w-4" />
+            </IconButton>
           </div>
           <label class="inline-flex items-center gap-2 text-sm">
             <input
@@ -233,19 +223,16 @@ export default defineComponent({
               class="w-full rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs"
             />
             <div class="flex items-center gap-2">
-              <Tooltip>
-                <Button
-                  size="icon"
-                  variant="outline"
-                  class="h-8 w-8"
-                  :title="t('common.apply')"
-                  :aria-label="t('settings.opencodeConfig.sections.common.applyJson')"
-                  @click="applyJsonBuffer(`formatter:${fmtId}:env`)"
-                >
-                  <RiCheckLine class="h-4 w-4" />
-                </Button>
-                <template #content>{{ t('common.apply') }}</template>
-              </Tooltip>
+              <IconButton
+                variant="outline"
+                class="h-8 w-8"
+                :title="t('common.apply')"
+                :aria-label="t('settings.opencodeConfig.sections.common.applyJson')"
+                @click="applyJsonBuffer(`formatter:${fmtId}:env`)"
+                :tooltip="t('common.apply')"
+              >
+                <RiCheckLine class="h-4 w-4" />
+              </IconButton>
               <span
                 v-if="
                   ensureJsonBuffer(
@@ -282,19 +269,16 @@ export default defineComponent({
             :placeholder="t('settings.opencodeConfig.sections.formatter.lsp.placeholders.lspId')"
             class="max-w-xs"
           />
-          <Tooltip>
-            <Button
-              size="icon"
-              variant="outline"
-              class="h-9 w-9"
-              :title="t('settings.opencodeConfig.sections.formatter.lsp.actions.add')"
-              :aria-label="t('settings.opencodeConfig.sections.formatter.lsp.actions.addAria')"
-              @click="addLsp"
-            >
-              <RiAddLine class="h-4 w-4" />
-            </Button>
-            <template #content>{{ t('settings.opencodeConfig.sections.formatter.lsp.actions.add') }}</template>
-          </Tooltip>
+          <IconButton
+            variant="outline"
+            class="h-9 w-9"
+            :title="t('settings.opencodeConfig.sections.formatter.lsp.actions.add')"
+            :aria-label="t('settings.opencodeConfig.sections.formatter.lsp.actions.addAria')"
+            @click="addLsp"
+            :tooltip="t('settings.opencodeConfig.sections.formatter.lsp.actions.add')"
+          >
+            <RiAddLine class="h-4 w-4" />
+          </IconButton>
         </div>
         <div v-if="!lspDisabled && lspList.length === 0" class="text-xs text-muted-foreground">
           {{ t('settings.opencodeConfig.sections.formatter.lsp.empty') }}
@@ -307,19 +291,16 @@ export default defineComponent({
         >
           <div class="flex items-center justify-between">
             <div class="font-mono text-sm break-all">{{ lspId }}</div>
-            <Tooltip>
-              <Button
-                size="icon"
-                variant="ghost-destructive"
-                class="h-8 w-8"
-                :title="t('common.remove')"
-                :aria-label="t('settings.opencodeConfig.sections.formatter.lsp.actions.removeAria')"
-                @click="removeEntry('lsp', lspId)"
-              >
-                <RiDeleteBinLine class="h-4 w-4" />
-              </Button>
-              <template #content>{{ t('common.remove') }}</template>
-            </Tooltip>
+            <IconButton
+              variant="ghost-destructive"
+              class="h-8 w-8"
+              :title="t('common.remove')"
+              :aria-label="t('settings.opencodeConfig.sections.formatter.lsp.actions.removeAria')"
+              @click="removeEntry('lsp', lspId)"
+              :tooltip="t('common.remove')"
+            >
+              <RiDeleteBinLine class="h-4 w-4" />
+            </IconButton>
           </div>
           <label class="grid gap-1">
             <span class="text-xs text-muted-foreground">{{
@@ -384,19 +365,16 @@ export default defineComponent({
                 class="w-full rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs"
               />
               <div class="flex items-center gap-2">
-                <Tooltip>
-                  <Button
-                    size="icon"
-                    variant="outline"
-                    class="h-8 w-8"
-                    :title="t('common.apply')"
-                    :aria-label="t('settings.opencodeConfig.sections.common.applyJson')"
-                    @click="applyJsonBuffer(`lsp:${lspId}:env`)"
-                  >
-                    <RiCheckLine class="h-4 w-4" />
-                  </Button>
-                  <template #content>{{ t('common.apply') }}</template>
-                </Tooltip>
+                <IconButton
+                  variant="outline"
+                  class="h-8 w-8"
+                  :title="t('common.apply')"
+                  :aria-label="t('settings.opencodeConfig.sections.common.applyJson')"
+                  @click="applyJsonBuffer(`lsp:${lspId}:env`)"
+                  :tooltip="t('common.apply')"
+                >
+                  <RiCheckLine class="h-4 w-4" />
+                </IconButton>
                 <span
                   v-if="
                     ensureJsonBuffer(
@@ -436,19 +414,16 @@ export default defineComponent({
                 class="w-full rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs"
               />
               <div class="flex items-center gap-2">
-                <Tooltip>
-                  <Button
-                    size="icon"
-                    variant="outline"
-                    class="h-8 w-8"
-                    :title="t('common.apply')"
-                    :aria-label="t('settings.opencodeConfig.sections.common.applyJson')"
-                    @click="applyJsonBuffer(`lsp:${lspId}:init`)"
-                  >
-                    <RiCheckLine class="h-4 w-4" />
-                  </Button>
-                  <template #content>{{ t('common.apply') }}</template>
-                </Tooltip>
+                <IconButton
+                  variant="outline"
+                  class="h-8 w-8"
+                  :title="t('common.apply')"
+                  :aria-label="t('settings.opencodeConfig.sections.common.applyJson')"
+                  @click="applyJsonBuffer(`lsp:${lspId}:init`)"
+                  :tooltip="t('common.apply')"
+                >
+                  <RiCheckLine class="h-4 w-4" />
+                </IconButton>
                 <span
                   v-if="
                     ensureJsonBuffer(

@@ -765,21 +765,33 @@ void diffPaneRef
         <div class="oc-vscode-pane-title">{{ t('git.ui.sourceControl') }}</div>
         <div class="oc-vscode-toolbar">
           <SidebarIconButton
-            :title="t('git.actions.fetch')"
+            :tooltip="t('git.actions.fetch')"
+            :is-mobile-pointer="ui.isMobilePointer"
             :disabled="!gitReady || !root || repoBusy"
             @click="fetchRemote"
           >
             <RiRefreshLine class="h-3.5 w-3.5" :class="{ 'animate-spin': loading || repoBusy }" />
           </SidebarIconButton>
-          <SidebarIconButton :title="t('git.actions.pull')" :disabled="!gitReady || !root || repoBusy" @click="pull">
+          <SidebarIconButton
+            :tooltip="t('git.actions.pull')"
+            :is-mobile-pointer="ui.isMobilePointer"
+            :disabled="!gitReady || !root || repoBusy"
+            @click="pull"
+          >
             <RiArrowDownSLine class="h-3.5 w-3.5" />
           </SidebarIconButton>
-          <SidebarIconButton :title="t('git.actions.push')" :disabled="!gitReady || !root || repoBusy" @click="push">
+          <SidebarIconButton
+            :tooltip="t('git.actions.push')"
+            :is-mobile-pointer="ui.isMobilePointer"
+            :disabled="!gitReady || !root || repoBusy"
+            @click="push"
+          >
             <RiArrowRightSLine class="h-3.5 w-3.5 -rotate-45" />
           </SidebarIconButton>
           <div ref="actionsMenuAnchorEl" class="inline-flex">
             <SidebarIconButton
-              :title="t('git.ui.moreActions')"
+              :tooltip="t('git.ui.moreActions')"
+              :is-mobile-pointer="ui.isMobilePointer"
               :disabled="!gitReady || !root || repoBusy"
               @mousedown.prevent
               @click.stop="actionsOpen = !actionsOpen"
