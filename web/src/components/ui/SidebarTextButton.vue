@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { type HTMLAttributes, useAttrs } from 'vue'
 
+import Button from '@/components/ui/Button.vue'
 import { cn } from '@/lib/utils'
 
 interface Props {
@@ -12,13 +13,18 @@ const attrs = useAttrs()
 </script>
 
 <template>
-  <button
+  <Button
     v-bind="attrs"
     type="button"
+    variant="ghost"
+    size="mini"
     :class="
-      cn('min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50', props.class)
+      cn(
+        'h-auto min-w-0 justify-start rounded-none px-0 py-0 text-left shadow-none focus-visible:ring-2 focus-visible:ring-primary/50',
+        props.class,
+      )
     "
   >
     <slot />
-  </button>
+  </Button>
 </template>
