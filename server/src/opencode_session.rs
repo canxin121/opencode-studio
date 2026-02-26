@@ -1768,6 +1768,9 @@ mod tests {
     use crate::test_support::ENV_LOCK;
     use axum::body::to_bytes;
     use axum::extract::{Query, State};
+    use sqlx::SqlitePool;
+    use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
+    use std::time::Duration;
     use std::time::{SystemTime, UNIX_EPOCH};
     use tokio::fs;
 
@@ -1857,6 +1860,79 @@ mod tests {
             .unwrap();
     }
 
+    async fn open_test_sqlite_pool(path: &std::path::Path) -> SqlitePool {
+        let options = SqliteConnectOptions::new()
+            .filename(path)
+            .create_if_missing(true)
+            .busy_timeout(Duration::from_millis(5000));
+        SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(options)
+            .await
+            .unwrap()
+    }
+
+    async fn create_session_table(pool: &SqlitePool) {
+        sqlx::query(
+            "CREATE TABLE session (
+               id TEXT PRIMARY KEY,
+               project_id TEXT NOT NULL,
+               parent_id TEXT,
+               slug TEXT NOT NULL,
+               directory TEXT NOT NULL,
+               title TEXT NOT NULL,
+               version TEXT NOT NULL,
+               share_url TEXT,
+               summary_additions INTEGER,
+               summary_deletions INTEGER,
+               summary_files INTEGER,
+               summary_diffs TEXT,
+               revert TEXT,
+               permission TEXT,
+               time_created INTEGER NOT NULL,
+               time_updated INTEGER NOT NULL,
+               time_compacting INTEGER,
+               time_archived INTEGER
+             )",
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    struct SessionRow<'a> {
+        id: &'a str,
+        project_id: &'a str,
+        parent_id: Option<&'a str>,
+        slug: &'a str,
+        directory: &'a str,
+        title: &'a str,
+        time_created: i64,
+        time_updated: i64,
+    }
+
+    async fn insert_session_row(pool: &SqlitePool, row: &SessionRow<'_>) {
+        sqlx::query(
+            "INSERT INTO session (
+                id, project_id, parent_id, slug, directory, title, version,
+                share_url, summary_additions, summary_deletions, summary_files,
+                summary_diffs, revert, permission, time_created, time_updated,
+                time_compacting, time_archived
+             ) VALUES (?, ?, ?, ?, ?, ?, '2', NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?, ?, NULL, NULL)",
+        )
+        .bind(row.id)
+        .bind(row.project_id)
+        .bind(row.parent_id)
+        .bind(row.slug)
+        .bind(row.directory)
+        .bind(row.title)
+        .bind(row.time_created)
+        .bind(row.time_updated)
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
     fn dummy_state() -> Arc<crate::AppState> {
         Arc::new(crate::AppState {
             ui_auth: crate::ui_auth::UiAuth::Disabled,
@@ -1902,70 +1978,88 @@ mod tests {
         let message_count = 1200usize;
         let page_limit = 1000usize;
 
-        tokio::task::spawn_blocking({
-            let db_path = db_path.clone();
-            move || {
-                let mut conn = rusqlite::Connection::open(db_path).unwrap();
-                conn.execute_batch(
-                    "CREATE TABLE session (id TEXT PRIMARY KEY);\n\
-                     CREATE TABLE message (\
-                         id TEXT PRIMARY KEY,\
-                         session_id TEXT NOT NULL,\
-                         time_created INTEGER NOT NULL,\
-                         time_updated INTEGER NOT NULL,\
-                         data TEXT NOT NULL\
-                     );\n\
-                     CREATE TABLE part (\
-                         id TEXT PRIMARY KEY,\
-                         message_id TEXT NOT NULL,\
-                         session_id TEXT NOT NULL,\
-                         time_created INTEGER NOT NULL,\
-                         time_updated INTEGER NOT NULL,\
-                         data TEXT NOT NULL\
-                     );\n\
-                     CREATE INDEX message_session_idx ON message(session_id);\n\
-                     CREATE INDEX part_message_idx ON part(message_id);\n\
-                     CREATE INDEX part_session_idx ON part(session_id);",
-                )
-                .unwrap();
-                conn.execute("INSERT INTO session(id) VALUES (?1)", [session_id])
-                    .unwrap();
-
-                let tx = conn.transaction().unwrap();
-                {
-                    let mut msg_stmt = tx
-                        .prepare(
-                            "INSERT INTO message(id, session_id, time_created, time_updated, data) VALUES (?1, ?2, ?3, ?4, ?5)",
-                        )
-                        .unwrap();
-                    let mut part_stmt = tx
-                        .prepare(
-                            "INSERT INTO part(id, message_id, session_id, time_created, time_updated, data) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                        )
-                        .unwrap();
-
-                    for i in 0..message_count {
-                        let mid = format!("msg_{:04}", i);
-                        let pid = format!("prt_{:04}", i);
-                        let t = i as i64;
-                        let msg_data = format!(
-                            "{{\"role\":\"user\",\"time\":{{\"created\":{t}}}}}"
-                        );
-                        let part_data = "{\"type\":\"text\",\"text\":\"hello\"}";
-
-                        msg_stmt
-                            .execute(rusqlite::params![mid, session_id, t, t, msg_data])
-                            .unwrap();
-                        part_stmt
-                            .execute(rusqlite::params![pid, format!("msg_{:04}", i), session_id, t, t, part_data])
-                            .unwrap();
-                    }
-                }
-                tx.commit().unwrap();
-            }
-        })
+        let pool = open_test_sqlite_pool(&db_path).await;
+        sqlx::query("CREATE TABLE session (id TEXT PRIMARY KEY)")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query(
+            "CREATE TABLE message (
+                 id TEXT PRIMARY KEY,
+                 session_id TEXT NOT NULL,
+                 time_created INTEGER NOT NULL,
+                 time_updated INTEGER NOT NULL,
+                 data TEXT NOT NULL
+             )",
+        )
+        .execute(&pool)
         .await
         .unwrap();
+        sqlx::query(
+            "CREATE TABLE part (
+                 id TEXT PRIMARY KEY,
+                 message_id TEXT NOT NULL,
+                 session_id TEXT NOT NULL,
+                 time_created INTEGER NOT NULL,
+                 time_updated INTEGER NOT NULL,
+                 data TEXT NOT NULL
+             )",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query("CREATE INDEX message_session_idx ON message(session_id)")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("CREATE INDEX part_message_idx ON part(message_id)")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("CREATE INDEX part_session_idx ON part(session_id)")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO session(id) VALUES (?)")
+            .bind(session_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let mut tx = pool.begin().await.unwrap();
+        for i in 0..message_count {
+            let mid = format!("msg_{:04}", i);
+            let pid = format!("prt_{:04}", i);
+            let t = i as i64;
+            let msg_data = format!("{{\"role\":\"user\",\"time\":{{\"created\":{t}}}}}");
+            let part_data = "{\"type\":\"text\",\"text\":\"hello\"}";
+
+            sqlx::query(
+                "INSERT INTO message(id, session_id, time_created, time_updated, data) VALUES (?, ?, ?, ?, ?)",
+            )
+            .bind(&mid)
+            .bind(session_id)
+            .bind(t)
+            .bind(t)
+            .bind(&msg_data)
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+
+            sqlx::query(
+                "INSERT INTO part(id, message_id, session_id, time_created, time_updated, data) VALUES (?, ?, ?, ?, ?, ?)",
+            )
+            .bind(&pid)
+            .bind(&mid)
+            .bind(session_id)
+            .bind(t)
+            .bind(t)
+            .bind(part_data)
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+        }
+        tx.commit().await.unwrap();
 
         let page = load_session_message_page_from_sqlite(session_id, 0, Some(page_limit), true)
             .await
@@ -1996,70 +2090,73 @@ mod tests {
             fs::create_dir_all(parent).await.unwrap();
         }
 
-        tokio::task::spawn_blocking({
-            let db_path = db_path.clone();
-            move || {
-                let mut conn = rusqlite::Connection::open(db_path).unwrap();
-                // Note: `part` table intentionally omits `session_id`.
-                conn.execute_batch(
-                    "CREATE TABLE session (id TEXT PRIMARY KEY);\n\
-                     CREATE TABLE message (\
-                         id TEXT PRIMARY KEY,\
-                         session_id TEXT NOT NULL,\
-                         time_created INTEGER NOT NULL,\
-                         time_updated INTEGER NOT NULL,\
-                         data TEXT NOT NULL\
-                     );\n\
-                     CREATE TABLE part (\
-                         id TEXT PRIMARY KEY,\
-                         message_id TEXT NOT NULL,\
-                         time_created INTEGER NOT NULL,\
-                         time_updated INTEGER NOT NULL,\
-                         data TEXT NOT NULL\
-                     );\n\
-                     CREATE INDEX message_session_idx ON message(session_id);\n\
-                     CREATE INDEX part_message_idx ON part(message_id);",
-                )
-                .unwrap();
-                conn.execute("INSERT INTO session(id) VALUES (?1)", ["ses_compat"]).unwrap();
-
-                let tx = conn.transaction().unwrap();
-                {
-                    let mut msg_stmt = tx
-                        .prepare(
-                            "INSERT INTO message(id, session_id, time_created, time_updated, data) VALUES (?1, ?2, ?3, ?4, ?5)",
-                        )
-                        .unwrap();
-                    let mut part_stmt = tx
-                        .prepare(
-                            "INSERT INTO part(id, message_id, time_created, time_updated, data) VALUES (?1, ?2, ?3, ?4, ?5)",
-                        )
-                        .unwrap();
-
-                    msg_stmt
-                        .execute(rusqlite::params![
-                            "msg_1",
-                            "ses_compat",
-                            1i64,
-                            1i64,
-                            "{\"role\":\"user\",\"time\":{\"created\":1}}",
-                        ])
-                        .unwrap();
-                    part_stmt
-                        .execute(rusqlite::params![
-                            "prt_1",
-                            "msg_1",
-                            1i64,
-                            1i64,
-                            "{\"type\":\"text\",\"text\":\"hello\"}",
-                        ])
-                        .unwrap();
-                }
-                tx.commit().unwrap();
-            }
-        })
+        let pool = open_test_sqlite_pool(&db_path).await;
+        sqlx::query("CREATE TABLE session (id TEXT PRIMARY KEY)")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query(
+            "CREATE TABLE message (
+                 id TEXT PRIMARY KEY,
+                 session_id TEXT NOT NULL,
+                 time_created INTEGER NOT NULL,
+                 time_updated INTEGER NOT NULL,
+                 data TEXT NOT NULL
+             )",
+        )
+        .execute(&pool)
         .await
         .unwrap();
+        sqlx::query(
+            "CREATE TABLE part (
+                 id TEXT PRIMARY KEY,
+                 message_id TEXT NOT NULL,
+                 time_created INTEGER NOT NULL,
+                 time_updated INTEGER NOT NULL,
+                 data TEXT NOT NULL
+             )",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query("CREATE INDEX message_session_idx ON message(session_id)")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("CREATE INDEX part_message_idx ON part(message_id)")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO session(id) VALUES (?)")
+            .bind("ses_compat")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let mut tx = pool.begin().await.unwrap();
+        sqlx::query(
+            "INSERT INTO message(id, session_id, time_created, time_updated, data) VALUES (?, ?, ?, ?, ?)",
+        )
+        .bind("msg_1")
+        .bind("ses_compat")
+        .bind(1i64)
+        .bind(1i64)
+        .bind("{\"role\":\"user\",\"time\":{\"created\":1}}")
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO part(id, message_id, time_created, time_updated, data) VALUES (?, ?, ?, ?, ?)",
+        )
+        .bind("prt_1")
+        .bind("msg_1")
+        .bind(1i64)
+        .bind(1i64)
+        .bind("{\"type\":\"text\",\"text\":\"hello\"}")
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
 
         let page = load_session_message_page_from_sqlite("ses_compat", 0, Some(10), true)
             .await
@@ -2740,54 +2837,22 @@ mod tests {
             tokio::fs::create_dir_all(parent).await.unwrap();
         }
 
-        {
-            let conn = rusqlite::Connection::open(&db_path).unwrap();
-            conn.execute_batch(
-                "
-                CREATE TABLE session (
-                  id TEXT PRIMARY KEY,
-                  project_id TEXT NOT NULL,
-                  parent_id TEXT,
-                  slug TEXT NOT NULL,
-                  directory TEXT NOT NULL,
-                  title TEXT NOT NULL,
-                  version TEXT NOT NULL,
-                  share_url TEXT,
-                  summary_additions INTEGER,
-                  summary_deletions INTEGER,
-                  summary_files INTEGER,
-                  summary_diffs TEXT,
-                  revert TEXT,
-                  permission TEXT,
-                  time_created INTEGER NOT NULL,
-                  time_updated INTEGER NOT NULL,
-                  time_compacting INTEGER,
-                  time_archived INTEGER
-                );
-                ",
-            )
-            .unwrap();
-
-            conn.execute(
-                "INSERT INTO session (
-                    id, project_id, parent_id, slug, directory, title, version,
-                    share_url, summary_additions, summary_deletions, summary_files,
-                    summary_diffs, revert, permission, time_created, time_updated,
-                    time_compacting, time_archived
-                ) VALUES (?1, ?2, NULL, ?3, ?4, ?5, ?6, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?7, ?8, NULL, NULL)",
-                rusqlite::params![
-                    "ses_sqlite",
-                    "project_sqlite",
-                    "sqlite",
-                    proj.to_string_lossy().to_string(),
-                    "SQLite Session",
-                    "2",
-                    1000i64,
-                    2000i64
-                ],
-            )
-            .unwrap();
-        }
+        let pool = open_test_sqlite_pool(&db_path).await;
+        create_session_table(&pool).await;
+        insert_session_row(
+            &pool,
+            &SessionRow {
+                id: "ses_sqlite",
+                project_id: "project_sqlite",
+                parent_id: None,
+                slug: "sqlite",
+                directory: proj.to_string_lossy().as_ref(),
+                title: "SQLite Session",
+                time_created: 1000,
+                time_updated: 2000,
+            },
+        )
+        .await;
 
         let resp = session_list(
             State(dummy_state()),
@@ -2845,74 +2910,36 @@ mod tests {
             tokio::fs::create_dir_all(parent).await.unwrap();
         }
 
-        {
-            let conn = rusqlite::Connection::open(&db_path).unwrap();
-            conn.execute_batch(
-                "
-                CREATE TABLE session (
-                  id TEXT PRIMARY KEY,
-                  project_id TEXT NOT NULL,
-                  parent_id TEXT,
-                  slug TEXT NOT NULL,
-                  directory TEXT NOT NULL,
-                  title TEXT NOT NULL,
-                  version TEXT NOT NULL,
-                  share_url TEXT,
-                  summary_additions INTEGER,
-                  summary_deletions INTEGER,
-                  summary_files INTEGER,
-                  summary_diffs TEXT,
-                  revert TEXT,
-                  permission TEXT,
-                  time_created INTEGER NOT NULL,
-                  time_updated INTEGER NOT NULL,
-                  time_compacting INTEGER,
-                  time_archived INTEGER
-                );
-                ",
-            )
-            .unwrap();
-
-            conn.execute(
-                "INSERT INTO session (
-                    id, project_id, parent_id, slug, directory, title, version,
-                    share_url, summary_additions, summary_deletions, summary_files,
-                    summary_diffs, revert, permission, time_created, time_updated,
-                    time_compacting, time_archived
-                ) VALUES (?1, ?2, NULL, ?3, ?4, ?5, ?6, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?7, ?8, NULL, NULL)",
-                rusqlite::params![
-                    "ses_proj_a",
-                    "project_sqlite_a",
-                    "proj-a",
-                    proj.to_string_lossy().to_string(),
-                    "SQLite Session A",
-                    "2",
-                    1000i64,
-                    2000i64
-                ],
-            )
-            .unwrap();
-
-            conn.execute(
-                "INSERT INTO session (
-                    id, project_id, parent_id, slug, directory, title, version,
-                    share_url, summary_additions, summary_deletions, summary_files,
-                    summary_diffs, revert, permission, time_created, time_updated,
-                    time_compacting, time_archived
-                ) VALUES (?1, ?2, NULL, ?3, ?4, ?5, ?6, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?7, ?8, NULL, NULL)",
-                rusqlite::params![
-                    "ses_proj_b",
-                    "project_sqlite_b",
-                    "proj-b",
-                    proj.to_string_lossy().to_string(),
-                    "SQLite Session B",
-                    "2",
-                    1100i64,
-                    2100i64
-                ],
-            )
-            .unwrap();
-        }
+        let pool = open_test_sqlite_pool(&db_path).await;
+        create_session_table(&pool).await;
+        insert_session_row(
+            &pool,
+            &SessionRow {
+                id: "ses_proj_a",
+                project_id: "project_sqlite_a",
+                parent_id: None,
+                slug: "proj-a",
+                directory: proj.to_string_lossy().as_ref(),
+                title: "SQLite Session A",
+                time_created: 1000,
+                time_updated: 2000,
+            },
+        )
+        .await;
+        insert_session_row(
+            &pool,
+            &SessionRow {
+                id: "ses_proj_b",
+                project_id: "project_sqlite_b",
+                parent_id: None,
+                slug: "proj-b",
+                directory: proj.to_string_lossy().as_ref(),
+                title: "SQLite Session B",
+                time_created: 1100,
+                time_updated: 2100,
+            },
+        )
+        .await;
 
         let resp = session_list(
             State(dummy_state()),
@@ -2968,75 +2995,36 @@ mod tests {
             tokio::fs::create_dir_all(parent).await.unwrap();
         }
 
-        {
-            let conn = rusqlite::Connection::open(&db_path).unwrap();
-            conn.execute_batch(
-                "
-                CREATE TABLE session (
-                  id TEXT PRIMARY KEY,
-                  project_id TEXT NOT NULL,
-                  parent_id TEXT,
-                  slug TEXT NOT NULL,
-                  directory TEXT NOT NULL,
-                  title TEXT NOT NULL,
-                  version TEXT NOT NULL,
-                  share_url TEXT,
-                  summary_additions INTEGER,
-                  summary_deletions INTEGER,
-                  summary_files INTEGER,
-                  summary_diffs TEXT,
-                  revert TEXT,
-                  permission TEXT,
-                  time_created INTEGER NOT NULL,
-                  time_updated INTEGER NOT NULL,
-                  time_compacting INTEGER,
-                  time_archived INTEGER
-                );
-                ",
-            )
-            .unwrap();
-
-            conn.execute(
-                "INSERT INTO session (
-                    id, project_id, parent_id, slug, directory, title, version,
-                    share_url, summary_additions, summary_deletions, summary_files,
-                    summary_diffs, revert, permission, time_created, time_updated,
-                    time_compacting, time_archived
-                ) VALUES (?1, ?2, NULL, ?3, ?4, ?5, ?6, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?7, ?8, NULL, NULL)",
-                rusqlite::params![
-                    "parent_root",
-                    "global",
-                    "parent-root",
-                    parent_dir.to_string_lossy().to_string(),
-                    "Parent Root",
-                    "2",
-                    1000i64,
-                    3000i64
-                ],
-            )
-            .unwrap();
-
-            conn.execute(
-                "INSERT INTO session (
-                    id, project_id, parent_id, slug, directory, title, version,
-                    share_url, summary_additions, summary_deletions, summary_files,
-                    summary_diffs, revert, permission, time_created, time_updated,
-                    time_compacting, time_archived
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?8, ?9, NULL, NULL)",
-                rusqlite::params![
-                    "child_leaf",
-                    "global",
-                    "parent_root",
-                    "child-leaf",
-                    child_dir.to_string_lossy().to_string(),
-                    "Child Leaf",
-                    "2",
-                    2000i64,
-                    4000i64
-                ],
-            )
-            .unwrap();
-        }
+        let pool = open_test_sqlite_pool(&db_path).await;
+        create_session_table(&pool).await;
+        insert_session_row(
+            &pool,
+            &SessionRow {
+                id: "parent_root",
+                project_id: "global",
+                parent_id: None,
+                slug: "parent-root",
+                directory: parent_dir.to_string_lossy().as_ref(),
+                title: "Parent Root",
+                time_created: 1000,
+                time_updated: 3000,
+            },
+        )
+        .await;
+        insert_session_row(
+            &pool,
+            &SessionRow {
+                id: "child_leaf",
+                project_id: "global",
+                parent_id: Some("parent_root"),
+                slug: "child-leaf",
+                directory: child_dir.to_string_lossy().as_ref(),
+                title: "Child Leaf",
+                time_created: 2000,
+                time_updated: 4000,
+            },
+        )
+        .await;
 
         let resp = session_list(
             State(dummy_state()),
@@ -3102,96 +3090,50 @@ mod tests {
             tokio::fs::create_dir_all(parent).await.unwrap();
         }
 
-        {
-            let conn = rusqlite::Connection::open(&db_path).unwrap();
-            conn.execute_batch(
-                "
-                CREATE TABLE session (
-                  id TEXT PRIMARY KEY,
-                  project_id TEXT NOT NULL,
-                  parent_id TEXT,
-                  slug TEXT NOT NULL,
-                  directory TEXT NOT NULL,
-                  title TEXT NOT NULL,
-                  version TEXT NOT NULL,
-                  share_url TEXT,
-                  summary_additions INTEGER,
-                  summary_deletions INTEGER,
-                  summary_files INTEGER,
-                  summary_diffs TEXT,
-                  revert TEXT,
-                  permission TEXT,
-                  time_created INTEGER NOT NULL,
-                  time_updated INTEGER NOT NULL,
-                  time_compacting INTEGER,
-                  time_archived INTEGER
-                );
-                ",
-            )
-            .unwrap();
-
-            conn.execute(
-                "INSERT INTO session (
-                    id, project_id, parent_id, slug, directory, title, version,
-                    share_url, summary_additions, summary_deletions, summary_files,
-                    summary_diffs, revert, permission, time_created, time_updated,
-                    time_compacting, time_archived
-                ) VALUES (?1, ?2, NULL, ?3, ?4, ?5, ?6, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?7, ?8, NULL, NULL)",
-                rusqlite::params![
-                    "parent_root",
-                    "global",
-                    "parent-root",
-                    parent_dir.to_string_lossy().to_string(),
-                    "Parent Root",
-                    "2",
-                    1000i64,
-                    3000i64
-                ],
-            )
-            .unwrap();
-
-            conn.execute(
-                "INSERT INTO session (
-                    id, project_id, parent_id, slug, directory, title, version,
-                    share_url, summary_additions, summary_deletions, summary_files,
-                    summary_diffs, revert, permission, time_created, time_updated,
-                    time_compacting, time_archived
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?8, ?9, NULL, NULL)",
-                rusqlite::params![
-                    "child_a",
-                    "global",
-                    "parent_root",
-                    "child-a",
-                    child_dir_a.to_string_lossy().to_string(),
-                    "Child A",
-                    "2",
-                    1100i64,
-                    4100i64
-                ],
-            )
-            .unwrap();
-
-            conn.execute(
-                "INSERT INTO session (
-                    id, project_id, parent_id, slug, directory, title, version,
-                    share_url, summary_additions, summary_deletions, summary_files,
-                    summary_diffs, revert, permission, time_created, time_updated,
-                    time_compacting, time_archived
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?8, ?9, NULL, NULL)",
-                rusqlite::params![
-                    "child_b",
-                    "global",
-                    "parent_root",
-                    "child-b",
-                    child_dir_b.to_string_lossy().to_string(),
-                    "Child B",
-                    "2",
-                    1200i64,
-                    4200i64
-                ],
-            )
-            .unwrap();
-        }
+        let pool = open_test_sqlite_pool(&db_path).await;
+        create_session_table(&pool).await;
+        insert_session_row(
+            &pool,
+            &SessionRow {
+                id: "parent_root",
+                project_id: "global",
+                parent_id: None,
+                slug: "parent-root",
+                directory: parent_dir.to_string_lossy().as_ref(),
+                title: "Parent Root",
+                time_created: 1000,
+                time_updated: 3000,
+            },
+        )
+        .await;
+        insert_session_row(
+            &pool,
+            &SessionRow {
+                id: "child_a",
+                project_id: "global",
+                parent_id: Some("parent_root"),
+                slug: "child-a",
+                directory: child_dir_a.to_string_lossy().as_ref(),
+                title: "Child A",
+                time_created: 1100,
+                time_updated: 4100,
+            },
+        )
+        .await;
+        insert_session_row(
+            &pool,
+            &SessionRow {
+                id: "child_b",
+                project_id: "global",
+                parent_id: Some("parent_root"),
+                slug: "child-b",
+                directory: child_dir_b.to_string_lossy().as_ref(),
+                title: "Child B",
+                time_created: 1200,
+                time_updated: 4200,
+            },
+        )
+        .await;
 
         let resp = session_list(
             State(dummy_state()),
@@ -3432,89 +3374,98 @@ mod tests {
             tokio::fs::create_dir_all(parent).await.unwrap();
         }
 
-        {
-            let conn = rusqlite::Connection::open(&db_path).unwrap();
-            conn.execute_batch(
-                r#"
-                CREATE TABLE message (
-                  id TEXT PRIMARY KEY,
-                  session_id TEXT NOT NULL,
-                  role TEXT NOT NULL,
-                  data TEXT NOT NULL,
-                  time_created INTEGER NOT NULL,
-                  time_updated INTEGER NOT NULL
-                );
-                CREATE TABLE part (
-                  id TEXT PRIMARY KEY,
-                  session_id TEXT NOT NULL,
-                  message_id TEXT NOT NULL,
-                  type TEXT NOT NULL,
-                  data TEXT NOT NULL,
-                  time_created INTEGER NOT NULL,
-                  time_updated INTEGER NOT NULL
-                );
-                "#,
-            )
-            .unwrap();
+        let pool = open_test_sqlite_pool(&db_path).await;
+        sqlx::query(
+            "CREATE TABLE message (
+               id TEXT PRIMARY KEY,
+               session_id TEXT NOT NULL,
+               role TEXT NOT NULL,
+               data TEXT NOT NULL,
+               time_created INTEGER NOT NULL,
+               time_updated INTEGER NOT NULL
+             )",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "CREATE TABLE part (
+               id TEXT PRIMARY KEY,
+               session_id TEXT NOT NULL,
+               message_id TEXT NOT NULL,
+               type TEXT NOT NULL,
+               data TEXT NOT NULL,
+               time_created INTEGER NOT NULL,
+               time_updated INTEGER NOT NULL
+             )",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
 
-            conn.execute(
-                "INSERT INTO message (id, session_id, role, data, time_created, time_updated) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                rusqlite::params![
-                    "msg_old",
-                    "ses_sql",
-                    "user",
-                    serde_json::json!({
-                        "id": "msg_old",
-                        "sessionID": "ses_sql",
-                        "role": "user",
-                        "time": {"created": 10}
-                    })
-                    .to_string(),
-                    10i64,
-                    10i64,
-                ],
-            )
-            .unwrap();
-            conn.execute(
-                "INSERT INTO message (id, session_id, role, data, time_created, time_updated) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                rusqlite::params![
-                    "msg_new",
-                    "ses_sql",
-                    "assistant",
-                    serde_json::json!({
-                        "id": "msg_new",
-                        "sessionID": "ses_sql",
-                        "role": "assistant",
-                        "time": {"created": 20}
-                    })
-                    .to_string(),
-                    20i64,
-                    20i64,
-                ],
-            )
-            .unwrap();
+        sqlx::query(
+            "INSERT INTO message (id, session_id, role, data, time_created, time_updated) VALUES (?, ?, ?, ?, ?, ?)",
+        )
+        .bind("msg_old")
+        .bind("ses_sql")
+        .bind("user")
+        .bind(
+            serde_json::json!({
+                "id": "msg_old",
+                "sessionID": "ses_sql",
+                "role": "user",
+                "time": {"created": 10}
+            })
+            .to_string(),
+        )
+        .bind(10i64)
+        .bind(10i64)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO message (id, session_id, role, data, time_created, time_updated) VALUES (?, ?, ?, ?, ?, ?)",
+        )
+        .bind("msg_new")
+        .bind("ses_sql")
+        .bind("assistant")
+        .bind(
+            serde_json::json!({
+                "id": "msg_new",
+                "sessionID": "ses_sql",
+                "role": "assistant",
+                "time": {"created": 20}
+            })
+            .to_string(),
+        )
+        .bind(20i64)
+        .bind(20i64)
+        .execute(&pool)
+        .await
+        .unwrap();
 
-            conn.execute(
-                "INSERT INTO part (id, session_id, message_id, type, data, time_created, time_updated) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-                rusqlite::params![
-                    "part_new",
-                    "ses_sql",
-                    "msg_new",
-                    "text",
-                    serde_json::json!({
-                        "id": "part_new",
-                        "messageID": "msg_new",
-                        "sessionID": "ses_sql",
-                        "type": "text",
-                        "text": "latest"
-                    })
-                    .to_string(),
-                    20i64,
-                    20i64,
-                ],
-            )
-            .unwrap();
-        }
+        sqlx::query(
+            "INSERT INTO part (id, session_id, message_id, type, data, time_created, time_updated) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind("part_new")
+        .bind("ses_sql")
+        .bind("msg_new")
+        .bind("text")
+        .bind(
+            serde_json::json!({
+                "id": "part_new",
+                "messageID": "msg_new",
+                "sessionID": "ses_sql",
+                "type": "text",
+                "text": "latest"
+            })
+            .to_string(),
+        )
+        .bind(20i64)
+        .bind(20i64)
+        .execute(&pool)
+        .await
+        .unwrap();
 
         let response = session_message_get(
             State(dummy_state()),
@@ -3574,11 +3525,11 @@ mod tests {
         if let Some(parent) = db_path.parent() {
             tokio::fs::create_dir_all(parent).await.unwrap();
         }
-        {
-            let conn = rusqlite::Connection::open(&db_path).unwrap();
-            conn.execute_batch("CREATE TABLE unrelated (id TEXT PRIMARY KEY);")
-                .unwrap();
-        }
+        let pool = open_test_sqlite_pool(&db_path).await;
+        sqlx::query("CREATE TABLE unrelated (id TEXT PRIMARY KEY)")
+            .execute(&pool)
+            .await
+            .unwrap();
 
         let storage = tmp.join("opencode").join("storage");
         write_json(
@@ -3663,71 +3614,78 @@ mod tests {
             tokio::fs::create_dir_all(parent).await.unwrap();
         }
 
-        {
-            let conn = rusqlite::Connection::open(&db_path).unwrap();
-            conn.execute_batch(
-                r#"
-                CREATE TABLE message (
-                  id TEXT PRIMARY KEY,
-                  session_id TEXT NOT NULL,
-                  role TEXT NOT NULL,
-                  data TEXT NOT NULL,
-                  time_created INTEGER NOT NULL,
-                  time_updated INTEGER NOT NULL
-                );
-                CREATE TABLE part (
-                  id TEXT PRIMARY KEY,
-                  session_id TEXT NOT NULL,
-                  message_id TEXT NOT NULL,
-                  type TEXT NOT NULL,
-                  data TEXT NOT NULL,
-                  time_created INTEGER NOT NULL,
-                  time_updated INTEGER NOT NULL
-                );
-                "#,
-            )
-            .unwrap();
+        let pool = open_test_sqlite_pool(&db_path).await;
+        sqlx::query(
+            "CREATE TABLE message (
+               id TEXT PRIMARY KEY,
+               session_id TEXT NOT NULL,
+               role TEXT NOT NULL,
+               data TEXT NOT NULL,
+               time_created INTEGER NOT NULL,
+               time_updated INTEGER NOT NULL
+             )",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "CREATE TABLE part (
+               id TEXT PRIMARY KEY,
+               session_id TEXT NOT NULL,
+               message_id TEXT NOT NULL,
+               type TEXT NOT NULL,
+               data TEXT NOT NULL,
+               time_created INTEGER NOT NULL,
+               time_updated INTEGER NOT NULL
+             )",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
 
-            conn.execute(
-                "INSERT INTO message (id, session_id, role, data, time_created, time_updated) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                rusqlite::params![
-                    "msg_sql",
-                    "ses_sql",
-                    "assistant",
-                    serde_json::json!({
-                        "id": "msg_sql",
-                        "sessionID": "ses_sql",
-                        "role": "assistant",
-                        "time": {"created": 20}
-                    })
-                    .to_string(),
-                    20i64,
-                    20i64,
-                ],
-            )
-            .unwrap();
+        sqlx::query(
+            "INSERT INTO message (id, session_id, role, data, time_created, time_updated) VALUES (?, ?, ?, ?, ?, ?)",
+        )
+        .bind("msg_sql")
+        .bind("ses_sql")
+        .bind("assistant")
+        .bind(
+            serde_json::json!({
+                "id": "msg_sql",
+                "sessionID": "ses_sql",
+                "role": "assistant",
+                "time": {"created": 20}
+            })
+            .to_string(),
+        )
+        .bind(20i64)
+        .bind(20i64)
+        .execute(&pool)
+        .await
+        .unwrap();
 
-            conn.execute(
-                "INSERT INTO part (id, session_id, message_id, type, data, time_created, time_updated) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-                rusqlite::params![
-                    "part_sql",
-                    "ses_sql",
-                    "msg_sql",
-                    "tool",
-                    serde_json::json!({
-                        "id": "part_sql",
-                        "sessionID": "ses_sql",
-                        "messageID": "msg_sql",
-                        "type": "tool",
-                        "tool": {"name": "bash", "status": "completed"}
-                    })
-                    .to_string(),
-                    20i64,
-                    20i64,
-                ],
-            )
-            .unwrap();
-        }
+        sqlx::query(
+            "INSERT INTO part (id, session_id, message_id, type, data, time_created, time_updated) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind("part_sql")
+        .bind("ses_sql")
+        .bind("msg_sql")
+        .bind("tool")
+        .bind(
+            serde_json::json!({
+                "id": "part_sql",
+                "sessionID": "ses_sql",
+                "messageID": "msg_sql",
+                "type": "tool",
+                "tool": {"name": "bash", "status": "completed"}
+            })
+            .to_string(),
+        )
+        .bind(20i64)
+        .bind(20i64)
+        .execute(&pool)
+        .await
+        .unwrap();
 
         let response = session_message_part_get(
             State(dummy_state()),

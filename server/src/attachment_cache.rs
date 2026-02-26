@@ -1,21 +1,25 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::Engine as _;
 use sha2::{Digest as _, Sha256};
+use sqlx::SqlitePool;
+use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use tokio::sync::Mutex;
 
 const CACHE_SCHEMA_VERSION: i64 = 1;
 const CACHE_BUSY_TIMEOUT_MS: u64 = 5000;
+const CACHE_POOL_MAX_CONNECTIONS: u32 = 4;
+const CACHE_POOL_ACQUIRE_TIMEOUT_MS: u64 = 1500;
+const CACHE_POOL_IDLE_TIMEOUT_SECS: u64 = 120;
 
 #[derive(Clone)]
 pub(crate) struct AttachmentCacheManager {
     root: PathBuf,
     db_path: PathBuf,
-    initialized: Arc<AtomicBool>,
-    init_lock: Arc<Mutex<()>>,
+    pool: Arc<Mutex<Option<SqlitePool>>>,
 }
 
 #[derive(Debug, Clone)]
@@ -32,29 +36,24 @@ impl AttachmentCacheManager {
         Self {
             root,
             db_path,
-            initialized: Arc::new(AtomicBool::new(false)),
-            init_lock: Arc::new(Mutex::new(())),
+            pool: Arc::new(Mutex::new(None)),
         }
     }
 
-    async fn ensure_initialized(&self) -> Result<(), String> {
-        if self.initialized.load(Ordering::Acquire) {
-            return Ok(());
+    async fn pool(&self) -> Result<SqlitePool, String> {
+        let mut guard = self.pool.lock().await;
+        if let Some(pool) = guard.as_ref() {
+            return Ok(pool.clone());
         }
 
-        let _guard = self.init_lock.lock().await;
-        if self.initialized.load(Ordering::Acquire) {
-            return Ok(());
-        }
-
-        let root = self.root.clone();
-        let db_path = self.db_path.clone();
-        tokio::task::spawn_blocking(move || initialize_cache_store(&root, &db_path))
+        tokio::fs::create_dir_all(&self.root)
             .await
-            .map_err(|err| err.to_string())??;
+            .map_err(|err| err.to_string())?;
 
-        self.initialized.store(true, Ordering::Release);
-        Ok(())
+        let pool = open_cache_pool(&self.db_path).await?;
+        initialize_cache_store(&pool).await?;
+        *guard = Some(pool.clone());
+        Ok(pool)
     }
 
     pub(crate) async fn data_url_for_file(
@@ -62,8 +61,6 @@ impl AttachmentCacheManager {
         source: &Path,
         mime: &str,
     ) -> Result<String, String> {
-        self.ensure_initialized().await?;
-
         let source_abs = normalize_source_path(source)?;
         let meta = tokio::fs::metadata(&source_abs)
             .await
@@ -99,8 +96,6 @@ impl AttachmentCacheManager {
         bytes: &[u8],
         mime: &str,
     ) -> Result<(), String> {
-        self.ensure_initialized().await?;
-
         let source_abs = normalize_source_path(source)?;
         let meta = tokio::fs::metadata(&source_abs)
             .await
@@ -124,69 +119,63 @@ impl AttachmentCacheManager {
         source: &SourceSnapshot,
         mime: &str,
     ) -> Result<Option<String>, String> {
-        let db_path = self.db_path.clone();
+        let pool = self.pool().await?;
         let root = self.root.clone();
         let source = source.clone();
         let mime = mime.to_string();
         let mime_for_data_url = mime.clone();
 
-        tokio::task::spawn_blocking(move || {
-            let conn = open_cache_connection(&db_path)?;
-            let found: Option<String> = conn
-                .query_row(
-                    "SELECT blob_rel_path FROM source_index WHERE source_path = ?1 AND source_mtime_ns = ?2 AND source_size = ?3 AND mime = ?4",
-                    rusqlite::params![
-                        source.source_path,
-                        source.source_mtime_ns,
-                        source.source_size,
-                        mime,
-                    ],
-                    |row| row.get::<_, String>(0),
-                )
-                .ok();
-
-            let Some(rel_path) = found else {
-                return Ok(None);
-            };
-
-            let blob_path = root.join(&rel_path);
-            let encoded = std::fs::read_to_string(&blob_path).ok();
-            let Some(encoded) = encoded else {
-                let _ = conn.execute(
-                    "DELETE FROM source_index WHERE source_path = ?1 AND source_mtime_ns = ?2 AND source_size = ?3 AND mime = ?4",
-                    rusqlite::params![
-                        source.source_path,
-                        source.source_mtime_ns,
-                        source.source_size,
-                        mime,
-                    ],
-                );
-                return Ok(None);
-            };
-
-            let now = now_unix_ms();
-            let _ = conn.execute(
-                "UPDATE source_index SET last_accessed_at = ?1, hit_count = hit_count + 1 WHERE source_path = ?2 AND source_mtime_ns = ?3 AND source_size = ?4 AND mime = ?5",
-                rusqlite::params![
-                    now,
-                    source.source_path,
-                    source.source_mtime_ns,
-                    source.source_size,
-                    mime,
-                ],
-            );
-            let _ = conn.execute(
-                "UPDATE blob_store SET last_accessed_at = ?1 WHERE rel_path = ?2",
-                rusqlite::params![now, rel_path],
-            );
-
-            Ok(Some(encoded))
-        })
+        let found = sqlx::query_scalar::<_, String>(
+            "SELECT blob_rel_path FROM source_index WHERE source_path = ? AND source_mtime_ns = ? AND source_size = ? AND mime = ?",
+        )
+        .bind(&source.source_path)
+        .bind(source.source_mtime_ns)
+        .bind(source.source_size)
+        .bind(&mime)
+        .fetch_optional(&pool)
         .await
-        .map_err(|err| err.to_string())?
-        .map(|opt| {
-            opt.map(|encoded| format!("data:{};base64,{}", mime_for_data_url, encoded))
-        })
+        .map_err(|err| err.to_string())?;
+
+        let Some(rel_path) = found else {
+            return Ok(None);
+        };
+
+        let blob_path = root.join(&rel_path);
+        let encoded = tokio::fs::read_to_string(&blob_path).await.ok();
+        let Some(encoded) = encoded else {
+            let _ = sqlx::query(
+                "DELETE FROM source_index WHERE source_path = ? AND source_mtime_ns = ? AND source_size = ? AND mime = ?",
+            )
+            .bind(&source.source_path)
+            .bind(source.source_mtime_ns)
+            .bind(source.source_size)
+            .bind(&mime)
+            .execute(&pool)
+            .await;
+            return Ok(None);
+        };
+
+        let now = now_unix_ms();
+        let _ = sqlx::query(
+            "UPDATE source_index SET last_accessed_at = ?, hit_count = hit_count + 1 WHERE source_path = ? AND source_mtime_ns = ? AND source_size = ? AND mime = ?",
+        )
+        .bind(now)
+        .bind(&source.source_path)
+        .bind(source.source_mtime_ns)
+        .bind(source.source_size)
+        .bind(&mime)
+        .execute(&pool)
+        .await;
+        let _ = sqlx::query("UPDATE blob_store SET last_accessed_at = ? WHERE rel_path = ?")
+            .bind(now)
+            .bind(&rel_path)
+            .execute(&pool)
+            .await;
+
+        Ok(Some(format!(
+            "data:{};base64,{}",
+            mime_for_data_url, encoded
+        )))
     }
 
     async fn persist_data_url(
@@ -221,42 +210,44 @@ impl AttachmentCacheManager {
             }
         }
 
-        let db_path = self.db_path.clone();
+        let pool = self.pool().await?;
         let source = source.clone();
         let mime = mime.to_string();
         let rel_path_for_db = rel_path.to_string_lossy().to_string();
         let digest_for_db = digest.clone();
         let bytes_size = i64::try_from(bytes.len()).unwrap_or(i64::MAX);
 
-        tokio::task::spawn_blocking(move || {
-            let mut conn = open_cache_connection(&db_path)?;
-            let tx = conn.transaction().map_err(|err| err.to_string())?;
-            let now = now_unix_ms();
+        let mut tx = pool.begin().await.map_err(|err| err.to_string())?;
+        let now = now_unix_ms();
 
-            tx.execute(
-                "INSERT INTO blob_store (digest_sha256, rel_path, bytes_size, created_at, last_accessed_at)\n                 VALUES (?1, ?2, ?3, ?4, ?4)\n                 ON CONFLICT(digest_sha256) DO UPDATE SET\n                   rel_path = excluded.rel_path,\n                   bytes_size = excluded.bytes_size,\n                   last_accessed_at = excluded.last_accessed_at",
-                rusqlite::params![digest_for_db, rel_path_for_db, bytes_size, now],
-            )
-            .map_err(|err| err.to_string())?;
-
-            tx.execute(
-                "INSERT INTO source_index (source_path, source_mtime_ns, source_size, mime, digest_sha256, blob_rel_path, created_at, last_accessed_at, hit_count)\n                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7, 0)\n                 ON CONFLICT(source_path, source_mtime_ns, source_size, mime) DO UPDATE SET\n                   digest_sha256 = excluded.digest_sha256,\n                   blob_rel_path = excluded.blob_rel_path,\n                   last_accessed_at = excluded.last_accessed_at",
-                rusqlite::params![
-                    source.source_path,
-                    source.source_mtime_ns,
-                    source.source_size,
-                    mime,
-                    digest,
-                    rel_path_for_db,
-                    now,
-                ],
-            )
-            .map_err(|err| err.to_string())?;
-
-            tx.commit().map_err(|err| err.to_string())
-        })
+        sqlx::query(
+            "INSERT INTO blob_store (digest_sha256, rel_path, bytes_size, created_at, last_accessed_at)\n             VALUES (?, ?, ?, ?, ?)\n             ON CONFLICT(digest_sha256) DO UPDATE SET\n               rel_path = excluded.rel_path,\n               bytes_size = excluded.bytes_size,\n               last_accessed_at = excluded.last_accessed_at",
+        )
+        .bind(&digest_for_db)
+        .bind(&rel_path_for_db)
+        .bind(bytes_size)
+        .bind(now)
+        .bind(now)
+        .execute(&mut *tx)
         .await
-        .map_err(|err| err.to_string())??;
+        .map_err(|err| err.to_string())?;
+
+        sqlx::query(
+            "INSERT INTO source_index (source_path, source_mtime_ns, source_size, mime, digest_sha256, blob_rel_path, created_at, last_accessed_at, hit_count)\n             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)\n             ON CONFLICT(source_path, source_mtime_ns, source_size, mime) DO UPDATE SET\n               digest_sha256 = excluded.digest_sha256,\n               blob_rel_path = excluded.blob_rel_path,\n               last_accessed_at = excluded.last_accessed_at",
+        )
+        .bind(&source.source_path)
+        .bind(source.source_mtime_ns)
+        .bind(source.source_size)
+        .bind(&mime)
+        .bind(&digest)
+        .bind(&rel_path_for_db)
+        .bind(now)
+        .bind(now)
+        .execute(&mut *tx)
+        .await
+        .map_err(|err| err.to_string())?;
+
+        tx.commit().await.map_err(|err| err.to_string())?;
 
         Ok(())
     }
@@ -299,24 +290,69 @@ fn system_time_to_ns(time: SystemTime) -> i64 {
         .unwrap_or(0)
 }
 
-fn open_cache_connection(path: &Path) -> Result<rusqlite::Connection, String> {
-    let conn = rusqlite::Connection::open(path).map_err(|err| err.to_string())?;
-    let _ = conn.busy_timeout(std::time::Duration::from_millis(CACHE_BUSY_TIMEOUT_MS));
-    let _ = conn.pragma_update(None, "journal_mode", "WAL");
-    let _ = conn.pragma_update(None, "synchronous", "NORMAL");
-    let _ = conn.pragma_update(None, "temp_store", "MEMORY");
-    Ok(conn)
+async fn open_cache_pool(path: &Path) -> Result<SqlitePool, String> {
+    let options = SqliteConnectOptions::new()
+        .filename(path)
+        .create_if_missing(true)
+        .busy_timeout(Duration::from_millis(CACHE_BUSY_TIMEOUT_MS))
+        .pragma("journal_mode", "WAL")
+        .pragma("synchronous", "NORMAL")
+        .pragma("temp_store", "MEMORY");
+
+    SqlitePoolOptions::new()
+        .max_connections(CACHE_POOL_MAX_CONNECTIONS)
+        .acquire_timeout(Duration::from_millis(CACHE_POOL_ACQUIRE_TIMEOUT_MS))
+        .idle_timeout(Some(Duration::from_secs(CACHE_POOL_IDLE_TIMEOUT_SECS)))
+        .connect_with(options)
+        .await
+        .map_err(|err| err.to_string())
 }
 
-fn initialize_cache_store(root: &Path, db_path: &Path) -> Result<(), String> {
-    std::fs::create_dir_all(root).map_err(|err| err.to_string())?;
-    let conn = open_cache_connection(db_path)?;
-    conn.execute_batch(
-        "PRAGMA user_version = 1;\n         CREATE TABLE IF NOT EXISTS source_index (\n           source_path TEXT NOT NULL,\n           source_mtime_ns INTEGER NOT NULL,\n           source_size INTEGER NOT NULL,\n           mime TEXT NOT NULL,\n           digest_sha256 TEXT NOT NULL,\n           blob_rel_path TEXT NOT NULL,\n           created_at INTEGER NOT NULL,\n           last_accessed_at INTEGER NOT NULL,\n           hit_count INTEGER NOT NULL DEFAULT 0,\n           PRIMARY KEY (source_path, source_mtime_ns, source_size, mime)\n         );\n         CREATE TABLE IF NOT EXISTS blob_store (\n           digest_sha256 TEXT PRIMARY KEY,\n           rel_path TEXT NOT NULL,\n           bytes_size INTEGER NOT NULL,\n           created_at INTEGER NOT NULL,\n           last_accessed_at INTEGER NOT NULL\n         );\n         CREATE INDEX IF NOT EXISTS idx_source_index_last_accessed\n           ON source_index(last_accessed_at DESC);",
+async fn initialize_cache_store(pool: &SqlitePool) -> Result<(), String> {
+    sqlx::query(&format!("PRAGMA user_version = {CACHE_SCHEMA_VERSION}"))
+        .execute(pool)
+        .await
+        .map_err(|err| err.to_string())?;
+
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS source_index (
+           source_path TEXT NOT NULL,
+           source_mtime_ns INTEGER NOT NULL,
+           source_size INTEGER NOT NULL,
+           mime TEXT NOT NULL,
+           digest_sha256 TEXT NOT NULL,
+           blob_rel_path TEXT NOT NULL,
+           created_at INTEGER NOT NULL,
+           last_accessed_at INTEGER NOT NULL,
+           hit_count INTEGER NOT NULL DEFAULT 0,
+           PRIMARY KEY (source_path, source_mtime_ns, source_size, mime)
+         )",
     )
+    .execute(pool)
+    .await
     .map_err(|err| err.to_string())?;
 
-    let _ = conn.pragma_update(None, "user_version", CACHE_SCHEMA_VERSION);
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS blob_store (
+           digest_sha256 TEXT PRIMARY KEY,
+           rel_path TEXT NOT NULL,
+           bytes_size INTEGER NOT NULL,
+           created_at INTEGER NOT NULL,
+           last_accessed_at INTEGER NOT NULL
+         )",
+    )
+    .execute(pool)
+    .await
+    .map_err(|err| err.to_string())?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_source_index_last_accessed
+           ON source_index(last_accessed_at DESC)",
+    )
+    .execute(pool)
+    .await
+    .map_err(|err| err.to_string())?;
+
     Ok(())
 }
 

@@ -1,119 +1,80 @@
 use serde_json::{Value, json};
-use std::sync::{Arc, LazyLock};
+use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions, SqliteRow};
+use sqlx::{QueryBuilder, Row, Sqlite, SqlitePool};
+use std::collections::HashMap;
+use std::future::Future;
+use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 use std::time::Duration;
 use tokio::fs;
-use tokio::sync::{OwnedSemaphorePermit, Semaphore};
+use tokio::sync::RwLock;
 
 use super::{ResponseConsistency, SessionRecord, opencode_db_path};
 
 const SQLITE_BUSY_TIMEOUT_MS: u64 = 15000;
-const SQLITE_READ_CONCURRENCY: usize = 2;
-const SQLITE_BUSY_RETRY_ATTEMPTS: usize = 3;
-const SQLITE_BUSY_RETRY_DELAY_MS: u64 = 30;
-const SQLITE_READ_ACQUIRE_TIMEOUT_MS: u64 = 1500;
-const SQLITE_READ_OPERATION_TIMEOUT_MS: u64 = 20000;
+const SQLITE_POOL_MAX_CONNECTIONS: u32 = 6;
+const SQLITE_POOL_ACQUIRE_TIMEOUT_MS: u64 = 1500;
+const SQLITE_POOL_IDLE_TIMEOUT_SECS: u64 = 120;
+const SQLITE_QUERY_TIMEOUT_MS: u64 = 20000;
+const SQLITE_RECORD_QUERY_CHUNK: usize = 300;
+const SQLITE_PART_QUERY_CHUNK: usize = 450;
 
-static SQLITE_READ_SEMAPHORE: LazyLock<Arc<Semaphore>> =
-    LazyLock::new(|| Arc::new(Semaphore::new(SQLITE_READ_CONCURRENCY)));
+static SQLITE_READ_POOLS: LazyLock<RwLock<HashMap<PathBuf, SqlitePool>>> =
+    LazyLock::new(|| RwLock::new(HashMap::new()));
 
-fn open_sqlite_readonly_connection(
-    db_path: &std::path::Path,
-) -> rusqlite::Result<rusqlite::Connection> {
-    let conn = rusqlite::Connection::open_with_flags(
-        db_path,
-        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_URI,
-    )?;
-    let _ = conn.pragma_update(None, "query_only", "ON");
-    let _ = conn.pragma_update(None, "read_uncommitted", "OFF");
-    let _ = conn.pragma_update(None, "temp_store", "MEMORY");
-    let _ = conn.pragma_update(None, "cache_size", -16_000i64);
-    let _ = conn.pragma_update(None, "mmap_size", 256_i64 * 1024 * 1024);
-    let _ = conn.busy_timeout(std::time::Duration::from_millis(SQLITE_BUSY_TIMEOUT_MS));
-    Ok(conn)
+fn sqlite_read_connect_options(db_path: &Path) -> SqliteConnectOptions {
+    SqliteConnectOptions::new()
+        .filename(db_path)
+        .read_only(true)
+        .create_if_missing(false)
+        .busy_timeout(Duration::from_millis(SQLITE_BUSY_TIMEOUT_MS))
+        .pragma("query_only", "ON")
+        .pragma("read_uncommitted", "OFF")
+        .pragma("temp_store", "MEMORY")
+        .pragma("cache_size", "-16000")
+        .pragma("mmap_size", "268435456")
 }
 
-fn sqlite_is_busy_error(err: &rusqlite::Error) -> bool {
-    matches!(
-        err.sqlite_error_code(),
-        Some(rusqlite::ffi::ErrorCode::DatabaseBusy)
-            | Some(rusqlite::ffi::ErrorCode::DatabaseLocked)
-    )
-}
-
-fn with_sqlite_busy_retry<T, F>(mut op: F) -> Option<T>
-where
-    F: FnMut() -> rusqlite::Result<T>,
-{
-    for attempt in 0..SQLITE_BUSY_RETRY_ATTEMPTS {
-        match op() {
-            Ok(value) => return Some(value),
-            Err(err) if sqlite_is_busy_error(&err) && attempt + 1 < SQLITE_BUSY_RETRY_ATTEMPTS => {
-                std::thread::sleep(std::time::Duration::from_millis(SQLITE_BUSY_RETRY_DELAY_MS));
-            }
-            Err(_) => return None,
+async fn sqlite_read_pool(db_path: &Path) -> Option<SqlitePool> {
+    {
+        let pools = SQLITE_READ_POOLS.read().await;
+        if let Some(pool) = pools.get(db_path) {
+            return Some(pool.clone());
         }
     }
-    None
+
+    let pool = SqlitePoolOptions::new()
+        .max_connections(SQLITE_POOL_MAX_CONNECTIONS)
+        .acquire_timeout(Duration::from_millis(SQLITE_POOL_ACQUIRE_TIMEOUT_MS))
+        .idle_timeout(Some(Duration::from_secs(SQLITE_POOL_IDLE_TIMEOUT_SECS)))
+        .connect_with(sqlite_read_connect_options(db_path))
+        .await
+        .ok()?;
+
+    let mut pools = SQLITE_READ_POOLS.write().await;
+    if let Some(existing) = pools.get(db_path) {
+        return Some(existing.clone());
+    }
+
+    pools.insert(db_path.to_path_buf(), pool.clone());
+    Some(pool)
 }
 
-async fn acquire_sqlite_read_permit(op_name: &'static str) -> Option<OwnedSemaphorePermit> {
-    let semaphore = SQLITE_READ_SEMAPHORE.clone();
-    match tokio::time::timeout(
-        Duration::from_millis(SQLITE_READ_ACQUIRE_TIMEOUT_MS),
-        semaphore.acquire_owned(),
-    )
-    .await
-    {
-        Ok(Ok(permit)) => Some(permit),
-        Ok(Err(_)) => {
-            tracing::error!(
-                op = op_name,
-                "sqlite read semaphore closed unexpectedly; skipping sqlite read"
-            );
+async fn run_sqlite_query<T, Fut>(op_name: &'static str, fut: Fut) -> Option<T>
+where
+    Fut: Future<Output = Result<T, sqlx::Error>>,
+{
+    match tokio::time::timeout(Duration::from_millis(SQLITE_QUERY_TIMEOUT_MS), fut).await {
+        Ok(Ok(value)) => Some(value),
+        Ok(Err(err)) => {
+            tracing::warn!(op = op_name, error = %err, "sqlite query failed");
             None
         }
         Err(_) => {
             tracing::warn!(
                 op = op_name,
-                timeout_ms = SQLITE_READ_ACQUIRE_TIMEOUT_MS,
-                "sqlite read permit acquisition timed out; enabling fallback"
-            );
-            None
-        }
-    }
-}
-
-async fn run_sqlite_read_task<T, F>(op_name: &'static str, task: F) -> Option<T>
-where
-    T: Send + 'static,
-    F: FnOnce() -> Option<T> + Send + 'static,
-{
-    let permit = acquire_sqlite_read_permit(op_name).await?;
-    let handle = tokio::task::spawn_blocking(move || {
-        let _permit = permit;
-        task()
-    });
-
-    match tokio::time::timeout(
-        Duration::from_millis(SQLITE_READ_OPERATION_TIMEOUT_MS),
-        handle,
-    )
-    .await
-    {
-        Ok(Ok(result)) => result,
-        Ok(Err(err)) => {
-            tracing::error!(
-                op = op_name,
-                error = %err,
-                "sqlite read blocking task join failed"
-            );
-            None
-        }
-        Err(_) => {
-            tracing::error!(
-                op = op_name,
-                timeout_ms = SQLITE_READ_OPERATION_TIMEOUT_MS,
-                "sqlite read operation timed out; fallback path will be used"
+                timeout_ms = SQLITE_QUERY_TIMEOUT_MS,
+                "sqlite query timed out"
             );
             None
         }
@@ -131,16 +92,16 @@ fn parse_json_text(raw: &str) -> Option<Value> {
     serde_json::from_str::<Value>(raw).ok()
 }
 
-fn session_record_from_sqlite_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<SessionRecord> {
-    let id: String = row.get(0)?;
-    let parent_id: Option<String> = row.get(1)?;
-    let directory: String = row.get(2)?;
-    let title: String = row.get(3)?;
-    let slug: String = row.get(4)?;
-    let share_url: Option<String> = row.get(5)?;
-    let revert_raw: Option<String> = row.get(6)?;
-    let time_created: i64 = row.get(7)?;
-    let time_updated: i64 = row.get(8)?;
+fn session_record_from_sqlite_row(row: &SqliteRow) -> Option<SessionRecord> {
+    let id: String = row.try_get("id").ok()?;
+    let parent_id: Option<String> = row.try_get("parent_id").ok().flatten();
+    let directory: String = row.try_get("directory").ok()?;
+    let title: String = row.try_get("title").ok()?;
+    let slug: String = row.try_get("slug").ok()?;
+    let share_url: Option<String> = row.try_get("share_url").ok().flatten();
+    let revert_raw: Option<String> = row.try_get("revert").ok().flatten();
+    let time_created: i64 = row.try_get("time_created").ok()?;
+    let time_updated: i64 = row.try_get("time_updated").ok()?;
 
     let mut value = json!({
         "id": id,
@@ -176,7 +137,7 @@ fn session_record_from_sqlite_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<S
         value["revert"] = revert;
     }
 
-    Ok(SessionRecord {
+    Some(SessionRecord {
         id: value
             .get("id")
             .and_then(|v| v.as_str())
@@ -203,29 +164,37 @@ pub(super) async fn load_session_records_from_sqlite(
         .map(str::trim)
         .filter(|v| !v.is_empty())
         .map(|v| v.to_string());
+    let pool = sqlite_read_pool(&db_path).await?;
 
-    run_sqlite_read_task("load_session_records_from_sqlite", move || {
-        let conn = with_sqlite_busy_retry(|| open_sqlite_readonly_connection(&db_path))?;
+    let rows = match project_id.as_deref() {
+        Some(project_id) => {
+            run_sqlite_query(
+                "load_session_records_from_sqlite",
+                sqlx::query(
+                    "SELECT id, parent_id, directory, title, slug, share_url, revert, time_created, time_updated FROM session WHERE project_id = ?",
+                )
+                .bind(project_id)
+                .fetch_all(&pool),
+            )
+            .await?
+        }
+        None => {
+            run_sqlite_query(
+                "load_session_records_from_sqlite",
+                sqlx::query(
+                    "SELECT id, parent_id, directory, title, slug, share_url, revert, time_created, time_updated FROM session",
+                )
+                .fetch_all(&pool),
+            )
+            .await?
+        }
+    };
 
-        let sql = if project_id.is_some() {
-            "SELECT id, parent_id, directory, title, slug, share_url, revert, time_created, time_updated FROM session WHERE project_id = ?1"
-        } else {
-            "SELECT id, parent_id, directory, title, slug, share_url, revert, time_created, time_updated FROM session"
-        };
-
-        let mut stmt = conn.prepare(sql).ok()?;
-
-        let mapped = match project_id.as_deref() {
-            Some(project_id) => {
-                stmt.query_map(rusqlite::params![project_id], session_record_from_sqlite_row)
-                    .ok()?
-            }
-            None => stmt.query_map([], session_record_from_sqlite_row).ok()?,
-        };
-
-        Some(mapped.filter_map(Result::ok).collect::<Vec<_>>())
-    })
-    .await
+    Some(
+        rows.iter()
+            .filter_map(session_record_from_sqlite_row)
+            .collect::<Vec<_>>(),
+    )
 }
 
 pub(super) async fn load_session_records_by_ids_from_sqlite(
@@ -253,29 +222,31 @@ pub(super) async fn load_session_records_by_ids_from_sqlite(
         return Some(Vec::new());
     }
 
-    run_sqlite_read_task("load_session_records_by_ids_from_sqlite", move || {
-        let conn = with_sqlite_busy_retry(|| open_sqlite_readonly_connection(&db_path))?;
-        let mut out = Vec::<SessionRecord>::new();
-        const CHUNK_SIZE: usize = 300;
+    let pool = sqlite_read_pool(&db_path).await?;
+    let mut out = Vec::<SessionRecord>::new();
 
-        for chunk in normalized.chunks(CHUNK_SIZE) {
-            let sql = format!(
-                "SELECT id, parent_id, directory, title, slug, share_url, revert, time_created, time_updated FROM session WHERE id IN ({})",
-                sqlite_placeholders(chunk.len())
-            );
-            let mut stmt = conn.prepare(&sql).ok()?;
-            let mapped = stmt
-                .query_map(
-                    rusqlite::params_from_iter(chunk.iter()),
-                    session_record_from_sqlite_row,
-                )
-                .ok()?;
-            out.extend(mapped.filter_map(Result::ok));
+    for chunk in normalized.chunks(SQLITE_RECORD_QUERY_CHUNK) {
+        let mut builder = QueryBuilder::<Sqlite>::new(
+            "SELECT id, parent_id, directory, title, slug, share_url, revert, time_created, time_updated FROM session WHERE id IN (",
+        );
+        {
+            let mut separated = builder.separated(",");
+            for id in chunk {
+                separated.push_bind(id);
+            }
         }
+        builder.push(")");
 
-        Some(out)
-    })
-    .await
+        let rows = run_sqlite_query(
+            "load_session_records_by_ids_from_sqlite",
+            builder.build().fetch_all(&pool),
+        )
+        .await?;
+
+        out.extend(rows.iter().filter_map(session_record_from_sqlite_row));
+    }
+
+    Some(out)
 }
 
 pub(super) async fn load_session_records_by_parent_ids_from_sqlite(
@@ -303,38 +274,31 @@ pub(super) async fn load_session_records_by_parent_ids_from_sqlite(
         return Some(Vec::new());
     }
 
-    run_sqlite_read_task("load_session_records_by_parent_ids_from_sqlite", move || {
-        let conn = with_sqlite_busy_retry(|| open_sqlite_readonly_connection(&db_path))?;
-        let mut out = Vec::<SessionRecord>::new();
-        const CHUNK_SIZE: usize = 300;
+    let pool = sqlite_read_pool(&db_path).await?;
+    let mut out = Vec::<SessionRecord>::new();
 
-        for chunk in normalized.chunks(CHUNK_SIZE) {
-            let sql = format!(
-                "SELECT id, parent_id, directory, title, slug, share_url, revert, time_created, time_updated FROM session WHERE parent_id IN ({})",
-                sqlite_placeholders(chunk.len())
-            );
-            let mut stmt = conn.prepare(&sql).ok()?;
-            let mapped = stmt
-                .query_map(
-                    rusqlite::params_from_iter(chunk.iter()),
-                    session_record_from_sqlite_row,
-                )
-                .ok()?;
-            out.extend(mapped.filter_map(Result::ok));
+    for chunk in normalized.chunks(SQLITE_RECORD_QUERY_CHUNK) {
+        let mut builder = QueryBuilder::<Sqlite>::new(
+            "SELECT id, parent_id, directory, title, slug, share_url, revert, time_created, time_updated FROM session WHERE parent_id IN (",
+        );
+        {
+            let mut separated = builder.separated(",");
+            for parent_id in chunk {
+                separated.push_bind(parent_id);
+            }
         }
+        builder.push(")");
 
-        Some(out)
-    })
-    .await
-}
+        let rows = run_sqlite_query(
+            "load_session_records_by_parent_ids_from_sqlite",
+            builder.build().fetch_all(&pool),
+        )
+        .await?;
 
-fn sqlite_placeholders(count: usize) -> String {
-    if count == 0 {
-        return String::new();
+        out.extend(rows.iter().filter_map(session_record_from_sqlite_row));
     }
-    std::iter::repeat_n("?", count)
-        .collect::<Vec<_>>()
-        .join(",")
+
+    Some(out)
 }
 
 pub(super) async fn load_session_message_page_from_sqlite(
@@ -349,210 +313,195 @@ pub(super) async fn load_session_message_page_from_sqlite(
     }
 
     let session_id = session_id.trim().to_string();
-    run_sqlite_read_task("load_session_message_page_from_sqlite", move || {
-        let conn = with_sqlite_busy_retry(|| open_sqlite_readonly_connection(&db_path))?;
+    let pool = sqlite_read_pool(&db_path).await?;
 
-        let mut consistency = ResponseConsistency::default();
-        let mut total = 0usize;
-        if include_total {
-            match with_sqlite_busy_retry(|| {
-                conn.query_row(
-                    "SELECT COUNT(*) FROM message WHERE session_id = ?1",
-                    rusqlite::params![session_id.as_str()],
-                    |row| row.get::<_, i64>(0),
-                )
-            }) {
-                Some(count) => {
-                    total = if count.is_negative() { 0 } else { count as usize };
-                }
-                None => {
-                    consistency.note_io_skip();
-                }
+    let mut consistency = ResponseConsistency::default();
+    let mut total = 0usize;
+    if include_total {
+        match run_sqlite_query(
+            "load_session_message_page_from_sqlite.total",
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM message WHERE session_id = ?")
+                .bind(session_id.as_str())
+                .fetch_one(&pool),
+        )
+        .await
+        {
+            Some(count) => {
+                total = if count.is_negative() {
+                    0
+                } else {
+                    count as usize
+                };
+            }
+            None => {
+                consistency.note_io_skip();
             }
         }
+    }
 
-        let mut message_rows: Vec<(String, String, Value)> = Vec::new();
+    let mut message_rows: Vec<(String, String, Value)> = Vec::new();
 
-        if limit != Some(0) {
-            let (sql, use_limit) = if limit.is_some() {
-                (
-                    "SELECT id, session_id, data FROM message WHERE session_id = ?1 ORDER BY time_created DESC, id DESC LIMIT ?2 OFFSET ?3",
-                    true,
+    if limit != Some(0) {
+        let rows = if let Some(limit) = limit {
+            run_sqlite_query(
+                "load_session_message_page_from_sqlite.messages",
+                sqlx::query(
+                    "SELECT id, session_id, data FROM message WHERE session_id = ? ORDER BY time_created DESC, id DESC LIMIT ? OFFSET ?",
                 )
-            } else {
-                (
-                    "SELECT id, session_id, data FROM message WHERE session_id = ?1 ORDER BY time_created DESC, id DESC LIMIT -1 OFFSET ?2",
-                    false,
+                .bind(session_id.as_str())
+                .bind(limit as i64)
+                .bind(offset as i64)
+                .fetch_all(&pool),
+            )
+            .await?
+        } else {
+            run_sqlite_query(
+                "load_session_message_page_from_sqlite.messages",
+                sqlx::query(
+                    "SELECT id, session_id, data FROM message WHERE session_id = ? ORDER BY time_created DESC, id DESC LIMIT -1 OFFSET ?",
                 )
-            };
+                .bind(session_id.as_str())
+                .bind(offset as i64)
+                .fetch_all(&pool),
+            )
+            .await?
+        };
 
-            let mut stmt = conn.prepare(sql).ok()?;
-
-            let mut rows = if use_limit {
-                stmt.query(rusqlite::params![
-                    session_id.as_str(),
-                    limit.unwrap_or_default() as i64,
-                    offset as i64
-                ])
-                .ok()?
-            } else {
-                stmt.query(rusqlite::params![session_id.as_str(), offset as i64])
-                    .ok()?
-            };
-
-            loop {
-                match rows.next() {
-                    Ok(Some(row)) => {
-                        let id = match row.get::<_, String>(0) {
-                            Ok(v) if !v.trim().is_empty() => v,
-                            _ => {
-                                consistency.note_parse_skip();
-                                continue;
-                            }
-                        };
-                        let row_session_id = match row.get::<_, String>(1) {
-                            Ok(v) if !v.trim().is_empty() => v,
-                            _ => {
-                                consistency.note_parse_skip();
-                                continue;
-                            }
-                        };
-                        let data_raw = match row.get::<_, String>(2) {
-                            Ok(v) => v,
-                            Err(_) => {
-                                consistency.note_parse_skip();
-                                continue;
-                            }
-                        };
-
-                        let mut info = match serde_json::from_str::<Value>(&data_raw) {
-                            Ok(value) => value,
-                            Err(_) => {
-                                consistency.note_parse_skip();
-                                continue;
-                            }
-                        };
-                        let Some(obj) = info.as_object_mut() else {
-                            consistency.note_parse_skip();
-                            continue;
-                        };
-                        obj.insert("id".to_string(), Value::String(id.clone()));
-                        obj.insert(
-                            "sessionID".to_string(),
-                            Value::String(row_session_id.clone()),
-                        );
-
-                        message_rows.push((id, row_session_id, info));
-                    }
-                    Ok(None) => break,
-                    Err(_) => {
-                        return None;
-                    }
-                }
-            }
-        }
-
-        let mut parts_by_message_id = std::collections::HashMap::<String, Vec<Value>>::new();
-        if !message_rows.is_empty() {
-            // SQLite can enforce a relatively small cap on the number of bound variables.
-            // Large sessions (or large requested history windows) can exceed that cap when
-            // we try to fetch parts for N message IDs in a single `IN (...)` query.
-            //
-            // Chunk the message IDs and issue multiple queries to keep this robust.
-            // Keep the chunk size comfortably below the common 999-variable limit.
-            const PART_QUERY_CHUNK: usize = 450;
-
-            let message_ids = message_rows
-                .iter()
-                .map(|(id, _, _)| id.as_str())
-                .collect::<Vec<_>>();
-
-            for chunk in message_ids.chunks(PART_QUERY_CHUNK) {
-                if chunk.is_empty() {
+        for row in rows {
+            let id = match row.try_get::<String, _>("id") {
+                Ok(v) if !v.trim().is_empty() => v,
+                _ => {
+                    consistency.note_parse_skip();
                     continue;
                 }
+            };
+            let row_session_id = match row.try_get::<String, _>("session_id") {
+                Ok(v) if !v.trim().is_empty() => v,
+                _ => {
+                    consistency.note_parse_skip();
+                    continue;
+                }
+            };
+            let data_raw = match row.try_get::<String, _>("data") {
+                Ok(v) => v,
+                Err(_) => {
+                    consistency.note_parse_skip();
+                    continue;
+                }
+            };
 
-                // Be conservative about schema assumptions: some historical databases
-                // may not have `part.session_id` populated (or even present). We only
-                // need `message_id` to associate parts with the selected messages.
-                let sql = format!(
-                    "SELECT id, message_id, data FROM part WHERE message_id IN ({}) ORDER BY message_id ASC, id ASC",
-                    sqlite_placeholders(chunk.len())
-                );
+            let mut info = match serde_json::from_str::<Value>(&data_raw) {
+                Ok(value) => value,
+                Err(_) => {
+                    consistency.note_parse_skip();
+                    continue;
+                }
+            };
+            let Some(obj) = info.as_object_mut() else {
+                consistency.note_parse_skip();
+                continue;
+            };
+            obj.insert("id".to_string(), Value::String(id.clone()));
+            obj.insert(
+                "sessionID".to_string(),
+                Value::String(row_session_id.clone()),
+            );
 
-                let mut stmt = conn.prepare(&sql).ok()?;
+            message_rows.push((id, row_session_id, info));
+        }
+    }
 
-                let mut rows = stmt.query(rusqlite::params_from_iter(chunk.iter())).ok()?;
+    let mut parts_by_message_id = HashMap::<String, Vec<Value>>::new();
+    if !message_rows.is_empty() {
+        let message_ids = message_rows
+            .iter()
+            .map(|(id, _, _)| id.as_str())
+            .collect::<Vec<_>>();
 
-                loop {
-                    match rows.next() {
-                        Ok(Some(row)) => {
-                            let id = match row.get::<_, String>(0) {
-                                Ok(v) if !v.trim().is_empty() => v,
-                                _ => {
-                                    consistency.note_parse_skip();
-                                    continue;
-                                }
-                            };
-                            let message_id = match row.get::<_, String>(1) {
-                                Ok(v) if !v.trim().is_empty() => v,
-                                _ => {
-                                    consistency.note_parse_skip();
-                                    continue;
-                                }
-                            };
-                            let data_raw = match row.get::<_, String>(2) {
-                                Ok(v) => v,
-                                Err(_) => {
-                                    consistency.note_parse_skip();
-                                    continue;
-                                }
-                            };
+        for chunk in message_ids.chunks(SQLITE_PART_QUERY_CHUNK) {
+            if chunk.is_empty() {
+                continue;
+            }
 
-                            let mut part = match serde_json::from_str::<Value>(&data_raw) {
-                                Ok(value) => value,
-                                Err(_) => {
-                                    consistency.note_parse_skip();
-                                    continue;
-                                }
-                            };
-                            let Some(obj) = part.as_object_mut() else {
-                                consistency.note_parse_skip();
-                                continue;
-                            };
-                            obj.insert("id".to_string(), Value::String(id.clone()));
-                            obj.insert("sessionID".to_string(), Value::String(session_id.clone()));
-                            obj.insert("messageID".to_string(), Value::String(message_id.clone()));
-
-                            parts_by_message_id.entry(message_id).or_default().push(part);
-                        }
-                        Ok(None) => break,
-                        Err(_) => return None,
-                    }
+            let mut builder = QueryBuilder::<Sqlite>::new(
+                "SELECT id, message_id, data FROM part WHERE message_id IN (",
+            );
+            {
+                let mut separated = builder.separated(",");
+                for message_id in chunk {
+                    separated.push_bind(*message_id);
                 }
             }
+            builder.push(") ORDER BY message_id ASC, id ASC");
+
+            let rows = run_sqlite_query(
+                "load_session_message_page_from_sqlite.parts",
+                builder.build().fetch_all(&pool),
+            )
+            .await?;
+
+            for row in rows {
+                let id = match row.try_get::<String, _>("id") {
+                    Ok(v) if !v.trim().is_empty() => v,
+                    _ => {
+                        consistency.note_parse_skip();
+                        continue;
+                    }
+                };
+                let message_id = match row.try_get::<String, _>("message_id") {
+                    Ok(v) if !v.trim().is_empty() => v,
+                    _ => {
+                        consistency.note_parse_skip();
+                        continue;
+                    }
+                };
+                let data_raw = match row.try_get::<String, _>("data") {
+                    Ok(v) => v,
+                    Err(_) => {
+                        consistency.note_parse_skip();
+                        continue;
+                    }
+                };
+
+                let mut part = match serde_json::from_str::<Value>(&data_raw) {
+                    Ok(value) => value,
+                    Err(_) => {
+                        consistency.note_parse_skip();
+                        continue;
+                    }
+                };
+                let Some(obj) = part.as_object_mut() else {
+                    consistency.note_parse_skip();
+                    continue;
+                };
+                obj.insert("id".to_string(), Value::String(id));
+                obj.insert("sessionID".to_string(), Value::String(session_id.clone()));
+                obj.insert("messageID".to_string(), Value::String(message_id.clone()));
+
+                parts_by_message_id
+                    .entry(message_id)
+                    .or_default()
+                    .push(part);
+            }
         }
+    }
 
-        let mut entries = Vec::with_capacity(message_rows.len());
-        for (message_id, _sid, info) in message_rows {
-            let parts = parts_by_message_id.remove(&message_id).unwrap_or_default();
-            entries.push(json!({
-                "info": info,
-                "parts": parts,
-            }));
-        }
+    let mut entries = Vec::with_capacity(message_rows.len());
+    for (message_id, _sid, info) in message_rows {
+        let parts = parts_by_message_id.remove(&message_id).unwrap_or_default();
+        entries.push(json!({
+            "info": info,
+            "parts": parts,
+        }));
+    }
 
-        // Keep existing transport contract: each page is oldest -> newest,
-        // with offset applied against newest-first ordering.
-        entries.reverse();
+    entries.reverse();
 
-        Some(SqliteMessagePage {
-            entries,
-            total,
-            consistency,
-        })
+    Some(SqliteMessagePage {
+        entries,
+        total,
+        consistency,
     })
-    .await
 }
 
 pub(super) async fn load_session_message_part_from_sqlite(
@@ -568,38 +517,39 @@ pub(super) async fn load_session_message_part_from_sqlite(
     let session_id = session_id.trim().to_string();
     let message_id = message_id.trim().to_string();
     let part_id = part_id.trim().to_string();
+    let pool = sqlite_read_pool(&db_path).await?;
 
-    run_sqlite_read_task("load_session_message_part_from_sqlite", move || {
-        let conn = with_sqlite_busy_retry(|| open_sqlite_readonly_connection(&db_path))?;
+    let info_raw = run_sqlite_query(
+        "load_session_message_part_from_sqlite.info",
+        sqlx::query_scalar::<_, String>("SELECT data FROM message WHERE id = ? AND session_id = ?")
+            .bind(message_id.as_str())
+            .bind(session_id.as_str())
+            .fetch_optional(&pool),
+    )
+    .await??;
 
-        let info_raw = conn
-            .query_row(
-                "SELECT data FROM message WHERE id = ?1 AND session_id = ?2",
-                rusqlite::params![message_id.as_str(), session_id.as_str()],
-                |row| row.get::<_, String>(0),
-            )
-            .ok()?;
-        let mut info = serde_json::from_str::<Value>(&info_raw).ok()?;
-        let info_obj = info.as_object_mut()?;
-        info_obj.insert("id".to_string(), Value::String(message_id.clone()));
-        info_obj.insert("sessionID".to_string(), Value::String(session_id.clone()));
+    let mut info = serde_json::from_str::<Value>(&info_raw).ok()?;
+    let info_obj = info.as_object_mut()?;
+    info_obj.insert("id".to_string(), Value::String(message_id.clone()));
+    info_obj.insert("sessionID".to_string(), Value::String(session_id.clone()));
 
-        // Avoid relying on `part.session_id` for compatibility with historical schemas.
-        // Validate session ownership via the `message` table instead.
-        let part_raw = conn
-            .query_row(
-                "SELECT p.data FROM part p JOIN message m ON p.message_id = m.id WHERE p.id = ?1 AND p.message_id = ?2 AND m.session_id = ?3",
-                rusqlite::params![part_id.as_str(), message_id.as_str(), session_id.as_str()],
-                |row| row.get::<_, String>(0),
-            )
-            .ok()?;
-        let mut part = serde_json::from_str::<Value>(&part_raw).ok()?;
-        let part_obj = part.as_object_mut()?;
-        part_obj.insert("id".to_string(), Value::String(part_id));
-        part_obj.insert("sessionID".to_string(), Value::String(session_id));
-        part_obj.insert("messageID".to_string(), Value::String(message_id));
+    let part_raw = run_sqlite_query(
+        "load_session_message_part_from_sqlite.part",
+        sqlx::query_scalar::<_, String>(
+            "SELECT p.data FROM part p JOIN message m ON p.message_id = m.id WHERE p.id = ? AND p.message_id = ? AND m.session_id = ?",
+        )
+        .bind(part_id.as_str())
+        .bind(message_id.as_str())
+        .bind(session_id.as_str())
+        .fetch_optional(&pool),
+    )
+    .await??;
 
-        Some((info, part))
-    })
-    .await
+    let mut part = serde_json::from_str::<Value>(&part_raw).ok()?;
+    let part_obj = part.as_object_mut()?;
+    part_obj.insert("id".to_string(), Value::String(part_id));
+    part_obj.insert("sessionID".to_string(), Value::String(session_id));
+    part_obj.insert("messageID".to_string(), Value::String(message_id));
+
+    Some((info, part))
 }

@@ -42,4 +42,4 @@ url = "2.5.8"
 walkdir = "2.5.0"
 zip = { version = "8.0.0", default-features = false, features = ["deflate"] }
 fs2 = "0.4.3"
-rusqlite = { version = "0.38.0", features = ["bundled"] }
+sqlx = { version = "0.8.2", default-features = false, features = ["sqlite", "runtime-tokio-rustls"] }
