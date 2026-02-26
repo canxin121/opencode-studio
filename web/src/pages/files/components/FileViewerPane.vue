@@ -965,7 +965,7 @@ function onSendSelection() {
 
 <template>
   <section class="flex min-h-0 h-full flex-col overflow-hidden bg-background">
-    <div class="flex items-center gap-2 border-b border-border/40 px-3 py-2">
+    <div class="flex min-w-0 items-center gap-2 border-b border-border/40 px-3 py-2">
       <IconButton
         v-if="isMobile && showMobileViewer"
         size="lg"
@@ -979,6 +979,20 @@ function onSendSelection() {
         <div class="typography-ui-label font-semibold truncate">
           {{ selectedFile?.name || t('files.viewer.title.selectFile') }}
         </div>
+      </div>
+
+      <div v-if="viewerMode === 'markdown'" class="shrink-0">
+        <SegmentedControl class="grid-cols-3 max-w-xs">
+          <SegmentedButton :active="markdownViewMode === 'source'" size="xs" @click="markdownViewMode = 'source'">
+            {{ t('files.viewer.markdown.mode.source') }}
+          </SegmentedButton>
+          <SegmentedButton :active="markdownViewMode === 'preview'" size="xs" @click="markdownViewMode = 'preview'">
+            {{ t('files.viewer.markdown.mode.preview') }}
+          </SegmentedButton>
+          <SegmentedButton :active="markdownViewMode === 'split'" size="xs" @click="markdownViewMode = 'split'">
+            {{ t('files.viewer.markdown.mode.split') }}
+          </SegmentedButton>
+        </SegmentedControl>
       </div>
 
       <OptionMenu
@@ -1086,20 +1100,6 @@ function onSendSelection() {
       <span v-else-if="gitInlineEnabled">
         {{ t('files.viewer.status.hunksSummary', { count: gitHunks.length, range: gitDiffRangeLabel }) }}
       </span>
-    </div>
-
-    <div v-if="viewerMode === 'markdown'" class="border-b border-border/40 px-3 py-2">
-      <SegmentedControl class="grid-cols-3 max-w-xs">
-        <SegmentedButton :active="markdownViewMode === 'source'" size="xs" @click="markdownViewMode = 'source'">
-          {{ t('files.viewer.markdown.mode.source') }}
-        </SegmentedButton>
-        <SegmentedButton :active="markdownViewMode === 'preview'" size="xs" @click="markdownViewMode = 'preview'">
-          {{ t('files.viewer.markdown.mode.preview') }}
-        </SegmentedButton>
-        <SegmentedButton :active="markdownViewMode === 'split'" size="xs" @click="markdownViewMode = 'split'">
-          {{ t('files.viewer.markdown.mode.split') }}
-        </SegmentedButton>
-      </SegmentedControl>
     </div>
 
     <div class="flex-1 min-h-0 relative">
