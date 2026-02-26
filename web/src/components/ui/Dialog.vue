@@ -2,8 +2,10 @@
 import { DialogRoot, DialogContent, DialogOverlay, DialogPortal, DialogTitle, DialogDescription } from 'radix-vue'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { RiCloseLine } from '@remixicon/vue'
 import { cn } from '@/lib/utils'
-import Button from '@/components/ui/Button.vue'
+import IconButton from '@/components/ui/IconButton.vue'
+import { useUiStore } from '@/stores/ui'
 
 const props = defineProps<{
   open: boolean
@@ -24,6 +26,7 @@ function close() {
 }
 
 const { t } = useI18n()
+const ui = useUiStore()
 
 const contentClass = computed(() =>
   cn(
@@ -43,22 +46,18 @@ const contentClass = computed(() =>
       />
       <DialogContent :class="contentClass">
         <div class="absolute right-3 top-3">
-          <Button variant="ghost" size="icon" class="h-8 w-8" :aria-label="t('common.close')" @click="close">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </Button>
+          <IconButton
+            variant="ghost"
+            size="md"
+            class="h-8 w-8"
+            :tooltip="t('common.close')"
+            :is-mobile-pointer="ui.isMobilePointer"
+            :title="t('common.close')"
+            :aria-label="t('common.close')"
+            @click="close"
+          >
+            <RiCloseLine class="h-4.5 w-4.5" />
+          </IconButton>
         </div>
 
         <div class="flex flex-col space-y-1.5 text-center sm:text-left min-w-0" v-if="title || description">

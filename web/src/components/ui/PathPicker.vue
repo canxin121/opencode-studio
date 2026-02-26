@@ -4,7 +4,9 @@ import { useI18n } from 'vue-i18n'
 import { apiJson } from '@/lib/api'
 import { normalizeFsPath, trimTrailingFsSlashes } from '@/lib/path'
 import Button from '@/components/ui/Button.vue'
+import IconButton from '@/components/ui/IconButton.vue'
 import Input from '@/components/ui/Input.vue'
+import { useUiStore } from '@/stores/ui'
 import {
   RiArrowRightSLine,
   RiAddLine,
@@ -63,6 +65,7 @@ const props = withDefaults(
 )
 
 const { t } = useI18n()
+const ui = useUiStore()
 
 const effectiveButtonLabel = computed(
   () => String(props.buttonLabel || '').trim() || String(t('ui.pathPicker.actions.browse')),
@@ -428,12 +431,14 @@ watch(
 
           <div class="flex items-center gap-1">
             <template v-if="showOptions">
-              <Button
+              <IconButton
                 variant="ghost"
-                size="icon"
+                size="sm"
                 type="button"
                 class="h-8 w-8"
                 :class="showHidden ? 'bg-secondary/60' : ''"
+                :tooltip="showHidden ? t('ui.pathPicker.titles.hiddenShown') : t('ui.pathPicker.titles.hiddenHidden')"
+                :is-mobile-pointer="ui.isMobilePointer"
                 :title="showHidden ? t('ui.pathPicker.titles.hiddenShown') : t('ui.pathPicker.titles.hiddenHidden')"
                 :aria-pressed="showHidden"
                 :aria-label="t('ui.pathPicker.aria.toggleHidden')"
@@ -441,13 +446,19 @@ watch(
               >
                 <RiEyeLine v-if="showHidden" class="h-4 w-4" />
                 <RiEyeOffLine v-else class="h-4 w-4" />
-              </Button>
-              <Button
+              </IconButton>
+              <IconButton
                 variant="ghost"
-                size="icon"
+                size="sm"
                 type="button"
                 class="h-8 w-8"
                 :class="showGitignored ? 'bg-secondary/60' : ''"
+                :tooltip="
+                  showGitignored
+                    ? t('ui.pathPicker.titles.gitignoredShown')
+                    : t('ui.pathPicker.titles.gitignoredHidden')
+                "
+                :is-mobile-pointer="ui.isMobilePointer"
                 :title="
                   showGitignored
                     ? t('ui.pathPicker.titles.gitignoredShown')
@@ -458,7 +469,7 @@ watch(
                 @click="showGitignored = !showGitignored"
               >
                 <RiGitBranchLine class="h-4 w-4" :class="showGitignored ? '' : 'opacity-50'" />
-              </Button>
+              </IconButton>
             </template>
 
             <Button

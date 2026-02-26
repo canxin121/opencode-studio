@@ -209,7 +209,14 @@ onBeforeUnmount(() => {
               {{ description }}
             </DialogDescription>
           </div>
-          <IconButton size="sm" :title="t('common.close')" :aria-label="t('common.close')" @click="close">
+          <IconButton
+            size="sm"
+            :tooltip="t('common.close')"
+            :is-mobile-pointer="ui.isMobilePointer"
+            :title="t('common.close')"
+            :aria-label="t('common.close')"
+            @click="close"
+          >
             <RiCloseLine class="h-4 w-4" />
           </IconButton>
         </div>

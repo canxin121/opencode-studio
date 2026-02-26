@@ -22,7 +22,7 @@ const props = withDefaults(
     formatBytes: (bytes: number) => string
     busy?: boolean
     isMobilePointer?: boolean
-    desktopAnchorEl?: HTMLElement | null
+    desktopAnchorEl?: { triggerEl?: unknown; $el?: unknown } | HTMLElement | null
     title?: string
   }>(),
   {
@@ -143,6 +143,9 @@ function resolveDesktopAnchorEl(): HTMLElement | null {
   const raw = props.desktopAnchorEl as unknown
   if (raw instanceof HTMLElement) return raw
   if (!raw || typeof raw !== 'object') return null
+
+  const triggerEl = (raw as { triggerEl?: unknown }).triggerEl
+  if (triggerEl instanceof HTMLElement) return triggerEl
 
   const hostEl = (raw as { $el?: unknown }).$el
   if (hostEl instanceof HTMLElement) return hostEl
@@ -345,7 +348,14 @@ onBeforeUnmount(() => {
             </div>
           </div>
         </div>
-        <IconButton size="sm" :title="t('common.close')" :aria-label="t('common.close')" @click="close">
+        <IconButton
+          size="sm"
+          :tooltip="t('common.close')"
+          :is-mobile-pointer="isMobileSheet"
+          :title="t('common.close')"
+          :aria-label="t('common.close')"
+          @click="close"
+        >
           <RiCloseLine class="h-4 w-4" />
         </IconButton>
       </div>
@@ -418,6 +428,8 @@ onBeforeUnmount(() => {
                 <IconButton
                   size="xs"
                   class="text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                  :tooltip="t('common.remove')"
+                  :is-mobile-pointer="isMobileSheet"
                   :title="t('common.remove')"
                   :aria-label="t('chat.attachments.removeAttachmentAria')"
                   @click="$emit('remove', f.id)"
@@ -454,7 +466,14 @@ onBeforeUnmount(() => {
             <span v-else>{{ countLabel }}</span>
           </div>
         </div>
-        <IconButton size="sm" :title="t('common.close')" :aria-label="t('common.close')" @click="close">
+        <IconButton
+          size="sm"
+          :tooltip="t('common.close')"
+          :is-mobile-pointer="isMobileSheet"
+          :title="t('common.close')"
+          :aria-label="t('common.close')"
+          @click="close"
+        >
           <RiCloseLine class="h-4 w-4" />
         </IconButton>
       </div>
@@ -527,6 +546,8 @@ onBeforeUnmount(() => {
                 <IconButton
                   size="xs"
                   class="text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                  :tooltip="t('common.remove')"
+                  :is-mobile-pointer="isMobileSheet"
                   :title="t('common.remove')"
                   :aria-label="t('chat.attachments.removeAttachmentAria')"
                   @click="$emit('remove', f.id)"

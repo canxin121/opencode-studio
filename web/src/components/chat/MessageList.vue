@@ -8,7 +8,6 @@ import ReasoningInvocation from '@/components/ui/ReasoningInvocation.vue'
 import MetaInvocation from '@/components/ui/MetaInvocation.vue'
 import Button from '@/components/ui/Button.vue'
 import ToolbarChipButton from '@/components/ui/ToolbarChipButton.vue'
-import Tooltip from '@/components/ui/Tooltip.vue'
 import MobileSidebarEmptyState from '@/components/ui/MobileSidebarEmptyState.vue'
 import MessageItem from '@/components/chat/MessageItem.vue'
 import type {
@@ -389,17 +388,15 @@ function sessionErrorAtLabel(): string {
             <div class="mt-1 break-words">{{ sessionErrorBody() }}</div>
 
             <div class="mt-2 flex flex-wrap items-center gap-2">
-              <Tooltip>
-                <ToolbarChipButton
-                  :title="t('chat.sessionError.actions.copyDetails')"
-                  :aria-label="t('chat.sessionError.actions.copyDetails')"
-                  class="h-7 rounded-md border border-rose-300/60 bg-rose-100/45 px-2 text-[11px] font-medium text-rose-900 hover:bg-rose-100/65 dark:border-rose-500/40 dark:bg-rose-900/25 dark:text-rose-100 dark:hover:bg-rose-900/40"
-                  @click="$emit('copySessionError')"
-                >
-                  {{ t('chat.sessionError.actions.copyDetails') }}
-                </ToolbarChipButton>
-                <template #content>{{ t('chat.sessionError.actions.copyDetails') }}</template>
-              </Tooltip>
+              <ToolbarChipButton
+                :tooltip="t('chat.sessionError.actions.copyDetails')"
+                :title="t('chat.sessionError.actions.copyDetails')"
+                :aria-label="t('chat.sessionError.actions.copyDetails')"
+                class="h-7 rounded-md border border-rose-300/60 bg-rose-100/45 px-2 text-[11px] font-medium text-rose-900 hover:bg-rose-100/65 dark:border-rose-500/40 dark:bg-rose-900/25 dark:text-rose-100 dark:hover:bg-rose-900/40"
+                @click="$emit('copySessionError')"
+              >
+                {{ t('chat.sessionError.actions.copyDetails') }}
+              </ToolbarChipButton>
               <Button size="sm" variant="outline" class="h-7" @click="$emit('clearSessionError')">{{
                 t('chat.sessionError.actions.dismiss')
               }}</Button>

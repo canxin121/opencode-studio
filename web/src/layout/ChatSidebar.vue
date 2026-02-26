@@ -1640,6 +1640,7 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
         :directoryPaging="directoryPaging || directoryPageLoading"
         :sessionsLoading="sessionsLoading"
         :query="sidebarQuery"
+        :is-mobile-pointer="ui.isMobilePointer"
         @update:query="(v) => (sidebarQuery = v)"
         @update:directoryPage="
           (v) => {

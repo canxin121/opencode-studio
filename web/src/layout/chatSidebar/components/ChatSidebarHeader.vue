@@ -14,6 +14,7 @@ const props = defineProps<{
   directoryPaging?: boolean
   sessionsLoading: boolean
   query: string
+  isMobilePointer?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -45,11 +46,18 @@ const emit = defineEmits<{
           @update:page="(v) => emit('update:directoryPage', v)"
         />
 
-        <IconButton :title="String(t('chat.sidebar.header.addDirectory'))" @click="emit('add-directory')">
+        <IconButton
+          :tooltip="String(t('chat.sidebar.header.addDirectory'))"
+          :is-mobile-pointer="Boolean(props.isMobilePointer)"
+          :title="String(t('chat.sidebar.header.addDirectory'))"
+          @click="emit('add-directory')"
+        >
           <RiAddLine class="h-4 w-4" />
         </IconButton>
 
         <IconButton
+          :tooltip="String(t('chat.sidebar.header.refresh'))"
+          :is-mobile-pointer="Boolean(props.isMobilePointer)"
           :title="String(t('chat.sidebar.header.refresh'))"
           :disabled="sessionsLoading"
           @click="emit('refresh')"
@@ -76,6 +84,8 @@ const emit = defineEmits<{
         v-if="query.trim()"
         size="xs"
         class="absolute right-1 top-1/2 -translate-y-1/2"
+        :tooltip="String(t('common.clear'))"
+        :is-mobile-pointer="Boolean(props.isMobilePointer)"
         :aria-label="String(t('chat.sidebar.header.clearSearch'))"
         :title="String(t('common.clear'))"
         @click="emit('update:query', '')"

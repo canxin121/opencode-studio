@@ -25,11 +25,9 @@ import Composer from '@/components/chat/Composer.vue'
 import RenameSessionDialog from '@/components/chat/RenameSessionDialog.vue'
 import AttachProjectDialog from '@/components/chat/AttachProjectDialog.vue'
 import AttachmentsPanel from '@/components/chat/AttachmentsPanel.vue'
-import Button from '@/components/ui/Button.vue'
 import IconButton from '@/components/ui/IconButton.vue'
 import OptionMenu from '@/components/ui/OptionMenu.vue'
 import ToolbarChipButton from '@/components/ui/ToolbarChipButton.vue'
-import Tooltip from '@/components/ui/Tooltip.vue'
 import type { ChatPageViewContext } from './chatPageViewContext'
 import { hasDisplayableAssistantError } from './assistantError'
 import { resolveComposerToolbarLayout } from './composerToolbarLayout'
@@ -195,7 +193,9 @@ const {
   handleUnrevertFromRevertMarker,
 } = ctx
 
-const attachmentsTriggerRef = ref<HTMLElement | null>(null)
+type TooltipAnchorLike = { triggerEl?: unknown; $el?: unknown } | HTMLElement | null
+
+const attachmentsTriggerRef = ref<TooltipAnchorLike>(null)
 const { width: viewportWidth } = useWindowSize()
 
 const composerToolbarLayout = computed(() => resolveComposerToolbarLayout(ui.isMobilePointer, viewportWidth.value))
@@ -244,11 +244,21 @@ function handleOverlayReserve(px: number) {
 
 // Compute the anchor element for the picker menu based on which picker is open.
 // This ensures the menu appears right next to the button that triggered it.
+function resolveAnchorEl(target: TooltipAnchorLike): HTMLElement | null {
+  if (target instanceof HTMLElement) return target
+  if (!target || typeof target !== 'object') return null
+  const triggerEl = (target as { triggerEl?: unknown }).triggerEl
+  if (triggerEl instanceof HTMLElement) return triggerEl
+  const rootEl = (target as { $el?: unknown }).$el
+  if (rootEl instanceof HTMLElement) return rootEl
+  return null
+}
+
 const activePickerAnchor = computed(() => {
   const mode = unref(composerPickerOpen)
-  if (mode === 'model') return unref(modelTriggerRef)
-  if (mode === 'variant') return unref(variantTriggerRef)
-  if (mode === 'agent') return unref(agentTriggerRef)
+  if (mode === 'model') return resolveAnchorEl(unref(modelTriggerRef) as TooltipAnchorLike)
+  if (mode === 'variant') return resolveAnchorEl(unref(variantTriggerRef) as TooltipAnchorLike)
+  if (mode === 'agent') return resolveAnchorEl(unref(agentTriggerRef) as TooltipAnchorLike)
   return null
 })
 
@@ -354,30 +364,30 @@ void sessionActionsMenuRef
           class="absolute right-3 z-20 flex flex-col items-center gap-2"
           :style="{ bottom: navBottomOffset }"
         >
-          <Button
+          <IconButton
             v-if="navigableMessageIds.length > 1 || (navigableMessageIds.length > 0 && !chat.selectedHistory.exhausted)"
-            size="icon"
             variant="outline"
             class="h-8 w-8 rounded-full bg-background/80 backdrop-blur"
+            :tooltip="t('chat.page.nav.previousUserMessage')"
+            :is-mobile-pointer="ui.isMobilePointer"
             :aria-label="t('chat.page.nav.previousUserMessage')"
-            :title="t('chat.page.nav.previousUserMessage')"
             @click="navPrev"
             :disabled="(navIndex <= 0 && chat.selectedHistory.exhausted) || loadingOlder"
           >
             <RiArrowUpLine class="h-4 w-4" />
-          </Button>
-          <Button
+          </IconButton>
+          <IconButton
             v-if="navigableMessageIds.length > 1"
-            size="icon"
             variant="outline"
             class="h-8 w-8 rounded-full bg-background/80 backdrop-blur"
-            :title="t('chat.page.nav.nextUserMessage')"
+            :tooltip="t('chat.page.nav.nextUserMessage')"
+            :is-mobile-pointer="ui.isMobilePointer"
             :aria-label="t('chat.page.nav.nextUserMessage')"
             @click="navNext"
             :disabled="navIndex >= navigableMessageIds.length - 1"
           >
             <RiArrowDownLine class="h-4 w-4" />
-          </Button>
+          </IconButton>
 
           <div
             v-if="navigableMessageIds.length > 0"
@@ -387,17 +397,17 @@ void sessionActionsMenuRef
           </div>
 
           <!-- Keep this slot fixed so other controls don't move -->
-          <Button
-            size="icon"
+          <IconButton
             variant="outline"
             class="h-8 w-8 rounded-full bg-background/80 backdrop-blur"
-            :title="t('chat.page.nav.bottom')"
+            :tooltip="t('chat.page.nav.bottom')"
+            :is-mobile-pointer="ui.isMobilePointer"
             :aria-label="t('chat.page.nav.bottom')"
             :class="!isAtBottom && chat.messages.length ? '' : 'invisible pointer-events-none'"
             @click="scrollToBottom('smooth')"
           >
             <RiArrowDownDoubleLine class="h-4 w-4" />
-          </Button>
+          </IconButton>
         </div>
 
         <div
@@ -484,43 +494,15 @@ void sessionActionsMenuRef
                         class="flex-1 flex flex-nowrap items-center gap-1 sm:gap-1.5 min-w-0 overflow-x-auto oc-scrollbar-hidden [&>*]:shrink-0"
                         data-oc-keyboard-tap="blur"
                       >
-                        <Tooltip v-if="!ui.isMobilePointer">
-                          <ToolbarChipButton
-                            ref="attachmentsTriggerRef"
-                            :active="attachmentsPanelOpen"
-                            :aria-label="t('chat.page.attachments')"
-                            @mousedown.prevent
-                            @click.stop="toggleAttachmentsPanel"
-                          >
-                            <RiAttachmentLine class="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
-                            <span
-                              v-if="attachmentsBusy"
-                              class="inline-flex items-center justify-center h-5 w-5 rounded-full border border-border/60 bg-background/60"
-                              aria-hidden="true"
-                            >
-                              <RiLoader4Line class="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-                            </span>
-                            <span
-                              v-else-if="attachmentsCount > 0"
-                              class="inline-flex items-center justify-center h-5 min-w-5 px-1 rounded-full border border-border/60 bg-secondary/60 text-[10px] font-mono tabular-nums"
-                              aria-hidden="true"
-                            >
-                              {{ attachmentsCountLabel }}
-                            </span>
-                          </ToolbarChipButton>
-                          <template #content>
-                            {{
-                              attachmentsCount > 0
-                                ? t('chat.page.attachmentsWithCount', { count: attachmentsCount })
-                                : t('chat.page.attachments')
-                            }}
-                          </template>
-                        </Tooltip>
-
                         <ToolbarChipButton
-                          v-else
                           ref="attachmentsTriggerRef"
                           :active="attachmentsPanelOpen"
+                          :tooltip="
+                            attachmentsCount > 0
+                              ? t('chat.page.attachmentsWithCount', { count: attachmentsCount })
+                              : t('chat.page.attachments')
+                          "
+                          :is-mobile-pointer="ui.isMobilePointer"
                           :title="t('chat.page.attachments')"
                           :aria-label="t('chat.page.attachments')"
                           @mousedown.prevent
@@ -546,6 +528,8 @@ void sessionActionsMenuRef
                         <IconButton
                           class="text-muted-foreground hover:text-foreground hover:bg-secondary/40"
                           :class="[composerActionMenuOpen ? 'bg-secondary/60 text-foreground' : '']"
+                          :tooltip="t('chat.page.tools')"
+                          :is-mobile-pointer="ui.isMobilePointer"
                           :title="t('chat.page.tools')"
                           :aria-label="t('chat.page.tools')"
                           @mousedown.prevent
@@ -573,23 +557,10 @@ void sessionActionsMenuRef
                           @select="runComposerActionMenu"
                         />
 
-                        <!-- Agent Tooltip -->
-                        <Tooltip v-if="!ui.isMobilePointer && agentHint">
-                          <ToolbarChipButton
-                            :active="composerPickerOpen === 'agent'"
-                            :aria-label="t('chat.composer.picker.agentTitle')"
-                            ref="agentTriggerRef"
-                            @mousedown.prevent
-                            @click.stop="toggleComposerPicker('agent')"
-                          >
-                            <RiUserLine class="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
-                            <span :class="agentChipTextClass">{{ agentChipLabel }}</span>
-                          </ToolbarChipButton>
-                          <template #content>{{ agentHint }}</template>
-                        </Tooltip>
                         <ToolbarChipButton
-                          v-else
                           :active="composerPickerOpen === 'agent'"
+                          :tooltip="agentHint"
+                          :is-mobile-pointer="ui.isMobilePointer"
                           :title="t('chat.composer.picker.agentTitle')"
                           :aria-label="t('chat.composer.picker.agentTitle')"
                           ref="agentTriggerRef"
@@ -600,25 +571,10 @@ void sessionActionsMenuRef
                           <span :class="agentChipTextClass">{{ agentChipLabel }}</span>
                         </ToolbarChipButton>
 
-                        <!-- Model Tooltip -->
-                        <Tooltip v-if="!ui.isMobilePointer && modelHint">
-                          <ToolbarChipButton
-                            :active="composerPickerOpen === 'model'"
-                            :aria-label="t('chat.composer.picker.modelTitle')"
-                            ref="modelTriggerRef"
-                            @mousedown.prevent
-                            @click.stop="toggleComposerPicker('model')"
-                          >
-                            <RiStackLine class="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
-                            <span :class="modelChipTextClass">{{
-                              ui.isMobilePointer ? modelChipLabelMobile : modelChipLabel
-                            }}</span>
-                          </ToolbarChipButton>
-                          <template #content>{{ modelHint }}</template>
-                        </Tooltip>
                         <ToolbarChipButton
-                          v-else
                           :active="composerPickerOpen === 'model'"
+                          :tooltip="modelHint"
+                          :is-mobile-pointer="ui.isMobilePointer"
                           :title="t('chat.composer.picker.modelTitle')"
                           :aria-label="t('chat.composer.picker.modelTitle')"
                           ref="modelTriggerRef"
@@ -631,23 +587,11 @@ void sessionActionsMenuRef
                           }}</span>
                         </ToolbarChipButton>
 
-                        <!-- Variant Tooltip -->
-                        <Tooltip v-if="hasVariantsForSelection && !ui.isMobilePointer && variantHint">
-                          <ToolbarChipButton
-                            :active="composerPickerOpen === 'variant'"
-                            :aria-label="t('chat.composer.picker.variantTitle')"
-                            ref="variantTriggerRef"
-                            @mousedown.prevent
-                            @click.stop="toggleComposerPicker('variant')"
-                          >
-                            <RiBrainAi3Line class="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
-                            <span :class="variantChipTextClass">{{ variantChipLabel }}</span>
-                          </ToolbarChipButton>
-                          <template #content>{{ variantHint }}</template>
-                        </Tooltip>
                         <ToolbarChipButton
-                          v-else-if="hasVariantsForSelection"
+                          v-if="hasVariantsForSelection"
                           :active="composerPickerOpen === 'variant'"
+                          :tooltip="variantHint"
+                          :is-mobile-pointer="ui.isMobilePointer"
                           :title="t('chat.composer.picker.variantTitle')"
                           :aria-label="t('chat.composer.picker.variantTitle')"
                           ref="variantTriggerRef"
@@ -684,36 +628,33 @@ void sessionActionsMenuRef
 
                       <!-- Region 3: Stop & Send Actions -->
                       <div class="flex-none flex items-center gap-1.5">
-                        <Tooltip v-if="showComposerStopAction">
-                          <Button
-                            size="icon"
-                            variant="outline"
-                            class="h-8 w-8 text-destructive hover:text-destructive"
-                            data-oc-keyboard-tap="blur"
-                            :aria-label="t('chat.page.primary.stopRun')"
-                            :disabled="composerStopDisabled"
-                            @click="handleComposerStopAction"
-                          >
-                            <RiLoader4Line v-if="aborting" class="h-4 w-4 animate-spin" />
-                            <RiStopCircleLine v-else class="h-4 w-4" />
-                          </Button>
-                          <template #content>{{ t('chat.page.primary.stopRun') }}</template>
-                        </Tooltip>
+                        <IconButton
+                          v-if="showComposerStopAction"
+                          variant="outline"
+                          class="h-8 w-8 text-destructive hover:text-destructive"
+                          data-oc-keyboard-tap="blur"
+                          :tooltip="t('chat.page.primary.stopRun')"
+                          :is-mobile-pointer="ui.isMobilePointer"
+                          :aria-label="t('chat.page.primary.stopRun')"
+                          :disabled="composerStopDisabled"
+                          @click="handleComposerStopAction"
+                        >
+                          <RiLoader4Line v-if="aborting" class="h-4 w-4 animate-spin" />
+                          <RiStopCircleLine v-else class="h-4 w-4" />
+                        </IconButton>
 
-                        <Tooltip>
-                          <Button
-                            size="icon"
-                            class="h-8 w-8"
-                            data-oc-keyboard-tap="blur"
-                            :aria-label="t('chat.page.primary.sendMessage')"
-                            :disabled="composerPrimaryDisabled"
-                            @click="handleComposerPrimaryAction"
-                          >
-                            <RiLoader4Line v-if="sending" class="h-4 w-4 animate-spin" />
-                            <RiSendPlane2Line v-else class="h-4 w-4" />
-                          </Button>
-                          <template #content>{{ t('chat.page.primary.send') }}</template>
-                        </Tooltip>
+                        <IconButton
+                          class="h-8 w-8"
+                          data-oc-keyboard-tap="blur"
+                          :tooltip="t('chat.page.primary.send')"
+                          :is-mobile-pointer="ui.isMobilePointer"
+                          :aria-label="t('chat.page.primary.sendMessage')"
+                          :disabled="composerPrimaryDisabled"
+                          @click="handleComposerPrimaryAction"
+                        >
+                          <RiLoader4Line v-if="sending" class="h-4 w-4 animate-spin" />
+                          <RiSendPlane2Line v-else class="h-4 w-4" />
+                        </IconButton>
                       </div>
                     </div>
                   </div>

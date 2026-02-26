@@ -8,8 +8,8 @@ test('message item detail entry uses shared toolbar chip button stack', () => {
   const source = readFileSync(file, 'utf8')
 
   assert.ok(source.includes("import ToolbarChipButton from '@/components/ui/ToolbarChipButton.vue'"))
-  assert.ok(source.includes("import Tooltip from '@/components/ui/Tooltip.vue'"))
   assert.ok(source.includes('<ToolbarChipButton'))
+  assert.ok(source.includes(':tooltip="t(\'chat.messageItem.errorDetails\')"'))
   assert.ok(source.includes(':aria-expanded="errorDetailsOpen"'))
   assert.ok(source.includes('<Transition name="toolreveal">'))
   assert.ok(!source.includes('<details'))
@@ -21,7 +21,7 @@ test('session error copy-details action uses shared toolbar chip button', () => 
   const source = readFileSync(file, 'utf8')
 
   assert.ok(source.includes("import ToolbarChipButton from '@/components/ui/ToolbarChipButton.vue'"))
-  assert.ok(source.includes("import Tooltip from '@/components/ui/Tooltip.vue'"))
   assert.ok(source.includes('chat.sessionError.actions.copyDetails'))
   assert.ok(source.includes('<ToolbarChipButton'))
+  assert.ok(source.includes(':tooltip="t(\'chat.sessionError.actions.copyDetails\')"'))
 })

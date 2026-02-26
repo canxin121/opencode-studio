@@ -11,10 +11,10 @@ import {
 } from '@remixicon/vue'
 
 import Button from '@/components/ui/Button.vue'
+import IconButton from '@/components/ui/IconButton.vue'
 import Input from '@/components/ui/Input.vue'
 import OptionPicker from '@/components/ui/OptionPicker.vue'
 import type { PickerOption } from '@/components/ui/pickerOption.types'
-import Tooltip from '@/components/ui/Tooltip.vue'
 import VirtualList from '@/components/ui/VirtualList.vue'
 import CodeMirrorEditor from '@/components/CodeMirrorEditor.vue'
 import StringListEditor from '../StringListEditor.vue'
@@ -25,9 +25,9 @@ import { useOpencodeConfigPanelContext } from '../opencodeConfigContext'
 export default defineComponent({
   components: {
     Button,
+    IconButton,
     Input,
     OptionPicker,
-    Tooltip,
     VirtualList,
     CodeMirrorEditor,
     StringListEditor,
@@ -78,52 +78,45 @@ export default defineComponent({
         <div class="text-base font-semibold leading-snug">{{ t('settings.opencodeConfig.sections.mcp.title') }}</div>
       </div>
       <div class="flex items-center gap-2">
-        <Tooltip>
-          <Button
-            size="sm"
-            variant="outline"
-            class="gap-2"
-            :aria-label="t('settings.opencodeConfig.sections.mcp.actions.manageConnectionsAria')"
-            @click="openMcpConnections"
-          >
-            <RiShieldKeyholeLine class="h-4 w-4" />
-            <span>{{ t('settings.opencodeConfig.sections.mcp.actions.connections') }}</span>
-          </Button>
-          <template #content>{{ t('settings.opencodeConfig.sections.mcp.actions.connectionsHelp') }}</template>
-        </Tooltip>
-        <Tooltip>
-          <Button
-            size="icon"
-            variant="ghost"
-            class="h-8 w-8"
-            :title="t('settings.opencodeConfig.sections.common.resetSection')"
-            @click="resetSection('mcp')"
-          >
-            <RiRestartLine class="h-4 w-4" />
-          </Button>
-          <template #content>{{ t('settings.opencodeConfig.sections.common.resetSection') }}</template>
-        </Tooltip>
-        <Tooltip>
-          <Button
-            size="icon"
-            variant="outline"
-            class="h-8 w-8"
-            :title="
-              isSectionOpen('mcp')
-                ? t('settings.opencodeConfig.sections.common.collapse')
-                : t('settings.opencodeConfig.sections.common.expand')
-            "
-            @click="toggleSection('mcp')"
-          >
-            <RiArrowUpSLine v-if="isSectionOpen('mcp')" class="h-4 w-4" />
-            <RiArrowDownSLine v-else class="h-4 w-4" />
-          </Button>
-          <template #content>{{
+        <Button
+          size="sm"
+          variant="outline"
+          class="gap-2"
+          :tooltip="t('settings.opencodeConfig.sections.mcp.actions.connectionsHelp')"
+          :is-mobile-pointer="ui.isMobilePointer"
+          :aria-label="t('settings.opencodeConfig.sections.mcp.actions.manageConnectionsAria')"
+          @click="openMcpConnections"
+        >
+          <RiShieldKeyholeLine class="h-4 w-4" />
+          <span>{{ t('settings.opencodeConfig.sections.mcp.actions.connections') }}</span>
+        </Button>
+        <IconButton
+          variant="ghost"
+          class="h-8 w-8"
+          :title="t('settings.opencodeConfig.sections.common.resetSection')"
+          @click="resetSection('mcp')"
+          :tooltip="t('settings.opencodeConfig.sections.common.resetSection')"
+        >
+          <RiRestartLine class="h-4 w-4" />
+        </IconButton>
+        <IconButton
+          variant="outline"
+          class="h-8 w-8"
+          :title="
             isSectionOpen('mcp')
               ? t('settings.opencodeConfig.sections.common.collapse')
               : t('settings.opencodeConfig.sections.common.expand')
-          }}</template>
-        </Tooltip>
+          "
+          @click="toggleSection('mcp')"
+          :tooltip="
+            isSectionOpen('mcp')
+              ? t('settings.opencodeConfig.sections.common.collapse')
+              : t('settings.opencodeConfig.sections.common.expand')
+          "
+        >
+          <RiArrowUpSLine v-if="isSectionOpen('mcp')" class="h-4 w-4" />
+          <RiArrowDownSLine v-else class="h-4 w-4" />
+        </IconButton>
       </div>
     </div>
 
@@ -134,19 +127,16 @@ export default defineComponent({
           :placeholder="t('settings.opencodeConfig.sections.mcp.placeholders.serverName')"
           class="max-w-xs"
         />
-        <Tooltip>
-          <Button
-            size="icon"
-            variant="outline"
-            class="h-9 w-9"
-            :title="t('settings.opencodeConfig.sections.mcp.actions.addServer')"
-            :aria-label="t('settings.opencodeConfig.sections.mcp.actions.addServerAria')"
-            @click="addMcp"
-          >
-            <RiAddLine class="h-4 w-4" />
-          </Button>
-          <template #content>{{ t('settings.opencodeConfig.sections.mcp.actions.addServer') }}</template>
-        </Tooltip>
+        <IconButton
+          variant="outline"
+          class="h-9 w-9"
+          :title="t('settings.opencodeConfig.sections.mcp.actions.addServer')"
+          :aria-label="t('settings.opencodeConfig.sections.mcp.actions.addServerAria')"
+          @click="addMcp"
+          :tooltip="t('settings.opencodeConfig.sections.mcp.actions.addServer')"
+        >
+          <RiAddLine class="h-4 w-4" />
+        </IconButton>
       </div>
       <div v-if="mcpList.length === 0" class="text-xs text-muted-foreground">
         {{ t('settings.opencodeConfig.sections.mcp.empty') }}
@@ -154,19 +144,16 @@ export default defineComponent({
       <div v-for="[mcpName, mcp] in mcpList" :key="mcpName" class="rounded-md border border-border p-3 space-y-4">
         <div class="flex items-center justify-between">
           <div class="font-mono text-sm break-all">{{ mcpName }}</div>
-          <Tooltip>
-            <Button
-              size="icon"
-              variant="ghost-destructive"
-              class="h-8 w-8"
-              :title="t('common.remove')"
-              :aria-label="t('settings.opencodeConfig.sections.mcp.actions.removeServerAria')"
-              @click="removeEntry('mcp', mcpName)"
-            >
-              <RiDeleteBinLine class="h-4 w-4" />
-            </Button>
-            <template #content>{{ t('common.remove') }}</template>
-          </Tooltip>
+          <IconButton
+            variant="ghost-destructive"
+            class="h-8 w-8"
+            :title="t('common.remove')"
+            :aria-label="t('settings.opencodeConfig.sections.mcp.actions.removeServerAria')"
+            @click="removeEntry('mcp', mcpName)"
+            :tooltip="t('common.remove')"
+          >
+            <RiDeleteBinLine class="h-4 w-4" />
+          </IconButton>
         </div>
         <label class="grid gap-1">
           <span class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.mcp.fields.type') }}</span>
@@ -227,19 +214,16 @@ export default defineComponent({
               class="w-full rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs"
             />
             <div class="flex items-center gap-2">
-              <Tooltip>
-                <Button
-                  size="icon"
-                  variant="outline"
-                  class="h-8 w-8"
-                  :title="t('common.apply')"
-                  :aria-label="t('settings.opencodeConfig.sections.common.applyJson')"
-                  @click="applyJsonBuffer(`mcp:${mcpName}:env`)"
-                >
-                  <RiCheckLine class="h-4 w-4" />
-                </Button>
-                <template #content>{{ t('common.apply') }}</template>
-              </Tooltip>
+              <IconButton
+                variant="outline"
+                class="h-8 w-8"
+                :title="t('common.apply')"
+                :aria-label="t('settings.opencodeConfig.sections.common.applyJson')"
+                @click="applyJsonBuffer(`mcp:${mcpName}:env`)"
+                :tooltip="t('common.apply')"
+              >
+                <RiCheckLine class="h-4 w-4" />
+              </IconButton>
               <span
                 v-if="
                   ensureJsonBuffer(
@@ -302,19 +286,16 @@ export default defineComponent({
               class="w-full rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs"
             />
             <div class="flex items-center gap-2">
-              <Tooltip>
-                <Button
-                  size="icon"
-                  variant="outline"
-                  class="h-8 w-8"
-                  :title="t('common.apply')"
-                  :aria-label="t('settings.opencodeConfig.sections.common.applyJson')"
-                  @click="applyJsonBuffer(`mcp:${mcpName}:headers`)"
-                >
-                  <RiCheckLine class="h-4 w-4" />
-                </Button>
-                <template #content>{{ t('common.apply') }}</template>
-              </Tooltip>
+              <IconButton
+                variant="outline"
+                class="h-8 w-8"
+                :title="t('common.apply')"
+                :aria-label="t('settings.opencodeConfig.sections.common.applyJson')"
+                @click="applyJsonBuffer(`mcp:${mcpName}:headers`)"
+                :tooltip="t('common.apply')"
+              >
+                <RiCheckLine class="h-4 w-4" />
+              </IconButton>
               <span
                 v-if="
                   ensureJsonBuffer(

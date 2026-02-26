@@ -1,18 +1,39 @@
 import { nextTick, type Ref } from 'vue'
 
 type PickerKind = 'agent' | 'model' | 'variant'
+type AnchorLike =
+  | HTMLElement
+  | { triggerEl?: unknown; $el?: unknown; getBoundingClientRect?: () => DOMRect | undefined }
+  | null
 
 function clampNumber(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value))
+}
+
+function resolveAnchorRect(anchor: AnchorLike): DOMRect | null {
+  if (!anchor) return null
+  if (anchor instanceof HTMLElement) return anchor.getBoundingClientRect()
+  if (typeof anchor !== 'object') return null
+
+  const triggerEl = (anchor as { triggerEl?: unknown }).triggerEl
+  if (triggerEl instanceof HTMLElement) return triggerEl.getBoundingClientRect()
+
+  const rootEl = (anchor as { $el?: unknown }).$el
+  if (rootEl instanceof HTMLElement) return rootEl.getBoundingClientRect()
+
+  const getRect = (anchor as { getBoundingClientRect?: () => DOMRect | undefined }).getBoundingClientRect
+  if (typeof getRect === 'function') return getRect() || null
+
+  return null
 }
 
 export function useModelSelectionPickerUi(opts: {
   composerControlsRef: Ref<HTMLDivElement | null>
   composerPickerOpen: Ref<null | PickerKind>
   composerPickerStyle: Ref<Record<string, string>>
-  agentTriggerRef: Ref<HTMLElement | null>
-  modelTriggerRef: Ref<HTMLElement | null>
-  variantTriggerRef: Ref<HTMLElement | null>
+  agentTriggerRef: Ref<AnchorLike>
+  modelTriggerRef: Ref<AnchorLike>
+  variantTriggerRef: Ref<AnchorLike>
   modelPickerQuery: Ref<string>
   agentPickerQuery: Ref<string>
   onOpenComposerPicker: () => void
@@ -55,13 +76,13 @@ export function useModelSelectionPickerUi(opts: {
       const box = composerControlsRef.value
       const anchor =
         kind === 'agent' ? agentTriggerRef.value : kind === 'model' ? modelTriggerRef.value : variantTriggerRef.value
-      if (!box || !anchor) {
+      const anchorRect = resolveAnchorRect(anchor)
+      if (!box || !anchorRect) {
         composerPickerStyle.value = { left: '8px' }
         return
       }
 
       const boxRect = box.getBoundingClientRect()
-      const anchorRect = anchor.getBoundingClientRect()
 
       const padding = 8
       const boxWidth = Math.max(0, boxRect.width)

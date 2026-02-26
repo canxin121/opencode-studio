@@ -11,10 +11,9 @@ import {
 } from '@remixicon/vue'
 
 import MarkdownRenderer from '@/components/markdown/MarkdownRenderer.vue'
-import Button from '@/components/ui/Button.vue'
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
+import IconButton from '@/components/ui/IconButton.vue'
 import ToolbarChipButton from '@/components/ui/ToolbarChipButton.vue'
-import Tooltip from '@/components/ui/Tooltip.vue'
 import {
   buildAssistantErrorDetailsText,
   buildAssistantErrorMetaEntries,
@@ -171,15 +170,14 @@ const assistantHasError = () => role() === 'assistant' && Boolean(assistantError
               :anchor-to-cursor="false"
               @confirm="emit('fork', messageId())"
             >
-              <Button
+              <IconButton
                 variant="ghost"
-                size="icon"
                 class="h-7 w-7"
-                :title="t('chat.messageItem.fork.actionTitle')"
+                :tooltip="t('chat.messageItem.fork.actionTitle')"
                 :aria-label="t('chat.messageItem.fork.actionTitle')"
               >
                 <RiGitBranchLine class="h-4 w-4" />
-              </Button>
+              </IconButton>
             </ConfirmPopover>
 
             <ConfirmPopover
@@ -192,30 +190,28 @@ const assistantHasError = () => role() === 'assistant' && Boolean(assistantError
               :anchor-to-cursor="false"
               @confirm="emit('revert', messageId())"
             >
-              <Button
+              <IconButton
                 variant="ghost"
-                size="icon"
                 class="h-7 w-7"
-                :title="t('chat.messageItem.revert.actionTitle')"
+                :tooltip="t('chat.messageItem.revert.actionTitle')"
                 :aria-label="t('chat.messageItem.revert.actionTitle')"
                 :disabled="revertBusyMessageId === messageId()"
               >
                 <RiLoader4Line v-if="revertBusyMessageId === messageId()" class="h-4 w-4 animate-spin" />
                 <RiArrowGoBackLine v-else class="h-4 w-4" />
-              </Button>
+              </IconButton>
             </ConfirmPopover>
 
-            <Button
+            <IconButton
               variant="ghost"
-              size="icon"
               class="h-7 w-7"
-              :title="t('chat.messageItem.copy.actionTitle')"
+              :tooltip="t('chat.messageItem.copy.actionTitle')"
               :aria-label="t('chat.messageItem.copy.actionTitle')"
               @click="$emit('copy', message)"
             >
               <RiCheckLine v-if="copiedMessageId === messageId()" class="h-4 w-4 text-emerald-500" />
               <RiClipboardLine v-else class="h-4 w-4" />
-            </Button>
+            </IconButton>
           </div>
         </div>
 
@@ -259,20 +255,18 @@ const assistantHasError = () => role() === 'assistant' && Boolean(assistantError
           </div>
 
           <div v-if="hasAssistantErrorDetails" class="mt-2">
-            <Tooltip>
-              <ToolbarChipButton
-                :active="errorDetailsOpen"
-                :title="t('chat.messageItem.errorDetails')"
-                :aria-label="t('chat.messageItem.errorDetails')"
-                :aria-expanded="errorDetailsOpen"
-                class="h-6 sm:h-7 rounded-md border border-rose-300/60 bg-rose-100/40 px-2 text-[11px] font-medium text-rose-900 hover:bg-rose-100/65 dark:border-rose-500/40 dark:bg-rose-900/25 dark:text-rose-100 dark:hover:bg-rose-900/40"
-                @click="errorDetailsOpen = !errorDetailsOpen"
-              >
-                <RiInformationLine class="h-3.5 w-3.5" />
-                <span>{{ t('chat.messageItem.errorDetails') }}</span>
-              </ToolbarChipButton>
-              <template #content>{{ t('chat.messageItem.errorDetails') }}</template>
-            </Tooltip>
+            <ToolbarChipButton
+              :active="errorDetailsOpen"
+              :tooltip="t('chat.messageItem.errorDetails')"
+              :title="t('chat.messageItem.errorDetails')"
+              :aria-label="t('chat.messageItem.errorDetails')"
+              :aria-expanded="errorDetailsOpen"
+              class="h-6 sm:h-7 rounded-md border border-rose-300/60 bg-rose-100/40 px-2 text-[11px] font-medium text-rose-900 hover:bg-rose-100/65 dark:border-rose-500/40 dark:bg-rose-900/25 dark:text-rose-100 dark:hover:bg-rose-900/40"
+              @click="errorDetailsOpen = !errorDetailsOpen"
+            >
+              <RiInformationLine class="h-3.5 w-3.5" />
+              <span>{{ t('chat.messageItem.errorDetails') }}</span>
+            </ToolbarChipButton>
             <Transition name="toolreveal">
               <pre
                 v-show="errorDetailsOpen"

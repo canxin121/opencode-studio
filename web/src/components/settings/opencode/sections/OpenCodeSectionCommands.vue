@@ -14,6 +14,7 @@ import {
 } from '@remixicon/vue'
 
 import Button from '@/components/ui/Button.vue'
+import IconButton from '@/components/ui/IconButton.vue'
 import Input from '@/components/ui/Input.vue'
 import OptionPicker from '@/components/ui/OptionPicker.vue'
 import type { PickerOption } from '@/components/ui/pickerOption.types'
@@ -27,6 +28,7 @@ import { useOpencodeConfigPanelContext } from '../opencodeConfigContext'
 export default defineComponent({
   components: {
     Button,
+    IconButton,
     Input,
     OptionPicker,
     Tooltip,
@@ -87,39 +89,33 @@ export default defineComponent({
         </div>
       </div>
       <div class="flex items-center gap-2">
-        <Tooltip>
-          <Button
-            size="icon"
-            variant="ghost"
-            class="h-8 w-8"
-            :title="t('settings.opencodeConfig.sections.common.resetSection')"
-            @click="resetSection('commands')"
-          >
-            <RiRestartLine class="h-4 w-4" />
-          </Button>
-          <template #content>{{ t('settings.opencodeConfig.sections.common.resetSection') }}</template>
-        </Tooltip>
-        <Tooltip>
-          <Button
-            size="icon"
-            variant="outline"
-            class="h-8 w-8"
-            :title="
-              isSectionOpen('commands')
-                ? t('settings.opencodeConfig.sections.common.collapse')
-                : t('settings.opencodeConfig.sections.common.expand')
-            "
-            @click="toggleSection('commands')"
-          >
-            <RiArrowUpSLine v-if="isSectionOpen('commands')" class="h-4 w-4" />
-            <RiArrowDownSLine v-else class="h-4 w-4" />
-          </Button>
-          <template #content>{{
+        <IconButton
+          variant="ghost"
+          class="h-8 w-8"
+          :title="t('settings.opencodeConfig.sections.common.resetSection')"
+          @click="resetSection('commands')"
+          :tooltip="t('settings.opencodeConfig.sections.common.resetSection')"
+        >
+          <RiRestartLine class="h-4 w-4" />
+        </IconButton>
+        <IconButton
+          variant="outline"
+          class="h-8 w-8"
+          :title="
             isSectionOpen('commands')
               ? t('settings.opencodeConfig.sections.common.collapse')
               : t('settings.opencodeConfig.sections.common.expand')
-          }}</template>
-        </Tooltip>
+          "
+          @click="toggleSection('commands')"
+          :tooltip="
+            isSectionOpen('commands')
+              ? t('settings.opencodeConfig.sections.common.collapse')
+              : t('settings.opencodeConfig.sections.common.expand')
+          "
+        >
+          <RiArrowUpSLine v-if="isSectionOpen('commands')" class="h-4 w-4" />
+          <RiArrowDownSLine v-else class="h-4 w-4" />
+        </IconButton>
       </div>
     </div>
 
@@ -135,19 +131,16 @@ export default defineComponent({
           :placeholder="t('settings.opencodeConfig.sections.commands.placeholders.template')"
           class="min-w-[260px]"
         />
-        <Tooltip>
-          <Button
-            size="icon"
-            variant="outline"
-            class="h-9 w-9"
-            :title="t('settings.opencodeConfig.sections.commands.actions.addCommand')"
-            :aria-label="t('settings.opencodeConfig.sections.commands.actions.addCommandAria')"
-            @click="addCommand"
-          >
-            <RiAddLine class="h-4 w-4" />
-          </Button>
-          <template #content>{{ t('settings.opencodeConfig.sections.commands.actions.addCommand') }}</template>
-        </Tooltip>
+        <IconButton
+          variant="outline"
+          class="h-9 w-9"
+          :title="t('settings.opencodeConfig.sections.commands.actions.addCommand')"
+          :aria-label="t('settings.opencodeConfig.sections.commands.actions.addCommandAria')"
+          @click="addCommand"
+          :tooltip="t('settings.opencodeConfig.sections.commands.actions.addCommand')"
+        >
+          <RiAddLine class="h-4 w-4" />
+        </IconButton>
       </div>
       <Input
         v-model="commandFilter"
@@ -165,45 +158,36 @@ export default defineComponent({
         <div class="flex items-center justify-between">
           <div class="font-mono text-sm break-all">/{{ commandId }}</div>
           <div class="flex items-center gap-2">
-            <Tooltip>
-              <Button
-                size="icon"
-                variant="ghost"
-                class="h-8 w-8"
-                :title="t('settings.opencodeConfig.sections.commands.actions.copyJson')"
-                :aria-label="t('settings.opencodeConfig.sections.commands.actions.copyJson')"
-                @click="copyEntryJson('command', commandId)"
-              >
-                <RiClipboardLine class="h-4 w-4" />
-              </Button>
-              <template #content>{{ t('settings.opencodeConfig.sections.commands.actions.copyJson') }}</template>
-            </Tooltip>
-            <Tooltip>
-              <Button
-                size="icon"
-                variant="ghost"
-                class="h-8 w-8"
-                :title="t('settings.opencodeConfig.sections.commands.actions.importJson')"
-                :aria-label="t('settings.opencodeConfig.sections.commands.actions.importJson')"
-                @click="importEntryJson('command', commandId)"
-              >
-                <RiFileUploadLine class="h-4 w-4" />
-              </Button>
-              <template #content>{{ t('settings.opencodeConfig.sections.commands.actions.importJson') }}</template>
-            </Tooltip>
-            <Tooltip>
-              <Button
-                size="icon"
-                variant="ghost-destructive"
-                class="h-8 w-8"
-                :title="t('common.remove')"
-                :aria-label="t('settings.opencodeConfig.sections.commands.actions.removeCommandAria')"
-                @click="removeEntry('command', commandId)"
-              >
-                <RiDeleteBinLine class="h-4 w-4" />
-              </Button>
-              <template #content>{{ t('common.remove') }}</template>
-            </Tooltip>
+            <IconButton
+              variant="ghost"
+              class="h-8 w-8"
+              :title="t('settings.opencodeConfig.sections.commands.actions.copyJson')"
+              :aria-label="t('settings.opencodeConfig.sections.commands.actions.copyJson')"
+              @click="copyEntryJson('command', commandId)"
+              :tooltip="t('settings.opencodeConfig.sections.commands.actions.copyJson')"
+            >
+              <RiClipboardLine class="h-4 w-4" />
+            </IconButton>
+            <IconButton
+              variant="ghost"
+              class="h-8 w-8"
+              :title="t('settings.opencodeConfig.sections.commands.actions.importJson')"
+              :aria-label="t('settings.opencodeConfig.sections.commands.actions.importJson')"
+              @click="importEntryJson('command', commandId)"
+              :tooltip="t('settings.opencodeConfig.sections.commands.actions.importJson')"
+            >
+              <RiFileUploadLine class="h-4 w-4" />
+            </IconButton>
+            <IconButton
+              variant="ghost-destructive"
+              class="h-8 w-8"
+              :title="t('common.remove')"
+              :aria-label="t('settings.opencodeConfig.sections.commands.actions.removeCommandAria')"
+              @click="removeEntry('command', commandId)"
+              :tooltip="t('common.remove')"
+            >
+              <RiDeleteBinLine class="h-4 w-4" />
+            </IconButton>
           </div>
         </div>
         <div class="grid gap-4 lg:grid-cols-2">
@@ -213,36 +197,26 @@ export default defineComponent({
                 t('settings.opencodeConfig.sections.commands.fields.template')
               }}</span>
               <div class="flex items-center gap-2">
-                <Tooltip>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    class="h-8 w-8"
-                    :title="t('settings.opencodeConfig.sections.commands.actions.insertSkeleton')"
-                    :aria-label="t('settings.opencodeConfig.sections.commands.actions.insertSkeleton')"
-                    @click="insertCommandSnippet(commandId, PROMPT_SKELETON)"
-                  >
-                    <RiFileTextLine class="h-4 w-4" />
-                  </Button>
-                  <template #content>{{
-                    t('settings.opencodeConfig.sections.commands.actions.insertSkeleton')
-                  }}</template>
-                </Tooltip>
-                <Tooltip>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    class="h-8 w-8"
-                    :title="t('settings.opencodeConfig.sections.commands.actions.insertFrontmatter')"
-                    :aria-label="t('settings.opencodeConfig.sections.commands.actions.insertFrontmatter')"
-                    @click="insertCommandSnippet(commandId, FRONTMATTER_SKELETON)"
-                  >
-                    <RiFileTextLine class="h-4 w-4" />
-                  </Button>
-                  <template #content>{{
-                    t('settings.opencodeConfig.sections.commands.actions.insertFrontmatter')
-                  }}</template>
-                </Tooltip>
+                <IconButton
+                  variant="ghost"
+                  class="h-8 w-8"
+                  :title="t('settings.opencodeConfig.sections.commands.actions.insertSkeleton')"
+                  :aria-label="t('settings.opencodeConfig.sections.commands.actions.insertSkeleton')"
+                  @click="insertCommandSnippet(commandId, PROMPT_SKELETON)"
+                  :tooltip="t('settings.opencodeConfig.sections.commands.actions.insertSkeleton')"
+                >
+                  <RiFileTextLine class="h-4 w-4" />
+                </IconButton>
+                <IconButton
+                  variant="ghost"
+                  class="h-8 w-8"
+                  :title="t('settings.opencodeConfig.sections.commands.actions.insertFrontmatter')"
+                  :aria-label="t('settings.opencodeConfig.sections.commands.actions.insertFrontmatter')"
+                  @click="insertCommandSnippet(commandId, FRONTMATTER_SKELETON)"
+                  :tooltip="t('settings.opencodeConfig.sections.commands.actions.insertFrontmatter')"
+                >
+                  <RiFileTextLine class="h-4 w-4" />
+                </IconButton>
               </div>
             </div>
             <div class="h-40 rounded-md border border-input overflow-hidden">
