@@ -216,7 +216,7 @@ function handleDesktopOpenActionMenu(event: MouseEvent) {
           <span
             v-if="isParent"
             role="button"
-            class="h-3.5 w-3.5 flex-shrink-0 inline-flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:dark:bg-accent/40 hover:bg-primary/6 cursor-pointer active:scale-95 transition"
+            class="h-5 w-5 flex-shrink-0 inline-flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:dark:bg-accent/40 hover:bg-primary/6 cursor-pointer active:scale-95 transition"
             :aria-label="
               String(
                 t(
@@ -228,10 +228,10 @@ function handleDesktopOpenActionMenu(event: MouseEvent) {
             "
             @click.stop="emit('toggle-thread')"
           >
-            <RiArrowDownSLine v-if="isExpanded" class="h-3 w-3" />
-            <RiArrowRightSLine v-else class="h-3 w-3" />
+            <RiArrowDownSLine v-if="isExpanded" class="h-4 w-4" />
+            <RiArrowRightSLine v-else class="h-4 w-4" />
           </span>
-          <span v-else-if="showThreadPlaceholder" class="inline-flex h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
+          <span v-else-if="showThreadPlaceholder" class="inline-flex h-5 w-5 flex-shrink-0" aria-hidden="true" />
 
           <span
             v-if="statusDotClass"
