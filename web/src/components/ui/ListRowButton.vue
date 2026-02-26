@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { type HTMLAttributes, computed } from 'vue'
 
+import Button from '@/components/ui/Button.vue'
 import { cn } from '@/lib/utils'
 
 type ListRowSize = 'md' | 'sm'
@@ -26,11 +27,13 @@ const stateClass = computed(() => (props.active ? 'bg-secondary/60' : 'hover:bg-
 </script>
 
 <template>
-  <button
+  <Button
     type="button"
+    variant="ghost"
+    size="xs"
     :class="
       cn(
-        'w-full flex items-start gap-2 transition-colors disabled:pointer-events-none disabled:opacity-50',
+        'h-auto w-full items-start gap-2 text-left shadow-none',
         sizeClass,
         stateClass,
         props.destructive ? 'text-destructive' : '',
@@ -39,5 +42,5 @@ const stateClass = computed(() => (props.active ? 'bg-secondary/60' : 'hover:bg-
     "
   >
     <slot />
-  </button>
+  </Button>
 </template>
