@@ -423,21 +423,16 @@ fn parse_unified_diff_entries(
         *deletions = 0;
     };
 
-    let set_current_file = |next: Option<String>,
-                            current: &mut String,
-                            current_lines: &mut Vec<String>,
-                            additions: &mut usize,
-                            deletions: &mut usize,
-                            out: &mut BTreeMap<String, ParsedDiffEntry>| {
-        flush_current(
-            current,
-            current_lines,
-            additions,
-            deletions,
-            out,
-        );
-        *current = next.unwrap_or_default();
-    };
+    let set_current_file =
+        |next: Option<String>,
+         current: &mut String,
+         current_lines: &mut Vec<String>,
+         additions: &mut usize,
+         deletions: &mut usize,
+         out: &mut BTreeMap<String, ParsedDiffEntry>| {
+            flush_current(current, current_lines, additions, deletions, out);
+            *current = next.unwrap_or_default();
+        };
 
     for line in text.replace("\r\n", "\n").replace('\r', "\n").lines() {
         if line.starts_with("diff --git ") {
@@ -5655,6 +5650,10 @@ mod tests {
         assert_eq!(files, vec!["src/new.ts", "src/old.ts"]);
         assert_eq!(computed[1].additions, 2);
         assert_eq!(computed[1].deletions, 1);
-        assert!(computed[1].diff.contains("diff --git a/src/old.ts b/src/old.ts"));
+        assert!(
+            computed[1]
+                .diff
+                .contains("diff --git a/src/old.ts b/src/old.ts")
+        );
     }
 }
