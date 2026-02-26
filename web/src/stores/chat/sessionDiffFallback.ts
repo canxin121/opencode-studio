@@ -180,15 +180,15 @@ function parsePartFallbackDiff(part: unknown, directory?: string | null): Sessio
   const parsedStats = parseUnifiedDiffStats(diffText, directory)
   for (const stat of parsedStats) {
     const previous = byFile.get(stat.file)
-      byFile.set(stat.file, {
-        file: stat.file,
-        before: previous?.before || '',
-        after: previous?.after || '',
-        additions: stat.additions,
-        deletions: stat.deletions,
-        ...(previous?.diff || diffText ? { diff: previous?.diff || diffText } : {}),
-        ...(previous?.meta ? { meta: previous.meta } : {}),
-      })
+    byFile.set(stat.file, {
+      file: stat.file,
+      before: previous?.before || '',
+      after: previous?.after || '',
+      additions: stat.additions,
+      deletions: stat.deletions,
+      ...(previous?.diff || diffText ? { diff: previous?.diff || diffText } : {}),
+      ...(previous?.meta ? { meta: previous.meta } : {}),
+    })
   }
 
   return [...byFile.values()].sort((a, b) => a.file.localeCompare(b.file))

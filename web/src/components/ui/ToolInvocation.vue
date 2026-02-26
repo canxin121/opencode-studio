@@ -387,7 +387,17 @@ const activityDiffPreview = computed(() => {
       'filepath',
       'relativePath',
     ])
-    const before = firstRawString(rec, ['before', 'old', 'oldText', 'original', 'previous', 'prev', 'from', 'left', 'a'])
+    const before = firstRawString(rec, [
+      'before',
+      'old',
+      'oldText',
+      'original',
+      'previous',
+      'prev',
+      'from',
+      'left',
+      'a',
+    ])
     const after = firstRawString(rec, ['after', 'new', 'newText', 'modified', 'current', 'next', 'to', 'right', 'b'])
     const rowDiff = firstRawString(rec, ['diff', 'patch'])
     const rowMeta = readDiffMeta(rec)
