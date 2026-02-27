@@ -370,7 +370,10 @@ fn parse_metadata_file_entry(
             map,
             &["additions", "added", "insertions", "linesAdded", "add"],
         ),
-        deletions: first_count(map, &["deletions", "removed", "linesDeleted", "del"]),
+        deletions: first_count(
+            map,
+            &["deletions", "deleted", "removed", "linesDeleted", "del"],
+        ),
         diff: first_string(map, &["diff", "patch"]),
     })
 }
@@ -2690,6 +2693,7 @@ fn prune_tool_metadata_files(value: &mut serde_json::Value) {
                     "additions",
                     "deletions",
                     "added",
+                    "deleted",
                     "removed",
                 ],
             );
@@ -5412,6 +5416,66 @@ mod tests {
     }
 
     #[test]
+    fn sanitize_sse_tool_part_event_preserves_deleted_alias_in_files_metadata() {
+        let mut event = json!({
+            "type": "message.part.updated",
+            "properties": {
+                "sessionID": "ses_1",
+                "messageID": "msg_1",
+                "partID": "prt_patch",
+                "delta": "",
+                "part": {
+                    "id": "prt_patch",
+                    "type": "tool",
+                    "tool": "apply_patch",
+                    "state": {
+                        "status": "completed",
+                        "metadata": {
+                            "diff": "@@ -1 +1 @@\n-old\n+new\n",
+                            "files": [
+                                {
+                                    "path": "src/a.ts",
+                                    "before": "old\n",
+                                    "after": "new\n",
+                                    "added": 1,
+                                    "deleted": 1,
+                                    "noise": true
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        });
+
+        let filter = ActivityFilter {
+            allowed: ["tool"].into_iter().map(String::from).collect(),
+            tool_allowed: ["apply_patch"].into_iter().map(String::from).collect(),
+            tool_explicit: true,
+            show_reasoning: false,
+            show_justification: false,
+        };
+
+        let detail = ActivityDetailPolicy {
+            enabled: false,
+            expanded: HashSet::new(),
+            expanded_tools: HashSet::new(),
+        };
+
+        assert!(sanitize_sse_event_data(&mut event, &filter, &detail));
+
+        let file = event["properties"]["part"]["state"]["metadata"]["files"]
+            .as_array()
+            .and_then(|files| files.first())
+            .and_then(|entry| entry.as_object())
+            .expect("metadata file");
+
+        assert_eq!(file.get("added"), Some(&json!(1)));
+        assert_eq!(file.get("deleted"), Some(&json!(1)));
+        assert!(file.get("noise").is_none());
+    }
+
+    #[test]
     fn sanitize_sse_reasoning_event_respects_reasoning_toggle() {
         let mut event = json!({
             "type": "message.part.updated",
@@ -5993,8 +6057,8 @@ mod tests {
                                             "path": "/repo/src/from_result_metadata.ts",
                                             "before": "old\n",
                                             "after": "new\n",
-                                            "additions": 1,
-                                            "deletions": 1
+                                            "added": 1,
+                                            "deleted": 1
                                         }
                                     ]
                                 }
@@ -6034,6 +6098,8 @@ mod tests {
         );
         assert_eq!(computed[1].before, "old\n");
         assert_eq!(computed[1].after, "new\n");
+        assert_eq!(computed[1].additions, 1);
+        assert_eq!(computed[1].deletions, 1);
     }
 
     #[test]
