@@ -426,17 +426,17 @@ jobs:
         run: |
           set -euo pipefail
           CONFIG="tauri.conf.full.json"
-          EXTRA_BUNDLE_ARGS=()
+          EXTRA_BUNDLE_ARGS=""
 
           # MSI does not accept semver prerelease identifiers like "-beta.2".
           # Keep prerelease builds on NSIS to avoid WiX/version failures.
           if [[ "${RUNNER_OS}" == "Windows" && "${RELEASE_TAG}" == *-* ]]; then
-            EXTRA_BUNDLE_ARGS+=(--bundles nsis)
+            EXTRA_BUNDLE_ARGS="--bundles nsis"
           fi
 
           rm -rf "${CARGO_TARGET_DIR}/${{ matrix.target }}/release/bundle" "${CARGO_TARGET_DIR}/release/bundle" || true
 
-          if cargo tauri build --config "$CONFIG" --target ${{ matrix.target }} "${EXTRA_BUNDLE_ARGS[@]}"; then
+          if cargo tauri build --config "$CONFIG" --target ${{ matrix.target }} ${EXTRA_BUNDLE_ARGS}; then
             exit 0
           fi
 
@@ -464,15 +464,15 @@ jobs:
         run: |
           set -euo pipefail
           CONFIG="tauri.conf.full.json"
-          EXTRA_BUNDLE_ARGS=()
+          EXTRA_BUNDLE_ARGS=""
 
           if [[ "${RUNNER_OS}" == "Windows" && "${RELEASE_TAG}" == *-* ]]; then
-            EXTRA_BUNDLE_ARGS+=(--bundles nsis)
+            EXTRA_BUNDLE_ARGS="--bundles nsis"
           fi
 
           rm -rf "${CARGO_TARGET_DIR}/${{ matrix.target }}/release/bundle" "${CARGO_TARGET_DIR}/release/bundle" || true
 
-          if cargo tauri build --config "$CONFIG" --target ${{ matrix.target }} --features cef "${EXTRA_BUNDLE_ARGS[@]}"; then
+          if cargo tauri build --config "$CONFIG" --target ${{ matrix.target }} --features cef ${EXTRA_BUNDLE_ARGS}; then
             exit 0
           fi
 
