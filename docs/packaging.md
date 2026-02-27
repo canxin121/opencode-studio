@@ -119,18 +119,50 @@ Two workflows are relevant:
   - main (system WebView)
   - CEF runtime (suffix `-cef`, using Tauri's `feat/cef` branch)
 
+Architecture matrix used by `Package`:
+
+- Linux: `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`
+- Windows: `x86_64-pc-windows-msvc`
+- macOS: `aarch64-apple-darwin`, `x86_64-apple-darwin`
+
+`Package` artifact naming strategy:
+
+- Backend archive: `opencode-studio-<target>.tar.gz` (Unix) / `opencode-studio-<target>.zip` (Windows)
+- Desktop installers: `opencode-studio-desktop-<target><suffix>.<ext>`
+- Upload artifact names always include `<target>` so architecture is explicit.
+
 Mobile: use the hosted web UI (`web/dist`).
 
 For releases:
 
 - `Release` (`.github/workflows/release.yml`): on tag `v*` it creates a GitHub Release and attaches:
   - web dist archives
-  - backend binaries for macOS/Windows/Linux
+  - backend archives for macOS/Windows/Linux
   - desktop installers (full) as native artifacts when available:
     - Windows: `.msi` (and/or `.exe`)
     - macOS: `.dmg`
     - Linux: `.AppImage` + `.deb` + `.rpm`
     plus the same again using Tauri's CEF runtime (suffix `-cef`)
+
+Architecture matrix used by `Release`:
+
+- Linux: `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`
+- Windows: `x86_64-pc-windows-msvc`
+- macOS: `aarch64-apple-darwin`, `x86_64-apple-darwin`
+
+`Release` asset naming strategy:
+
+- Backend archives (service artifacts):
+  - `opencode-studio-backend-<target>-<tag>.tar.gz` (Unix)
+  - `opencode-studio-backend-<target>-<tag>.zip` (Windows)
+  - metadata: `opencode-studio-backend-<target>-<tag>.json`
+- Desktop installers (installer artifacts):
+  - `opencode-studio-desktop-<target><suffix>-<tag>.<ext>`
+
+Target/runner guard:
+
+- Packaging/release workflows run `python scripts/assert_native_target.py <target>` before build,
+  so matrix regressions are caught early in CI even if local machine cannot cross-compile every target.
 
 Service install scripts are not published as release assets. Use GitHub raw URLs instead, for example:
 

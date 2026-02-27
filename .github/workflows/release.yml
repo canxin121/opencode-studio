@@ -136,6 +136,8 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
           - os: macos-14
             target: aarch64-apple-darwin
           - os: macos-15-intel
@@ -149,18 +151,32 @@ jobs:
         with:
           ref: ${{ env.RELEASE_REF }}
 
-      - name: Build + upload Rust binary
-        uses: taiki-e/upload-rust-binary-action@v1
+      - name: Validate native target mapping
+        run: python scripts/assert_native_target.py ${{ matrix.target }}
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
         with:
-          bin: opencode-studio
-          manifest-path: server/Cargo.toml
-          target: ${{ matrix.target }}
-          ref: ${{ env.RELEASE_REF }}
-          locked: true
-          tar: unix
-          zip: windows
-          include: LICENSE,README.md
-          token: ${{ github.token }}
+          targets: ${{ matrix.target }}
+
+      - name: Cache Rust builds
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+          save-if: true
+          add-job-id-key: false
+
+      - name: Build backend release artifact
+        shell: bash
+        run: ./scripts/build-backend-release.sh --target ${{ matrix.target }} --tag ${{ env.RELEASE_TAG }} --out-dir release-assets
+
+      - name: Upload backend assets to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          files: |
+            release-assets/opencode-studio-backend-${{ matrix.target }}-${{ env.RELEASE_TAG }}.*
 
   desktop:
     needs: create-release
@@ -171,6 +187,11 @@ jobs:
           # Release ref (tag)
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
+            suffix: ""
+            flavor: full
+            cef: false
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
             suffix: ""
             flavor: full
             cef: false
@@ -193,6 +214,11 @@ jobs:
           # Extra builds using Tauri's CEF runtime (suffix -cef)
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
+            suffix: "-cef"
+            flavor: full
+            cef: true
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
             suffix: "-cef"
             flavor: full
             cef: true
@@ -232,7 +258,7 @@ jobs:
           path: src-tauri
 
       - name: Install Linux deps (Tauri)
-        if: matrix.os == 'ubuntu-latest'
+        if: startsWith(matrix.os, 'ubuntu-')
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -306,6 +332,9 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      - name: Validate native target mapping
+        run: python scripts/assert_native_target.py ${{ matrix.target }}
+
       - name: Add x86_64 macOS target (cef arm64)
         if: matrix.cef == true && matrix.target == 'aarch64-apple-darwin'
         run: rustup target add x86_64-apple-darwin
@@ -335,7 +364,7 @@ jobs:
           add-job-id-key: false
 
       - name: Cache CEF runtime (Linux)
-        if: matrix.cef == true && matrix.os == 'ubuntu-latest'
+        if: matrix.cef == true && startsWith(matrix.os, 'ubuntu-')
         uses: actions/cache@v5
         with:
           path: ~/.cache/tauri-cef
