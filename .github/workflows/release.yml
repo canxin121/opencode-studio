@@ -150,7 +150,6 @@ jobs:
           target: ${{ matrix.target }}
           ref: ${{ env.RELEASE_REF }}
           locked: true
-          checksum: sha256
           tar: unix
           zip: windows
           include: LICENSE,README.md
