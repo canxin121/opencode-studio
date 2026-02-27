@@ -82,7 +82,7 @@ function handleMobileOpenActionsClick(event: MouseEvent) {
       </span>
     </template>
 
-    <div class="flex min-w-0 flex-col justify-center">
+    <div class="flex min-w-0 flex-col justify-center gap-0.5">
       <span
         class="typography-ui-label truncate text-left leading-tight"
         :class="focused ? 'text-primary' : 'text-foreground'"
