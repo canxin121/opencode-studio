@@ -81,6 +81,9 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             ref: ${{ github.sha }}
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            ref: ${{ github.sha }}
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             ref: ${{ github.sha }}
@@ -94,6 +97,9 @@ jobs:
       - uses: actions/checkout@v6
         with:
           ref: ${{ matrix.ref }}
+
+      - name: Validate native target mapping
+        run: python scripts/assert_native_target.py ${{ matrix.target }}
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -166,6 +172,12 @@ jobs:
             tauri: main
             suffix: ""
             flavor: full
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            ref: ${{ github.sha }}
+            tauri: main
+            suffix: ""
+            flavor: full
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             ref: ${{ github.sha }}
@@ -189,8 +201,11 @@ jobs:
         with:
           ref: ${{ matrix.ref }}
 
+      - name: Validate native target mapping
+        run: python scripts/assert_native_target.py ${{ matrix.target }}
+
       - name: Install Linux deps (Tauri)
-        if: matrix.os == 'ubuntu-latest'
+        if: startsWith(matrix.os, 'ubuntu-')
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -404,6 +419,11 @@ jobs:
             tauri: cef
             suffix: "-cef"
             flavor: full
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            tauri: cef
+            suffix: "-cef"
+            flavor: full
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             tauri: cef
@@ -424,8 +444,11 @@ jobs:
         with:
           ref: ${{ github.sha }}
 
+      - name: Validate native target mapping
+        run: python scripts/assert_native_target.py ${{ matrix.target }}
+
       - name: Install Linux deps (Tauri)
-        if: matrix.os == 'ubuntu-latest'
+        if: startsWith(matrix.os, 'ubuntu-')
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -441,7 +464,7 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev || sudo apt-get install -y libwebkit2gtk-4.0-dev
 
       - name: Cache CEF runtime (Linux)
-        if: matrix.os == 'ubuntu-latest'
+        if: startsWith(matrix.os, 'ubuntu-')
         uses: actions/cache@v5
         with:
           path: ~/.cache/tauri-cef
