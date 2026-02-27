@@ -20,6 +20,8 @@ export type DesktopRuntimeInfo = {
   installerVersion: string
   installerTarget: string
   installerChannel: 'main' | 'cef'
+  installerType: string
+  installerManager: string
 }
 
 export type DesktopUpdateProgress = {
@@ -77,11 +79,15 @@ function asDesktopRuntimeInfo(value: unknown): DesktopRuntimeInfo | null {
   const installerTarget = typeof root.installerTarget === 'string' ? root.installerTarget.trim() : ''
   const rawChannel = typeof root.installerChannel === 'string' ? root.installerChannel.trim().toLowerCase() : 'main'
   const installerChannel: 'main' | 'cef' = rawChannel === 'cef' ? 'cef' : 'main'
-  if (!installerVersion || !installerTarget) return null
+  const installerType = typeof root.installerType === 'string' ? root.installerType.trim().toLowerCase() : ''
+  const installerManager = typeof root.installerManager === 'string' ? root.installerManager.trim().toLowerCase() : ''
+  if (!installerVersion || !installerTarget || !installerType || !installerManager) return null
   return {
     installerVersion,
     installerTarget,
     installerChannel,
+    installerType,
+    installerManager,
   }
 }
 

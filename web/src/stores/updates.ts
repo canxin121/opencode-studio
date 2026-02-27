@@ -18,6 +18,17 @@ import { useToastsStore } from '@/stores/toasts'
 type ReleaseAssetLink = {
   name: string
   url: string
+  installerType: string
+  manager: string
+}
+
+type InstallerSelectionError = {
+  code: string
+  message: string
+  expectedTarget?: string
+  expectedInstallerType?: string
+  expectedManager?: string
+  availableIdentities?: Array<{ installerType: string; manager: string }>
 }
 
 type ReleaseSummary = {
@@ -47,6 +58,7 @@ type InstallerUpdateStatus = {
   assets?: ReleaseAssetLink[]
   primaryAssetName?: string
   primaryAssetUrl?: string
+  selectionError?: InstallerSelectionError
 }
 
 type UpdateCheckResponse = {
@@ -383,6 +395,11 @@ export const useUpdatesStore = defineStore('updates', () => {
   }
 
   async function applyInstallerUpdate(): Promise<UpdateActionResult> {
+    if (!installer.value?.primaryAssetUrl) {
+      return actionResult(
+        installer.value?.selectionError?.message || 'No compatible installer candidate for current runtime',
+      )
+    }
     return await applyInstallerUpdateInternal(installer.value?.primaryAssetUrl || '', installer.value?.primaryAssetName)
   }
 
@@ -441,6 +458,12 @@ export const useUpdatesStore = defineStore('updates', () => {
       }
       if (runtime?.installerChannel) {
         query.set('installerChannel', runtime.installerChannel)
+      }
+      if (runtime?.installerType) {
+        query.set('installerType', runtime.installerType)
+      }
+      if (runtime?.installerManager) {
+        query.set('installerManager', runtime.installerManager)
       }
 
       const suffix = query.toString()
