@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
+import { toast, type ExternalToast } from 'vue-sonner'
 
 export type ToastKind = 'info' | 'success' | 'error'
 
@@ -17,19 +18,35 @@ export type Toast = {
   action?: ToastAction
 }
 
-function id() {
-  return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+const TOAST_DEDUPE_WINDOW_MS = 1500
+const TOAST_PENDING_LIMIT = 24
+
+type ToastId = string | number
+
+type PendingToast = {
+  kind: ToastKind
+  message: string
+  timeoutMs: number
+  action?: ToastAction
 }
 
-const TOAST_MAX_VISIBLE = 4
-const TOAST_DEDUPE_WINDOW_MS = 1500
+function normalizeMessage(message: string) {
+  return String(message || '').trim()
+}
+
+function normalizeTimeout(timeoutMs: number) {
+  if (!Number.isFinite(timeoutMs)) return 2500
+  if (timeoutMs <= 0) return Number.POSITIVE_INFINITY
+  return Math.max(200, timeoutMs)
+}
 
 export const useToastsStore = defineStore('toasts', () => {
-  const items = ref<Toast[]>([])
+  const hostReady = ref(false)
   const recentByKey = new Map<string, number>()
-  const dismissTimerById = new Map<string, number>()
+  const toastIdByKey = new Map<string, ToastId>()
+  const pendingBeforeHostReady = ref<PendingToast[]>([])
 
-  const visible = computed(() => items.value)
+  const isHostReady = computed(() => hostReady.value)
 
   function toastKey(kind: ToastKind, message: string): string {
     return `${kind}:${message.trim()}`
@@ -43,31 +60,30 @@ export const useToastsStore = defineStore('toasts', () => {
     }
   }
 
-  function armDismissTimer(toastId: string, timeoutMs: number) {
-    const prev = dismissTimerById.get(toastId)
-    if (typeof prev === 'number') {
-      window.clearTimeout(prev)
-      dismissTimerById.delete(toastId)
+  function showToast(kind: ToastKind, message: string, timeoutMs: number, action?: ToastAction): ToastId {
+    const options: ExternalToast = {
+      duration: normalizeTimeout(timeoutMs),
     }
-    if (timeoutMs <= 0) return
-    const timer = window.setTimeout(() => dismiss(toastId), timeoutMs)
-    dismissTimerById.set(toastId, timer)
+
+    if (action) {
+      options.action = {
+        label: action.label,
+        onClick: action.onClick,
+      }
+    }
+
+    if (kind === 'error') return toast.error(message, options)
+    if (kind === 'success') return toast.success(message, options)
+    return toast.info(message, options)
   }
 
   function push(kind: ToastKind, message: string, timeoutMs = 2500, action?: ToastAction) {
-    const now = Date.now()
-    const key = toastKey(kind, message)
-    trimRecent(now)
+    const normalizedMessage = normalizeMessage(message)
+    if (!normalizedMessage) return
 
-    const existing = items.value.find((toast) => toast.kind === kind && toast.message === message)
-    if (existing) {
-      recentByKey.set(key, now)
-      if (action) {
-        items.value = items.value.map((toast) => (toast.id === existing.id ? { ...toast, action } : toast))
-      }
-      armDismissTimer(existing.id, timeoutMs)
-      return
-    }
+    const now = Date.now()
+    const key = toastKey(kind, normalizedMessage)
+    trimRecent(now)
 
     const lastSeenAt = recentByKey.get(key) || 0
     if (now - lastSeenAt < TOAST_DEDUPE_WINDOW_MS) {
@@ -76,35 +92,41 @@ export const useToastsStore = defineStore('toasts', () => {
     }
 
     recentByKey.set(key, now)
-    const toast: Toast = {
-      id: id(),
-      kind,
-      message,
-      createdAt: now,
-      timeoutMs,
-      action,
+
+    if (!hostReady.value) {
+      const next = [...pendingBeforeHostReady.value, { kind, message: normalizedMessage, timeoutMs, action }]
+      pendingBeforeHostReady.value = next.slice(-TOAST_PENDING_LIMIT)
+      return
     }
-    const nextItems = [toast, ...items.value].slice(0, TOAST_MAX_VISIBLE)
-    for (const stale of items.value) {
-      if (nextItems.some((item) => item.id === stale.id)) continue
-      const timer = dismissTimerById.get(stale.id)
-      if (typeof timer === 'number') {
-        window.clearTimeout(timer)
-        dismissTimerById.delete(stale.id)
+
+    const prev = toastIdByKey.get(key)
+    if (prev) {
+      toast.dismiss(prev)
+    }
+
+    const toastId = showToast(kind, normalizedMessage, timeoutMs, action)
+    toastIdByKey.set(key, toastId)
+  }
+
+  function dismiss(toastId: ToastId) {
+    toast.dismiss(toastId)
+  }
+
+  function markHostReady() {
+    if (hostReady.value) return
+    hostReady.value = true
+    const queue = [...pendingBeforeHostReady.value]
+    pendingBeforeHostReady.value = []
+    for (const item of queue) {
+      const key = toastKey(item.kind, item.message)
+      const prev = toastIdByKey.get(key)
+      if (prev) {
+        toast.dismiss(prev)
       }
+      const toastId = showToast(item.kind, item.message, item.timeoutMs, item.action)
+      toastIdByKey.set(key, toastId)
     }
-    items.value = nextItems
-    armDismissTimer(toast.id, toast.timeoutMs)
   }
 
-  function dismiss(toastId: string) {
-    const timer = dismissTimerById.get(toastId)
-    if (typeof timer === 'number') {
-      window.clearTimeout(timer)
-      dismissTimerById.delete(toastId)
-    }
-    items.value = items.value.filter((t) => t.id !== toastId)
-  }
-
-  return { visible, push, dismiss }
+  return { isHostReady, push, dismiss, markHostReady }
 })

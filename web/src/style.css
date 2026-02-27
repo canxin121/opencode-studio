@@ -211,6 +211,64 @@
   ::-webkit-scrollbar-corner {
     background: transparent;
   }
+
+  [data-sonner-toaster].oc-toaster {
+    z-index: 2147483000 !important;
+    pointer-events: none;
+    padding-top: calc(var(--oc-safe-area-top, 0px) + 2px);
+    padding-right: calc(var(--oc-safe-area-right, 0px) + 2px);
+    padding-left: calc(var(--oc-safe-area-left, 0px) + 2px);
+  }
+
+  [data-sonner-toaster].oc-toaster [data-sonner-toast] {
+    pointer-events: auto;
+    border-radius: calc(var(--radius) + 4px);
+    border: 1px solid oklch(var(--border) / 0.72);
+    box-shadow:
+      0 14px 30px oklch(var(--foreground) / 0.12),
+      0 2px 8px oklch(var(--foreground) / 0.08);
+    background: color-mix(in oklch, oklch(var(--card)) 84%, oklch(var(--background)) 16%);
+    color: oklch(var(--card-foreground));
+    backdrop-filter: blur(6px);
+    min-height: 56px;
+  }
+
+  [data-sonner-toaster].oc-toaster [data-sonner-toast][data-type='success'] {
+    border-color: color-mix(in oklch, oklch(var(--primary)) 55%, oklch(var(--border)) 45%);
+    box-shadow:
+      0 14px 30px oklch(var(--primary) / 0.2),
+      0 2px 8px oklch(var(--foreground) / 0.08);
+  }
+
+  [data-sonner-toaster].oc-toaster [data-sonner-toast][data-type='error'] {
+    border-color: color-mix(in oklch, oklch(var(--destructive)) 55%, oklch(var(--border)) 45%);
+    box-shadow:
+      0 14px 30px oklch(var(--destructive) / 0.24),
+      0 2px 8px oklch(var(--foreground) / 0.08);
+  }
+
+  [data-sonner-toaster].oc-toaster [data-button='true'] {
+    border-radius: calc(var(--radius) - 1px);
+    border: 1px solid oklch(var(--border) / 0.75);
+    background: color-mix(in oklch, oklch(var(--background)) 68%, oklch(var(--muted)) 32%);
+    color: oklch(var(--foreground));
+  }
+
+  [data-sonner-toaster].oc-toaster [data-description] {
+    color: oklch(var(--muted-foreground));
+  }
+
+  @media (max-width: 768px) {
+    [data-sonner-toaster].oc-toaster {
+      width: min(100vw, 100%);
+      padding-left: calc(var(--oc-safe-area-left, 0px) + 10px);
+      padding-right: calc(var(--oc-safe-area-right, 0px) + 10px);
+    }
+
+    [data-sonner-toaster].oc-toaster [data-sonner-toast] {
+      width: min(100vw - 20px, 440px);
+    }
+  }
 }
 
 @theme {

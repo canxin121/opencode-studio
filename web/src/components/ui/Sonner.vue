@@ -4,10 +4,13 @@ import type { ToasterProps } from 'vue-sonner'
 
 withDefaults(defineProps<ToasterProps>(), {
   position: 'top-right',
+  offset: '14px',
+  mobileOffset: '10px',
   theme: 'system',
-  richColors: true,
+  richColors: false,
   closeButton: true,
   visibleToasts: 4,
+  duration: 2500,
 })
 </script>
 
