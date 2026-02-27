@@ -8,6 +8,23 @@ Param(
 
 $ErrorActionPreference = "Stop"
 
+function Require-Command([string]$Name, [string]$Hint = "") {
+  if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
+    if ($Hint) {
+      throw "Missing dependency: $Name. $Hint"
+    }
+    throw "Missing dependency: $Name"
+  }
+}
+
+$principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+  throw "This installer must run in an elevated PowerShell (Run as Administrator)."
+}
+
+Require-Command "sc.exe" "Windows service management requires sc.exe."
+Require-Command "opencode" "Install OpenCode first (for example: scoop install opencode, choco install opencode, or npm i -g opencode-ai@latest)."
+
 function Get-TargetTriple {
   # GitHub Actions + release assets currently publish x64 Windows builds.
   return "x86_64-pc-windows-msvc"
@@ -40,12 +57,12 @@ $TagName = $Release.tag_name
 if (-not $TagName) { throw "Failed to determine release tag_name" }
 
 if (-not $InstallDir) {
-  $InstallDir = Join-Path $env:LOCALAPPDATA "OpenCodeStudio"
+  $InstallDir = Join-Path $HOME "opencode-studio"
 }
 
 $BinDir = Join-Path $InstallDir "bin"
-$UiDir = Join-Path $InstallDir "ui\dist"
-$ConfigFile = Join-Path $BinDir "opencode-studio.toml"
+$UiDir = Join-Path $InstallDir "dist"
+$ConfigFile = Join-Path $InstallDir "opencode-studio.toml"
 New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
 
 $Tmp = New-Item -ItemType Directory -Force -Path (Join-Path $env:TEMP ("ocstudio-" + [Guid]::NewGuid().ToString()))
@@ -66,11 +83,14 @@ try {
     $WebUrl = Find-AssetUrl $Release $WebAsset
     $WebZip = Join-Path $Tmp $WebAsset
     Download $WebUrl $WebZip
-    if (Test-Path (Join-Path $InstallDir "ui")) {
-      Remove-Item -Recurse -Force (Join-Path $InstallDir "ui")
+    if (Test-Path $UiDir) {
+      Remove-Item -Recurse -Force $UiDir
     }
-    New-Item -ItemType Directory -Force -Path (Join-Path $InstallDir "ui") | Out-Null
-    Expand-Archive -Force -Path $WebZip -DestinationPath (Join-Path $InstallDir "ui")
+    $LegacyUiDir = Join-Path $InstallDir "ui"
+    if (Test-Path $LegacyUiDir) {
+      Remove-Item -Recurse -Force $LegacyUiDir
+    }
+    Expand-Archive -Force -Path $WebZip -DestinationPath $InstallDir
     if (-not (Test-Path (Join-Path $UiDir "index.html"))) {
       throw "Unexpected web archive layout; expected dist/index.html"
     }
@@ -97,9 +117,7 @@ try {
   }
   $TomlLines | Set-Content -Encoding UTF8 -Path $ConfigFile
 
-  $Args = @("--config", $ConfigFile)
-
-  $BinPathWithArgs = '"' + $BinPath + '" ' + ($Args -join ' ')
+  $BinPathWithArgs = '"' + $BinPath + '" --config "' + $ConfigFile + '"'
 
   Write-Host "Creating Windows service $ServiceName"
   & sc.exe stop $ServiceName | Out-Null 2>$null

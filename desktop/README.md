@@ -1,5 +1,7 @@
 ## Desktop packaging (Tauri)
 
+English | [简体中文](README.zh-CN.md)
+
 This folder contains the Tauri-based desktop packaging for OpenCode Studio.
 
 We intentionally keep it separate from the Rust workspace at the repo root so

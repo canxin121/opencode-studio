@@ -1,5 +1,7 @@
 # Contributing
 
+English | [简体中文](CONTRIBUTING.zh-CN.md)
+
 Thanks for your interest in improving OpenCode Studio.
 
 ## Local development

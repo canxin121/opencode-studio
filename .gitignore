@@ -1,4 +1,5 @@
 /target
+/release-assets/
 .VSCodeCounter
 .ruff_cache
-.workbench
+/.workbench/

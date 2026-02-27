@@ -20,8 +20,8 @@ Usage:
 
 Notes:
   - This installs the Rust server binary (opencode-studio) from GitHub Releases.
-  - OpenCode itself (the `opencode` CLI) must be available, or you must configure
-    OPENCODE_PORT/OPENCODE_HOST to an already-running OpenCode instance.
+  - OpenCode itself (the `opencode` CLI) must already be installed and on PATH.
+  - Default install dir: ~/opencode-studio (bin/, dist/, opencode-studio.toml).
 EOF
 }
 
@@ -40,6 +40,11 @@ done
 need() { command -v "$1" >/dev/null 2>&1 || { echo "Missing dependency: $1" >&2; exit 1; }; }
 need curl
 need tar
+if ! command -v opencode >/dev/null 2>&1; then
+  echo "Missing dependency: opencode" >&2
+  echo "Install OpenCode first, for example: curl -fsSL https://opencode.ai/install | bash" >&2
+  exit 1
+fi
 
 OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
 ARCH="$(uname -m)"
@@ -60,13 +65,13 @@ target_triple() {
 TARGET="$(target_triple)"
 
 if [[ -z "$INSTALL_DIR" ]]; then
-  INSTALL_DIR="$HOME/.local/share/opencode-studio"
+  INSTALL_DIR="$HOME/opencode-studio"
 fi
 
-BIN_DIR="$HOME/.local/bin"
+BIN_DIR="$INSTALL_DIR/bin"
 BIN_PATH="$BIN_DIR/opencode-studio"
-UI_DIR="$INSTALL_DIR/ui/dist"
-CONFIG_FILE="$BIN_DIR/opencode-studio.toml"
+UI_DIR="$INSTALL_DIR/dist"
+CONFIG_FILE="$INSTALL_DIR/opencode-studio.toml"
 
 mkdir -p "$INSTALL_DIR" "$BIN_DIR"
 
@@ -150,9 +155,9 @@ if [[ "$WITH_FRONTEND" == "1" ]]; then
   WEB_ASSET="opencode-studio-web-dist-${TAG_NAME}.tar.gz"
   WEB_TAR="$TMP_DIR/$WEB_ASSET"
   download_asset_by_name "$RELEASE_JSON" "$WEB_ASSET" "$WEB_TAR"
-  rm -rf "$UI_DIR"
-  mkdir -p "$INSTALL_DIR/ui"
-  tar -xzf "$WEB_TAR" -C "$INSTALL_DIR/ui"
+  rm -rf "$UI_DIR" "$INSTALL_DIR/ui"
+  mkdir -p "$INSTALL_DIR"
+  tar -xzf "$WEB_TAR" -C "$INSTALL_DIR"
   if [[ ! -f "$UI_DIR/index.html" ]]; then
     echo "Unexpected web archive layout; expected dist/index.html" >&2
     exit 1
@@ -191,7 +196,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=$BIN_PATH
+ExecStart="$BIN_PATH" --config "$CONFIG_FILE"
 Restart=on-failure
 RestartSec=2
 
@@ -212,7 +217,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=$BIN_PATH
+ExecStart="$BIN_PATH" --config "$CONFIG_FILE"
 Restart=on-failure
 RestartSec=2
 

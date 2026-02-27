@@ -10,6 +10,8 @@ OpenCode Studio 是一个面向 OpenCode 的本地优先 Web UI。它运行一�
   <img src="web/public/apple-touch-icon-180x180.png" width="128" alt="OpenCode Studio 桌面版图标" />
 </p>
 
+## 页面展示
+
 <details>
 <summary><strong>界面截图</strong>（点击展开）</summary>
 
@@ -23,203 +25,181 @@ OpenCode Studio 是一个面向 OpenCode 的本地优先 Web UI。它运行一�
 
 </details>
 
-## 你会得到什么
+- 聊天页面：会话管理、消息流、工具调用可视化。
+- 文件页面：工作区浏览、编辑、搜索/替换。
+- 终端页面：集成 PTY 终端，支持常见命令操作。
+- Git 页面：状态查看、差异对比、分支/worktree 辅助。
+- 设置页面：OpenCode 配置层与 Studio 本地配置集中管理。
 
-- 事件流代理与过滤控制（心跳、`Last-Event-ID` 恢复、可配置 activity/tool 过滤、payload 精简）
-- 聊天界面与会话侧边栏（session/message 列表支持 `offset`/`limit` 分页）
-- 文件浏览 + 搜索/替换（目录列表支持 `offset`/`limit` 分页；可选遵循 `.gitignore`；范围限制在工作区内）
-- Git UI 能力（status/diff/分支/worktree 等）
-- 内置终端会话（PTY；若系统可用则可选 tmux 后端）
-- 设置页：编辑 OpenCode 多层配置 + Studio 本地设置
-- Studio 侧插件运行时（从 `opencode.json` 发现插件、加载 `studio.manifest.json`、调用 action、事件流订阅）
+## 功能介绍
 
-## 技术栈
+- 多面板协同：聊天、文件、终端、Git 在一个工作区内联动。
+- OpenCode 事件流桥接：支持实时流式消息和会话恢复。
+- 配置可视化：可在设置页读取与编辑多层配置。
+- 插件交互入口：可加载插件 UI 描述并触发插件动作。
 
-- 后端：Rust 2024、Axum、Tokio、tower-http
-- 前端：Vue 3 + TypeScript、Vite、Tailwind CSS 4、Pinia、Monaco Editor、xterm.js、PWA（Service Worker）
+## 特性介绍
 
-## 目录结构
+- 性能优化链路：在代理层进行事件裁剪、结果精简与传输减负，降低长会话卡顿。
+- 分页机制：会话列表、消息列表、目录列表等核心数据走 `offset`/`limit` 分页，减少首屏压力。
+- 懒加载策略：较重内容按需请求与展开，避免一次性加载全部上下文。
+- 独有插件 UI 系统：从 `opencode.json` 发现插件，加载 `studio.manifest.json` 并在 UI 中提供可操作入口。
+- 本地优先与可运维：既能桌面安装即开即用，也能以系统服务稳定常驻。
 
-- `server/`：Rust 后端（HTTP API + OpenCode bridge + 静态资源托管）
-- `web/`：Vue 前端（构建产物输出到 `web/dist`）
+## 前置依赖
 
-## 运行前准备
+- 所有平台都需要提前安装 OpenCode CLI，再安装/运行 Studio 服务。
+- Windows 服务安装依赖 `sc.exe`（Windows 标准组件内置），并需使用管理员权限 PowerShell。
+- Linux 想使用系统服务管理时，需要 `systemctl`。
 
-- Rust 工具链（stable）
-- Bun（推荐，CI 使用 Bun）与 Node.js（CI 使用 Node 20+）
-- OpenCode 服务满足其一：
-  - `opencode` 可在 `PATH` 中找到（Studio 可自动拉起 `opencode serve`），或
-  - 你已经单独运行了 OpenCode 服务，并能提供 host/port
+先安装 OpenCode（任选一种方式）：
 
-## 一行安装（含服务与自启动初始化）
+```bash
+# macOS / Linux（官方安装脚本）
+curl -fsSL https://opencode.ai/install | bash
 
-安装脚本支持两种模式：
+# macOS / Linux（Homebrew）
+brew install anomalyco/tap/opencode
+```
 
-- `desktop`：安装后端 + 内置 Web UI，并配置自启动服务（默认）。
-- `headless`：仅安装后端（仅 API/服务），并配置自启动服务。
+```powershell
+# Windows（Scoop）
+scoop install opencode
+
+# Windows（Chocolatey）
+choco install opencode
+
+# 任意平台（已安装 Node.js）
+npm i -g opencode-ai@latest
+```
+
+安装 Studio 服务前建议先确认：
+
+```bash
+opencode --version
+```
+
+## 快速安装
+
+你可以按场景选择两种安装方式：
+
+### 方式一：安装包安装（Desktop App）
+
+适合本机桌面使用（开箱即用）。
+
+1. 打开 [GitHub Releases 页面](https://github.com/canxin121/opencode-studio/releases/latest)
+2. 按系统下载安装包：
+   - Windows：`.msi` / `.exe`
+   - macOS：`.dmg`
+   - Linux：`.AppImage` / `.deb` / `.rpm`
+3. 安装并启动应用后，内置后端 sidecar 会自动启动。
+
+### 方式二：服务安装（Service）
+
+适合服务器、开发机常驻、或需要用 `systemd` / `sc` 统一管理的场景。
 
 Unix（Linux/macOS）：
 
 ```bash
-# desktop 模式（默认）
-curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install.sh | bash -s -- --desktop
+# 服务安装（含内置 UI）
+curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install-service.sh | bash -s -- --with-frontend
 
-# headless 模式（仅 API）
-curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install.sh | bash -s -- --headless
+# 服务安装（仅 API，不带内置 UI）
+curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install-service.sh | bash
 ```
 
-Windows PowerShell（请用管理员权限运行）：
+Windows PowerShell（管理员权限）：
 
 ```powershell
-# desktop 模式（默认）
-iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install.ps1) } -Variant desktop"
+# 服务安装（含内置 UI）
+iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install-service.ps1) } -WithFrontend"
 
-# headless 模式（仅 API）
-iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install.ps1) } -Variant headless"
+# 服务安装（仅 API，不带内置 UI）
+iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install-service.ps1) }"
 ```
 
-各平台初始化行为：
+## 安装后：如何在浏览器访问
 
-- Linux：通过 systemd 创建并启用 `opencode-studio.service`（`--mode user|system`，默认 `user`）。
-- macOS：写入并加载 `~/Library/LaunchAgents/cn.cxits.opencode-studio.plist`。
-- Windows：通过 `sc.exe` 创建并启动自动启动服务 `OpenCodeStudio`。
+- 服务默认地址是 `http://127.0.0.1:3000`（由配置里的 `host` + `port` 决定）。
+- 如果是“含内置 UI”安装，直接打开 `http://127.0.0.1:3000`。
+- 如果是“仅 API”安装，可访问 `http://127.0.0.1:3000/health` 确认服务是否正常。
+- 仅 API 模式想启用网页 UI，可在 `opencode-studio.toml` 中设置 `ui_dir` 指向有效的 `dist` 目录，或重新用 `--with-frontend` / `-WithFrontend` 安装。
+- 需要远程机器访问时，把 `host` 改为 `0.0.0.0`，重启服务后通过 `http://<服务器IP>:3000` 访问。
 
-生成的配置/状态文件：
+## 安装后：如何调整配置文件
 
-- Unix：`~/.local/bin/opencode-studio.toml`。
-- Windows：`%LOCALAPPDATA%\\OpenCodeStudio\\bin\\opencode-studio.toml`。
+### 服务安装
 
-常用安装参数：
+安装完成后会生成 `opencode-studio.toml`：
 
-- Unix：`--desktop` / `--headless`、`--version`、`--repo`、`--install-dir`、`--host`、`--port`、`--mode`。
-- Windows：`-Variant desktop|headless`、`-Version`、`-Repo`、`-InstallDir`、`-Host`、`-Port`、`-ServiceName`。
+- Unix：`~/opencode-studio/opencode-studio.toml`
+- Windows：`%USERPROFILE%\\opencode-studio\\opencode-studio.toml`
 
-## 快速开始（本地运行）
+可直接修改 `[backend]` 下的关键项，例如监听地址、端口、UI 路径、OpenCode 连接方式：
 
-1) 安装 Web 依赖
+```toml
+[backend]
+host = "127.0.0.1"
+port = 3000
+skip_opencode_start = false
+opencode_host = "127.0.0.1"
+# opencode_port = 16000
+# ui_dir = "/absolute/path/to/web/dist"
+```
+
+修改后重启服务生效：
+
+- Linux 用户服务：`systemctl --user restart opencode-studio`
+- Linux 系统服务：`sudo systemctl restart opencode-studio`
+- Windows 服务：`sc stop OpenCodeStudio` 后执行 `sc start OpenCodeStudio`
+
+### 安装包安装
+
+安装包模式下，配置文件位于应用数据目录；可通过托盘菜单直接打开配置文件（Open Config）进行修改。
+
+## 安装后：如何通过 systemd / sc 管理服务
+
+以下命令适用于“服务安装”模式。
+
+Linux（默认 user 模式）：
 
 ```bash
-bun install --cwd web
+systemctl --user status opencode-studio
+systemctl --user start opencode-studio
+systemctl --user stop opencode-studio
+systemctl --user restart opencode-studio
 ```
 
-2) 构建前端资源
+Linux（`--mode system` 安装）：
 
 ```bash
-bun run --cwd web build
+sudo systemctl status opencode-studio
+sudo systemctl start opencode-studio
+sudo systemctl stop opencode-studio
+sudo systemctl restart opencode-studio
 ```
 
-3) 运行 Studio 服务端（托管 UI + `/api/*`）
+Windows（默认服务名 `OpenCodeStudio`）：
 
-```bash
-cargo run -p opencode-studio -- \
-  --ui-dir web/dist
+```powershell
+sc query OpenCodeStudio
+sc start OpenCodeStudio
+sc stop OpenCodeStudio
 ```
 
-浏览器打开 `http://127.0.0.1:3000`。
+## 技术细节与参数
 
-说明：
+技术栈、目录结构、CLI/环境变量参数、安装脚本参数、连接外部 OpenCode、开发命令等统一放在：
 
-- CI 使用冻结安装（`bun install --cwd web --frozen-lockfile`）。如果 Bun 提示 lockfile 会发生变化，请先不带 `--frozen-lockfile` 重新安装以更新 `web/bun.lock`。
-- `--ui-dir`（或 `OPENCODE_STUDIO_UI_DIR`）为可选项。设置后可托管内置 Web UI；不设置时为仅 API/headless 模式。
-- 启动时 Studio 会确保 OpenCode 可用；若未提供 `--opencode-port` / `OPENCODE_PORT`，会尝试自动拉起 `opencode serve`。
+- `docs/technical-reference.md`
 
-## 连接到已运行的 OpenCode 服务
+补充文档：
 
-如果你单独运行 OpenCode，可通过 port（可选 host）连接：
-
-```bash
-cargo run -p opencode-studio -- \
-  --opencode-port 16000 \
-  --opencode-host 127.0.0.1 \
-  --ui-dir web/dist
-```
-
-对应的环境变量：
-
-- `OPENCODE_PORT=16000`
-- `OPENCODE_HOST=127.0.0.1`
-
-## 配置
-
-### CLI 参数 / 环境变量
-
-服务端基础配置：
-
-| 名称 | 默认值 | 说明 |
-| --- | --- | --- |
-| `OPENCODE_STUDIO_CONFIG` / `--config` | `<exe-dir>/opencode-studio.toml` | 运行时 TOML 配置路径；未显式指定时会尝试从可执行文件目录自动加载 |
-| `OPENCODE_STUDIO_HOST` / `--host` | `127.0.0.1` | 监听地址 |
-| `OPENCODE_STUDIO_PORT` / `--port` | `3000` | 监听端口 |
-| `OPENCODE_STUDIO_UI_DIR` / `--ui-dir` |（未设置）| 前端构建目录（Vite `dist/`）；不设置时仅提供 API/headless |
-
-OpenCode 连接配置：
-
-| 名称 | 默认值 | 说明 |
-| --- | --- | --- |
-| `OPENCODE_PORT` / `--opencode-port` |（未设置）| 指定后，Studio 连接到该 OpenCode 实例 |
-| `OPENCODE_HOST` / `--opencode-host` | `127.0.0.1` | 与 `OPENCODE_PORT` 搭配使用 |
-| `OPENCODE_STUDIO_SKIP_OPENCODE_START` / `--skip-opencode-start` | `false` | 不自动拉起 `opencode serve` |
-| `OPENCODE_STUDIO_OPENCODE_LOG_LEVEL` / `--opencode-log-level` |（未设置）| 传递给托管的 `opencode serve` 的日志级别 |
-| `OPENCODE_STUDIO_OPENCODE_LOGS` |（未设置）| 设为 `true/1/yes/on` 时转发托管 OpenCode 的 stdout/stderr |
-
-UI 登录（可选）：
-
-| 名称 | 默认值 | 说明 |
-| --- | --- | --- |
-| `OPENCODE_STUDIO_UI_PASSWORD` / `--ui-password` |（关闭）| 启用基于 Cookie 的 UI 登录 |
-
-Studio 数据目录：
-
-| 名称 | 默认值 | 说明 |
-| --- | --- | --- |
-| `OPENCODE_STUDIO_DATA_DIR` | `~/.config/opencode-studio` | 存放 `settings.json`、终端会话注册表等 |
-
-高级配置（节选）：
-
-| 名称 | 默认值 | 说明 |
-| --- | --- | --- |
-| `OPENCODE_CONFIG` |（未设置）| 自定义 OpenCode 配置文件路径（作为额外配置层） |
-| `OPENCODE_STUDIO_GIT_TIMEOUT_MS` | `60000` | Git 操作超时时间 |
-| `OPENCODE_STUDIO_TERMINAL_IDLE_TIMEOUT_SECS` |（未设置）| 设置为正整数时，自动清理空闲终端 |
-
-### 配置文件
-
-- 运行时配置（后端/desktop/服务安装统一）：`opencode-studio.toml`。
-  - 默认从当前可执行文件所在目录自动发现。
-  - Desktop 会写入应用配置目录，并在启动 sidecar 时传 `--config <path>`。
-- Studio 设置（项目列表、部分 UI 相关配置）：`~/.config/opencode-studio/settings.json`（可用 `OPENCODE_STUDIO_DATA_DIR` 修改基目录）。
-- OpenCode 多层配置（可在 Studio 设置页读取/编辑）：
-  - 用户层：`~/.config/opencode/opencode.json`
-  - 项目层：`opencode.json` / `opencode.jsonc`（或 `.opencode/` 目录下）
-  - 自定义层：`OPENCODE_CONFIG`（可选）
-
-## 开发相关命令
-
-Web：
-
-```bash
-bun run --cwd web fmt
-bun run --cwd web test
-bun run --cwd web build:rust-debug
-```
-
-Rust：
-
-```bash
-cargo test -q --manifest-path server/Cargo.toml
-```
-
-提示：想获得更好的调试体验，可用 `build:rust-debug` 构建 UI，并把服务端的 `--ui-dir` 指向 `web/dist-rust-debug`。
-
-## 安全提示
-
-本服务提供了较强的本地能力（在工作区范围内读写文件、执行 git 操作、启动终端等）。推荐仅在 localhost 使用；如必须对外提供访问，请启用 `OPENCODE_STUDIO_UI_PASSWORD` 并放在可信的反向代理之后。
-
-更完整的威胁模型与上报建议见 `SECURITY.md`。
-
-## 参与贡献
-
-提交 PR 前请先阅读 `CONTRIBUTING.md`。
+- `docs/service.md`（服务安装/卸载细节）
+- `docs/packaging.md`（安装包与构建产物说明）
+- `docs/opencode-studio.toml.example`（配置模板）
+- `SECURITY.md`（安全说明）
+- `CONTRIBUTING.md`（贡献指南）
 
 ## License
 

@@ -23,5 +23,4 @@ fi
 
 echo "Uninstall finished (service units removed)."
 echo "If you also want to remove binaries/data:"
-echo "  rm -f $HOME/.local/bin/opencode-studio"
-echo "  rm -rf $HOME/.local/share/opencode-studio"
+echo "  rm -rf $HOME/opencode-studio"

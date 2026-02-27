@@ -10,6 +10,8 @@ OpenCode Studio is a local-first web UI for OpenCode. It runs a Rust (Axum) serv
   <img src="web/public/apple-touch-icon-180x180.png" width="128" alt="OpenCode Studio desktop app icon" />
 </p>
 
+## UI Preview
+
 <details>
 <summary><strong>Screenshots</strong> (click to expand)</summary>
 
@@ -23,203 +25,181 @@ OpenCode Studio is a local-first web UI for OpenCode. It runs a Rust (Axum) serv
 
 </details>
 
-## What you get
+- Chat view: sessions, streaming messages, and tool traces.
+- Files view: workspace browsing, editing, and search/replace.
+- Terminal view: integrated PTY session for command workflows.
+- Git view: status, diff, branch/worktree helpers.
+- Settings view: OpenCode config layers + Studio-local settings.
 
-- Event stream proxy with filtering/control (heartbeats, `Last-Event-ID` resume, configurable activity/tool filters, payload pruning)
-- Chat + session sidebar (sessions + message history use `offset`/`limit` pagination)
-- File explorer + search/replace (paged directory listing via `offset`/`limit`; optional `.gitignore` filtering)
-- Git UI helpers (status/diff/branches/worktrees, etc.)
-- Integrated terminal sessions (PTY; optional tmux backend if available)
-- Settings UI that edits OpenCode config layers and Studio-local settings
-- Studio-side plugin runtime (discovers plugins from `opencode.json`, loads `studio.manifest.json`, invokes actions, streams events)
+## Functional Overview
 
-## Tech stack
+- Unified workflow across chat, files, terminal, and Git in one workspace.
+- OpenCode event-stream bridge with real-time updates and resume behavior.
+- Visual configuration editing from the settings page.
+- Plugin action entry points rendered in the Studio UI.
 
-- Backend: Rust 2024, Axum, Tokio, tower-http
-- Frontend: Vue 3 + TypeScript, Vite, Tailwind CSS 4, Pinia, Monaco Editor, xterm.js, PWA (service worker)
+## Key Differentiators
 
-## Repository layout
-
-- `server/`: Rust backend (HTTP API + OpenCode bridge + static file serving)
-- `web/`: Vue app (builds to `web/dist`)
+- Performance-focused proxy path: payload pruning and response shaping for long sessions.
+- Pagination-first data access: core lists use `offset`/`limit` to reduce initial load pressure.
+- Lazy-loading strategy: heavier content is fetched/rendered on demand.
+- Studio-only plugin UI system: discovers plugins via `opencode.json`, loads `studio.manifest.json`, and exposes actions in UI.
+- Local-first plus ops-friendly deployment: use desktop package install or managed service install.
 
 ## Prerequisites
 
-- Rust toolchain (stable)
-- Bun (recommended; used in CI) and Node.js (CI uses Node 20+)
-- OpenCode server:
-  - Either `opencode` is available on `PATH` (Studio can spawn `opencode serve`), or
-  - You already have an OpenCode server running and can provide its host/port
+- OpenCode CLI is required on all platforms; install it before installing/running Studio service.
+- Windows service install requires `sc.exe` (built into standard Windows) and an elevated PowerShell.
+- Linux service install requires `systemctl` when you want managed autostart/service control.
 
-## One-line install (service + autostart bootstrap)
+Install OpenCode first (choose one method):
 
-The installer supports two modes:
+```bash
+# macOS / Linux (official install script)
+curl -fsSL https://opencode.ai/install | bash
 
-- `desktop`: installs backend + bundled web UI, then configures autostart service (default).
-- `headless`: installs backend only (API/service only), then configures autostart service.
+# macOS / Linux (Homebrew)
+brew install anomalyco/tap/opencode
+```
+
+```powershell
+# Windows (Scoop)
+scoop install opencode
+
+# Windows (Chocolatey)
+choco install opencode
+
+# Any platform with Node.js
+npm i -g opencode-ai@latest
+```
+
+Verify before installing Studio service:
+
+```bash
+opencode --version
+```
+
+## Quick Install
+
+Choose one of two installation paths based on your scenario.
+
+### Option 1: Package Install (Desktop App)
+
+Best for local desktop usage.
+
+1. Open [GitHub Releases](https://github.com/canxin121/opencode-studio/releases/latest)
+2. Download your platform package:
+   - Windows: `.msi` / `.exe`
+   - macOS: `.dmg`
+   - Linux: `.AppImage` / `.deb` / `.rpm`
+3. Install and launch the app; the bundled backend sidecar starts automatically.
+
+### Option 2: Service Install
+
+Best for always-on hosts, server-like usage, or environments managed by `systemd` / `sc`.
 
 Unix (Linux/macOS):
 
 ```bash
-# desktop mode (default)
-curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install.sh | bash -s -- --desktop
+# service install with bundled UI
+curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install-service.sh | bash -s -- --with-frontend
 
-# headless mode (API only)
-curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install.sh | bash -s -- --headless
+# service install API-only (no bundled UI)
+curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install-service.sh | bash
 ```
 
 Windows PowerShell (run as Administrator):
 
 ```powershell
-# desktop mode (default)
-iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install.ps1) } -Variant desktop"
+# service install with bundled UI
+iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install-service.ps1) } -WithFrontend"
 
-# headless mode (API only)
-iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install.ps1) } -Variant headless"
+# service install API-only (no bundled UI)
+iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install-service.ps1) }"
 ```
 
-Installer behavior by platform:
+## After Install: Open in Browser
 
-- Linux: creates/enables `opencode-studio.service` via systemd (`--mode user|system`, default `user`).
-- macOS: writes and loads `~/Library/LaunchAgents/cn.cxits.opencode-studio.plist`.
-- Windows: creates/starts auto-start service `OpenCodeStudio` via `sc.exe`.
+- Default service address is `http://127.0.0.1:3000` (from `host` + `port` in config).
+- If installed with frontend, open `http://127.0.0.1:3000` directly.
+- If installed API-only, use `http://127.0.0.1:3000/health` to verify service is running.
+- To enable UI after API-only install, set `ui_dir` in `opencode-studio.toml` to a valid `dist` directory, or reinstall with `--with-frontend` / `-WithFrontend`.
+- For remote machine access, change `host` to `0.0.0.0`, restart service, then visit `http://<server-ip>:3000`.
 
-Generated config/state files:
+## After Install: Update Configuration
 
-- Unix: `~/.local/bin/opencode-studio.toml`.
-- Windows: `%LOCALAPPDATA%\\OpenCodeStudio\\bin\\opencode-studio.toml`.
+### Service install
 
-Common installer parameters:
+The installer generates `opencode-studio.toml`:
 
-- Unix: `--desktop` / `--headless`, `--version`, `--repo`, `--install-dir`, `--host`, `--port`, `--mode`.
-- Windows: `-Variant desktop|headless`, `-Version`, `-Repo`, `-InstallDir`, `-Host`, `-Port`, `-ServiceName`.
+- Unix: `~/opencode-studio/opencode-studio.toml`
+- Windows: `%USERPROFILE%\\opencode-studio\\opencode-studio.toml`
 
-## Quickstart (local)
+Edit key values under `[backend]` to update host/port, UI serving path, or OpenCode connection mode:
 
-1) Install web dependencies
+```toml
+[backend]
+host = "127.0.0.1"
+port = 3000
+skip_opencode_start = false
+opencode_host = "127.0.0.1"
+# opencode_port = 16000
+# ui_dir = "/absolute/path/to/web/dist"
+```
+
+Apply changes by restarting the service:
+
+- Linux user service: `systemctl --user restart opencode-studio`
+- Linux system service: `sudo systemctl restart opencode-studio`
+- Windows service: `sc stop OpenCodeStudio` then `sc start OpenCodeStudio`
+
+### Package install
+
+In package mode, runtime config is stored in the app data directory. Use the tray menu action to open the config file directly.
+
+## After Install: Manage Service (systemd / sc)
+
+The commands below apply to the service-install path.
+
+Linux (default user-mode install):
 
 ```bash
-bun install --cwd web
+systemctl --user status opencode-studio
+systemctl --user start opencode-studio
+systemctl --user stop opencode-studio
+systemctl --user restart opencode-studio
 ```
 
-2) Build the UI bundle
+Linux (`--mode system` install):
 
 ```bash
-bun run --cwd web build
+sudo systemctl status opencode-studio
+sudo systemctl start opencode-studio
+sudo systemctl stop opencode-studio
+sudo systemctl restart opencode-studio
 ```
 
-3) Run the Studio server (serves UI + `/api/*`)
+Windows (default service name `OpenCodeStudio`):
 
-```bash
-cargo run -p opencode-studio -- \
-  --ui-dir web/dist
+```powershell
+sc query OpenCodeStudio
+sc start OpenCodeStudio
+sc stop OpenCodeStudio
 ```
 
-Open `http://127.0.0.1:3000`.
+## Technical Details and Parameters
 
-Notes:
+All technical details, configuration parameters, and developer-centric references are consolidated in:
 
-- CI uses a frozen install (`bun install --cwd web --frozen-lockfile`). If Bun reports the lockfile would change, re-run without `--frozen-lockfile` to refresh `web/bun.lock`.
-- `--ui-dir` (or `OPENCODE_STUDIO_UI_DIR`) is optional. Set it to serve the bundled web UI; leave it unset for API-only/headless mode.
-- On startup, Studio will try to ensure OpenCode is reachable. If you did not set `--opencode-port` / `OPENCODE_PORT`, it will try to spawn `opencode serve`.
+- `docs/technical-reference.md`
 
-## Connect to an existing OpenCode server
+Related docs:
 
-If you run OpenCode separately, pass its port (and optionally host):
-
-```bash
-cargo run -p opencode-studio -- \
-  --opencode-port 16000 \
-  --opencode-host 127.0.0.1 \
-  --ui-dir web/dist
-```
-
-Equivalent env vars:
-
-- `OPENCODE_PORT=16000`
-- `OPENCODE_HOST=127.0.0.1`
-
-## Configuration
-
-### CLI flags / env vars
-
-Core server settings:
-
-| Name | Default | Notes |
-| --- | --- | --- |
-| `OPENCODE_STUDIO_CONFIG` / `--config` | `<exe-dir>/opencode-studio.toml` | Runtime TOML config path; when unset Studio auto-loads from executable directory if present |
-| `OPENCODE_STUDIO_HOST` / `--host` | `127.0.0.1` | Bind address |
-| `OPENCODE_STUDIO_PORT` / `--port` | `3000` | HTTP port |
-| `OPENCODE_STUDIO_UI_DIR` / `--ui-dir` | (unset) | Built UI directory (Vite `dist/`); unset means API-only/headless |
-
-OpenCode connection:
-
-| Name | Default | Notes |
-| --- | --- | --- |
-| `OPENCODE_PORT` / `--opencode-port` | (unset) | When set, Studio connects to that OpenCode instance |
-| `OPENCODE_HOST` / `--opencode-host` | `127.0.0.1` | Used with `OPENCODE_PORT` |
-| `OPENCODE_STUDIO_SKIP_OPENCODE_START` / `--skip-opencode-start` | `false` | Do not spawn `opencode serve` |
-| `OPENCODE_STUDIO_OPENCODE_LOG_LEVEL` / `--opencode-log-level` | (unset) | Log level passed to managed `opencode serve` |
-| `OPENCODE_STUDIO_OPENCODE_LOGS` | (unset) | Set to `true/1/yes/on` to forward managed OpenCode logs |
-
-UI auth (optional):
-
-| Name | Default | Notes |
-| --- | --- | --- |
-| `OPENCODE_STUDIO_UI_PASSWORD` / `--ui-password` | (disabled) | Enables cookie-based UI login |
-
-Studio data directory:
-
-| Name | Default | Notes |
-| --- | --- | --- |
-| `OPENCODE_STUDIO_DATA_DIR` | `~/.config/opencode-studio` | Stores `settings.json`, terminal session registry, etc. |
-
-Advanced (selected):
-
-| Name | Default | Notes |
-| --- | --- | --- |
-| `OPENCODE_CONFIG` | (unset) | Custom path for OpenCode config file (used as an extra config layer) |
-| `OPENCODE_STUDIO_GIT_TIMEOUT_MS` | `60000` | Timeout for git operations |
-| `OPENCODE_STUDIO_TERMINAL_IDLE_TIMEOUT_SECS` | (unset) | Auto-cleanup idle terminals when set to a positive integer |
-
-### Config files
-
-- Runtime config (backend/desktop/service): `opencode-studio.toml`.
-  - Auto-discovered from the current executable directory.
-  - Desktop writes it under the app config directory and starts sidecar with `--config <path>`.
-- Studio settings (projects list, a few UI knobs): `~/.config/opencode-studio/settings.json` (override base dir via `OPENCODE_STUDIO_DATA_DIR`).
-- OpenCode config layers (read/edited via the Studio UI):
-  - User: `~/.config/opencode/opencode.json`
-  - Project: `opencode.json` / `opencode.jsonc` (or under `.opencode/`)
-  - Custom: `OPENCODE_CONFIG` (optional)
-
-## Development
-
-Web:
-
-```bash
-bun run --cwd web fmt
-bun run --cwd web test
-bun run --cwd web build:rust-debug
-```
-
-Rust:
-
-```bash
-cargo test -q --manifest-path server/Cargo.toml
-```
-
-Tip: for UI iteration with better debugging, use `build:rust-debug` and point the server at `web/dist-rust-debug`.
-
-## Security notes
-
-This server exposes powerful local capabilities (filesystem read/write within a selected workspace, git operations, terminal spawning). Run it on localhost, or enable `OPENCODE_STUDIO_UI_PASSWORD` and put it behind a trusted reverse proxy if you must expose it.
-
-For a threat model and reporting guidance, see `SECURITY.md`.
-
-## Contributing
-
-See `CONTRIBUTING.md`.
+- `docs/service.md` (service install/uninstall details)
+- `docs/packaging.md` (package artifacts and build outputs)
+- `docs/opencode-studio.toml.example` (runtime config example)
+- `SECURITY.md` (security notes)
+- `CONTRIBUTING.md` (contribution guide)
 
 ## License
 

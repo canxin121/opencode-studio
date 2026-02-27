@@ -16,23 +16,6 @@ env:
   CACHE_VERSION: v1
 
 jobs:
-  service-scripts:
-    name: Service scripts
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v6
-      - name: Upload installer scripts
-        uses: actions/upload-artifact@v6
-        with:
-          name: opencode-studio-service-scripts
-          path: |
-            scripts/install-service.sh
-            scripts/uninstall-service.sh
-            scripts/install-service.ps1
-            scripts/uninstall-service.ps1
-          if-no-files-found: error
-
   web:
     name: Web dist
     runs-on: ubuntu-latest

@@ -129,33 +129,6 @@ jobs:
           include: LICENSE,README.md
           token: ${{ github.token }}
 
-  service:
-    needs: create-release
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ env.RELEASE_REF }}
-
-      - name: Prepare service installer assets
-        run: |
-          mkdir -p release-assets
-          cp scripts/install-service.sh "release-assets/opencode-studio-install-service-${{ env.RELEASE_TAG }}.sh"
-          cp scripts/uninstall-service.sh "release-assets/opencode-studio-uninstall-service-${{ env.RELEASE_TAG }}.sh"
-          cp scripts/install-service.ps1 "release-assets/opencode-studio-install-service-${{ env.RELEASE_TAG }}.ps1"
-          cp scripts/uninstall-service.ps1 "release-assets/opencode-studio-uninstall-service-${{ env.RELEASE_TAG }}.ps1"
-
-      - name: Upload service assets to GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          files: |
-            release-assets/opencode-studio-install-service-${{ env.RELEASE_TAG }}.sh
-            release-assets/opencode-studio-uninstall-service-${{ env.RELEASE_TAG }}.sh
-            release-assets/opencode-studio-install-service-${{ env.RELEASE_TAG }}.ps1
-            release-assets/opencode-studio-uninstall-service-${{ env.RELEASE_TAG }}.ps1
-
   desktop:
     needs: create-release
     strategy:

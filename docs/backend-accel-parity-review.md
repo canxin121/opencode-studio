@@ -1,5 +1,7 @@
 # Backend Accel/Parity Review (Studio)
 
+English | [简体中文](backend-accel-parity-review.zh-CN.md)
+
 ## What was implemented now
 
 - Added a persisted local attachment cache with a SQLite metadata index and on-disk base64 blobs (`server/src/attachment_cache.rs`).

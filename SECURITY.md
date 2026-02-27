@@ -1,5 +1,7 @@
 # Security
 
+English | [简体中文](SECURITY.zh-CN.md)
+
 ## Threat model
 
 OpenCode Studio runs locally and exposes powerful capabilities via its HTTP API and UI:

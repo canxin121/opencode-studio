@@ -1,18 +1,20 @@
-# AGENTS 验收门槛（对齐 CI）
+# AGENTS Acceptance Gates (Aligned with CI)
 
-本文件定义 Agent 在交付变更前必须满足的最低验收门槛。
-基准来源：`.github/workflows/ci.yml`。
-若本文件与 CI 配置不一致，以 CI 为准。
+English | [简体中文](AGENTS.zh-CN.md)
 
-## 适用规则
+This file defines the minimum acceptance gates that agents must satisfy before handing off changes.
+Baseline source: `.github/workflows/ci.yml`.
+If this file and CI config diverge, CI is the source of truth.
 
-- 在仓库根目录执行命令。
-- 任何代码变更在提交前都应满足以下检查。
-- 不得通过降低标准绕过检查（如移除 `--locked`、取消 `-D warnings`）。
+## Scope Rules
 
-## 必过检查
+- Run commands at the repository root.
+- Any code change should satisfy the checks below before commit.
+- Do not bypass checks by lowering standards (for example removing `--locked` or `-D warnings`).
 
-### Web（对应 CI job: `web`）
+## Required Checks
+
+### Web (CI job: `web`)
 
 ```bash
 bun install --cwd web --frozen-lockfile
@@ -22,7 +24,7 @@ bun run --cwd web vite build
 bun test --cwd web
 ```
 
-### Rust（对应 CI job: `rust`）
+### Rust (CI job: `rust`)
 
 ```bash
 cargo fmt --all -- --check
@@ -33,12 +35,12 @@ python3 -m json.tool desktop/src-tauri/tauri.conf.full.json >/dev/null
 python3 -m json.tool desktop/src-tauri/capabilities/default.json >/dev/null
 ```
 
-## 验收判定
+## Acceptance Criteria
 
-- 上述命令全部返回成功（exit code 0）才算通过。
-- 任一命令失败即视为未通过验收。
+- All commands above must exit successfully (`exit code 0`).
+- Any failed command means acceptance is not met.
 
-## 版本对齐
+## Version Alignment
 
-- Bun 版本对齐 CI：`1.3.9`。
-- CI 变更后，应同步更新本文件中的门槛命令。
+- Bun version aligned with CI: `1.3.9`.
+- When CI changes, update this file accordingly.

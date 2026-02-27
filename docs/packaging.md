@@ -1,5 +1,7 @@
 # Packaging
 
+English | [简体中文](packaging.zh-CN.md)
+
 This repo produces multiple deliverables from the same codebase.
 
 Repository layout:
@@ -129,7 +131,11 @@ For releases:
     - macOS: `.dmg`
     - Linux: `.AppImage` + `.deb` + `.rpm`
     plus the same again using Tauri's CEF runtime (suffix `-cef`)
-  - service installer scripts
+
+Service install scripts are not published as release assets. Use GitHub raw URLs instead, for example:
+
+- `https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install-service.sh`
+- `https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install-service.ps1`
 
 ## Unsigned builds
 
