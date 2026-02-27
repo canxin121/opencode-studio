@@ -68,8 +68,12 @@ iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/main/
 
 ## Config
 
-The installer writes a simple environment file / service arguments. Adjust these to change:
+The installer writes `opencode-studio.toml` (next to the installed backend executable).
+Adjust `[backend]` fields to change runtime behavior:
 
-- `OPENCODE_STUDIO_PORT`
-- `OPENCODE_HOST` / `OPENCODE_PORT` (connect to existing OpenCode)
-- `OPENCODE_STUDIO_UI_DIR` (serve frontend dist)
+- `host` / `port`
+- `opencode_host` / `opencode_port` (connect to existing OpenCode)
+- `ui_dir` (serve frontend dist)
+
+By default, `opencode-studio` auto-loads `opencode-studio.toml` from the current executable
+directory. You can also override it with `--config <path>` or `OPENCODE_STUDIO_CONFIG`.

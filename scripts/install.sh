@@ -87,7 +87,7 @@ fi
 BIN_DIR="$HOME/.local/bin"
 BIN_PATH="$BIN_DIR/opencode-studio"
 UI_DIR="$INSTALL_DIR/ui/dist"
-ENV_FILE="$INSTALL_DIR/service.env"
+CONFIG_FILE="$BIN_DIR/opencode-studio.toml"
 
 mkdir -p "$INSTALL_DIR" "$BIN_DIR"
 
@@ -179,22 +179,25 @@ if [[ "$INSTALL_VARIANT" == "desktop" ]]; then
   fi
 fi
 
-cat >"$ENV_FILE" <<EOF
-# Environment file for the opencode-studio service.
-# Edit this file to change host/port/OpenCode connectivity.
+cat >"$CONFIG_FILE" <<EOF
+# Runtime configuration for opencode-studio.
+# CLI flags and environment variables can still override these values.
 
-OPENCODE_STUDIO_HOST=$HOST
-OPENCODE_STUDIO_PORT=$PORT
-# If you run OpenCode separately, set these:
-# OPENCODE_HOST=127.0.0.1
-# OPENCODE_PORT=16000
+[backend]
+host = "$HOST"
+port = $PORT
+skip_opencode_start = false
+opencode_host = "127.0.0.1"
+
+# To connect to an already running OpenCode, set:
+# opencode_port = 16000
 EOF
 
 if [[ "$INSTALL_VARIANT" == "desktop" ]]; then
-  printf '%s\n' "OPENCODE_STUDIO_UI_DIR=$UI_DIR" >>"$ENV_FILE"
+  printf '%s\n' "ui_dir = \"$UI_DIR\"" >>"$CONFIG_FILE"
 fi
 
-echo "Wrote env file: $ENV_FILE"
+echo "Wrote runtime config: $CONFIG_FILE"
 
 if [[ "$OS" == "linux" ]]; then
   if command -v systemctl >/dev/null 2>&1; then
@@ -209,7 +212,6 @@ After=network.target
 
 [Service]
 Type=simple
-EnvironmentFile=$ENV_FILE
 ExecStart=$BIN_PATH
 Restart=on-failure
 RestartSec=2
@@ -231,7 +233,6 @@ After=network.target
 
 [Service]
 Type=simple
-EnvironmentFile=$ENV_FILE
 ExecStart=$BIN_PATH
 Restart=on-failure
 RestartSec=2
@@ -261,23 +262,13 @@ elif [[ "$OS" == "darwin" ]]; then
   <key>ProgramArguments</key>
   <array>
     <string>$BIN_PATH</string>
+    <string>--config</string>
+    <string>$CONFIG_FILE</string>
   </array>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
   <true/>
-  <key>EnvironmentVariables</key>
-  <dict>
-    <key>OPENCODE_STUDIO_HOST</key><string>$HOST</string>
-    <key>OPENCODE_STUDIO_PORT</key><string>$PORT</string>
-EOF
-  if [[ "$INSTALL_VARIANT" == "desktop" ]]; then
-    cat >>"$PLIST" <<EOF
-    <key>OPENCODE_STUDIO_UI_DIR</key><string>$UI_DIR</string>
-EOF
-  fi
-  cat >>"$PLIST" <<'EOF'
-  </dict>
 </dict>
 </plist>
 EOF
@@ -291,6 +282,7 @@ else
 fi
 
 echo "Install complete ($INSTALL_VARIANT). Binary: $BIN_PATH"
+echo "Runtime config: $CONFIG_FILE"
 echo "Open: http://${HOST}:${PORT}"
 if [[ "$INSTALL_VARIANT" == "headless" ]]; then
   echo "Headless mode: no bundled UI installed (API/service only)."

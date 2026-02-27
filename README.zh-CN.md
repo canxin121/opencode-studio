@@ -86,8 +86,8 @@ iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/main/
 
 生成的配置/状态文件：
 
-- Unix：`~/.local/share/opencode-studio/service.env`。
-- Windows：`%LOCALAPPDATA%\\OpenCodeStudio\\service.env.ps1`。
+- Unix：`~/.local/bin/opencode-studio.toml`。
+- Windows：`%LOCALAPPDATA%\\OpenCodeStudio\\bin\\opencode-studio.toml`。
 
 常用安装参数：
 
@@ -147,6 +147,7 @@ cargo run -p opencode-studio -- \
 
 | 名称 | 默认值 | 说明 |
 | --- | --- | --- |
+| `OPENCODE_STUDIO_CONFIG` / `--config` | `<exe-dir>/opencode-studio.toml` | 运行时 TOML 配置路径；未显式指定时会尝试从可执行文件目录自动加载 |
 | `OPENCODE_STUDIO_HOST` / `--host` | `127.0.0.1` | 监听地址 |
 | `OPENCODE_STUDIO_PORT` / `--port` | `3000` | 监听端口 |
 | `OPENCODE_STUDIO_UI_DIR` / `--ui-dir` |（未设置）| 前端构建目录（Vite `dist/`）；不设置时仅提供 API/headless |
@@ -183,6 +184,9 @@ Studio 数据目录：
 
 ### 配置文件
 
+- 运行时配置（后端/desktop/服务安装统一）：`opencode-studio.toml`。
+  - 默认从当前可执行文件所在目录自动发现。
+  - Desktop 会写入应用配置目录，并在启动 sidecar 时传 `--config <path>`。
 - Studio 设置（项目列表、部分 UI 相关配置）：`~/.config/opencode-studio/settings.json`（可用 `OPENCODE_STUDIO_DATA_DIR` 修改基目录）。
 - OpenCode 多层配置（可在 Studio 设置页读取/编辑）：
   - 用户层：`~/.config/opencode/opencode.json`

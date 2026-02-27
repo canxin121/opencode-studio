@@ -77,7 +77,7 @@ Notes:
 - In `full-app`, Tauri opens the backend URL directly and frontend assets are
   served by the bundled backend sidecar (`--ui-dir`).
 - Backend API port defaults to `3000`; if this port is occupied, update
-  `desktop-config.json` to use another port.
+  `opencode-studio.toml` to use another port.
 
 ### Build desktop with CEF runtime (`-cef`)
 
@@ -102,9 +102,9 @@ Build (full / bundled backend):
 
 The desktop app writes a user-editable config file on first launch:
 
-- macOS: `~/Library/Application Support/<...>/desktop-config.json` (exact path is platform-dependent)
-- Linux: `~/.config/<...>/desktop-config.json`
-- Windows: `%APPDATA%\\<...>\\desktop-config.json`
+- macOS: `~/Library/Application Support/<...>/opencode-studio.toml` (exact path is platform-dependent)
+- Linux: `~/.config/<...>/opencode-studio.toml`
+- Windows: `%APPDATA%\\<...>\\opencode-studio.toml`
 
 The tray menu has an item to open this file.
 

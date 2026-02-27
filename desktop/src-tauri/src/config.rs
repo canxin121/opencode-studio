@@ -6,6 +6,9 @@ use tauri::Manager;
 
 use crate::AppHandle;
 
+const CONFIG_FILE_NAME: &str = "opencode-studio.toml";
+const LEGACY_CONFIG_FILE_NAME: &str = "desktop-config.json";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DesktopConfig {
@@ -19,10 +22,12 @@ pub struct DesktopConfig {
 pub struct BackendConfig {
     pub host: String,
     pub port: u16,
+    pub ui_dir: Option<String>,
     pub cors_origins: Vec<String>,
     pub cors_allow_all: bool,
     pub backend_log_level: Option<String>,
     pub ui_password: Option<String>,
+    pub ui_cookie_samesite: Option<String>,
 
     // OpenCode connectivity overrides.
     pub opencode_host: String,
@@ -49,10 +54,12 @@ impl Default for BackendConfig {
         Self {
             host: "127.0.0.1".to_string(),
             port: 3000,
+            ui_dir: None,
             cors_origins: Vec::new(),
             cors_allow_all: false,
             backend_log_level: None,
             ui_password: None,
+            ui_cookie_samesite: None,
             opencode_host: "127.0.0.1".to_string(),
             opencode_port: None,
             skip_opencode_start: false,
@@ -63,7 +70,12 @@ impl Default for BackendConfig {
 
 pub fn config_path(app: &AppHandle) -> Option<PathBuf> {
     let dir = app.path().app_config_dir().ok()?;
-    Some(dir.join("desktop-config.json"))
+    Some(dir.join(CONFIG_FILE_NAME))
+}
+
+fn legacy_config_path(app: &AppHandle) -> Option<PathBuf> {
+    let dir = app.path().app_config_dir().ok()?;
+    Some(dir.join(LEGACY_CONFIG_FILE_NAME))
 }
 
 pub fn load_or_create(app: &AppHandle) -> Result<DesktopConfig, String> {
@@ -72,13 +84,23 @@ pub fn load_or_create(app: &AppHandle) -> Result<DesktopConfig, String> {
 
     if path.exists() {
         let txt = fs::read_to_string(&path).map_err(|e| format!("read config: {e}"))?;
+        let cfg = normalize_config(toml::from_str(&txt).map_err(|e| format!("parse config: {e}"))?);
+        return Ok(cfg);
+    }
+
+    if let Some(legacy_path) = legacy_config_path(app)
+        && legacy_path.exists()
+    {
+        let txt = fs::read_to_string(&legacy_path).map_err(|e| format!("read config: {e}"))?;
         let cfg =
             normalize_config(serde_json::from_str(&txt).map_err(|e| format!("parse config: {e}"))?);
+        let _ = save(app, cfg.clone())?;
+        let _ = fs::remove_file(&legacy_path);
         return Ok(cfg);
     }
 
     let cfg = normalize_config(DesktopConfig::default());
-    let txt = serde_json::to_string_pretty(&cfg).map_err(|e| format!("serialize config: {e}"))?;
+    let txt = toml::to_string_pretty(&cfg).map_err(|e| format!("serialize config: {e}"))?;
     fs::write(&path, format!("{txt}\n")).map_err(|e| format!("write config: {e}"))?;
     Ok(cfg)
 }
@@ -88,8 +110,7 @@ pub fn save(app: &AppHandle, cfg: DesktopConfig) -> Result<DesktopConfig, String
     ensure_parent_dir(&path)?;
 
     let normalized = normalize_config(cfg);
-    let txt =
-        serde_json::to_string_pretty(&normalized).map_err(|e| format!("serialize config: {e}"))?;
+    let txt = toml::to_string_pretty(&normalized).map_err(|e| format!("serialize config: {e}"))?;
     fs::write(&path, format!("{txt}\n")).map_err(|e| format!("write config: {e}"))?;
     Ok(normalized)
 }
@@ -119,11 +140,19 @@ fn ensure_parent_dir(path: &Path) -> Result<(), String> {
 
 fn normalize_config(mut cfg: DesktopConfig) -> DesktopConfig {
     cfg.backend.host = normalize_host(&cfg.backend.host);
+    cfg.backend.ui_dir = normalize_optional_path(cfg.backend.ui_dir.take());
     cfg.backend.opencode_host = normalize_host(&cfg.backend.opencode_host);
     cfg.backend.cors_origins = normalize_cors_origins(cfg.backend.cors_origins);
     cfg.backend.backend_log_level = normalize_log_level(cfg.backend.backend_log_level.take());
+    cfg.backend.ui_cookie_samesite =
+        normalize_ui_cookie_samesite(cfg.backend.ui_cookie_samesite.take());
     cfg.backend.opencode_log_level = normalize_log_level(cfg.backend.opencode_log_level.take());
     cfg
+}
+
+fn normalize_optional_path(raw: Option<String>) -> Option<String> {
+    let value = raw?.trim().to_string();
+    if value.is_empty() { None } else { Some(value) }
 }
 
 fn normalize_host(raw: &str) -> String {
@@ -153,6 +182,14 @@ fn normalize_log_level(raw: Option<String>) -> Option<String> {
     let level = raw?.trim().to_ascii_uppercase();
     match level.as_str() {
         "DEBUG" | "INFO" | "WARN" | "ERROR" => Some(level),
+        _ => None,
+    }
+}
+
+fn normalize_ui_cookie_samesite(raw: Option<String>) -> Option<String> {
+    let value = raw?.trim().to_ascii_lowercase();
+    match value.as_str() {
+        "auto" | "strict" | "lax" | "none" => Some(value),
         _ => None,
     }
 }
