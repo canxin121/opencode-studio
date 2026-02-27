@@ -9,6 +9,7 @@ import {
   desktopRuntimeInfo,
   desktopServiceUpdate,
   desktopUpdateProgressGet,
+  isDesktopRuntime,
   type DesktopUpdateProgress,
 } from '@/lib/desktopConfig'
 import { useSettingsStore } from '@/stores/settings'
@@ -64,6 +65,7 @@ type UpdateActionResult = {
 }
 
 type ReminderSuppressionReason = 'none' | 'ignored' | 'snoozed'
+type RuntimeMode = 'service' | 'desktop'
 
 function serviceFallback(): ServiceUpdateStatus {
   return {
@@ -107,6 +109,7 @@ export const useUpdatesStore = defineStore('updates', () => {
   const release = ref<ReleaseSummary | null>(null)
   const service = ref<ServiceUpdateStatus>(serviceFallback())
   const installer = ref<InstallerUpdateStatus | null>(null)
+  const runtimeMode = ref<RuntimeMode>(isDesktopRuntime() ? 'desktop' : 'service')
   const lastPromptKey = ref('')
   const lastAutoApplyKey = ref('')
   const serviceUpdating = ref(false)
@@ -116,8 +119,10 @@ export const useUpdatesStore = defineStore('updates', () => {
 
   let progressPollTimer: number | null = null
 
-  const serviceAvailable = computed(() => service.value.available === true)
-  const installerAvailable = computed(() => installer.value?.available === true)
+  const showServiceUpdates = computed(() => runtimeMode.value === 'service')
+  const showInstallerUpdates = computed(() => runtimeMode.value === 'desktop')
+  const serviceAvailable = computed(() => showServiceUpdates.value && service.value.available === true)
+  const installerAvailable = computed(() => showInstallerUpdates.value && installer.value?.available === true)
   const anyAvailable = computed(() => serviceAvailable.value || installerAvailable.value)
   const autoCheckEnabled = computed(() => settings.data?.updateAutoCheckEnabled !== false)
   const autoPromptEnabled = computed(() => settings.data?.updateAutoPromptEnabled !== false)
@@ -150,7 +155,11 @@ export const useUpdatesStore = defineStore('updates', () => {
 
   function buildPromptKey(resp: UpdateCheckResponse): string {
     const releaseKey = releaseKeyFromResponse(resp)
-    return [releaseKey, resp.service.available ? 'service' : '', resp.installer?.available ? 'installer' : '']
+    return [
+      releaseKey,
+      showServiceUpdates.value && resp.service.available ? 'service' : '',
+      showInstallerUpdates.value && resp.installer?.available ? 'installer' : '',
+    ]
       .filter((part) => part.length > 0)
       .join('|')
   }
@@ -231,7 +240,9 @@ export const useUpdatesStore = defineStore('updates', () => {
   }
 
   function maybeNotifyForUpdate(resp: UpdateCheckResponse, opts?: { forcePrompt?: boolean }) {
-    if (!resp.service.available && !resp.installer?.available) return
+    const serviceVisibleAvailable = showServiceUpdates.value && resp.service.available
+    const installerVisibleAvailable = showInstallerUpdates.value && !!resp.installer?.available
+    if (!serviceVisibleAvailable && !installerVisibleAvailable) return
 
     const releaseTag = releaseKeyFromResponse(resp)
     const suppression = reminderSuppressionForReleaseTag(releaseTag)
@@ -244,25 +255,12 @@ export const useUpdatesStore = defineStore('updates', () => {
     }
     lastPromptKey.value = promptKey
 
-    if (resp.service.available && resp.installer?.available) {
-      toasts.push(
-        'info',
-        String(
-          i18n.global.t('settings.desktopRuntime.updates.toasts.bothAvailable', {
-            version: resp.release?.version || resp.service.latestVersion || '',
-          }),
-        ),
-        5000,
-      )
-      return
-    }
-
-    if (resp.installer?.available) {
+    if (installerVisibleAvailable) {
       toasts.push(
         'info',
         String(
           i18n.global.t('settings.desktopRuntime.updates.toasts.installerAvailable', {
-            version: resp.installer.latestVersion || resp.release?.version || '',
+            version: resp.installer?.latestVersion || resp.release?.version || '',
           }),
         ),
         5000,
@@ -270,15 +268,17 @@ export const useUpdatesStore = defineStore('updates', () => {
       return
     }
 
-    toasts.push(
-      'info',
-      String(
-        i18n.global.t('settings.desktopRuntime.updates.toasts.serviceAvailable', {
-          version: resp.service.latestVersion || resp.release?.version || '',
-        }),
-      ),
-      5000,
-    )
+    if (serviceVisibleAvailable) {
+      toasts.push(
+        'info',
+        String(
+          i18n.global.t('settings.desktopRuntime.updates.toasts.serviceAvailable', {
+            version: resp.service.latestVersion || resp.release?.version || '',
+          }),
+        ),
+        5000,
+      )
+    }
   }
 
   function stopProgressPolling() {
@@ -388,6 +388,7 @@ export const useUpdatesStore = defineStore('updates', () => {
 
   async function maybeAutoApply(resp: UpdateCheckResponse, runtimeAvailable: boolean) {
     if (!runtimeAvailable) return
+    if (!showInstallerUpdates.value) return
     if (serviceUpdating.value || installerUpdating.value) return
 
     const releaseTag = releaseKeyFromResponse(resp)
@@ -398,20 +399,6 @@ export const useUpdatesStore = defineStore('updates', () => {
     if (!autoKey || autoKey === lastAutoApplyKey.value) return
 
     let applied = false
-    if (autoServiceInstallEnabled.value && resp.service.available) {
-      const result = await applyServiceUpdateInternal(resp.service.assetUrl || '')
-      if (!result.ok) {
-        toasts.push(
-          'error',
-          String(
-            i18n.global.t('settings.desktopRuntime.updates.toasts.autoServiceFailed', { error: result.error || '' }),
-          ),
-        )
-      } else {
-        applied = true
-      }
-    }
-
     if (autoInstallerInstallEnabled.value && resp.installer?.available) {
       const result = await applyInstallerUpdateInternal(
         resp.installer.primaryAssetUrl || '',
@@ -442,6 +429,9 @@ export const useUpdatesStore = defineStore('updates', () => {
 
     try {
       const runtime = await desktopRuntimeInfo().catch(() => null)
+      const desktopRuntime = runtime !== null || isDesktopRuntime()
+      runtimeMode.value = desktopRuntime ? 'desktop' : 'service'
+
       const query = new URLSearchParams()
       if (runtime?.installerVersion) {
         query.set('installerVersion', runtime.installerVersion)
@@ -469,13 +459,14 @@ export const useUpdatesStore = defineStore('updates', () => {
         maybeNotifyForUpdate(resp, { forcePrompt: opts.forcePrompt })
       }
       if (opts?.autoApply !== false) {
-        await maybeAutoApply(resp, runtime !== null)
+        await maybeAutoApply(resp, desktopRuntime)
       }
     } catch (err) {
       error.value = err instanceof Error ? err.message : String(err)
       service.value = serviceFallback()
       installer.value = null
       release.value = null
+      runtimeMode.value = isDesktopRuntime() ? 'desktop' : 'service'
     } finally {
       loading.value = false
     }
@@ -503,6 +494,8 @@ export const useUpdatesStore = defineStore('updates', () => {
     serviceAvailable,
     installerAvailable,
     anyAvailable,
+    showServiceUpdates,
+    showInstallerUpdates,
     autoCheckEnabled,
     autoPromptEnabled,
     autoServiceInstallEnabled,

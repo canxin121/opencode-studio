@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 const DEFAULT_RELEASE_REPO: &str = "canxin121/opencode-studio";
 const GITHUB_API_BASE: &str = "https://api.github.com";
+const GITHUB_WEB_BASE: &str = "https://github.com";
 const SOURCE_KIND: &str = "githubRelease";
 
 #[derive(Debug, Deserialize, Default)]
@@ -204,7 +205,13 @@ pub async fn update_check(Query(query): Query<UpdateCheckQuery>) -> Json<UpdateC
 
     if let Some(target) = service_target.as_deref() {
         let asset_name = service_asset_name(target);
-        let asset_url = find_asset_url(&release.assets, &asset_name);
+        let asset_url = find_asset_url(&release.assets, &asset_name).or_else(|| {
+            Some(release_asset_url(
+                &repo,
+                release.tag_name.trim(),
+                &asset_name,
+            ))
+        });
         response.service.asset_name = Some(asset_name);
         response.service.asset_url = asset_url.clone();
         response.service.update_command = build_service_update_command(asset_url.as_deref());
@@ -222,6 +229,7 @@ pub async fn update_check(Query(query): Query<UpdateCheckQuery>) -> Json<UpdateC
         if let Some(target) = runtime.target.as_deref() {
             let mut assets = installer_assets_for_target(
                 &release.assets,
+                &repo,
                 target,
                 &runtime.channel,
                 release.tag_name.trim(),
@@ -470,14 +478,14 @@ fn normalize_installer_channel(raw: Option<&str>) -> String {
 
 fn installer_assets_for_target(
     assets: &[GithubReleaseAsset],
+    repo: &str,
     target: &str,
     channel: &str,
     release_tag: &str,
 ) -> Vec<ReleaseAssetLink> {
-    let suffix = if channel == "cef" { "-cef" } else { "" };
-    let prefix = format!("opencode-studio-desktop-full-{target}{suffix}-{release_tag}.");
+    let prefix = installer_asset_prefix(target, channel, release_tag);
 
-    assets
+    let mut links = assets
         .iter()
         .filter(|asset| asset.name.starts_with(&prefix))
         .filter_map(|asset| {
@@ -487,7 +495,50 @@ fn installer_assets_for_target(
                 url,
             })
         })
-        .collect()
+        .collect::<Vec<_>>();
+
+    if links.is_empty() {
+        links = installer_expected_asset_names(target, channel, release_tag)
+            .into_iter()
+            .map(|name| ReleaseAssetLink {
+                url: release_asset_url(repo, release_tag, &name),
+                name,
+            })
+            .collect();
+    }
+
+    links
+}
+
+fn installer_asset_prefix(target: &str, channel: &str, release_tag: &str) -> String {
+    let suffix = if channel == "cef" { "-cef" } else { "" };
+    format!("opencode-studio-desktop-{target}{suffix}-{release_tag}.")
+}
+
+fn installer_expected_asset_names(target: &str, channel: &str, release_tag: &str) -> Vec<String> {
+    let suffix = if channel == "cef" { "-cef" } else { "" };
+    let stem = format!("opencode-studio-desktop-{target}{suffix}-{release_tag}");
+
+    if target.contains("windows") {
+        if release_tag.contains('-') {
+            return vec![format!("{stem}.exe")];
+        }
+        return vec![format!("{stem}.msi"), format!("{stem}.exe")];
+    }
+
+    if target.contains("apple") || target.contains("darwin") {
+        return vec![format!("{stem}.dmg")];
+    }
+
+    vec![
+        format!("{stem}.AppImage"),
+        format!("{stem}.deb"),
+        format!("{stem}.rpm"),
+    ]
+}
+
+fn release_asset_url(repo: &str, release_tag: &str, asset_name: &str) -> String {
+    format!("{GITHUB_WEB_BASE}/{repo}/releases/download/{release_tag}/{asset_name}")
 }
 
 fn installer_asset_rank(name: &str, target: &str) -> usize {
@@ -527,11 +578,30 @@ async fn fetch_latest_release(repo: &str) -> Result<GithubRelease, String> {
         .build()
         .map_err(|err| format!("build http client: {err}"))?;
 
+    match fetch_latest_release_via_api(&client, repo).await {
+        Ok(release) => Ok(release),
+        Err(api_err) => fetch_latest_release_via_web(repo)
+            .await
+            .map_err(|web_err| format!("{api_err}; fallback failed: {web_err}")),
+    }
+}
+
+async fn fetch_latest_release_via_api(
+    client: &reqwest::Client,
+    repo: &str,
+) -> Result<GithubRelease, String> {
     let url = format!("{GITHUB_API_BASE}/repos/{repo}/releases/latest");
-    let resp = client
+    let mut request = client
         .get(url)
         .header(reqwest::header::ACCEPT, "application/vnd.github+json")
         .header(reqwest::header::USER_AGENT, "opencode-studio-update-check")
+        .header("X-GitHub-Api-Version", "2022-11-28");
+
+    if let Some(token) = github_api_token() {
+        request = request.bearer_auth(token);
+    }
+
+    let resp = request
         .send()
         .await
         .map_err(|err| format!("request GitHub release: {err}"))?;
@@ -543,4 +613,53 @@ async fn fetch_latest_release(repo: &str) -> Result<GithubRelease, String> {
     resp.json::<GithubRelease>()
         .await
         .map_err(|err| format!("decode GitHub release payload: {err}"))
+}
+
+async fn fetch_latest_release_via_web(repo: &str) -> Result<GithubRelease, String> {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()
+        .map_err(|err| format!("build fallback client: {err}"))?;
+
+    let latest_url = format!("{GITHUB_WEB_BASE}/{repo}/releases/latest");
+    let resp = client
+        .get(latest_url)
+        .header(reqwest::header::USER_AGENT, "opencode-studio-update-check")
+        .send()
+        .await
+        .map_err(|err| format!("request GitHub release page: {err}"))?;
+
+    if !resp.status().is_success() {
+        return Err(format!(
+            "request GitHub release page failed ({})",
+            resp.status()
+        ));
+    }
+
+    let final_url = resp.url().clone();
+    let tag_name = release_tag_from_url(&final_url)
+        .ok_or_else(|| format!("resolve latest release tag from {}", final_url))?;
+
+    Ok(GithubRelease {
+        tag_name,
+        html_url: Some(final_url.to_string()),
+        body: None,
+        published_at: None,
+        assets: Vec::new(),
+    })
+}
+
+fn release_tag_from_url(url: &reqwest::Url) -> Option<String> {
+    let parts = url.path_segments()?.collect::<Vec<_>>();
+    let idx = parts.iter().position(|segment| *segment == "tag")?;
+    nonempty(Some(parts.get(idx + 1)?))
+}
+
+fn github_api_token() -> Option<String> {
+    let primary = std::env::var("OPENCODE_STUDIO_GITHUB_TOKEN").ok();
+    if let Some(token) = nonempty(primary.as_deref()) {
+        return Some(token);
+    }
+    let secondary = std::env::var("GITHUB_TOKEN").ok();
+    nonempty(secondary.as_deref())
 }

@@ -858,7 +858,7 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
                   {{ t('settings.desktopRuntime.updates.fields.autoPrompt') }}
                 </label>
 
-                <label class="inline-flex items-center gap-2 text-sm">
+                <label v-if="updates.showServiceUpdates" class="inline-flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
                     v-model="updateAutoServiceInstallEnabled"
@@ -867,7 +867,7 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
                   {{ t('settings.desktopRuntime.updates.fields.autoServiceInstall') }}
                 </label>
 
-                <label class="inline-flex items-center gap-2 text-sm">
+                <label v-if="updates.showInstallerUpdates" class="inline-flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
                     v-model="updateAutoInstallerInstallEnabled"
@@ -933,7 +933,10 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
                   {{ updates.error }}
                 </div>
 
-                <div class="grid gap-2 rounded-md border border-border/60 bg-background/60 p-3">
+                <div
+                  v-if="updates.showServiceUpdates"
+                  class="grid gap-2 rounded-md border border-border/60 bg-background/60 p-3"
+                >
                   <div class="flex items-center justify-between gap-3">
                     <div class="text-xs text-muted-foreground">
                       {{ t('settings.desktopRuntime.updates.sections.service') }}
@@ -1013,7 +1016,7 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
                 </div>
 
                 <div
-                  v-if="updates.installer"
+                  v-if="updates.showInstallerUpdates && updates.installer"
                   class="grid gap-2 rounded-md border border-border/60 bg-background/60 p-3"
                 >
                   <div class="flex items-center justify-between gap-3">

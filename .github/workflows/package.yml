@@ -335,26 +335,25 @@ jobs:
           BUNDLE_DIR="desktop/src-tauri/target/${{ matrix.target }}/release/bundle"
           if [ ! -d "$BUNDLE_DIR" ]; then BUNDLE_DIR="desktop/src-tauri/target/release/bundle"; fi
 
-          FLAVOR="${{ matrix.flavor }}"
           TARGET="${{ matrix.target }}"
           SUFFIX="${{ matrix.suffix }}"
 
           if [[ "${RUNNER_OS}" == "macOS" ]]; then
             SRC="$(ls -1 "$BUNDLE_DIR"/dmg/*.dmg 2>/dev/null | head -n 1 || true)"
             test -n "$SRC"
-            cp "$SRC" "release-assets/opencode-studio-desktop-${FLAVOR}-${TARGET}${SUFFIX}.dmg"
+            cp "$SRC" "release-assets/opencode-studio-desktop-${TARGET}${SUFFIX}.dmg"
           else
             # linux
             SRC_APPIMAGE="$(ls -1 "$BUNDLE_DIR"/appimage/*.AppImage 2>/dev/null | head -n 1 || true)"
             test -n "$SRC_APPIMAGE"
-            cp "$SRC_APPIMAGE" "release-assets/opencode-studio-desktop-${FLAVOR}-${TARGET}${SUFFIX}.AppImage"
+            cp "$SRC_APPIMAGE" "release-assets/opencode-studio-desktop-${TARGET}${SUFFIX}.AppImage"
 
             SRC_DEB="$(ls -1 "$BUNDLE_DIR"/deb/*.deb 2>/dev/null | head -n 1 || true)"
             test -n "$SRC_DEB"
-            cp "$SRC_DEB" "release-assets/opencode-studio-desktop-${FLAVOR}-${TARGET}${SUFFIX}.deb"
+            cp "$SRC_DEB" "release-assets/opencode-studio-desktop-${TARGET}${SUFFIX}.deb"
             SRC_RPM="$(ls -1 "$BUNDLE_DIR"/rpm/*.rpm 2>/dev/null | head -n 1 || true)"
             test -n "$SRC_RPM"
-            cp "$SRC_RPM" "release-assets/opencode-studio-desktop-${FLAVOR}-${TARGET}${SUFFIX}.rpm"
+            cp "$SRC_RPM" "release-assets/opencode-studio-desktop-${TARGET}${SUFFIX}.rpm"
           fi
 
       - name: Pack desktop bundles (Windows)
@@ -364,18 +363,17 @@ jobs:
           New-Item -ItemType Directory -Force -Path release-assets | Out-Null
           $bundleDir = "desktop/src-tauri/target/${{ matrix.target }}/release/bundle"
           if (-not (Test-Path $bundleDir)) { $bundleDir = "desktop/src-tauri/target/release/bundle" }
-          $flavor = "${{ matrix.flavor }}"
           $target = "${{ matrix.target }}"
           $suffix = "${{ matrix.suffix }}"
 
           $msi = Get-ChildItem -Path (Join-Path $bundleDir 'msi') -Filter '*.msi' -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
           if ($msi) {
-            Copy-Item -Force $msi.FullName (Join-Path 'release-assets' ("opencode-studio-desktop-$flavor-$target$suffix.msi"))
+            Copy-Item -Force $msi.FullName (Join-Path 'release-assets' ("opencode-studio-desktop-$target$suffix.msi"))
           }
 
           $exe = Get-ChildItem -Path (Join-Path $bundleDir 'nsis') -Filter '*.exe' -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
           if ($exe) {
-            Copy-Item -Force $exe.FullName (Join-Path 'release-assets' ("opencode-studio-desktop-$flavor-$target$suffix.exe"))
+            Copy-Item -Force $exe.FullName (Join-Path 'release-assets' ("opencode-studio-desktop-$target$suffix.exe"))
           }
 
           if (-not $msi -and -not $exe) {
@@ -385,7 +383,7 @@ jobs:
       - name: Upload desktop artifact
         uses: actions/upload-artifact@v6
         with:
-          name: opencode-studio-desktop-${{ matrix.flavor }}-${{ matrix.target }}${{ matrix.suffix }}
+          name: opencode-studio-desktop-${{ matrix.target }}${{ matrix.suffix }}
           path: release-assets/opencode-studio-desktop-*
           if-no-files-found: error
 
@@ -600,25 +598,24 @@ jobs:
           BUNDLE_DIR="${CARGO_TARGET_DIR}/${{ matrix.target }}/release/bundle"
           if [ ! -d "$BUNDLE_DIR" ]; then BUNDLE_DIR="${CARGO_TARGET_DIR}/release/bundle"; fi
 
-          FLAVOR="${{ matrix.flavor }}"
           TARGET="${{ matrix.target }}"
           SUFFIX="${{ matrix.suffix }}"
 
           if [[ "${RUNNER_OS}" == "macOS" ]]; then
             SRC="$(ls -1 "$BUNDLE_DIR"/dmg/*.dmg 2>/dev/null | head -n 1 || true)"
             test -n "$SRC"
-            cp "$SRC" "release-assets/opencode-studio-desktop-${FLAVOR}-${TARGET}${SUFFIX}.dmg"
+            cp "$SRC" "release-assets/opencode-studio-desktop-${TARGET}${SUFFIX}.dmg"
           else
             SRC_APPIMAGE="$(ls -1 "$BUNDLE_DIR"/appimage/*.AppImage 2>/dev/null | head -n 1 || true)"
             test -n "$SRC_APPIMAGE"
-            cp "$SRC_APPIMAGE" "release-assets/opencode-studio-desktop-${FLAVOR}-${TARGET}${SUFFIX}.AppImage"
+            cp "$SRC_APPIMAGE" "release-assets/opencode-studio-desktop-${TARGET}${SUFFIX}.AppImage"
 
             SRC_DEB="$(ls -1 "$BUNDLE_DIR"/deb/*.deb 2>/dev/null | head -n 1 || true)"
             test -n "$SRC_DEB"
-            cp "$SRC_DEB" "release-assets/opencode-studio-desktop-${FLAVOR}-${TARGET}${SUFFIX}.deb"
+            cp "$SRC_DEB" "release-assets/opencode-studio-desktop-${TARGET}${SUFFIX}.deb"
             SRC_RPM="$(ls -1 "$BUNDLE_DIR"/rpm/*.rpm 2>/dev/null | head -n 1 || true)"
             test -n "$SRC_RPM"
-            cp "$SRC_RPM" "release-assets/opencode-studio-desktop-${FLAVOR}-${TARGET}${SUFFIX}.rpm"
+            cp "$SRC_RPM" "release-assets/opencode-studio-desktop-${TARGET}${SUFFIX}.rpm"
           fi
 
       - name: Pack desktop bundles (Windows)
@@ -628,18 +625,17 @@ jobs:
           New-Item -ItemType Directory -Force -Path release-assets | Out-Null
           $bundleDir = Join-Path $env:CARGO_TARGET_DIR "${{ matrix.target }}/release/bundle"
           if (-not (Test-Path $bundleDir)) { $bundleDir = Join-Path $env:CARGO_TARGET_DIR "release/bundle" }
-          $flavor = "${{ matrix.flavor }}"
           $target = "${{ matrix.target }}"
           $suffix = "${{ matrix.suffix }}"
 
           $msi = Get-ChildItem -Path (Join-Path $bundleDir 'msi') -Filter '*.msi' -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
           if ($msi) {
-            Copy-Item -Force $msi.FullName (Join-Path 'release-assets' ("opencode-studio-desktop-$flavor-$target$suffix.msi"))
+            Copy-Item -Force $msi.FullName (Join-Path 'release-assets' ("opencode-studio-desktop-$target$suffix.msi"))
           }
 
           $exe = Get-ChildItem -Path (Join-Path $bundleDir 'nsis') -Filter '*.exe' -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
           if ($exe) {
-            Copy-Item -Force $exe.FullName (Join-Path 'release-assets' ("opencode-studio-desktop-$flavor-$target$suffix.exe"))
+            Copy-Item -Force $exe.FullName (Join-Path 'release-assets' ("opencode-studio-desktop-$target$suffix.exe"))
           }
 
           if (-not $msi -and -not $exe) {
@@ -649,6 +645,6 @@ jobs:
       - name: Upload desktop artifact
         uses: actions/upload-artifact@v6
         with:
-          name: opencode-studio-desktop-${{ matrix.flavor }}-${{ matrix.target }}${{ matrix.suffix }}
+          name: opencode-studio-desktop-${{ matrix.target }}${{ matrix.suffix }}
           path: release-assets/opencode-studio-desktop-*
           if-no-files-found: error
