@@ -14,6 +14,12 @@ If this file and CI config diverge, CI is the source of truth.
 
 ## Required Checks
 
+### Version consistency (CI job: `version`)
+
+```bash
+python3 scripts/version_sync.py check
+```
+
 ### Web (CI job: `web`)
 
 ```bash

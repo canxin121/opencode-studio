@@ -14,6 +14,12 @@
 
 ## 必过检查
 
+### 版本一致性（对应 CI job: `version`）
+
+```bash
+python3 scripts/version_sync.py check
+```
+
 ### Web（对应 CI job: `web`）
 
 ```bash

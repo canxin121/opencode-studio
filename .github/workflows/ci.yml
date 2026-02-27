@@ -17,8 +17,19 @@ env:
   CACHE_VERSION: v1
 
 jobs:
+  version:
+    name: Version consistency
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check version consistency
+        run: python3 scripts/version_sync.py check
+
   web:
     name: Web (${{ matrix.task }})
+    needs: version
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -71,6 +82,7 @@ jobs:
 
   rust:
     name: Rust (${{ matrix.task }})
+    needs: version
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:

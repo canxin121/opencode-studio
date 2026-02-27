@@ -29,6 +29,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RELEASE_REF }}
+
       - name: Validate release tag format
         shell: bash
         run: |
@@ -39,6 +43,9 @@ jobs:
             echo "::error::Invalid release tag '$TAG'. Expected vMAJOR.MINOR.PATCH (optional -prerelease and +build metadata)."
             exit 1
           fi
+
+      - name: Validate version consistency against release tag
+        run: python3 scripts/version_sync.py check --tag "${{ env.RELEASE_TAG }}"
 
   create-release:
     needs: validate-tag
