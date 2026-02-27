@@ -21,6 +21,8 @@ const timeoutMs = computed(() => {
   return Math.max(0, Math.min(60_000, parsed))
 })
 
+const toastHostReady = computed(() => toasts.isHostReady)
+
 function resolveMessage(preset: ToastPreset): string {
   const trimmed = String(messageDraft.value || '').trim()
   const fallback = String(t(`settings.debug.toast.defaults.${preset}`))
@@ -113,6 +115,12 @@ function pushBurst() {
       <div class="space-y-1 text-[11px] text-muted-foreground">
         <div>{{ t('settings.debug.toast.hints.dedupe') }}</div>
         <div>{{ t('settings.debug.toast.hints.action') }}</div>
+        <div>
+          Toast host status:
+          <span class="font-medium" :class="toastHostReady ? 'text-primary' : 'text-destructive'">
+            {{ toastHostReady ? 'ready' : 'waiting to mount' }}
+          </span>
+        </div>
       </div>
     </section>
   </div>
