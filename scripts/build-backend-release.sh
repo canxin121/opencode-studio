@@ -5,18 +5,20 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 usage() {
   cat <<'EOF'
-Usage: build-backend-release.sh [--target TARGET_TRIPLE] [--tag RELEASE_TAG] [--out-dir OUT_DIR]
+Usage: build-backend-release.sh [--target TARGET_TRIPLE] [--tag RELEASE_TAG] [--out-dir OUT_DIR] [--build-tool cargo|cross]
 
 Options:
   --target TARGET_TRIPLE  Rust target triple (defaults to host)
   --tag RELEASE_TAG       Optional version/tag suffix for archive names
   --out-dir OUT_DIR       Output directory for packaged archives (default: release-assets)
+  --build-tool TOOL       Build tool to invoke: cargo (default) or cross
 EOF
 }
 
 TARGET_TRIPLE=""
 RELEASE_TAG=""
 OUT_DIR="$ROOT_DIR/release-assets"
+BUILD_TOOL="cargo"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -32,6 +34,10 @@ while [[ $# -gt 0 ]]; do
       OUT_DIR="${2:-}"
       shift 2
       ;;
+    --build-tool)
+      BUILD_TOOL="${2:-}"
+      shift 2
+      ;;
     -h|--help)
       usage
       exit 0
@@ -43,6 +49,11 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ "$BUILD_TOOL" != "cargo" && "$BUILD_TOOL" != "cross" ]]; then
+  echo "ERROR: unsupported --build-tool '$BUILD_TOOL' (expected cargo or cross)" >&2
+  exit 2
+fi
 
 if [[ -z "$TARGET_TRIPLE" ]]; then
   if rustc --print host-tuple >/dev/null 2>&1; then
@@ -61,8 +72,10 @@ case "$TARGET_TRIPLE" in
     ;;
 esac
 
-echo "Building Rust backend (server) release for ${TARGET_TRIPLE}..."
-cargo build --manifest-path "$ROOT_DIR/server/Cargo.toml" --release --locked --target "$TARGET_TRIPLE" --target-dir "$ROOT_DIR/server/target"
+BUILD_CMD=("$BUILD_TOOL")
+
+echo "Building Rust backend (server) release for ${TARGET_TRIPLE} via ${BUILD_TOOL}..."
+"${BUILD_CMD[@]}" build --manifest-path "$ROOT_DIR/server/Cargo.toml" --release --locked --target "$TARGET_TRIPLE" --target-dir "$ROOT_DIR/server/target"
 
 BIN_DIR="$ROOT_DIR/server/target/$TARGET_TRIPLE/release"
 BIN_NAME="opencode-studio$EXT"

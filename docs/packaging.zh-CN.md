@@ -118,13 +118,19 @@ cargo install tauri-cli --locked --git https://github.com/tauri-apps/tauri --bra
 
 `Package` 使用的架构矩阵：
 
-- Linux：`x86_64-unknown-linux-gnu`、`aarch64-unknown-linux-gnu`
-- Windows：`x86_64-pc-windows-msvc`
-- macOS：`aarch64-apple-darwin`、`x86_64-apple-darwin`
+- 桌面端（main + CEF）：
+  - Linux：`x86_64-unknown-linux-gnu`、`aarch64-unknown-linux-gnu`
+  - Windows：`x86_64-pc-windows-msvc`、`aarch64-pc-windows-msvc`
+  - macOS：`aarch64-apple-darwin`、`x86_64-apple-darwin`
+- 后端服务产物额外覆盖更多 Linux 架构：
+  - `x86_64-unknown-linux-musl`、`aarch64-unknown-linux-musl`
+  - `armv7-unknown-linux-gnueabihf`、`armv7-unknown-linux-musleabihf`
+  - `i686-unknown-linux-gnu`、`i686-unknown-linux-musl`
 
 `Package` 产物命名策略：
 
-- 后端归档：`opencode-studio-<target>.tar.gz`（Unix）/ `opencode-studio-<target>.zip`（Windows）
+- 后端归档：`opencode-studio-backend-<target>.tar.gz`（Unix）/ `opencode-studio-backend-<target>.zip`（Windows）
+- 后端元数据：`opencode-studio-backend-<target>.json`
 - 桌面安装包：`opencode-studio-desktop-<target><suffix>.<ext>`
 - 上传到 Actions 的 artifact 名称始终包含 `<target>`，可直接区分架构。
 
@@ -143,9 +149,14 @@ Release 场景：
 
 `Release` 使用的架构矩阵：
 
-- Linux：`x86_64-unknown-linux-gnu`、`aarch64-unknown-linux-gnu`
-- Windows：`x86_64-pc-windows-msvc`
-- macOS：`aarch64-apple-darwin`、`x86_64-apple-darwin`
+- 桌面端（main + CEF）：
+  - Linux：`x86_64-unknown-linux-gnu`、`aarch64-unknown-linux-gnu`
+  - Windows：`x86_64-pc-windows-msvc`、`aarch64-pc-windows-msvc`
+  - macOS：`aarch64-apple-darwin`、`x86_64-apple-darwin`
+- 后端服务产物额外覆盖更多 Linux 架构：
+  - `x86_64-unknown-linux-musl`、`aarch64-unknown-linux-musl`
+  - `armv7-unknown-linux-gnueabihf`、`armv7-unknown-linux-musleabihf`
+  - `i686-unknown-linux-gnu`、`i686-unknown-linux-musl`
 
 `Release` 资产命名策略：
 
@@ -158,8 +169,8 @@ Release 场景：
 
 target/runner 守护：
 
-- 打包和发布工作流会在构建前执行 `python scripts/assert_native_target.py <target>`，
-  即使本机无法完整跨编译，也能在 CI 中尽早发现矩阵与目标三元组不匹配的问题。
+- 原生构建矩阵会在构建前执行 `python scripts/assert_native_target.py <target>`。
+- 额外 Linux 服务端目标通过 `cross` 跨编译，因此会跳过原生 runner 断言。
 
 服务安装脚本不会作为 release 资产发布，请直接使用 GitHub raw 链接，例如：
 

@@ -121,13 +121,19 @@ Two workflows are relevant:
 
 Architecture matrix used by `Package`:
 
-- Linux: `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`
-- Windows: `x86_64-pc-windows-msvc`
-- macOS: `aarch64-apple-darwin`, `x86_64-apple-darwin`
+- Desktop (main + CEF):
+  - Linux: `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`
+  - Windows: `x86_64-pc-windows-msvc`, `aarch64-pc-windows-msvc`
+  - macOS: `aarch64-apple-darwin`, `x86_64-apple-darwin`
+- Backend (service artifacts) adds wider Linux coverage:
+  - `x86_64-unknown-linux-musl`, `aarch64-unknown-linux-musl`
+  - `armv7-unknown-linux-gnueabihf`, `armv7-unknown-linux-musleabihf`
+  - `i686-unknown-linux-gnu`, `i686-unknown-linux-musl`
 
 `Package` artifact naming strategy:
 
-- Backend archive: `opencode-studio-<target>.tar.gz` (Unix) / `opencode-studio-<target>.zip` (Windows)
+- Backend archive: `opencode-studio-backend-<target>.tar.gz` (Unix) / `opencode-studio-backend-<target>.zip` (Windows)
+- Backend metadata: `opencode-studio-backend-<target>.json`
 - Desktop installers: `opencode-studio-desktop-<target><suffix>.<ext>`
 - Upload artifact names always include `<target>` so architecture is explicit.
 
@@ -146,9 +152,14 @@ For releases:
 
 Architecture matrix used by `Release`:
 
-- Linux: `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`
-- Windows: `x86_64-pc-windows-msvc`
-- macOS: `aarch64-apple-darwin`, `x86_64-apple-darwin`
+- Desktop (main + CEF):
+  - Linux: `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`
+  - Windows: `x86_64-pc-windows-msvc`, `aarch64-pc-windows-msvc`
+  - macOS: `aarch64-apple-darwin`, `x86_64-apple-darwin`
+- Backend (service artifacts) adds wider Linux coverage:
+  - `x86_64-unknown-linux-musl`, `aarch64-unknown-linux-musl`
+  - `armv7-unknown-linux-gnueabihf`, `armv7-unknown-linux-musleabihf`
+  - `i686-unknown-linux-gnu`, `i686-unknown-linux-musl`
 
 `Release` asset naming strategy:
 
@@ -161,8 +172,8 @@ Architecture matrix used by `Release`:
 
 Target/runner guard:
 
-- Packaging/release workflows run `python scripts/assert_native_target.py <target>` before build,
-  so matrix regressions are caught early in CI even if local machine cannot cross-compile every target.
+- Native matrix entries run `python scripts/assert_native_target.py <target>` before build.
+- Extra Linux service targets are cross-built via `cross`, so they intentionally skip native runner assertion.
 
 Service install scripts are not published as release assets. Use GitHub raw URLs instead, for example:
 

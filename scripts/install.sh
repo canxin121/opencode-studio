@@ -65,11 +65,57 @@ need tar
 OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
 ARCH="$(uname -m)"
 
-target_triple() {
+linux_libc_family() {
+  if ! command -v ldd >/dev/null 2>&1; then
+    echo "gnu"
+    return
+  fi
+
+  local info
+  info="$(ldd --version 2>&1 || true)"
+  if [[ "$info" == *musl* ]]; then
+    echo "musl"
+  else
+    echo "gnu"
+  fi
+}
+
+backend_target_candidates() {
   case "${OS}/${ARCH}" in
-    linux/x86_64) echo "x86_64-unknown-linux-gnu" ;;
-    darwin/x86_64) echo "x86_64-apple-darwin" ;;
-    darwin/arm64) echo "aarch64-apple-darwin" ;;
+    linux/x86_64)
+      if [[ "$(linux_libc_family)" == "musl" ]]; then
+        printf '%s\n' "x86_64-unknown-linux-musl" "x86_64-unknown-linux-gnu"
+      else
+        printf '%s\n' "x86_64-unknown-linux-gnu" "x86_64-unknown-linux-musl"
+      fi
+      ;;
+    linux/aarch64|linux/arm64)
+      if [[ "$(linux_libc_family)" == "musl" ]]; then
+        printf '%s\n' "aarch64-unknown-linux-musl" "aarch64-unknown-linux-gnu"
+      else
+        printf '%s\n' "aarch64-unknown-linux-gnu" "aarch64-unknown-linux-musl"
+      fi
+      ;;
+    linux/armv7l|linux/armv7)
+      if [[ "$(linux_libc_family)" == "musl" ]]; then
+        printf '%s\n' "armv7-unknown-linux-musleabihf" "armv7-unknown-linux-gnueabihf"
+      else
+        printf '%s\n' "armv7-unknown-linux-gnueabihf" "armv7-unknown-linux-musleabihf"
+      fi
+      ;;
+    linux/i686|linux/i386)
+      if [[ "$(linux_libc_family)" == "musl" ]]; then
+        printf '%s\n' "i686-unknown-linux-musl" "i686-unknown-linux-gnu"
+      else
+        printf '%s\n' "i686-unknown-linux-gnu" "i686-unknown-linux-musl"
+      fi
+      ;;
+    darwin/x86_64)
+      printf '%s\n' "x86_64-apple-darwin"
+      ;;
+    darwin/arm64|darwin/aarch64)
+      printf '%s\n' "aarch64-apple-darwin"
+      ;;
     *)
       echo "Unsupported platform: ${OS}/${ARCH}" >&2
       echo "Set up a manual install from GitHub Releases for your target." >&2
@@ -78,7 +124,14 @@ target_triple() {
   esac
 }
 
-TARGET="$(target_triple)"
+BACKEND_TARGETS=()
+while IFS= read -r target; do
+  BACKEND_TARGETS+=("$target")
+done < <(backend_target_candidates)
+if [[ "${#BACKEND_TARGETS[@]}" -eq 0 ]]; then
+  echo "Failed to resolve backend target candidates for ${OS}/${ARCH}" >&2
+  exit 1
+fi
 
 if [[ -z "$INSTALL_DIR" ]]; then
   INSTALL_DIR="$HOME/.local/share/opencode-studio"
@@ -107,23 +160,7 @@ download_asset_by_name() {
   local out="$3"
   local url=""
 
-  if command -v jq >/dev/null 2>&1; then
-    url="$(jq -r --arg NAME "$name" '.assets[] | select(.name==$NAME) | .browser_download_url' <<<"$json" | head -n 1)"
-  else
-    need python3
-    url="$(python3 - <<PY
-import json,sys
-j=json.loads(sys.stdin.read())
-name=sys.argv[1]
-for a in j.get('assets', []):
-  if a.get('name')==name:
-    print(a.get('browser_download_url',''))
-    sys.exit(0)
-print("")
-sys.exit(0)
-PY
-"$name" <<<"$json")"
-  fi
+  url="$(asset_url_by_name "$json" "$name")"
 
   if [[ -z "$url" || "$url" == "null" ]]; then
     echo "Asset not found in release: $name" >&2
@@ -132,6 +169,49 @@ PY
 
   echo "Downloading: $name"
   curl -fL --retry 3 --retry-delay 1 -o "$out" "$url"
+}
+
+asset_url_by_name() {
+  local json="$1"
+  local name="$2"
+
+  if command -v jq >/dev/null 2>&1; then
+    jq -r --arg NAME "$name" '.assets[] | select(.name==$NAME) | .browser_download_url' <<<"$json" | head -n 1
+    return
+  fi
+
+  need python3
+  python3 -c 'import json,sys
+j=json.loads(sys.stdin.read())
+name=sys.argv[1]
+for a in j.get("assets", []):
+  if a.get("name") == name:
+    print(a.get("browser_download_url", ""))
+    sys.exit(0)
+print("")' "$name" <<<"$json"
+}
+
+download_first_asset_by_name() {
+  local json="$1"
+  local out="$2"
+  shift 2
+
+  local name=""
+  local url=""
+  for name in "$@"; do
+    url="$(asset_url_by_name "$json" "$name")"
+    if [[ -n "$url" && "$url" != "null" ]]; then
+      echo "Downloading: $name"
+      curl -fL --retry 3 --retry-delay 1 -o "$out" "$url"
+      return 0
+    fi
+  done
+
+  echo "Asset not found in release. Tried:" >&2
+  for name in "$@"; do
+    echo "  - $name" >&2
+  done
+  exit 1
 }
 
 RELEASE_JSON="$(fetch_release_json)"
@@ -154,9 +234,15 @@ TMP_DIR="$(mktemp -d)"
 cleanup() { rm -rf "$TMP_DIR"; }
 trap cleanup EXIT
 
-BACKEND_ASSET="opencode-studio-${TARGET}.tar.gz"
-BACKEND_TAR="$TMP_DIR/$BACKEND_ASSET"
-download_asset_by_name "$RELEASE_JSON" "$BACKEND_ASSET" "$BACKEND_TAR"
+BACKEND_TAR="$TMP_DIR/opencode-studio-backend.tar.gz"
+BACKEND_ASSET_CANDIDATES=()
+for target in "${BACKEND_TARGETS[@]}"; do
+  BACKEND_ASSET_CANDIDATES+=("opencode-studio-backend-${target}-${TAG_NAME}.tar.gz")
+done
+for target in "${BACKEND_TARGETS[@]}"; do
+  BACKEND_ASSET_CANDIDATES+=("opencode-studio-${target}.tar.gz")
+done
+download_first_asset_by_name "$RELEASE_JSON" "$BACKEND_TAR" "${BACKEND_ASSET_CANDIDATES[@]}"
 
 echo "Installing backend binary to $BIN_PATH"
 tar -xzf "$BACKEND_TAR" -C "$TMP_DIR"

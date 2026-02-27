@@ -136,14 +136,52 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
+            native: true
+            build_tool: cargo
           - os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
+            native: true
+            build_tool: cargo
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            native: false
+            build_tool: cross
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+            native: false
+            build_tool: cross
+          - os: ubuntu-latest
+            target: armv7-unknown-linux-gnueabihf
+            native: false
+            build_tool: cross
+          - os: ubuntu-latest
+            target: armv7-unknown-linux-musleabihf
+            native: false
+            build_tool: cross
+          - os: ubuntu-latest
+            target: i686-unknown-linux-gnu
+            native: false
+            build_tool: cross
+          - os: ubuntu-latest
+            target: i686-unknown-linux-musl
+            native: false
+            build_tool: cross
           - os: macos-14
             target: aarch64-apple-darwin
+            native: true
+            build_tool: cargo
           - os: macos-15-intel
             target: x86_64-apple-darwin
+            native: true
+            build_tool: cargo
           - os: windows-latest
             target: x86_64-pc-windows-msvc
+            native: true
+            build_tool: cargo
+          - os: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            native: true
+            build_tool: cargo
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     steps:
@@ -152,6 +190,7 @@ jobs:
           ref: ${{ env.RELEASE_REF }}
 
       - name: Validate native target mapping
+        if: matrix.native == true
         run: python scripts/assert_native_target.py ${{ matrix.target }}
 
       - name: Setup Rust
@@ -159,17 +198,21 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      - name: Install cross
+        if: matrix.build_tool == 'cross'
+        run: cargo install cross --locked --version 0.2.5
+
       - name: Cache Rust builds
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
-            . -> target
+            server -> server/target
           save-if: true
           add-job-id-key: false
 
       - name: Build backend release artifact
         shell: bash
-        run: ./scripts/build-backend-release.sh --target ${{ matrix.target }} --tag ${{ env.RELEASE_TAG }} --out-dir release-assets
+        run: ./scripts/build-backend-release.sh --target ${{ matrix.target }} --tag ${{ env.RELEASE_TAG }} --out-dir release-assets --build-tool ${{ matrix.build_tool }}
 
       - name: Upload backend assets to GitHub Release
         uses: softprops/action-gh-release@v2
@@ -200,6 +243,11 @@ jobs:
             suffix: ""
             flavor: full
             cef: false
+          - os: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            suffix: ""
+            flavor: full
+            cef: false
           - os: macos-14
             target: aarch64-apple-darwin
             suffix: ""
@@ -224,6 +272,11 @@ jobs:
             cef: true
           - os: windows-latest
             target: x86_64-pc-windows-msvc
+            suffix: "-cef"
+            flavor: full
+            cef: true
+          - os: windows-11-arm
+            target: aarch64-pc-windows-msvc
             suffix: "-cef"
             flavor: full
             cef: true
@@ -309,7 +362,7 @@ jobs:
           bun run --cwd src-main/web build
 
       - name: Copy web dist into desktop source (Unix)
-        if: matrix.os != 'windows-latest'
+        if: "!startsWith(matrix.os, 'windows-')"
         shell: bash
         run: |
           set -euo pipefail
@@ -319,7 +372,7 @@ jobs:
           test -f src-tauri/web/dist/index.html
 
       - name: Copy web dist into desktop source (Windows)
-        if: matrix.os == 'windows-latest'
+        if: startsWith(matrix.os, 'windows-')
         shell: pwsh
         run: |
           if (Test-Path 'src-tauri/web/dist') { Remove-Item -Recurse -Force 'src-tauri/web/dist' }
@@ -382,7 +435,7 @@ jobs:
             ${{ runner.os }}-tauri-cef-
 
       - name: Cache CEF runtime (Windows)
-        if: matrix.cef == true && matrix.os == 'windows-latest'
+        if: matrix.cef == true && startsWith(matrix.os, 'windows-')
         uses: actions/cache@v5
         with:
           path: ${{ env.LOCALAPPDATA }}\tauri-cef
@@ -427,7 +480,7 @@ jobs:
         run: cargo install tauri-cli --locked --git https://github.com/tauri-apps/tauri --branch feat/cef
 
       - name: Build + install backend sidecar (full only, Unix)
-        if: matrix.flavor == 'full' && matrix.os != 'windows-latest'
+        if: matrix.flavor == 'full' && !startsWith(matrix.os, 'windows-')
         shell: bash
         run: |
           set -euo pipefail
@@ -443,7 +496,7 @@ jobs:
           chmod +x "$TAURI_BIN_DIR/opencode-studio-${{ matrix.target }}"
 
       - name: Build + install backend sidecar (full only, Windows)
-        if: matrix.flavor == 'full' && matrix.os == 'windows-latest'
+        if: matrix.flavor == 'full' && startsWith(matrix.os, 'windows-')
         shell: pwsh
         run: |
           & cargo build --manifest-path src-main/server/Cargo.toml --release --target ${{ matrix.target }} --locked --target-dir src-main/server/target
@@ -527,7 +580,7 @@ jobs:
           hdiutil create -volname "OpenCode Studio" -srcfolder "$STAGE_DIR" -ov -format UDZO "$BUNDLE_DIR/dmg/opencode-studio-fallback.dmg"
 
       - name: Stage desktop installers (Unix)
-        if: matrix.os != 'windows-latest'
+        if: "!startsWith(matrix.os, 'windows-')"
         shell: bash
         run: |
           set -euo pipefail
@@ -569,7 +622,7 @@ jobs:
           fi
 
       - name: Stage desktop installers (Windows)
-        if: matrix.os == 'windows-latest'
+        if: startsWith(matrix.os, 'windows-')
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path release-assets | Out-Null

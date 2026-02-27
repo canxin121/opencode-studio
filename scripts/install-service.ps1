@@ -25,9 +25,13 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 Require-Command "sc.exe" "Windows service management requires sc.exe."
 Require-Command "opencode" "Install OpenCode first (for example: scoop install opencode, choco install opencode, or npm i -g opencode-ai@latest)."
 
-function Get-TargetTriple {
-  # GitHub Actions + release assets currently publish x64 Windows builds.
-  return "x86_64-pc-windows-msvc"
+function Get-TargetCandidates {
+  $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
+  switch ($arch) {
+    "Arm64" { return @("aarch64-pc-windows-msvc", "x86_64-pc-windows-msvc") }
+    "X64" { return @("x86_64-pc-windows-msvc", "aarch64-pc-windows-msvc") }
+    default { throw "Unsupported Windows architecture for installer: $arch" }
+  }
 }
 
 function Get-ReleaseJson {
@@ -46,12 +50,21 @@ function Find-AssetUrl([object]$Release, [string]$Name) {
   throw "Asset not found in release: $Name"
 }
 
+function Find-FirstAsset([object]$Release, [string[]]$Names) {
+  foreach ($name in $Names) {
+    foreach ($a in $Release.assets) {
+      if ($a.name -eq $name) { return $a }
+    }
+  }
+  throw "Asset not found in release. Tried: $($Names -join ', ')"
+}
+
 function Download([string]$Url, [string]$OutFile) {
   Write-Host "Downloading $Url"
   Invoke-WebRequest -Uri $Url -OutFile $OutFile
 }
 
-$Target = Get-TargetTriple
+$Targets = Get-TargetCandidates
 $Release = Get-ReleaseJson
 $TagName = $Release.tag_name
 if (-not $TagName) { throw "Failed to determine release tag_name" }
@@ -67,9 +80,17 @@ New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
 
 $Tmp = New-Item -ItemType Directory -Force -Path (Join-Path $env:TEMP ("ocstudio-" + [Guid]::NewGuid().ToString()))
 try {
-  $BackendAsset = "opencode-studio-$Target.zip"
-  $BackendUrl = Find-AssetUrl $Release $BackendAsset
-  $BackendZip = Join-Path $Tmp $BackendAsset
+  $BackendCandidates = @()
+  foreach ($target in $Targets) {
+    $BackendCandidates += "opencode-studio-backend-$target-$TagName.zip"
+  }
+  foreach ($target in $Targets) {
+    $BackendCandidates += "opencode-studio-$target.zip"
+  }
+
+  $BackendAsset = Find-FirstAsset $Release $BackendCandidates
+  $BackendUrl = $BackendAsset.browser_download_url
+  $BackendZip = Join-Path $Tmp $BackendAsset.name
   Download $BackendUrl $BackendZip
   Expand-Archive -Force -Path $BackendZip -DestinationPath $Tmp
 

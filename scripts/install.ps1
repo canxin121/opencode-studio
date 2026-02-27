@@ -12,9 +12,13 @@ Param(
 
 $ErrorActionPreference = "Stop"
 
-function Get-TargetTriple {
-  # Current releases publish x64 Windows artifacts.
-  return "x86_64-pc-windows-msvc"
+function Get-TargetCandidates {
+  $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
+  switch ($arch) {
+    "Arm64" { return @("aarch64-pc-windows-msvc", "x86_64-pc-windows-msvc") }
+    "X64" { return @("x86_64-pc-windows-msvc", "aarch64-pc-windows-msvc") }
+    default { throw "Unsupported Windows architecture for installer: $arch" }
+  }
 }
 
 function Get-ReleaseJson {
@@ -35,6 +39,17 @@ function Find-AssetUrl([object]$Release, [string]$Name) {
   throw "Asset not found in release: $Name"
 }
 
+function Find-FirstAsset([object]$Release, [string[]]$Names) {
+  foreach ($name in $Names) {
+    foreach ($asset in $Release.assets) {
+      if ($asset.name -eq $name) {
+        return $asset
+      }
+    }
+  }
+  throw "Asset not found in release. Tried: $($Names -join ', ')"
+}
+
 function Download([string]$Url, [string]$OutFile) {
   Write-Host "Downloading $Url"
   Invoke-WebRequest -Uri $Url -OutFile $OutFile
@@ -50,7 +65,7 @@ $ConfigFile = Join-Path $BinDir "opencode-studio.toml"
 
 New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
 
-$Target = Get-TargetTriple
+$Targets = Get-TargetCandidates
 $Release = Get-ReleaseJson
 $TagName = $Release.tag_name
 if (-not $TagName) {
@@ -59,9 +74,17 @@ if (-not $TagName) {
 
 $Tmp = New-Item -ItemType Directory -Force -Path (Join-Path $env:TEMP ("ocstudio-" + [Guid]::NewGuid().ToString()))
 try {
-  $BackendAsset = "opencode-studio-$Target.zip"
-  $BackendUrl = Find-AssetUrl $Release $BackendAsset
-  $BackendZip = Join-Path $Tmp $BackendAsset
+  $BackendCandidates = @()
+  foreach ($target in $Targets) {
+    $BackendCandidates += "opencode-studio-backend-$target-$TagName.zip"
+  }
+  foreach ($target in $Targets) {
+    $BackendCandidates += "opencode-studio-$target.zip"
+  }
+
+  $BackendAsset = Find-FirstAsset $Release $BackendCandidates
+  $BackendUrl = $BackendAsset.browser_download_url
+  $BackendZip = Join-Path $Tmp $BackendAsset.name
   Download $BackendUrl $BackendZip
   Expand-Archive -Force -Path $BackendZip -DestinationPath $Tmp
 

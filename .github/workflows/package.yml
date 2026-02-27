@@ -81,24 +81,70 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             ref: ${{ github.sha }}
+            native: true
+            build_tool: cargo
           - os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
             ref: ${{ github.sha }}
+            native: true
+            build_tool: cargo
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            ref: ${{ github.sha }}
+            native: false
+            build_tool: cross
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+            ref: ${{ github.sha }}
+            native: false
+            build_tool: cross
+          - os: ubuntu-latest
+            target: armv7-unknown-linux-gnueabihf
+            ref: ${{ github.sha }}
+            native: false
+            build_tool: cross
+          - os: ubuntu-latest
+            target: armv7-unknown-linux-musleabihf
+            ref: ${{ github.sha }}
+            native: false
+            build_tool: cross
+          - os: ubuntu-latest
+            target: i686-unknown-linux-gnu
+            ref: ${{ github.sha }}
+            native: false
+            build_tool: cross
+          - os: ubuntu-latest
+            target: i686-unknown-linux-musl
+            ref: ${{ github.sha }}
+            native: false
+            build_tool: cross
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             ref: ${{ github.sha }}
+            native: true
+            build_tool: cargo
+          - os: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            ref: ${{ github.sha }}
+            native: true
+            build_tool: cargo
           - os: macos-14
             target: aarch64-apple-darwin
             ref: ${{ github.sha }}
+            native: true
+            build_tool: cargo
           - os: macos-15-intel
             target: x86_64-apple-darwin
             ref: ${{ github.sha }}
+            native: true
+            build_tool: cargo
     steps:
       - uses: actions/checkout@v6
         with:
           ref: ${{ matrix.ref }}
 
       - name: Validate native target mapping
+        if: matrix.native == true
         run: python scripts/assert_native_target.py ${{ matrix.target }}
 
       - name: Setup Rust
@@ -106,49 +152,21 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      - name: Install cross
+        if: matrix.build_tool == 'cross'
+        run: cargo install cross --locked --version 0.2.5
+
       - name: Cache Rust builds
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
-            . -> target
+            server -> server/target
           save-if: true
           add-job-id-key: false
 
-      - name: Build backend
-        run: cargo build --manifest-path server/Cargo.toml --release --target ${{ matrix.target }} --locked
-
-      - name: Archive backend (Unix)
-        if: matrix.os != 'windows-latest'
+      - name: Build backend release artifact
         shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p release-assets
-          BIN="target/${{ matrix.target }}/release/opencode-studio"
-          if [[ ! -f "$BIN" ]]; then echo "missing $BIN" >&2; exit 1; fi
-          NAME="opencode-studio-${{ matrix.target }}"
-          tar -czf "release-assets/${NAME}.tar.gz" -C "$(dirname "$BIN")" "$(basename "$BIN")"
-
-      - name: Archive backend (Windows)
-        if: matrix.os == 'windows-latest'
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path release-assets | Out-Null
-
-          $binDir = "target/${{ matrix.target }}/release"
-          $binName = "opencode-studio.exe"
-          $binPath = Join-Path $binDir $binName
-          if (-not (Test-Path $binPath)) { throw "missing $binPath" }
-
-          $name = "opencode-studio-${{ matrix.target }}"
-          $out = Join-Path $env:GITHUB_WORKSPACE ("release-assets/$name.zip")
-
-          Push-Location $binDir
-          try {
-            if (Test-Path $out) { Remove-Item -Force $out }
-            Compress-Archive -Path $binName -DestinationPath $out -Force
-          } finally {
-            Pop-Location
-          }
+        run: ./scripts/build-backend-release.sh --target ${{ matrix.target }} --out-dir release-assets --build-tool ${{ matrix.build_tool }}
 
       - name: Upload backend artifact
         uses: actions/upload-artifact@v6
@@ -180,6 +198,12 @@ jobs:
             flavor: full
           - os: windows-latest
             target: x86_64-pc-windows-msvc
+            ref: ${{ github.sha }}
+            tauri: main
+            suffix: ""
+            flavor: full
+          - os: windows-11-arm
+            target: aarch64-pc-windows-msvc
             ref: ${{ github.sha }}
             tauri: main
             suffix: ""
@@ -227,7 +251,7 @@ jobs:
           path: release-assets
 
       - name: Extract web dist (Unix)
-        if: matrix.os != 'windows-latest'
+        if: "!startsWith(matrix.os, 'windows-')"
         shell: bash
         run: |
           set -euo pipefail
@@ -237,7 +261,7 @@ jobs:
           test -f web/dist/index.html
 
       - name: Extract web dist (Windows)
-        if: matrix.os == 'windows-latest'
+        if: startsWith(matrix.os, 'windows-')
         shell: pwsh
         run: |
           if (Test-Path 'web/dist') { Remove-Item -Recurse -Force 'web/dist' }
@@ -285,24 +309,36 @@ jobs:
           path: release-assets/backend
 
       - name: Install backend sidecar (full only, Unix)
-        if: matrix.flavor == 'full' && matrix.os != 'windows-latest'
+        if: matrix.flavor == 'full' && !startsWith(matrix.os, 'windows-')
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p desktop/src-tauri/binaries
           mkdir -p release-assets/backend-extract
-          tar -xzf "release-assets/backend/opencode-studio-${{ matrix.target }}.tar.gz" -C release-assets/backend-extract
+          ARCHIVE="release-assets/backend/opencode-studio-backend-${{ matrix.target }}.tar.gz"
+          if [[ ! -f "$ARCHIVE" ]]; then
+            ARCHIVE="release-assets/backend/opencode-studio-${{ matrix.target }}.tar.gz"
+          fi
+          test -f "$ARCHIVE"
+          tar -xzf "$ARCHIVE" -C release-assets/backend-extract
           test -f release-assets/backend-extract/opencode-studio
           cp release-assets/backend-extract/opencode-studio "desktop/src-tauri/binaries/opencode-studio-${{ matrix.target }}"
           chmod +x "desktop/src-tauri/binaries/opencode-studio-${{ matrix.target }}"
 
       - name: Install backend sidecar (full only, Windows)
-        if: matrix.flavor == 'full' && matrix.os == 'windows-latest'
+        if: matrix.flavor == 'full' && startsWith(matrix.os, 'windows-')
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path 'desktop/src-tauri/binaries' | Out-Null
           New-Item -ItemType Directory -Force -Path 'release-assets/backend-extract' | Out-Null
-          Expand-Archive -Force -Path "release-assets/backend/opencode-studio-${{ matrix.target }}.zip" -DestinationPath 'release-assets/backend-extract'
+          $archive = "release-assets/backend/opencode-studio-backend-${{ matrix.target }}.zip"
+          if (-not (Test-Path $archive)) {
+            $archive = "release-assets/backend/opencode-studio-${{ matrix.target }}.zip"
+          }
+          if (-not (Test-Path $archive)) {
+            throw "Missing backend archive for ${{ matrix.target }}"
+          }
+          Expand-Archive -Force -Path $archive -DestinationPath 'release-assets/backend-extract'
           if (-not (Test-Path 'release-assets/backend-extract/opencode-studio.exe')) { throw 'opencode-studio.exe missing after extract' }
           Copy-Item -Force 'release-assets/backend-extract/opencode-studio.exe' "desktop/src-tauri/binaries/opencode-studio-${{ matrix.target }}.exe"
 
@@ -342,7 +378,7 @@ jobs:
           hdiutil create -volname "OpenCode Studio" -srcfolder "$STAGE_DIR" -ov -format UDZO "$BUNDLE_DIR/dmg/opencode-studio-fallback.dmg"
 
       - name: Pack desktop bundles (Unix)
-        if: matrix.os != 'windows-latest'
+        if: "!startsWith(matrix.os, 'windows-')"
         shell: bash
         run: |
           set -euo pipefail
@@ -372,7 +408,7 @@ jobs:
           fi
 
       - name: Pack desktop bundles (Windows)
-        if: matrix.os == 'windows-latest'
+        if: startsWith(matrix.os, 'windows-')
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path release-assets | Out-Null
@@ -429,6 +465,11 @@ jobs:
             tauri: cef
             suffix: "-cef"
             flavor: full
+          - os: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            tauri: cef
+            suffix: "-cef"
+            flavor: full
           - os: macos-14
             target: aarch64-apple-darwin
             tauri: cef
@@ -482,7 +523,7 @@ jobs:
             ${{ runner.os }}-tauri-cef-
 
       - name: Cache CEF runtime (Windows)
-        if: matrix.os == 'windows-latest'
+        if: startsWith(matrix.os, 'windows-')
         uses: actions/cache@v5
         with:
           path: ${{ env.LOCALAPPDATA }}\tauri-cef
@@ -497,7 +538,7 @@ jobs:
           path: release-assets
 
       - name: Extract web dist (Unix)
-        if: matrix.os != 'windows-latest'
+        if: "!startsWith(matrix.os, 'windows-')"
         shell: bash
         run: |
           set -euo pipefail
@@ -507,7 +548,7 @@ jobs:
           test -f web/dist/index.html
 
       - name: Extract web dist (Windows)
-        if: matrix.os == 'windows-latest'
+        if: startsWith(matrix.os, 'windows-')
         shell: pwsh
         run: |
           if (Test-Path 'web/dist') { Remove-Item -Recurse -Force 'web/dist' }
@@ -563,24 +604,36 @@ jobs:
           path: release-assets/backend
 
       - name: Install backend sidecar (full only, Unix)
-        if: matrix.flavor == 'full' && matrix.os != 'windows-latest'
+        if: matrix.flavor == 'full' && !startsWith(matrix.os, 'windows-')
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p desktop/src-tauri-cef/binaries
           mkdir -p release-assets/backend-extract
-          tar -xzf "release-assets/backend/opencode-studio-${{ matrix.target }}.tar.gz" -C release-assets/backend-extract
+          ARCHIVE="release-assets/backend/opencode-studio-backend-${{ matrix.target }}.tar.gz"
+          if [[ ! -f "$ARCHIVE" ]]; then
+            ARCHIVE="release-assets/backend/opencode-studio-${{ matrix.target }}.tar.gz"
+          fi
+          test -f "$ARCHIVE"
+          tar -xzf "$ARCHIVE" -C release-assets/backend-extract
           test -f release-assets/backend-extract/opencode-studio
           cp release-assets/backend-extract/opencode-studio "desktop/src-tauri-cef/binaries/opencode-studio-${{ matrix.target }}"
           chmod +x "desktop/src-tauri-cef/binaries/opencode-studio-${{ matrix.target }}"
 
       - name: Install backend sidecar (full only, Windows)
-        if: matrix.flavor == 'full' && matrix.os == 'windows-latest'
+        if: matrix.flavor == 'full' && startsWith(matrix.os, 'windows-')
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path 'desktop/src-tauri-cef/binaries' | Out-Null
           New-Item -ItemType Directory -Force -Path 'release-assets/backend-extract' | Out-Null
-          Expand-Archive -Force -Path "release-assets/backend/opencode-studio-${{ matrix.target }}.zip" -DestinationPath 'release-assets/backend-extract'
+          $archive = "release-assets/backend/opencode-studio-backend-${{ matrix.target }}.zip"
+          if (-not (Test-Path $archive)) {
+            $archive = "release-assets/backend/opencode-studio-${{ matrix.target }}.zip"
+          }
+          if (-not (Test-Path $archive)) {
+            throw "Missing backend archive for ${{ matrix.target }}"
+          }
+          Expand-Archive -Force -Path $archive -DestinationPath 'release-assets/backend-extract'
           if (-not (Test-Path 'release-assets/backend-extract/opencode-studio.exe')) { throw 'opencode-studio.exe missing after extract' }
           Copy-Item -Force 'release-assets/backend-extract/opencode-studio.exe' "desktop/src-tauri-cef/binaries/opencode-studio-${{ matrix.target }}.exe"
 
@@ -613,7 +666,7 @@ jobs:
           hdiutil create -volname "OpenCode Studio" -srcfolder "$STAGE_DIR" -ov -format UDZO "$BUNDLE_DIR/dmg/opencode-studio-fallback.dmg"
 
       - name: Pack desktop bundles (Unix)
-        if: matrix.os != 'windows-latest'
+        if: "!startsWith(matrix.os, 'windows-')"
         shell: bash
         run: |
           set -euo pipefail
@@ -642,7 +695,7 @@ jobs:
           fi
 
       - name: Pack desktop bundles (Windows)
-        if: matrix.os == 'windows-latest'
+        if: startsWith(matrix.os, 'windows-')
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path release-assets | Out-Null
