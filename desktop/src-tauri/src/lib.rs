@@ -203,12 +203,15 @@ struct DesktopRuntimeInfo {
     installer_version: String,
     installer_target: String,
     installer_channel: String,
+    installer_type: String,
+    installer_manager: String,
 }
 
 #[tauri::command]
 fn desktop_runtime_info(app: AppHandle) -> DesktopRuntimeInfo {
     let target = runtime_target_triple()
         .unwrap_or_else(|| format!("{}-{}", std::env::consts::ARCH, std::env::consts::OS));
+    let (installer_type, installer_manager) = detect_installer_identity();
     DesktopRuntimeInfo {
         installer_version: app.package_info().version.to_string(),
         installer_target: target,
@@ -217,6 +220,96 @@ fn desktop_runtime_info(app: AppHandle) -> DesktopRuntimeInfo {
         } else {
             "main".to_string()
         },
+        installer_type,
+        installer_manager,
+    }
+}
+
+fn detect_installer_identity() -> (String, String) {
+    let installer_type = std::env::var("OPENCODE_STUDIO_INSTALLER_TYPE")
+        .ok()
+        .and_then(|value| normalize_installer_type(&value))
+        .unwrap_or_else(infer_installer_type_from_runtime);
+    let installer_manager = std::env::var("OPENCODE_STUDIO_INSTALLER_MANAGER")
+        .ok()
+        .and_then(|value| normalize_installer_manager(&value))
+        .unwrap_or_else(|| infer_installer_manager_from_runtime(&installer_type));
+    (installer_type, installer_manager)
+}
+
+fn normalize_installer_type(raw: &str) -> Option<String> {
+    let normalized = raw.trim().to_ascii_lowercase();
+    match normalized.as_str() {
+        "exe" | "msi" | "dmg" | "appimage" | "deb" | "rpm" | "pkg" => Some(normalized),
+        _ => None,
+    }
+}
+
+fn normalize_installer_manager(raw: &str) -> Option<String> {
+    let normalized = raw.trim().to_ascii_lowercase();
+    match normalized.as_str() {
+        "direct" | "winget" | "choco" | "scoop" | "brew" | "apt" | "dnf" | "pacman" => {
+            Some(normalized)
+        }
+        _ => None,
+    }
+}
+
+fn infer_installer_type_from_runtime() -> String {
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(exe_path) = std::env::current_exe() {
+            if let Some(parent) = exe_path.parent() {
+                if parent.join("uninstall.exe").exists() || parent.join("unins000.exe").exists() {
+                    return "exe".to_string();
+                }
+            }
+        }
+        return "msi".to_string();
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        return "dmg".to_string();
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        if let Ok(exe_path) = std::env::current_exe() {
+            let display = exe_path.to_string_lossy().to_ascii_lowercase();
+            if display.contains("/scoop/") {
+                return "appimage".to_string();
+            }
+        }
+        return "appimage".to_string();
+    }
+
+    #[allow(unreachable_code)]
+    "unknown".to_string()
+}
+
+fn infer_installer_manager_from_runtime(installer_type: &str) -> String {
+    if let Ok(exe_path) = std::env::current_exe() {
+        let display = exe_path.to_string_lossy().to_ascii_lowercase();
+        if display.contains("\\scoop\\") || display.contains("/scoop/") {
+            return "scoop".to_string();
+        }
+        if display.contains("\\chocolatey\\") || display.contains("/chocolatey/") {
+            return "choco".to_string();
+        }
+        if display.contains("windowsapps") {
+            return "winget".to_string();
+        }
+    }
+
+    match installer_type {
+        "deb" => "apt".to_string(),
+        "rpm" => "dnf".to_string(),
+        "pkg" => "pacman".to_string(),
+        "dmg" => "direct".to_string(),
+        "appimage" => "direct".to_string(),
+        "exe" | "msi" => "direct".to_string(),
+        _ => "direct".to_string(),
     }
 }
 

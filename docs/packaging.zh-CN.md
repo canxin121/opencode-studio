@@ -116,18 +116,50 @@ cargo install tauri-cli --locked --git https://github.com/tauri-apps/tauri --bra
   - main（系统 WebView）
   - CEF 运行时（后缀 `-cef`，基于 Tauri `feat/cef` 分支）
 
+`Package` 使用的架构矩阵：
+
+- Linux：`x86_64-unknown-linux-gnu`、`aarch64-unknown-linux-gnu`
+- Windows：`x86_64-pc-windows-msvc`
+- macOS：`aarch64-apple-darwin`、`x86_64-apple-darwin`
+
+`Package` 产物命名策略：
+
+- 后端归档：`opencode-studio-<target>.tar.gz`（Unix）/ `opencode-studio-<target>.zip`（Windows）
+- 桌面安装包：`opencode-studio-desktop-<target><suffix>.<ext>`
+- 上传到 Actions 的 artifact 名称始终包含 `<target>`，可直接区分架构。
+
 移动端场景：使用托管的 Web UI（`web/dist`）。
 
 Release 场景：
 
 - `Release`（`.github/workflows/release.yml`）：在 tag `v*` 时创建 GitHub Release，并附加：
   - web dist 压缩包
-  - macOS/Windows/Linux 后端二进制
+  - macOS/Windows/Linux 后端归档
   - 桌面安装包（full）原生产物（可用时）：
     - Windows：`.msi`（以及/或 `.exe`）
     - macOS：`.dmg`
     - Linux：`.AppImage` + `.deb` + `.rpm`
     同时附加 CEF 运行时版本（后缀 `-cef`）
+
+`Release` 使用的架构矩阵：
+
+- Linux：`x86_64-unknown-linux-gnu`、`aarch64-unknown-linux-gnu`
+- Windows：`x86_64-pc-windows-msvc`
+- macOS：`aarch64-apple-darwin`、`x86_64-apple-darwin`
+
+`Release` 资产命名策略：
+
+- 后端归档（服务端版本产物）：
+  - `opencode-studio-backend-<target>-<tag>.tar.gz`（Unix）
+  - `opencode-studio-backend-<target>-<tag>.zip`（Windows）
+  - 元数据：`opencode-studio-backend-<target>-<tag>.json`
+- 桌面安装包（安装包版本产物）：
+  - `opencode-studio-desktop-<target><suffix>-<tag>.<ext>`
+
+target/runner 守护：
+
+- 打包和发布工作流会在构建前执行 `python scripts/assert_native_target.py <target>`，
+  即使本机无法完整跨编译，也能在 CI 中尽早发现矩阵与目标三元组不匹配的问题。
 
 服务安装脚本不会作为 release 资产发布，请直接使用 GitHub raw 链接，例如：
 

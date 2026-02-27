@@ -15,6 +15,8 @@ pub(crate) struct UpdateCheckQuery {
     installer_version: Option<String>,
     installer_target: Option<String>,
     installer_channel: Option<String>,
+    installer_type: Option<String>,
+    installer_manager: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -77,6 +79,8 @@ struct InstallerUpdateStatus {
     primary_asset_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     primary_asset_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    selection_error: Option<InstallerSelectionError>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -84,6 +88,23 @@ struct InstallerUpdateStatus {
 struct ReleaseAssetLink {
     name: String,
     url: String,
+    installer_type: String,
+    manager: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InstallerSelectionError {
+    code: String,
+    message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    expected_target: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    expected_installer_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    expected_manager: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    available_identities: Vec<AssetIdentity>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -164,6 +185,7 @@ pub async fn update_check(Query(query): Query<UpdateCheckQuery>) -> Json<UpdateC
                 assets: Vec::new(),
                 primary_asset_name: None,
                 primary_asset_url: None,
+                selection_error: None,
             }),
         error: None,
     };
@@ -221,10 +243,11 @@ pub async fn update_check(Query(query): Query<UpdateCheckQuery>) -> Json<UpdateC
         (response.installer.as_mut(), installer_runtime.as_ref())
     {
         installer.latest_version = latest_version.clone();
-        installer.available = latest_version
+        let version_available = latest_version
             .as_deref()
             .map(|latest| is_newer_version(&runtime.current_version, latest))
             .unwrap_or(false);
+        installer.available = false;
 
         if let Some(target) = runtime.target.as_deref() {
             let mut assets = installer_assets_for_target(
@@ -234,16 +257,17 @@ pub async fn update_check(Query(query): Query<UpdateCheckQuery>) -> Json<UpdateC
                 &runtime.channel,
                 release.tag_name.trim(),
             );
-            assets.sort_by(|a, b| {
-                installer_asset_rank(&a.name, target)
-                    .cmp(&installer_asset_rank(&b.name, target))
-                    .then_with(|| a.name.cmp(&b.name))
-            });
+            assets.sort_by(|a, b| a.name.cmp(&b.name));
             installer.assets = assets;
-            if let Some(primary) = installer.assets.first() {
+            let selected = select_primary_installer_asset(runtime, installer.assets.as_slice());
+            installer.selection_error = selected.selection_error;
+            if let Some(primary) = selected.primary_asset {
                 installer.primary_asset_name = Some(primary.name.clone());
                 installer.primary_asset_url = Some(primary.url.clone());
+                installer.available = version_available;
             }
+        } else {
+            installer.selection_error = Some(missing_target_error());
         }
     }
 
@@ -255,6 +279,8 @@ struct InstallerRuntime {
     current_version: String,
     target: Option<String>,
     channel: String,
+    installer_type: Option<String>,
+    installer_manager: Option<String>,
 }
 
 impl InstallerRuntime {
@@ -266,7 +292,25 @@ impl InstallerRuntime {
             current_version,
             target,
             channel,
+            installer_type: normalize_installer_type(query.installer_type.as_deref()),
+            installer_manager: normalize_installer_manager(query.installer_manager.as_deref()),
         })
+    }
+}
+
+#[derive(Debug, Serialize, Clone, Eq, PartialEq, Ord, PartialOrd)]
+#[serde(rename_all = "camelCase")]
+struct AssetIdentity {
+    installer_type: String,
+    manager: String,
+}
+
+impl AssetIdentity {
+    fn from_parts(installer_type: &str, manager: &str) -> Self {
+        Self {
+            installer_type: installer_type.to_string(),
+            manager: manager.to_string(),
+        }
     }
 }
 
@@ -476,6 +520,26 @@ fn normalize_installer_channel(raw: Option<&str>) -> String {
     }
 }
 
+fn normalize_installer_type(raw: Option<&str>) -> Option<String> {
+    let value = nonempty(raw)?;
+    match value.to_ascii_lowercase().as_str() {
+        "exe" | "msi" | "dmg" | "appimage" | "deb" | "rpm" | "pkg" => {
+            Some(value.to_ascii_lowercase())
+        }
+        _ => None,
+    }
+}
+
+fn normalize_installer_manager(raw: Option<&str>) -> Option<String> {
+    let value = nonempty(raw)?;
+    match value.to_ascii_lowercase().as_str() {
+        "direct" | "winget" | "choco" | "scoop" | "brew" | "apt" | "dnf" | "pacman" => {
+            Some(value.to_ascii_lowercase())
+        }
+        _ => None,
+    }
+}
+
 fn installer_assets_for_target(
     assets: &[GithubReleaseAsset],
     repo: &str,
@@ -490,9 +554,12 @@ fn installer_assets_for_target(
         .filter(|asset| asset.name.starts_with(&prefix))
         .filter_map(|asset| {
             let url = nonempty(Some(asset.browser_download_url.as_str()))?;
+            let identity = classify_asset_identity(&asset.name)?;
             Some(ReleaseAssetLink {
                 name: asset.name.clone(),
                 url,
+                installer_type: identity.installer_type,
+                manager: identity.manager,
             })
         })
         .collect::<Vec<_>>();
@@ -500,9 +567,14 @@ fn installer_assets_for_target(
     if links.is_empty() {
         links = installer_expected_asset_names(target, channel, release_tag)
             .into_iter()
-            .map(|name| ReleaseAssetLink {
-                url: release_asset_url(repo, release_tag, &name),
-                name,
+            .filter_map(|name| {
+                let identity = classify_asset_identity(&name)?;
+                Some(ReleaseAssetLink {
+                    url: release_asset_url(repo, release_tag, &name),
+                    name,
+                    installer_type: identity.installer_type,
+                    manager: identity.manager,
+                })
             })
             .collect();
     }
@@ -541,35 +613,142 @@ fn release_asset_url(repo: &str, release_tag: &str, asset_name: &str) -> String 
     format!("{GITHUB_WEB_BASE}/{repo}/releases/download/{release_tag}/{asset_name}")
 }
 
-fn installer_asset_rank(name: &str, target: &str) -> usize {
-    let lower = name.to_ascii_lowercase();
-    if target.contains("windows") {
-        if lower.ends_with(".msi") {
-            return 0;
+fn classify_asset_identity(asset_name: &str) -> Option<AssetIdentity> {
+    let lower = asset_name.to_ascii_lowercase();
+    let installer_type = if lower.ends_with(".msi") {
+        "msi"
+    } else if lower.ends_with(".exe") {
+        "exe"
+    } else if lower.ends_with(".dmg") {
+        "dmg"
+    } else if lower.ends_with(".appimage") {
+        "appimage"
+    } else if lower.ends_with(".deb") {
+        "deb"
+    } else if lower.ends_with(".rpm") {
+        "rpm"
+    } else if lower.ends_with(".pkg.tar.zst") {
+        "pkg"
+    } else {
+        return None;
+    };
+
+    let manager = parse_manager_from_asset_name(&lower).unwrap_or(match installer_type {
+        "deb" => "apt",
+        "rpm" => "dnf",
+        "pkg" => "pacman",
+        _ => "direct",
+    });
+
+    Some(AssetIdentity::from_parts(installer_type, manager))
+}
+
+fn parse_manager_from_asset_name(lower: &str) -> Option<&'static str> {
+    for manager in ["winget", "choco", "scoop", "brew", "apt", "dnf", "pacman"] {
+        if lower.contains(&format!("-{manager}-"))
+            || lower.contains(&format!(".{manager}."))
+            || lower.contains(&format!("_{manager}_"))
+            || lower.ends_with(&format!("-{manager}"))
+        {
+            return Some(manager);
         }
-        if lower.ends_with(".exe") {
-            return 1;
-        }
-        return 99;
+    }
+    None
+}
+
+struct InstallerSelection {
+    primary_asset: Option<ReleaseAssetLink>,
+    selection_error: Option<InstallerSelectionError>,
+}
+
+fn select_primary_installer_asset(
+    runtime: &InstallerRuntime,
+    assets: &[ReleaseAssetLink],
+) -> InstallerSelection {
+    let Some(expected_installer_type) = runtime.installer_type.as_deref() else {
+        return InstallerSelection {
+            primary_asset: None,
+            selection_error: Some(missing_identity_error(runtime, assets)),
+        };
+    };
+    let Some(expected_manager) = runtime.installer_manager.as_deref() else {
+        return InstallerSelection {
+            primary_asset: None,
+            selection_error: Some(missing_identity_error(runtime, assets)),
+        };
+    };
+
+    let mut exact = assets
+        .iter()
+        .filter(|asset| {
+            asset.installer_type == expected_installer_type && asset.manager == expected_manager
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    exact.sort_by(|a, b| a.name.cmp(&b.name));
+
+    if let Some(primary) = exact.first() {
+        return InstallerSelection {
+            primary_asset: Some(primary.clone()),
+            selection_error: None,
+        };
     }
 
-    if target.contains("apple") || target.contains("darwin") {
-        if lower.ends_with(".dmg") {
-            return 0;
-        }
-        return 99;
+    InstallerSelection {
+        primary_asset: None,
+        selection_error: Some(mismatch_identity_error(runtime, assets)),
     }
+}
 
-    if lower.ends_with(".appimage") {
-        return 0;
+fn missing_target_error() -> InstallerSelectionError {
+    InstallerSelectionError {
+        code: "missingTarget".to_string(),
+        message: "installer target is required to resolve a compatible update package".to_string(),
+        expected_target: None,
+        expected_installer_type: None,
+        expected_manager: None,
+        available_identities: Vec::new(),
     }
-    if lower.ends_with(".deb") {
-        return 1;
+}
+
+fn missing_identity_error(
+    runtime: &InstallerRuntime,
+    assets: &[ReleaseAssetLink],
+) -> InstallerSelectionError {
+    InstallerSelectionError {
+        code: "missingInstallContext".to_string(),
+        message: "installer manager/type is required to avoid cross-manager updates".to_string(),
+        expected_target: runtime.target.clone(),
+        expected_installer_type: runtime.installer_type.clone(),
+        expected_manager: runtime.installer_manager.clone(),
+        available_identities: collect_available_identities(assets),
     }
-    if lower.ends_with(".rpm") {
-        return 2;
+}
+
+fn mismatch_identity_error(
+    runtime: &InstallerRuntime,
+    assets: &[ReleaseAssetLink],
+) -> InstallerSelectionError {
+    InstallerSelectionError {
+        code: "noCompatibleInstaller".to_string(),
+        message:
+            "no installer candidate matches current platform/arch/manager/installer-type context"
+                .to_string(),
+        expected_target: runtime.target.clone(),
+        expected_installer_type: runtime.installer_type.clone(),
+        expected_manager: runtime.installer_manager.clone(),
+        available_identities: collect_available_identities(assets),
     }
-    99
+}
+
+fn collect_available_identities(assets: &[ReleaseAssetLink]) -> Vec<AssetIdentity> {
+    let mut identities = assets
+        .iter()
+        .map(|asset| AssetIdentity::from_parts(&asset.installer_type, &asset.manager))
+        .collect::<Vec<_>>();
+    identities.sort();
+    identities.dedup();
+    identities
 }
 
 async fn fetch_latest_release(repo: &str) -> Result<GithubRelease, String> {
@@ -662,4 +841,112 @@ fn github_api_token() -> Option<String> {
     }
     let secondary = std::env::var("GITHUB_TOKEN").ok();
     nonempty(secondary.as_deref())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn runtime_with(identity_type: &str, manager: &str) -> InstallerRuntime {
+        InstallerRuntime {
+            current_version: "0.1.0".to_string(),
+            target: Some("x86_64-pc-windows-msvc".to_string()),
+            channel: "main".to_string(),
+            installer_type: Some(identity_type.to_string()),
+            installer_manager: Some(manager.to_string()),
+        }
+    }
+
+    fn asset(name: &str, installer_type: &str, manager: &str) -> ReleaseAssetLink {
+        ReleaseAssetLink {
+            name: name.to_string(),
+            url: format!("https://example.invalid/{name}"),
+            installer_type: installer_type.to_string(),
+            manager: manager.to_string(),
+        }
+    }
+
+    #[test]
+    fn select_primary_installer_prefers_exact_exe_match() {
+        let runtime = runtime_with("exe", "direct");
+        let assets = vec![
+            asset(
+                "opencode-studio-desktop-x86_64-pc-windows-msvc-v1.2.0.msi",
+                "msi",
+                "direct",
+            ),
+            asset(
+                "opencode-studio-desktop-x86_64-pc-windows-msvc-v1.2.0.exe",
+                "exe",
+                "direct",
+            ),
+        ];
+
+        let selected = select_primary_installer_asset(&runtime, assets.as_slice());
+        assert_eq!(
+            selected
+                .primary_asset
+                .as_ref()
+                .map(|item| item.name.as_str()),
+            Some("opencode-studio-desktop-x86_64-pc-windows-msvc-v1.2.0.exe")
+        );
+        assert!(selected.selection_error.is_none());
+    }
+
+    #[test]
+    fn select_primary_installer_rejects_cross_manager_match() {
+        let runtime = runtime_with("exe", "winget");
+        let assets = vec![asset(
+            "opencode-studio-desktop-x86_64-pc-windows-msvc-v1.2.0.exe",
+            "exe",
+            "direct",
+        )];
+
+        let selected = select_primary_installer_asset(&runtime, assets.as_slice());
+        assert!(selected.primary_asset.is_none());
+        let error = selected
+            .selection_error
+            .expect("selection error should be present");
+        assert_eq!(error.code, "noCompatibleInstaller");
+        assert_eq!(error.expected_manager.as_deref(), Some("winget"));
+        assert_eq!(error.expected_installer_type.as_deref(), Some("exe"));
+    }
+
+    #[test]
+    fn select_primary_installer_requires_identity_context() {
+        let runtime = InstallerRuntime {
+            current_version: "0.1.0".to_string(),
+            target: Some("x86_64-pc-windows-msvc".to_string()),
+            channel: "main".to_string(),
+            installer_type: None,
+            installer_manager: Some("direct".to_string()),
+        };
+        let assets = vec![asset(
+            "opencode-studio-desktop-x86_64-pc-windows-msvc-v1.2.0.exe",
+            "exe",
+            "direct",
+        )];
+
+        let selected = select_primary_installer_asset(&runtime, assets.as_slice());
+        assert!(selected.primary_asset.is_none());
+        let error = selected
+            .selection_error
+            .expect("selection error should be present");
+        assert_eq!(error.code, "missingInstallContext");
+    }
+
+    #[test]
+    fn classify_asset_identity_infers_extension_defaults() {
+        let deb =
+            classify_asset_identity("opencode-studio-desktop-x86_64-unknown-linux-gnu-v1.2.0.deb")
+                .expect("deb identity");
+        assert_eq!(deb.installer_type, "deb");
+        assert_eq!(deb.manager, "apt");
+
+        let rpm =
+            classify_asset_identity("opencode-studio-desktop-x86_64-unknown-linux-gnu-v1.2.0.rpm")
+                .expect("rpm identity");
+        assert_eq!(rpm.installer_type, "rpm");
+        assert_eq!(rpm.manager, "dnf");
+    }
 }
