@@ -56,7 +56,7 @@ const confirmButtonDisabled = computed(() => {
         :show-gitignored="true"
         :allow-create-directory="allowCreateDirectory ?? true"
         input-class="h-9 font-mono"
-        browser-class="flex h-[min(56vh,34rem)] min-h-[14rem] min-h-0 flex-col overflow-hidden"
+        browser-class="flex h-[min(56vh,34rem)] min-h-[14rem] min-h-0 flex-col"
       />
       <div class="flex flex-none items-center justify-end gap-2">
         <Button variant="ghost" @click="emit('update:open', false)">
