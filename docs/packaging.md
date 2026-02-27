@@ -125,10 +125,6 @@ Architecture matrix used by `Package`:
   - Linux: `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`
   - Windows: `x86_64-pc-windows-msvc`, `aarch64-pc-windows-msvc`
   - macOS: `aarch64-apple-darwin`, `x86_64-apple-darwin`
-- Backend (service artifacts) adds wider Linux coverage:
-  - `x86_64-unknown-linux-musl`, `aarch64-unknown-linux-musl`
-  - `armv7-unknown-linux-gnueabihf`, `armv7-unknown-linux-musleabihf`
-  - `i686-unknown-linux-gnu`, `i686-unknown-linux-musl`
 
 `Package` artifact naming strategy:
 
@@ -156,10 +152,6 @@ Architecture matrix used by `Release`:
   - Linux: `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`
   - Windows: `x86_64-pc-windows-msvc`, `aarch64-pc-windows-msvc`
   - macOS: `aarch64-apple-darwin`, `x86_64-apple-darwin`
-- Backend (service artifacts) adds wider Linux coverage:
-  - `x86_64-unknown-linux-musl`, `aarch64-unknown-linux-musl`
-  - `armv7-unknown-linux-gnueabihf`, `armv7-unknown-linux-musleabihf`
-  - `i686-unknown-linux-gnu`, `i686-unknown-linux-musl`
 
 `Release` asset naming strategy:
 
@@ -173,7 +165,6 @@ Architecture matrix used by `Release`:
 Target/runner guard:
 
 - Native matrix entries run `python scripts/assert_native_target.py <target>` before build.
-- Extra Linux service targets are cross-built via `cross`, so they intentionally skip native runner assertion.
 
 Service install scripts are not published as release assets. Use GitHub raw URLs instead, for example:
 
