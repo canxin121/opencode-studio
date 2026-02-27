@@ -803,6 +803,12 @@ watch(modelPath, () => {
   z-index: 20;
 }
 
+:global(.monaco-host[data-files-theme='1'] .monaco-editor .find-widget .monaco-inputbox input:focus),
+:global(.monaco-host[data-files-theme='1'] .monaco-editor .find-widget .monaco-inputbox input:focus-visible) {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
 :global(.monaco-host[data-files-theme='1'] .monaco-editor .monaco-hover) {
   pointer-events: none;
 }
@@ -810,6 +816,13 @@ watch(modelPath, () => {
 :global(.monaco-host[data-files-theme='1'] .monaco-editor .find-widget > .button.codicon-widget-close),
 :global(.monaco-host[data-files-theme='1'] .monaco-editor .find-widget .button.toggle) {
   z-index: 2;
+}
+
+:global(.monaco-host[data-files-theme='1'] .monaco-editor .find-widget .button) {
+  align-items: center;
+  display: inline-flex;
+  justify-content: center;
+  line-height: 1;
 }
 
 :global(.workbench-hover-container),
