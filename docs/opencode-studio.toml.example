@@ -1,0 +1,27 @@
+[backend]
+host = "127.0.0.1"
+port = 3000
+
+# Set to a built web/dist directory for bundled UI serving.
+# ui_dir = "/absolute/path/to/web/dist"
+
+# Optional UI session password.
+# ui_password = "change-me"
+
+# CORS settings.
+cors_origins = []
+cors_allow_all = false
+
+# Optional backend log level: DEBUG | INFO | WARN | ERROR
+# backend_log_level = "INFO"
+
+# OpenCode bridge behavior.
+opencode_host = "127.0.0.1"
+# opencode_port = 16000
+skip_opencode_start = false
+
+# Optional managed OpenCode log level: DEBUG | INFO | WARN | ERROR
+# opencode_log_level = "INFO"
+
+# UI cookie policy: auto | strict | lax | none
+ui_cookie_samesite = "auto"

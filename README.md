@@ -86,8 +86,8 @@ Installer behavior by platform:
 
 Generated config/state files:
 
-- Unix: `~/.local/share/opencode-studio/service.env`.
-- Windows: `%LOCALAPPDATA%\\OpenCodeStudio\\service.env.ps1`.
+- Unix: `~/.local/bin/opencode-studio.toml`.
+- Windows: `%LOCALAPPDATA%\\OpenCodeStudio\\bin\\opencode-studio.toml`.
 
 Common installer parameters:
 
@@ -147,6 +147,7 @@ Core server settings:
 
 | Name | Default | Notes |
 | --- | --- | --- |
+| `OPENCODE_STUDIO_CONFIG` / `--config` | `<exe-dir>/opencode-studio.toml` | Runtime TOML config path; when unset Studio auto-loads from executable directory if present |
 | `OPENCODE_STUDIO_HOST` / `--host` | `127.0.0.1` | Bind address |
 | `OPENCODE_STUDIO_PORT` / `--port` | `3000` | HTTP port |
 | `OPENCODE_STUDIO_UI_DIR` / `--ui-dir` | (unset) | Built UI directory (Vite `dist/`); unset means API-only/headless |
@@ -183,6 +184,9 @@ Advanced (selected):
 
 ### Config files
 
+- Runtime config (backend/desktop/service): `opencode-studio.toml`.
+  - Auto-discovered from the current executable directory.
+  - Desktop writes it under the app config directory and starts sidecar with `--config <path>`.
 - Studio settings (projects list, a few UI knobs): `~/.config/opencode-studio/settings.json` (override base dir via `OPENCODE_STUDIO_DATA_DIR`).
 - OpenCode config layers (read/edited via the Studio UI):
   - User: `~/.config/opencode/opencode.json`

@@ -23,6 +23,7 @@ mod opencode_session;
 mod path_utils;
 mod plugin_runtime;
 mod providers;
+mod runtime_config;
 mod session_activity;
 mod settings;
 mod settings_events;
@@ -43,6 +44,12 @@ pub(crate) use error::{ApiResult, AppError};
     about = "OpenCode Studio (Rust+Vue) dev server"
 )]
 pub(crate) struct Args {
+    /// Runtime config file path (TOML).
+    ///
+    /// When unset, OpenCode Studio tries `<current-exe-dir>/opencode-studio.toml`.
+    #[arg(long, env = "OPENCODE_STUDIO_CONFIG", value_name = "PATH")]
+    pub(crate) config: Option<String>,
+
     /// Bind address (e.g. 127.0.0.1 or 0.0.0.0)
     #[arg(long, env = "OPENCODE_STUDIO_HOST", default_value = "127.0.0.1")]
     pub(crate) host: String,
@@ -154,6 +161,12 @@ async fn main() {
         .with_max_level(Level::INFO)
         .init();
 
-    let args = Args::parse();
+    let args = match runtime_config::parse_args_with_runtime_config() {
+        Ok(args) => args,
+        Err(err) => {
+            eprintln!("{err}");
+            std::process::exit(2);
+        }
+    };
     app::run(args).await;
 }

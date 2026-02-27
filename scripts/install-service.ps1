@@ -45,6 +45,7 @@ if (-not $InstallDir) {
 
 $BinDir = Join-Path $InstallDir "bin"
 $UiDir = Join-Path $InstallDir "ui\dist"
+$ConfigFile = Join-Path $BinDir "opencode-studio.toml"
 New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
 
 $Tmp = New-Item -ItemType Directory -Force -Path (Join-Path $env:TEMP ("ocstudio-" + [Guid]::NewGuid().ToString()))
@@ -79,10 +80,24 @@ try {
   $ServiceName = "OpenCodeStudio"
   $BinPath = $BackendInstall
 
-  $Args = @("--host","127.0.0.1","--port", "$Port")
+  $TomlLines = @(
+    "# Runtime configuration for opencode-studio.",
+    "",
+    "[backend]",
+    "host = '127.0.0.1'",
+    "port = $Port",
+    "skip_opencode_start = false",
+    "opencode_host = '127.0.0.1'",
+    "",
+    "# To connect to an already running OpenCode, set:",
+    "# opencode_port = 16000"
+  )
   if ($WithFrontend) {
-    $Args += @("--ui-dir", $UiDir)
+    $TomlLines += "ui_dir = '$UiDir'"
   }
+  $TomlLines | Set-Content -Encoding UTF8 -Path $ConfigFile
+
+  $Args = @("--config", $ConfigFile)
 
   $BinPathWithArgs = '"' + $BinPath + '" ' + ($Args -join ' ')
 
@@ -93,6 +108,7 @@ try {
   & sc.exe start $ServiceName | Out-Null
 
   Write-Host "Installed. Service: $ServiceName"
+  Write-Host "Runtime config: $ConfigFile"
   Write-Host "Open: http://127.0.0.1:$Port"
 } finally {
   Remove-Item -Recurse -Force $Tmp | Out-Null

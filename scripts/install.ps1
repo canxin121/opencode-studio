@@ -46,7 +46,7 @@ if (-not $InstallDir) {
 
 $BinDir = Join-Path $InstallDir "bin"
 $UiDir = Join-Path $InstallDir "ui\dist"
-$EnvFile = Join-Path $InstallDir "service.env.ps1"
+$ConfigFile = Join-Path $BinDir "opencode-studio.toml"
 
 New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
 
@@ -91,19 +91,25 @@ try {
     }
   }
 
-  @(
-    "# Variables used by the installer-generated Windows service.",
-    "`$Host = '$Host'",
-    "`$Port = $Port",
-    "`$Variant = '$Variant'",
-    "`$InstallDir = '$InstallDir'",
-    "`$ServiceName = '$ServiceName'"
-  ) | Set-Content -Encoding UTF8 -Path $EnvFile
-
-  $Args = @("--host", $Host, "--port", "$Port")
+  $TomlLines = @(
+    "# Runtime configuration for opencode-studio.",
+    "# CLI flags and environment variables can still override these values.",
+    "",
+    "[backend]",
+    "host = '$Host'",
+    "port = $Port",
+    "skip_opencode_start = false",
+    "opencode_host = '127.0.0.1'",
+    "",
+    "# To connect to an already running OpenCode, set:",
+    "# opencode_port = 16000"
+  )
   if ($Variant -eq "desktop") {
-    $Args += @("--ui-dir", $UiDir)
+    $TomlLines += "ui_dir = '$UiDir'"
   }
+  $TomlLines | Set-Content -Encoding UTF8 -Path $ConfigFile
+
+  $Args = @("--config", $ConfigFile)
 
   $QuotedExe = '"' + $BackendInstall + '"'
   $BinPathWithArgs = $QuotedExe + " " + ($Args -join " ")
@@ -114,7 +120,7 @@ try {
   & sc.exe create $ServiceName binPath= $BinPathWithArgs start= auto | Out-Null
   & sc.exe start $ServiceName | Out-Null
 
-  Write-Host "Wrote installer state: $EnvFile"
+  Write-Host "Wrote runtime config: $ConfigFile"
   Write-Host "Install complete ($Variant). Service: $ServiceName"
   Write-Host "Open: http://$Host`:$Port"
   if ($Variant -eq "headless") {
