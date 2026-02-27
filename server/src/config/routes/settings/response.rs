@@ -41,6 +41,12 @@ impl<'a> SettingsResponseBuilder<'a> {
         self.set_bool_with_default("gitAllowNoVerifyCommit", false);
         self.set_bool_with_default("gitEnforceBranchProtection", false);
         self.set_bool_with_default("gitStrictPatchValidation", false);
+        self.set_bool_with_default("updateAutoCheckEnabled", true);
+        self.set_bool_with_default("updateAutoPromptEnabled", true);
+        self.set_bool_with_default("updateAutoServiceInstallEnabled", false);
+        self.set_bool_with_default("updateAutoInstallerInstallEnabled", false);
+        self.set_nullable_trimmed_string_with_default_null("updateIgnoredReleaseTag");
+        self.set_nonnegative_i64_with_default("updateReminderSnoozeUntil", 0);
         self.set_bool_with_default("showChatTimestamps", true);
         self.set_bool_with_default("chatActivityAutoCollapseOnIdle", true);
 
@@ -106,6 +112,38 @@ impl<'a> SettingsResponseBuilder<'a> {
             .or_else(|| self.output.get(key).and_then(|v| v.as_bool()))
             .unwrap_or(default);
         self.output.insert(key.to_string(), Value::Bool(value));
+    }
+
+    fn set_nullable_trimmed_string_with_default_null(&mut self, key: &str) {
+        let value = self
+            .input
+            .get(key)
+            .and_then(|v| v.as_str())
+            .or_else(|| self.output.get(key).and_then(|v| v.as_str()))
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .map(ToString::to_string);
+
+        match value {
+            Some(v) => {
+                self.output.insert(key.to_string(), Value::String(v));
+            }
+            None => {
+                self.output.insert(key.to_string(), Value::Null);
+            }
+        }
+    }
+
+    fn set_nonnegative_i64_with_default(&mut self, key: &str, default: i64) {
+        let value = self
+            .input
+            .get(key)
+            .and_then(|v| v.as_i64())
+            .or_else(|| self.output.get(key).and_then(|v| v.as_i64()))
+            .unwrap_or(default)
+            .max(0);
+        self.output
+            .insert(key.to_string(), Value::Number(value.into()));
     }
 
     fn set_git_branch_protection_prompt(&mut self) {

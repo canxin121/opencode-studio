@@ -1,6 +1,6 @@
 [package]
 name = "opencode-studio-desktop"
-version = "0.1.0"
+version = "0.2.0-beta.1"
 description = "OpenCode Studio Desktop (Tauri wrapper)"
 authors = ["OpenCode Studio Contributors"]
 edition = "2024"
@@ -24,6 +24,9 @@ thiserror = "2"
 
 tokio = { version = "1", features = ["sync", "time"] }
 reqwest = { version = "0.13", default-features = true, features = ["json"] }
+flate2 = "1.1.4"
+tar = "0.4.44"
+zip = { version = "2.4.2", default-features = false, features = ["deflate"] }
 
 tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-shell = "2"

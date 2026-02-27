@@ -1,5 +1,6 @@
 mod backend;
 mod config;
+mod updater;
 
 #[cfg(not(feature = "cef"))]
 type AppRuntime = tauri::Wry;
@@ -35,6 +36,11 @@ pub fn run() {
             desktop_config_save,
             desktop_open_logs_dir,
             desktop_open_config,
+            desktop_runtime_info,
+            desktop_open_external,
+            desktop_service_update,
+            desktop_installer_update,
+            desktop_update_progress_get,
         ])
         .setup(|app| {
             let app_handle = app.handle().clone();
@@ -49,6 +55,7 @@ pub fn run() {
             // Backend manager is always present so tray actions and UI commands share
             // one code path even when sidecar startup fails.
             app.manage(BackendManager::new());
+            app.manage(updater::UpdateProgressState::default());
 
             // Create tray.
             let open_i = MenuItem::with_id(app, "open", "Open", true, None::<&str>)?;
@@ -188,6 +195,76 @@ fn desktop_open_logs_dir(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 fn desktop_open_config(app: AppHandle) -> Result<(), String> {
     config::open_config_file(&app)
+}
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DesktopRuntimeInfo {
+    installer_version: String,
+    installer_target: String,
+    installer_channel: String,
+}
+
+#[tauri::command]
+fn desktop_runtime_info(app: AppHandle) -> DesktopRuntimeInfo {
+    let target = runtime_target_triple()
+        .unwrap_or_else(|| format!("{}-{}", std::env::consts::ARCH, std::env::consts::OS));
+    DesktopRuntimeInfo {
+        installer_version: app.package_info().version.to_string(),
+        installer_target: target,
+        installer_channel: if cfg!(feature = "cef") {
+            "cef".to_string()
+        } else {
+            "main".to_string()
+        },
+    }
+}
+
+#[tauri::command]
+fn desktop_open_external(app: AppHandle, url: String) -> Result<(), String> {
+    let url = url.trim();
+    if !url.starts_with("https://") && !url.starts_with("http://") {
+        return Err("only http/https urls are supported".to_string());
+    }
+    use tauri_plugin_opener::OpenerExt;
+    app.opener()
+        .open_path(url, None::<&str>)
+        .map_err(|err| format!("open external url: {err}"))
+}
+
+#[tauri::command]
+async fn desktop_service_update(app: AppHandle, asset_url: String) -> Result<(), String> {
+    let progress = app.state::<updater::UpdateProgressState>().inner().clone();
+    updater::apply_service_update(&app, &progress, asset_url).await
+}
+
+#[tauri::command]
+async fn desktop_installer_update(
+    app: AppHandle,
+    asset_url: String,
+    asset_name: Option<String>,
+) -> Result<(), String> {
+    let progress = app.state::<updater::UpdateProgressState>().inner().clone();
+    updater::apply_installer_update(&app, &progress, asset_url, asset_name).await
+}
+
+#[tauri::command]
+fn desktop_update_progress_get(app: AppHandle) -> updater::UpdateProgressSnapshot {
+    app.state::<updater::UpdateProgressState>()
+        .inner()
+        .snapshot()
+}
+
+fn runtime_target_triple() -> Option<String> {
+    let os = std::env::consts::OS;
+    let arch = std::env::consts::ARCH;
+    match (os, arch) {
+        ("linux", "x86_64") => Some("x86_64-unknown-linux-gnu".to_string()),
+        ("macos", "x86_64") => Some("x86_64-apple-darwin".to_string()),
+        ("macos", "aarch64") => Some("aarch64-apple-darwin".to_string()),
+        ("windows", "x86_64") => Some("x86_64-pc-windows-msvc".to_string()),
+        _ => None,
+    }
 }
 
 async fn handle_tray_menu(app: &AppHandle, id: &str) {

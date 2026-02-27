@@ -42,6 +42,12 @@ export type Settings = {
   githubScopes?: string
 
   // UI / appearance
+  updateAutoCheckEnabled?: boolean
+  updateAutoPromptEnabled?: boolean
+  updateAutoServiceInstallEnabled?: boolean
+  updateAutoInstallerInstallEnabled?: boolean
+  updateIgnoredReleaseTag?: string | null
+  updateReminderSnoozeUntil?: number
   useSystemTheme?: boolean
   themeVariant?: 'light' | 'dark'
   themeId?: string

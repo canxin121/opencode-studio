@@ -16,6 +16,22 @@ export type DesktopConfig = {
   }
 }
 
+export type DesktopRuntimeInfo = {
+  installerVersion: string
+  installerTarget: string
+  installerChannel: 'main' | 'cef'
+}
+
+export type DesktopUpdateProgress = {
+  running: boolean
+  kind: 'service' | 'installer' | ''
+  phase: string
+  message: string
+  downloadedBytes: number
+  totalBytes: number | null
+  error: string | null
+}
+
 function readTauriInvoke(): TauriInvoke | null {
   try {
     const candidate = (window as unknown as { __TAURI_INTERNALS__?: { invoke?: unknown } }).__TAURI_INTERNALS__?.invoke
@@ -54,6 +70,39 @@ function asDesktopConfig(value: unknown): DesktopConfig | null {
   }
 }
 
+function asDesktopRuntimeInfo(value: unknown): DesktopRuntimeInfo | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const root = value as Record<string, unknown>
+  const installerVersion = typeof root.installerVersion === 'string' ? root.installerVersion.trim() : ''
+  const installerTarget = typeof root.installerTarget === 'string' ? root.installerTarget.trim() : ''
+  const rawChannel = typeof root.installerChannel === 'string' ? root.installerChannel.trim().toLowerCase() : 'main'
+  const installerChannel: 'main' | 'cef' = rawChannel === 'cef' ? 'cef' : 'main'
+  if (!installerVersion || !installerTarget) return null
+  return {
+    installerVersion,
+    installerTarget,
+    installerChannel,
+  }
+}
+
+function asDesktopUpdateProgress(value: unknown): DesktopUpdateProgress | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const root = value as Record<string, unknown>
+  const rawKind = typeof root.kind === 'string' ? root.kind.trim().toLowerCase() : ''
+  const kind: 'service' | 'installer' | '' = rawKind === 'service' || rawKind === 'installer' ? rawKind : ''
+  const downloadedRaw = Number(root.downloadedBytes)
+  const totalRaw = Number(root.totalBytes)
+  return {
+    running: root.running === true,
+    kind,
+    phase: typeof root.phase === 'string' ? root.phase.trim() : '',
+    message: typeof root.message === 'string' ? root.message.trim() : '',
+    downloadedBytes: Number.isFinite(downloadedRaw) && downloadedRaw > 0 ? Math.floor(downloadedRaw) : 0,
+    totalBytes: Number.isFinite(totalRaw) && totalRaw > 0 ? Math.floor(totalRaw) : null,
+    error: typeof root.error === 'string' && root.error.trim() ? root.error.trim() : null,
+  }
+}
+
 export function isDesktopRuntime(): boolean {
   return !!readTauriInvoke()
 }
@@ -76,4 +125,50 @@ export async function desktopBackendRestart(): Promise<void> {
   const invoke = readTauriInvoke()
   if (!invoke) return
   await invoke('desktop_backend_restart')
+}
+
+export async function desktopRuntimeInfo(): Promise<DesktopRuntimeInfo | null> {
+  const invoke = readTauriInvoke()
+  if (!invoke) return null
+  const raw = await invoke('desktop_runtime_info')
+  return asDesktopRuntimeInfo(raw)
+}
+
+export async function desktopOpenExternal(url: string): Promise<void> {
+  const invoke = readTauriInvoke()
+  if (!invoke) {
+    if (typeof window !== 'undefined') {
+      window.open(url, '_blank', 'noopener,noreferrer')
+    }
+    return
+  }
+  await invoke('desktop_open_external', { url })
+}
+
+export async function desktopServiceUpdate(assetUrl: string): Promise<void> {
+  const invoke = readTauriInvoke()
+  if (!invoke) {
+    throw new Error('Service self-update is only available in desktop runtime')
+  }
+  await invoke('desktop_service_update', { assetUrl, asset_url: assetUrl })
+}
+
+export async function desktopInstallerUpdate(assetUrl: string, assetName?: string): Promise<void> {
+  const invoke = readTauriInvoke()
+  if (!invoke) {
+    throw new Error('Installer self-update is only available in desktop runtime')
+  }
+  await invoke('desktop_installer_update', {
+    assetUrl,
+    assetName: assetName || null,
+    asset_url: assetUrl,
+    asset_name: assetName || null,
+  })
+}
+
+export async function desktopUpdateProgressGet(): Promise<DesktopUpdateProgress | null> {
+  const invoke = readTauriInvoke()
+  if (!invoke) return null
+  const raw = await invoke('desktop_update_progress_get')
+  return asDesktopUpdateProgress(raw)
 }

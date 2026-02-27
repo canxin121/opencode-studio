@@ -8,6 +8,7 @@ import { useSettingsStore, type Settings } from '../stores/settings'
 import { usePluginHostStore } from '@/stores/pluginHost'
 import { useToastsStore } from '@/stores/toasts'
 import { useUiStore } from '@/stores/ui'
+import { useUpdatesStore } from '@/stores/updates'
 import { i18n, setAppLocale } from '@/i18n'
 import type { AppLocale } from '@/i18n/locale'
 
@@ -50,6 +51,7 @@ const settings = useSettingsStore()
 const pluginHost = usePluginHostStore()
 const toasts = useToastsStore()
 const ui = useUiStore()
+const updates = useUpdatesStore()
 const route = useRoute()
 const router = useRouter()
 const { startDesktopSidebarResize } = useDesktopSidebarResize()
@@ -199,6 +201,132 @@ async function saveDesktopRuntimeConfig() {
   }
 }
 
+const updateAutoCheckEnabled = computed<boolean>({
+  get() {
+    return updates.autoCheckEnabled
+  },
+  set(value) {
+    void updates.setAutoCheckEnabled(value === true)
+  },
+})
+
+const updateAutoPromptEnabled = computed<boolean>({
+  get() {
+    return updates.autoPromptEnabled
+  },
+  set(value) {
+    void updates.setAutoPromptEnabled(value === true)
+  },
+})
+
+const updateAutoServiceInstallEnabled = computed<boolean>({
+  get() {
+    return updates.autoServiceInstallEnabled
+  },
+  set(value) {
+    void updates.setAutoServiceInstallEnabled(value === true)
+  },
+})
+
+const updateAutoInstallerInstallEnabled = computed<boolean>({
+  get() {
+    return updates.autoInstallerInstallEnabled
+  },
+  set(value) {
+    void updates.setAutoInstallerInstallEnabled(value === true)
+  },
+})
+
+async function checkForUpdatesNow() {
+  await updates.checkForUpdates({ notify: true, forcePrompt: true })
+  if (updates.error) {
+    toasts.push('error', String(t('settings.desktopRuntime.updates.toasts.checkFailed', { error: updates.error })))
+    return
+  }
+
+  if (!updates.anyAvailable) {
+    toasts.push('success', String(t('settings.desktopRuntime.updates.toasts.checkedNoUpdate')))
+  }
+}
+
+async function openReleasePageForUpdate() {
+  const ok = await updates.openReleasePage()
+  if (!ok) {
+    toasts.push('error', String(t('settings.desktopRuntime.updates.toasts.openReleaseFailed')))
+  }
+}
+
+async function applyServiceUpdateNow() {
+  const result = await updates.applyServiceUpdate()
+  if (result.ok) {
+    toasts.push('success', String(t('settings.desktopRuntime.updates.toasts.serviceUpdated')))
+  } else {
+    toasts.push(
+      'error',
+      String(t('settings.desktopRuntime.updates.toasts.serviceUpdateFailed', { error: result.error || '' })),
+    )
+  }
+}
+
+async function applyInstallerUpdateNow() {
+  const result = await updates.applyInstallerUpdate()
+  if (result.ok) {
+    toasts.push('info', String(t('settings.desktopRuntime.updates.toasts.installerLaunching')))
+  } else {
+    toasts.push(
+      'error',
+      String(t('settings.desktopRuntime.updates.toasts.installerUpdateFailed', { error: result.error || '' })),
+    )
+  }
+}
+
+async function ignoreCurrentUpdateVersion() {
+  const result = await updates.ignoreCurrentReleaseVersion()
+  if (result.ok) {
+    toasts.push('info', String(t('settings.desktopRuntime.updates.toasts.ignoredVersion')))
+  } else {
+    toasts.push(
+      'error',
+      String(t('settings.desktopRuntime.updates.toasts.ignoreVersionFailed', { error: result.error || '' })),
+    )
+  }
+}
+
+async function snoozeUpdateReminder() {
+  const result = await updates.snoozeReminder(24)
+  if (result.ok) {
+    toasts.push('info', String(t('settings.desktopRuntime.updates.toasts.reminderSnoozed')))
+  } else {
+    toasts.push(
+      'error',
+      String(t('settings.desktopRuntime.updates.toasts.reminderSnoozeFailed', { error: result.error || '' })),
+    )
+  }
+}
+
+async function clearUpdateReminderSuppression() {
+  const result = await updates.clearReminderSuppression()
+  if (result.ok) {
+    toasts.push('success', String(t('settings.desktopRuntime.updates.toasts.reminderSuppressionCleared')))
+  } else {
+    toasts.push(
+      'error',
+      String(t('settings.desktopRuntime.updates.toasts.reminderSuppressionClearFailed', { error: result.error || '' })),
+    )
+  }
+}
+
+const updateReminderSnoozeUntilLabel = computed(() => {
+  const ts = Number(updates.reminderSnoozeUntil || 0)
+  if (!Number.isFinite(ts) || ts <= 0) return ''
+  try {
+    const locale = String(i18n.global.locale.value || 'en-US')
+    return new Date(ts).toLocaleString(locale)
+  } catch {
+    return new Date(ts).toLocaleString()
+  }
+})
+
 const tabs = computed<Array<{ id: SettingsTab; label: string }>>(() => [
   { id: 'opencode', label: String(t('settings.tabs.opencode')) },
   { id: 'plugins', label: String(t('settings.tabs.plugins')) },
@@ -343,6 +471,9 @@ onMounted(() => {
   }
   if (desktopRuntimeEnabled) {
     void loadDesktopRuntimeConfig()
+  }
+  if (!updates.checkedAt && !updates.loading && updates.autoCheckEnabled) {
+    void updates.checkForUpdates({ notify: false })
   }
 })
 
@@ -709,6 +840,270 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
           <!-- Backends Tab -->
           <div v-else-if="activeTab === 'backends'" class="space-y-6">
             <BackendsPanel />
+
+            <div class="rounded-lg border border-border bg-muted/10 p-4">
+              <div class="text-sm font-medium">{{ t('settings.desktopRuntime.updates.title') }}</div>
+              <div class="mt-1 text-xs text-muted-foreground">
+                {{ t('settings.desktopRuntime.updates.description') }}
+              </div>
+
+              <div class="mt-4 grid gap-3">
+                <label class="inline-flex items-center gap-2 text-sm">
+                  <input type="checkbox" v-model="updateAutoCheckEnabled" />
+                  {{ t('settings.desktopRuntime.updates.fields.autoCheck') }}
+                </label>
+
+                <label class="inline-flex items-center gap-2 text-sm">
+                  <input type="checkbox" v-model="updateAutoPromptEnabled" :disabled="!updateAutoCheckEnabled" />
+                  {{ t('settings.desktopRuntime.updates.fields.autoPrompt') }}
+                </label>
+
+                <label class="inline-flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    v-model="updateAutoServiceInstallEnabled"
+                    :disabled="!desktopRuntimeEnabled || !updateAutoCheckEnabled || updates.serviceUpdating"
+                  />
+                  {{ t('settings.desktopRuntime.updates.fields.autoServiceInstall') }}
+                </label>
+
+                <label class="inline-flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    v-model="updateAutoInstallerInstallEnabled"
+                    :disabled="!desktopRuntimeEnabled || !updateAutoCheckEnabled || updates.installerUpdating"
+                  />
+                  {{ t('settings.desktopRuntime.updates.fields.autoInstallerInstall') }}
+                </label>
+
+                <div class="flex items-center gap-2 flex-wrap">
+                  <Button
+                    variant="outline"
+                    :disabled="updates.loading || updates.serviceUpdating || updates.installerUpdating"
+                    @click="checkForUpdatesNow"
+                  >
+                    {{
+                      updates.loading
+                        ? t('settings.desktopRuntime.updates.actions.checking')
+                        : t('settings.desktopRuntime.updates.actions.checkNow')
+                    }}
+                  </Button>
+                  <Button variant="outline" :disabled="!updates.release?.url" @click="openReleasePageForUpdate">
+                    {{ t('settings.desktopRuntime.updates.actions.openRelease') }}
+                  </Button>
+                </div>
+
+                <div class="flex items-center gap-2 flex-wrap">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    :disabled="!updates.release?.tag"
+                    @click="ignoreCurrentUpdateVersion"
+                  >
+                    {{ t('settings.desktopRuntime.updates.actions.ignoreThisVersion') }}
+                  </Button>
+                  <Button variant="outline" size="sm" @click="snoozeUpdateReminder">
+                    {{ t('settings.desktopRuntime.updates.actions.remindLater') }}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    :disabled="!updates.currentReleaseIgnored && !updates.reminderSnoozed"
+                    @click="clearUpdateReminderSuppression"
+                  >
+                    {{ t('settings.desktopRuntime.updates.actions.clearSuppression') }}
+                  </Button>
+                </div>
+
+                <div v-if="updates.currentReleaseIgnored" class="text-xs text-muted-foreground">
+                  {{ t('settings.desktopRuntime.updates.suppression.ignored') }}
+                </div>
+                <div v-else-if="updates.reminderSnoozed" class="text-xs text-muted-foreground">
+                  {{
+                    t('settings.desktopRuntime.updates.suppression.snoozed', {
+                      until: updateReminderSnoozeUntilLabel || '-',
+                    })
+                  }}
+                </div>
+
+                <div
+                  v-if="updates.error"
+                  class="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+                >
+                  {{ updates.error }}
+                </div>
+
+                <div class="grid gap-2 rounded-md border border-border/60 bg-background/60 p-3">
+                  <div class="flex items-center justify-between gap-3">
+                    <div class="text-xs text-muted-foreground">
+                      {{ t('settings.desktopRuntime.updates.sections.service') }}
+                    </div>
+                    <span
+                      class="inline-flex items-center rounded-full border border-border/70 bg-primary/10 px-2 py-0.5 text-[11px] font-medium"
+                    >
+                      {{
+                        updates.service.available
+                          ? t('settings.desktopRuntime.updates.status.updateAvailable')
+                          : t('settings.desktopRuntime.updates.status.upToDate')
+                      }}
+                    </span>
+                  </div>
+                  <div class="text-sm">
+                    {{
+                      t('settings.desktopRuntime.updates.versionLine', {
+                        current: updates.service.currentVersion || '-',
+                        latest: updates.service.latestVersion || '-',
+                      })
+                    }}
+                  </div>
+                  <div v-if="updates.service.target" class="text-[11px] text-muted-foreground">
+                    {{ t('settings.desktopRuntime.updates.targetLine', { target: updates.service.target }) }}
+                  </div>
+                  <div v-if="updates.service.assetName" class="text-[11px] font-mono text-muted-foreground break-all">
+                    {{ updates.service.assetName }}
+                  </div>
+                  <div
+                    v-if="updates.serviceProgress?.running || updates.serviceProgress?.error"
+                    class="grid gap-1 rounded-md border border-border/60 bg-muted/20 p-2"
+                  >
+                    <div class="text-[11px] text-muted-foreground">
+                      {{ updates.serviceProgress?.message || t('settings.desktopRuntime.updates.progress.preparing') }}
+                    </div>
+                    <div class="h-1.5 overflow-hidden rounded bg-border/70">
+                      <div
+                        class="h-full bg-primary transition-all"
+                        :style="{ width: `${updates.serviceProgressPercent || 10}%` }"
+                      />
+                    </div>
+                    <div class="text-[11px] text-muted-foreground">
+                      {{
+                        updates.serviceProgressPercent !== null
+                          ? t('settings.desktopRuntime.updates.progress.percent', {
+                              percent: updates.serviceProgressPercent,
+                            })
+                          : t('settings.desktopRuntime.updates.progress.indeterminate')
+                      }}
+                    </div>
+                    <div v-if="updates.serviceProgress?.error" class="text-[11px] text-destructive">
+                      {{ updates.serviceProgress.error }}
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      :disabled="
+                        !desktopRuntimeEnabled ||
+                        updates.serviceUpdating ||
+                        !updates.service.available ||
+                        !updates.service.assetUrl
+                      "
+                      @click="applyServiceUpdateNow"
+                    >
+                      {{
+                        updates.serviceUpdating
+                          ? t('settings.desktopRuntime.updates.actions.updatingService')
+                          : t('settings.desktopRuntime.updates.actions.updateServiceNow')
+                      }}
+                    </Button>
+                  </div>
+                  <div class="text-[11px] text-muted-foreground">
+                    {{ t('settings.desktopRuntime.updates.serviceHint') }}
+                  </div>
+                </div>
+
+                <div
+                  v-if="updates.installer"
+                  class="grid gap-2 rounded-md border border-border/60 bg-background/60 p-3"
+                >
+                  <div class="flex items-center justify-between gap-3">
+                    <div class="text-xs text-muted-foreground">
+                      {{ t('settings.desktopRuntime.updates.sections.installer') }}
+                    </div>
+                    <span
+                      class="inline-flex items-center rounded-full border border-border/70 bg-primary/10 px-2 py-0.5 text-[11px] font-medium"
+                    >
+                      {{
+                        updates.installer.available
+                          ? t('settings.desktopRuntime.updates.status.updateAvailable')
+                          : t('settings.desktopRuntime.updates.status.upToDate')
+                      }}
+                    </span>
+                  </div>
+                  <div class="text-sm">
+                    {{
+                      t('settings.desktopRuntime.updates.versionLine', {
+                        current: updates.installer.currentVersion || '-',
+                        latest: updates.installer.latestVersion || '-',
+                      })
+                    }}
+                  </div>
+                  <div v-if="updates.installer.target" class="text-[11px] text-muted-foreground">
+                    {{ t('settings.desktopRuntime.updates.targetLine', { target: updates.installer.target }) }}
+                  </div>
+                  <div class="text-[11px] text-muted-foreground">
+                    {{ t('settings.desktopRuntime.updates.channelLine', { channel: updates.installer.channel }) }}
+                  </div>
+                  <div
+                    v-if="updates.installer.primaryAssetName"
+                    class="text-[11px] font-mono text-muted-foreground break-all"
+                  >
+                    {{ updates.installer.primaryAssetName }}
+                  </div>
+                  <div
+                    v-if="updates.installerProgress?.running || updates.installerProgress?.error"
+                    class="grid gap-1 rounded-md border border-border/60 bg-muted/20 p-2"
+                  >
+                    <div class="text-[11px] text-muted-foreground">
+                      {{
+                        updates.installerProgress?.message || t('settings.desktopRuntime.updates.progress.preparing')
+                      }}
+                    </div>
+                    <div class="h-1.5 overflow-hidden rounded bg-border/70">
+                      <div
+                        class="h-full bg-primary transition-all"
+                        :style="{ width: `${updates.installerProgressPercent || 10}%` }"
+                      />
+                    </div>
+                    <div class="text-[11px] text-muted-foreground">
+                      {{
+                        updates.installerProgressPercent !== null
+                          ? t('settings.desktopRuntime.updates.progress.percent', {
+                              percent: updates.installerProgressPercent,
+                            })
+                          : t('settings.desktopRuntime.updates.progress.indeterminate')
+                      }}
+                    </div>
+                    <div v-if="updates.installerProgress?.error" class="text-[11px] text-destructive">
+                      {{ updates.installerProgress.error }}
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      :disabled="
+                        !desktopRuntimeEnabled ||
+                        updates.installerUpdating ||
+                        !updates.installer.available ||
+                        !updates.installer.primaryAssetUrl
+                      "
+                      @click="applyInstallerUpdateNow"
+                    >
+                      {{
+                        updates.installerUpdating
+                          ? t('settings.desktopRuntime.updates.actions.preparingInstaller')
+                          : t('settings.desktopRuntime.updates.actions.installDesktopNow')
+                      }}
+                    </Button>
+                  </div>
+                  <div class="text-[11px] text-muted-foreground">
+                    {{ t('settings.desktopRuntime.updates.installerHint') }}
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div v-if="desktopRuntimeEnabled" class="rounded-lg border border-border bg-muted/10 p-4">
               <div class="text-sm font-medium">{{ t('settings.desktopRuntime.title') }}</div>
               <div class="mt-1 text-xs text-muted-foreground">

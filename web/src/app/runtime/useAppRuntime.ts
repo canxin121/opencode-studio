@@ -357,7 +357,8 @@ export function useAppRuntime() {
 
     // Check for updates a few seconds after mount.
     updateTimer = window.setTimeout(() => {
-      void updates.checkForUpdates()
+      if (!updates.autoCheckEnabled) return
+      void updates.checkForUpdates({ notify: true })
     }, 3000)
 
     // Keep sessions available for all views.

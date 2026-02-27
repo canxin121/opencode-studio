@@ -107,6 +107,7 @@ impl<'a> SettingsUpdateSanitizer<'a> {
             "defaultVariant",
             "defaultAgent",
             "defaultGitIdentityId",
+            "updateIgnoredReleaseTag",
         ] {
             if let Some(Value::String(v)) = self.input.get(key) {
                 let trimmed = v.trim();
@@ -123,6 +124,10 @@ impl<'a> SettingsUpdateSanitizer<'a> {
     fn sanitize_boolean_fields(&mut self) {
         for key in [
             "useSystemTheme",
+            "updateAutoCheckEnabled",
+            "updateAutoPromptEnabled",
+            "updateAutoServiceInstallEnabled",
+            "updateAutoInstallerInstallEnabled",
             "showReasoningTraces",
             "showTextJustificationActivity",
             "showChatTimestamps",
@@ -153,6 +158,7 @@ impl<'a> SettingsUpdateSanitizer<'a> {
         self.insert_bounded_number("memoryLimitHistorical", 10, 500);
         self.insert_bounded_number("memoryLimitViewport", 20, 500);
         self.insert_bounded_number("memoryLimitActiveSession", 30, 1000);
+        self.insert_bounded_number("updateReminderSnoozeUntil", 0, 4_102_444_800_000);
     }
 
     fn insert_bounded_number(&mut self, key: &str, min: i64, max: i64) {

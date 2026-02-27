@@ -144,6 +144,33 @@ mod tests {
                 .and_then(|v| v.as_bool()),
             Some(true)
         );
+        assert_eq!(
+            obj.get("updateAutoCheckEnabled").and_then(|v| v.as_bool()),
+            Some(true)
+        );
+        assert_eq!(
+            obj.get("updateAutoPromptEnabled").and_then(|v| v.as_bool()),
+            Some(true)
+        );
+        assert_eq!(
+            obj.get("updateAutoServiceInstallEnabled")
+                .and_then(|v| v.as_bool()),
+            Some(false)
+        );
+        assert_eq!(
+            obj.get("updateAutoInstallerInstallEnabled")
+                .and_then(|v| v.as_bool()),
+            Some(false)
+        );
+        assert_eq!(
+            obj.get("updateIgnoredReleaseTag"),
+            Some(&serde_json::Value::Null)
+        );
+        assert_eq!(
+            obj.get("updateReminderSnoozeUntil")
+                .and_then(|v| v.as_i64()),
+            Some(0)
+        );
         let default_filters = default_chat_activity_filters();
         let stored_filters = obj
             .get("chatActivityFilters")
