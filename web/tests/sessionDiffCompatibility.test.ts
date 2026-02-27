@@ -30,6 +30,32 @@ test('normalizeSessionDiffPayload: accepts wrapped payload and alternate field n
   ])
 })
 
+test('normalizeSessionDiffPayload: accepts deleted alias for deletion count', () => {
+  const payload = {
+    data: {
+      files: [
+        {
+          path: 'src/alias.ts',
+          old: 'const before = true\n',
+          new: 'const after = true\n',
+          added: 1,
+          deleted: 1,
+        },
+      ],
+    },
+  }
+
+  assert.deepEqual(normalizeSessionDiffPayload(payload), [
+    {
+      file: 'src/alias.ts',
+      before: 'const before = true\n',
+      after: 'const after = true\n',
+      additions: 1,
+      deletions: 1,
+    },
+  ])
+})
+
 test('normalizeSessionDiffPayload: accepts direct entry object shape', () => {
   const payload = {
     filename: 'README.md',

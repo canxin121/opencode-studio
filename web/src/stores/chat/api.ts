@@ -218,7 +218,7 @@ function parseSessionFileDiff(value: JsonValue): SessionFileDiff | null {
       'b',
     ]),
     additions: firstCount(record, ['additions', 'added', 'insertions', 'linesAdded', 'add']),
-    deletions: firstCount(record, ['deletions', 'removed', 'linesDeleted', 'del']),
+    deletions: firstCount(record, ['deletions', 'deleted', 'removed', 'linesDeleted', 'del']),
     ...(diff ? { diff } : {}),
     ...(meta ? { meta } : {}),
   }
