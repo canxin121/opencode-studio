@@ -75,7 +75,14 @@ esac
 BUILD_CMD=("$BUILD_TOOL")
 
 echo "Building Rust backend (server) release for ${TARGET_TRIPLE} via ${BUILD_TOOL}..."
-"${BUILD_CMD[@]}" build --manifest-path "$ROOT_DIR/server/Cargo.toml" --release --locked --target "$TARGET_TRIPLE" --target-dir "$ROOT_DIR/server/target"
+if [[ "$BUILD_TOOL" == "cross" ]]; then
+  (
+    cd "$ROOT_DIR"
+    "${BUILD_CMD[@]}" build --manifest-path "server/Cargo.toml" --release --locked --target "$TARGET_TRIPLE" --target-dir "server/target"
+  )
+else
+  "${BUILD_CMD[@]}" build --manifest-path "$ROOT_DIR/server/Cargo.toml" --release --locked --target "$TARGET_TRIPLE" --target-dir "$ROOT_DIR/server/target"
+fi
 
 BIN_DIR="$ROOT_DIR/server/target/$TARGET_TRIPLE/release"
 BIN_NAME="opencode-studio$EXT"
