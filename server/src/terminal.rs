@@ -30,7 +30,6 @@ const MAX_TERMINAL_SESSIONS: usize = 20;
 const TERMINAL_IDLE_TIMEOUT_ENV: &str = "OPENCODE_STUDIO_TERMINAL_IDLE_TIMEOUT_SECS";
 const TERMINAL_CLEANUP_INTERVAL: Duration = Duration::from_secs(5 * 60);
 const TERMINAL_HEARTBEAT: Duration = Duration::from_secs(15);
-const TERMINAL_SESSION_REGISTRY_FILE: &str = "terminal/sessions.json";
 const TERMINAL_SESSION_FILE_VERSION: u64 = 1;
 const TMUX_SESSION_PREFIX: &str = "opencode-studio-";
 
@@ -154,7 +153,7 @@ fn terminal_idle_timeout() -> Option<Duration> {
 }
 
 fn terminal_session_registry_path() -> PathBuf {
-    crate::settings::opencode_studio_data_dir().join(TERMINAL_SESSION_REGISTRY_FILE)
+    crate::persistence_paths::terminal_session_registry_path()
 }
 
 fn tmux_session_name(session_id: &str) -> String {

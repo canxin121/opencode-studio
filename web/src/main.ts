@@ -18,6 +18,7 @@ import { readSessionIdFromQuery } from './app/navigation/sessionQuery'
 import { useToastsStore } from './stores/toasts'
 import { useAuthStore } from './stores/auth'
 import { syncDesktopBackendTarget } from './lib/backend'
+import { sessionStorageKeys } from './lib/persistence/storageKeys'
 import {
   OC_AUTH_REQUIRED_EVENT,
   readAuthRequiredFromStorage,
@@ -27,8 +28,8 @@ import {
 
 // Capture initial page-load context so components that mount lazily (e.g. mobile sidebar)
 // can still tell whether a session query came from a fresh load vs in-app navigation.
-const PAGE_LOAD_TOKEN_KEY = 'oc2.pageLoadToken'
-const INITIAL_SESSION_QUERY_KEY = 'oc2.initialSessionQuery'
+const PAGE_LOAD_TOKEN_KEY = sessionStorageKeys.app.pageLoadToken
+const INITIAL_SESSION_QUERY_KEY = sessionStorageKeys.app.initialSessionQuery
 try {
   const token = String(performance.timeOrigin || Date.now())
   sessionStorage.setItem(PAGE_LOAD_TOKEN_KEY, token)

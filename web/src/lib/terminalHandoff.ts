@@ -1,4 +1,6 @@
-const TERMINAL_HANDOFF_KEY_PREFIX = 'oc2.terminal.handoff:'
+import { sessionStorageKeys } from './persistence/storageKeys'
+
+const TERMINAL_HANDOFF_KEY_PREFIX = sessionStorageKeys.terminal.handoffKeyPrefix
 const TERMINAL_HANDOFF_TTL_MS = 30_000
 const TERMINAL_HANDOFF_MAX_PENDING = 12
 const TERMINAL_HANDOFF_MAX_SEND_LEN = 12_000

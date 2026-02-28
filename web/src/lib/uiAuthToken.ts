@@ -1,9 +1,10 @@
-import { getLocalJson, getSessionJson, removeLocalKey, removeSessionKey, setLocalJson } from './persist'
+import { getLocalJson, removeLocalKey, setLocalJson } from './persist'
 import { readActiveBackendBaseUrl } from './backend'
+import { localStorageKeys } from './persistence/storageKeys'
 
 type TokenMap = Record<string, string>
 
-const STORAGE_KEY = 'oc2.uiAuth.tokenByBaseUrl.v1'
+const STORAGE_KEY = localStorageKeys.auth.uiTokenByBaseUrl
 
 function normalizeKey(baseUrl: string): string {
   const trimmed = String(baseUrl || '').trim()
@@ -12,18 +13,6 @@ function normalizeKey(baseUrl: string): string {
 
 function readMap(): TokenMap {
   const local = getLocalJson<TokenMap>(STORAGE_KEY, {})
-  if (local && typeof local === 'object' && Object.keys(local).length > 0) {
-    return local
-  }
-
-  // Migration: older builds stored tokens in sessionStorage.
-  const session = getSessionJson<TokenMap>(STORAGE_KEY, {})
-  if (session && typeof session === 'object' && Object.keys(session).length > 0) {
-    setLocalJson(STORAGE_KEY, session)
-    removeSessionKey(STORAGE_KEY)
-    return session
-  }
-
   return local
 }
 

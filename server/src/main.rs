@@ -21,6 +21,7 @@ mod opencode_config_model;
 mod opencode_proxy;
 mod opencode_session;
 mod path_utils;
+mod persistence_paths;
 mod plugin_runtime;
 mod providers;
 mod runtime_config;

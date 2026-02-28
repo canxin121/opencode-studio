@@ -1,11 +1,12 @@
 import { getLocalString, setLocalString } from '@/lib/persist'
+import { localStorageKeys } from '@/lib/persistence/storageKeys'
 
 export const SUPPORTED_LOCALES = ['zh-CN', 'en-US'] as const
 export type AppLocale = (typeof SUPPORTED_LOCALES)[number]
 
 export const DEFAULT_LOCALE: AppLocale = 'zh-CN'
 
-const STORAGE_KEY = 'oc2.ui.locale'
+const STORAGE_KEY = localStorageKeys.ui.locale
 
 function matchSupportedLocale(raw: string): AppLocale | null {
   const v = String(raw || '').trim()

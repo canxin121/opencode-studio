@@ -1,4 +1,5 @@
 import { nextTick, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
+import { localStorageKeys } from '@/lib/persistence/storageKeys'
 
 type UiLike = { isMobile: boolean; isMobilePointer: boolean }
 
@@ -58,7 +59,7 @@ export function useChatComposerLayout(opts: {
     else root.removeAttribute('data-oc-composer-fullscreen')
   }
 
-  const STORAGE_COMPOSER_USER_HEIGHT = 'oc2.chat.composerUserHeight'
+  const STORAGE_COMPOSER_USER_HEIGHT = localStorageKeys.chat.composerUserHeight
   const DEFAULT_COMPOSER_HEIGHT = 240
   const DEFAULT_MOBILE_COMPOSER_HEIGHT = 160
 

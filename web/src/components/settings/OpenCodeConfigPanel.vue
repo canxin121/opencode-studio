@@ -47,6 +47,7 @@ import { provideOpencodeConfigPanelContext } from './opencode/opencodeConfigCont
 import { useOpencodeDraft } from './opencode/useOpencodeDraft'
 
 import { apiJson } from '@/lib/api'
+import { localStorageKeys } from '@/lib/persistence/storageKeys'
 import { reloadOpenCodeConfig } from '@/lib/reload'
 import { matchPattern } from '@/lib/opencodePermission'
 
@@ -457,7 +458,7 @@ const permissionTestInput = ref('')
 
 const jsoncWarnEnabled = ref(true)
 const isJsoncActivePath = computed(() => (activePath.value || '').toLowerCase().endsWith('.jsonc'))
-const JSONC_WARN_KEY = 'opencode-studio.opencode.warnJsoncRewrite'
+const JSONC_WARN_KEY = localStorageKeys.settings.opencodeWarnJsoncRewrite
 
 // Pattern editor types/state live in dedicated helper modules.
 

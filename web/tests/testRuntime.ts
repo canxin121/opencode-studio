@@ -1,6 +1,7 @@
 import { reactive, ref } from 'vue'
 
 import type { SessionRunConfig } from '../src/types/chat'
+import { localStorageKeys } from '../src/lib/persistence/storageKeys'
 
 function createMemoryStorage(): Storage {
   const data = new Map<string, string>()
@@ -86,7 +87,7 @@ export async function createTestHarness(
     messages?: Array<{ info?: Record<string, unknown> }>
   } = {},
 ) {
-  clearLocalStorageKeys(['oc2.chat.modelVariantByKey', 'oc2.chat.sessionManualModelBySession'])
+  clearLocalStorageKeys([localStorageKeys.chat.modelVariantByKey, localStorageKeys.chat.sessionManualModelBySession])
   const useChatModelSelection = await getUseChatModelSelection()
 
   const chat = reactive<ChatState>({

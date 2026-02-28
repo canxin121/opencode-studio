@@ -6,8 +6,7 @@ use tauri::Manager;
 
 use crate::AppHandle;
 
-const CONFIG_FILE_NAME: &str = "opencode-studio.toml";
-const LEGACY_CONFIG_FILE_NAME: &str = "desktop-config.json";
+const RUNTIME_CONFIG_FILE_NAME: &str = "opencode-studio.toml";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -68,55 +67,45 @@ impl Default for BackendConfig {
     }
 }
 
-pub fn config_path(app: &AppHandle) -> Option<PathBuf> {
+pub fn runtime_config_path(app: &AppHandle) -> Option<PathBuf> {
     let dir = app.path().app_config_dir().ok()?;
-    Some(dir.join(CONFIG_FILE_NAME))
-}
-
-fn legacy_config_path(app: &AppHandle) -> Option<PathBuf> {
-    let dir = app.path().app_config_dir().ok()?;
-    Some(dir.join(LEGACY_CONFIG_FILE_NAME))
+    Some(dir.join(RUNTIME_CONFIG_FILE_NAME))
 }
 
 pub fn load_or_create(app: &AppHandle) -> Result<DesktopConfig, String> {
-    let path = config_path(app).ok_or_else(|| "unable to resolve app config dir".to_string())?;
+    let path =
+        runtime_config_path(app).ok_or_else(|| "unable to resolve app config dir".to_string())?;
     ensure_parent_dir(&path)?;
 
     if path.exists() {
-        let txt = fs::read_to_string(&path).map_err(|e| format!("read config: {e}"))?;
-        let cfg = normalize_config(toml::from_str(&txt).map_err(|e| format!("parse config: {e}"))?);
-        return Ok(cfg);
-    }
-
-    if let Some(legacy_path) = legacy_config_path(app)
-        && legacy_path.exists()
-    {
-        let txt = fs::read_to_string(&legacy_path).map_err(|e| format!("read config: {e}"))?;
-        let cfg =
-            normalize_config(serde_json::from_str(&txt).map_err(|e| format!("parse config: {e}"))?);
-        let _ = save(app, cfg.clone())?;
-        let _ = fs::remove_file(&legacy_path);
+        let txt = fs::read_to_string(&path).map_err(|e| format!("read runtime config: {e}"))?;
+        let cfg = normalize_config(
+            toml::from_str(&txt).map_err(|e| format!("parse runtime config: {e}"))?,
+        );
         return Ok(cfg);
     }
 
     let cfg = normalize_config(DesktopConfig::default());
-    let txt = toml::to_string_pretty(&cfg).map_err(|e| format!("serialize config: {e}"))?;
-    fs::write(&path, format!("{txt}\n")).map_err(|e| format!("write config: {e}"))?;
+    let txt = toml::to_string_pretty(&cfg).map_err(|e| format!("serialize runtime config: {e}"))?;
+    fs::write(&path, format!("{txt}\n")).map_err(|e| format!("write runtime config: {e}"))?;
     Ok(cfg)
 }
 
 pub fn save(app: &AppHandle, cfg: DesktopConfig) -> Result<DesktopConfig, String> {
-    let path = config_path(app).ok_or_else(|| "unable to resolve app config dir".to_string())?;
+    let path =
+        runtime_config_path(app).ok_or_else(|| "unable to resolve app config dir".to_string())?;
     ensure_parent_dir(&path)?;
 
     let normalized = normalize_config(cfg);
-    let txt = toml::to_string_pretty(&normalized).map_err(|e| format!("serialize config: {e}"))?;
-    fs::write(&path, format!("{txt}\n")).map_err(|e| format!("write config: {e}"))?;
+    let txt = toml::to_string_pretty(&normalized)
+        .map_err(|e| format!("serialize runtime config: {e}"))?;
+    fs::write(&path, format!("{txt}\n")).map_err(|e| format!("write runtime config: {e}"))?;
     Ok(normalized)
 }
 
-pub fn open_config_file(app: &AppHandle) -> Result<(), String> {
-    let path = config_path(app).ok_or_else(|| "unable to resolve app config dir".to_string())?;
+pub fn open_runtime_config_file(app: &AppHandle) -> Result<(), String> {
+    let path =
+        runtime_config_path(app).ok_or_else(|| "unable to resolve app config dir".to_string())?;
     ensure_parent_dir(&path)?;
 
     // If the config does not exist yet, create it.
@@ -152,7 +141,11 @@ fn normalize_config(mut cfg: DesktopConfig) -> DesktopConfig {
 
 fn normalize_optional_path(raw: Option<String>) -> Option<String> {
     let value = raw?.trim().to_string();
-    if value.is_empty() { None } else { Some(value) }
+    if value.is_empty() {
+        None
+    } else {
+        Some(value)
+    }
 }
 
 fn normalize_host(raw: &str) -> String {

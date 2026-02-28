@@ -35,6 +35,7 @@ import type { OptionMenuGroup, OptionMenuItem } from '@/components/ui/optionMenu
 import TerminalKeybar from '@/components/TerminalKeybar.vue'
 import { consumeTrustedTerminalHandoffPayload, type TerminalHandoffTarget } from '@/lib/terminalHandoff'
 import { getLocalString, removeLocalKey, setLocalString } from '@/lib/persist'
+import { localStorageKeys } from '@/lib/persistence/storageKeys'
 import { ApiError } from '@/lib/api'
 import { connectSse } from '@/lib/sse'
 import {
@@ -80,11 +81,7 @@ type TerminalUiStateEvent =
       }
     }
 
-const STORAGE_SESSION = 'oc2.terminal.sessionId'
-const STORAGE_SESSION_LIST = 'oc2.terminal.sessionIds'
-const STORAGE_SESSION_META = 'oc2.terminal.sessionMetaById'
-const STORAGE_FOLDER_LIST = 'oc2.terminal.folderList'
-const STORAGE_GIT_HANDOFF_SESSION = 'oc2.terminal.gitHandoffSessionId'
+const STORAGE_GIT_HANDOFF_SESSION = localStorageKeys.terminal.gitHandoffSessionId
 
 const TERMINAL_STATE_REMOTE_SAVE_DEBOUNCE_MS = 250
 
@@ -212,47 +209,6 @@ function normalizeSessionList(input: unknown): string[] {
     out.push(id)
   }
   return out
-}
-
-function readStoredSessionList(): string[] {
-  const raw = getLocalString(STORAGE_SESSION_LIST)
-  if (!raw) return []
-  try {
-    return normalizeSessionList(JSON.parse(raw))
-  } catch {
-    return []
-  }
-}
-
-function readStoredSessionMetaById(): Record<string, TerminalSessionMeta> {
-  const raw = getLocalString(STORAGE_SESSION_META)
-  if (!raw) return {}
-  try {
-    const parsed = JSON.parse(raw)
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
-
-    const out: Record<string, TerminalSessionMeta> = {}
-    for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
-      const sid = normalizeSessionId(key)
-      if (!sid) continue
-      const compact = compactSessionMeta(value)
-      if (!compact) continue
-      out[sid] = compact
-    }
-    return out
-  } catch {
-    return {}
-  }
-}
-
-function readStoredFolderList(): TerminalFolder[] {
-  const raw = getLocalString(STORAGE_FOLDER_LIST)
-  if (!raw) return []
-  try {
-    return normalizeFolderList(JSON.parse(raw))
-  } catch {
-    return []
-  }
 }
 
 function readStoredGitHandoffSessionId(): string {
@@ -707,40 +663,6 @@ function defaultTerminalUiState(): TerminalUiState {
   }
 }
 
-function readLegacyTerminalUiStateSnapshot(): TerminalUiState | null {
-  const active = normalizeSessionId(getLocalString(STORAGE_SESSION) || '')
-  const sessionIds = readStoredSessionList()
-  const sessionMeta = readStoredSessionMetaById()
-  const folderList = readStoredFolderList()
-
-  const mergedSessionIds = normalizeSessionList(active ? [active, ...sessionIds] : sessionIds)
-  const hasData =
-    mergedSessionIds.length > 0 || Object.keys(sessionMeta).length > 0 || folderList.length > 0 || Boolean(active)
-  if (!hasData) return null
-
-  return {
-    version: 0,
-    updatedAt: 0,
-    activeSessionId: active || mergedSessionIds[0] || null,
-    sessionIds: mergedSessionIds,
-    sessionMetaById: sessionMeta,
-    folders: folderList,
-  }
-}
-
-function clearLegacyTerminalStorage() {
-  removeLocalKey(STORAGE_SESSION)
-  removeLocalKey(STORAGE_SESSION_LIST)
-  removeLocalKey(STORAGE_SESSION_META)
-  removeLocalKey(STORAGE_FOLDER_LIST)
-}
-
-function remoteTerminalStateHasData(snapshot: TerminalUiState): boolean {
-  if (snapshot.sessionIds.length > 0) return true
-  if (Object.keys(snapshot.sessionMetaById || {}).length > 0) return true
-  return (snapshot.folders || []).some((folder) => normalizeFolderId(folder.id) !== DEFAULT_FOLDER_ID)
-}
-
 function applyTerminalUiStateSnapshot(snapshot: TerminalUiState) {
   const incomingVersion = Math.max(0, Math.floor(Number(snapshot.version) || 0))
   const incomingUpdatedAt = Math.max(0, Math.floor(Number(snapshot.updatedAt) || 0))
@@ -881,28 +803,15 @@ function openTerminalUiStateEvents() {
 }
 
 async function bootstrapTerminalUiState() {
-  const legacy = readLegacyTerminalUiStateSnapshot()
-
   try {
     const remote = await getTerminalUiState()
     applyTerminalUiStateSnapshot(remote)
     terminalStateHydrated.value = true
-
-    if (legacy && !remoteTerminalStateHasData(remote)) {
-      applyTerminalUiStateSnapshot({
-        ...legacy,
-        version: remote.version,
-        updatedAt: remote.updatedAt,
-      })
-      scheduleTerminalStateRemotePersist()
-    }
   } catch {
-    applyTerminalUiStateSnapshot(legacy || defaultTerminalUiState())
+    applyTerminalUiStateSnapshot(defaultTerminalUiState())
     terminalStateHydrated.value = true
     scheduleTerminalStateRemotePersist()
   }
-
-  clearLegacyTerminalStorage()
 
   if (terminalStatePersistQueued) {
     scheduleTerminalStateRemotePersist()

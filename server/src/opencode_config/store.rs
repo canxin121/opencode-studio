@@ -239,25 +239,22 @@ mod tests {
     }
 
     #[test]
-    fn config_file_user_falls_back_to_legacy_home_config_when_present() {
+    fn config_file_user_uses_preferred_config_home_path() {
         let _env_lock = ENV_LOCK.lock().unwrap();
         let tmp =
             std::env::temp_dir().join(format!("opencode-config-store-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&tmp);
 
-        let home = tmp.join("home");
-        let appdata = tmp.join("appdata");
-        let legacy_dir = home.join(".config").join("opencode");
-        let preferred_dir = appdata.join("opencode");
-        std::fs::create_dir_all(&legacy_dir).unwrap();
+        let xdg_config = tmp.join("xdg-config");
+        let preferred_dir = xdg_config.join("opencode");
         std::fs::create_dir_all(&preferred_dir).unwrap();
-        std::fs::write(legacy_dir.join("opencode.json"), "{\"$schema\":\"x\"}\n").unwrap();
 
-        let _home = EnvVarGuard::set("HOME", home.to_string_lossy().to_string());
-        let _app = EnvVarGuard::set("APPDATA", appdata.to_string_lossy().to_string());
-        let _xdg = EnvVarGuard::set("XDG_CONFIG_HOME", "".to_string());
+        let _xdg = EnvVarGuard::set("XDG_CONFIG_HOME", xdg_config.to_string_lossy().to_string());
 
         let store = OpenCodeConfigStore::from_env();
-        assert_eq!(store.config_file_user(), legacy_dir.join("opencode.json"));
+        assert_eq!(
+            store.config_file_user(),
+            preferred_dir.join("opencode.json")
+        );
     }
 }

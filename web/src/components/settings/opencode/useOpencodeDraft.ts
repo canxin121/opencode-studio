@@ -2,6 +2,7 @@ import { ref, type Ref } from 'vue'
 
 import { cloneConfig, deletePath, getPath, isEmptyValue, setPath } from '../ConfigUtils'
 import type { ToastKind } from '@/stores/toasts'
+import { localStorageKeys } from '@/lib/persistence/storageKeys'
 import type { JsonObject, JsonValue } from '@/types/json'
 
 export type ValidationIssue = { path: string; message: string; severity: 'error' | 'warning' }
@@ -30,7 +31,7 @@ type ToastsLike = {
   push: (kind: ToastKind, message: string, timeoutMs?: number) => void
 }
 
-const SAVE_META_KEY = 'opencode-studio.opencode.saveMeta.v2'
+const SAVE_META_KEY = localStorageKeys.settings.opencodeSaveMeta
 
 export function useOpencodeDraft(opts: {
   activePath: Ref<string>

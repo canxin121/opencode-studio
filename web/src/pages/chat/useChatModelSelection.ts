@@ -20,6 +20,7 @@ import {
 import { useModelSelectionStateMachine } from './modelSelectionStateMachine'
 import { createStringMapPersister, loadStringMapFromStorage, normalizeStringMapEntry } from './modelSelectionStorage'
 import { useModelSelectionViewState } from './modelSelectionViewState'
+import { localStorageKeys } from '../../lib/persistence/storageKeys'
 import type { SessionRunConfig } from '@/types/chat'
 
 type ChatMessageLike = { info?: ModelMetaRecord }
@@ -102,7 +103,7 @@ export function useChatModelSelection(opts: {
   const selectedAgent = ref('')
 
   // Variant selection is per-model (provider/model) and persists across sessions.
-  const STORAGE_MODEL_VARIANT_BY_KEY = 'oc2.chat.modelVariantByKey'
+  const STORAGE_MODEL_VARIANT_BY_KEY = localStorageKeys.chat.modelVariantByKey
   const variantByModelKey = ref<Record<string, string>>(
     loadStringMapFromStorage(STORAGE_MODEL_VARIANT_BY_KEY, normalizeStringMapEntry),
   )
@@ -115,7 +116,7 @@ export function useChatModelSelection(opts: {
     variantByModelPersister.persistSoon()
   }
 
-  const STORAGE_SESSION_MANUAL_MODEL_BY_SESSION = 'oc2.chat.sessionManualModelBySession'
+  const STORAGE_SESSION_MANUAL_MODEL_BY_SESSION = localStorageKeys.chat.sessionManualModelBySession
   const sessionManualModelBySession = ref<Record<string, string>>(
     loadStringMapFromStorage(STORAGE_SESSION_MANUAL_MODEL_BY_SESSION, normalizeSessionManualModelStorageEntry),
   )

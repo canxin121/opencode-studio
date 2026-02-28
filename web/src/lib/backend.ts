@@ -1,4 +1,5 @@
-import { getLocalJson, getLocalString, removeLocalKey, setLocalJson } from './persist'
+import { getLocalJson, setLocalJson } from './persist'
+import { localStorageKeys } from './persistence/storageKeys'
 
 export type BackendTarget = {
   id: string
@@ -14,10 +15,7 @@ export type BackendsConfigV1 = {
   backends: BackendTarget[]
 }
 
-const STORAGE_KEY = 'oc2.backends.v1'
-
-// Legacy single-backend keys (kept for migration / compatibility).
-const LEGACY_BASE_URL_KEY = 'oc2.backend.baseUrl'
+const STORAGE_KEY = localStorageKeys.backends.configV1
 
 function nowMs(): number {
   return Date.now()
@@ -171,27 +169,6 @@ export function ensureBackendsConfigInStorage(): BackendsConfigV1 {
       writeBackendsConfigToStorage(normalized)
     }
     return normalized
-  }
-
-  // Migration path from older single-backend storage.
-  const legacyBaseUrl = normalizeBackendBaseUrl(getLocalString(LEGACY_BASE_URL_KEY))
-  if (legacyBaseUrl) {
-    removeLocalKey(LEGACY_BASE_URL_KEY)
-    const now = nowMs()
-    const backend: BackendTarget = {
-      id: randomId(),
-      label: 'Backend',
-      baseUrl: legacyBaseUrl,
-      createdAt: now,
-      lastUsedAt: now,
-    }
-    const cfg: BackendsConfigV1 = {
-      version: 1,
-      activeBackendId: backend.id,
-      backends: [backend],
-    }
-    writeBackendsConfigToStorage(cfg)
-    return cfg
   }
 
   if (readTauriInvoke()) {

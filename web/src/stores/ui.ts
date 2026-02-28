@@ -3,12 +3,13 @@ import { computed, ref, watch } from 'vue'
 
 import { isMainTabId, type MainTabId } from '@/app/navigation/mainTabs'
 import { getLocalString, setLocalString } from '@/lib/persist'
+import { localStorageKeys } from '@/lib/persistence/storageKeys'
 
 export type MainTab = MainTabId
 
-const STORAGE_SIDEBAR_OPEN = 'oc2.ui.sidebarOpen'
-const STORAGE_SIDEBAR_WIDTH = 'oc2.ui.sidebarWidth'
-const STORAGE_ACTIVE_TAB = 'oc2.ui.activeMainTab'
+const STORAGE_SIDEBAR_OPEN = localStorageKeys.ui.sidebarOpen
+const STORAGE_SIDEBAR_WIDTH = localStorageKeys.ui.sidebarWidth
+const STORAGE_ACTIVE_TAB = localStorageKeys.ui.activeMainTab
 
 export const useUiStore = defineStore('ui', () => {
   const isMobile = ref(false)
