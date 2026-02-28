@@ -1194,6 +1194,10 @@ async function openRecentSession(sessionId: string) {
 }
 
 function directoryHasActiveOrBlocked(p: DirectoryEntry): boolean {
+  if (directorySessions.hasActiveRuntimeInDirectory(p.id, p.path, { includeCooldown: true })) {
+    return true
+  }
+
   const list = aggregatedSessionsForDirectory(p.id, p.path)
   for (const s of list) {
     const id = readSessionId(s)

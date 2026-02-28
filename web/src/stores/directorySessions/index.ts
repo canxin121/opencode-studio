@@ -76,7 +76,8 @@ export const DIRECTORIES_PAGE_SIZE_DEFAULT = 15
 export const FOOTER_PAGE_SIZE_DEFAULT = 10
 export const RECENT_INDEX_MAX_ITEMS = 40
 export const RECENT_INDEX_DEFAULT_LIMIT = RECENT_INDEX_MAX_ITEMS
-export const RUNNING_INDEX_DEFAULT_LIMIT = FOOTER_PAGE_SIZE_DEFAULT
+export const RUNNING_INDEX_MAX_ITEMS = 400
+export const RUNNING_INDEX_DEFAULT_LIMIT = RUNNING_INDEX_MAX_ITEMS
 
 function asRecord(value: JsonValue): JsonObject | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
