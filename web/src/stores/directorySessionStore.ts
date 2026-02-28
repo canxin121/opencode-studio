@@ -890,10 +890,7 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     }
 
     const offset = Math.max(0, Math.floor(opts?.offset || 0))
-    const limit = Math.max(
-      1,
-      Math.min(RUNNING_INDEX_MAX_ITEMS, Math.floor(opts?.limit || RUNNING_INDEX_DEFAULT_LIMIT)),
-    )
+    const limit = Math.max(1, Math.min(RUNNING_INDEX_MAX_ITEMS, Math.floor(opts?.limit || RUNNING_INDEX_DEFAULT_LIMIT)))
     const append = Boolean(opts?.append)
 
     const task = (async () => {
@@ -1842,7 +1839,11 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     return runtimeIsActive(runtimeBySessionId.value[sid], opts)
   }
 
-  function hasActiveRuntimeInDirectory(directoryId: string, directoryPath: string, opts?: { includeCooldown?: boolean }) {
+  function hasActiveRuntimeInDirectory(
+    directoryId: string,
+    directoryPath: string,
+    opts?: { includeCooldown?: boolean },
+  ) {
     return hasActiveRuntimeInDirectoryScope({
       directoryId,
       directoryPath,

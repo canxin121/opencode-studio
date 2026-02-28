@@ -3,10 +3,7 @@ export function normalizePage(value: number | null | undefined): number {
   return Math.max(0, Math.floor(value))
 }
 
-export function isDirectoryAggregatePageSatisfied(
-  cachedPage: number | null | undefined,
-  targetPage: number,
-): boolean {
+export function isDirectoryAggregatePageSatisfied(cachedPage: number | null | undefined, targetPage: number): boolean {
   return normalizePage(cachedPage) === normalizePage(targetPage)
 }
 
