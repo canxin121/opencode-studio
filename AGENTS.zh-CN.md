@@ -48,5 +48,5 @@ python3 -m json.tool desktop/src-tauri/capabilities/default.json >/dev/null
 
 ## 版本对齐
 
-- Bun 版本对齐 CI：`1.3.9`。
-- CI 变更后，应同步更新本文件中的门槛命令。
+- Bun 版本策略跟随 CI（`bun-version: latest`）。
+- 当 CI 版本策略变更时，应同步更新本文件。

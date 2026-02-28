@@ -10,7 +10,6 @@ Requirements:
 
 - Rust toolchain (stable)
 - Bun
-- Node.js (CI uses Node 20+)
 
 Web app:
 

@@ -19,8 +19,7 @@
 ## 前置依赖
 
 - Rust 工具链（stable）
-- Bun（与 CI 对齐版本：`1.3.9`）
-- Node.js（CI 使用 Node 20+）
+- Bun（CI 策略：通过 `bun-version: latest` 持续跟随稳定版）
 - 已安装 OpenCode CLI，且在 `PATH` 可用（`opencode --version`）
 - 仅 Windows 服务安装：管理员权限 PowerShell + `sc.exe`
 
@@ -37,7 +36,7 @@ scoop install opencode
 # or
 choco install opencode
 # or
-npm i -g opencode-ai@latest
+bun add -g opencode-ai@latest
 ```
 
 ## 安装路径

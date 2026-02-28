@@ -48,5 +48,5 @@ python3 -m json.tool desktop/src-tauri/capabilities/default.json >/dev/null
 
 ## Version Alignment
 
-- Bun version aligned with CI: `1.3.9`.
-- When CI changes, update this file accordingly.
+- Bun version policy follows CI (`bun-version: latest`).
+- When CI version policy changes, update this file accordingly.

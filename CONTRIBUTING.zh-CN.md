@@ -10,7 +10,6 @@
 
 - Rust 工具链（stable）
 - Bun
-- Node.js（CI 使用 Node 20+）
 
 Web 应用：
 

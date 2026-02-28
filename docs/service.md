@@ -32,7 +32,7 @@ scoop install opencode
 # or
 choco install opencode
 # or
-npm i -g opencode-ai@latest
+bun add -g opencode-ai@latest
 ```
 
 Verify:

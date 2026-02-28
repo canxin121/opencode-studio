@@ -69,8 +69,8 @@ scoop install opencode
 # Windows (Chocolatey)
 choco install opencode
 
-# Any platform with Node.js
-npm i -g opencode-ai@latest
+# Any platform with Bun
+bun add -g opencode-ai@latest
 ```
 
 Verify before installing Studio service:
