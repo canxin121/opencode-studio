@@ -30,6 +30,7 @@ export type ChatSidebarStateWire = {
   seq?: number
   directoriesPage?: JsonValue
   sessionPagesByDirectoryId?: JsonValue
+  runtimeBySessionId?: JsonValue
   recentPage?: JsonValue
   runningPage?: JsonValue
 }

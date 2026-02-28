@@ -243,12 +243,6 @@ fn preferences_path() -> PathBuf {
         .join("chat-sidebar.preferences.json")
 }
 
-fn legacy_preferences_path() -> PathBuf {
-    crate::settings::opencode_studio_data_dir()
-        .join("ui")
-        .join("sessions-sidebar.preferences.json")
-}
-
 async fn acquire_preferences_disk_lock() -> Result<std::fs::File, String> {
     let lock_path = preferences_path().with_extension("json.lock");
     tokio::task::spawn_blocking(move || {
@@ -276,13 +270,7 @@ async fn load_preferences_from_disk() -> SessionsSidebarPreferences {
     let primary = preferences_path();
     let raw = match tokio::fs::read_to_string(&primary).await {
         Ok(raw) => raw,
-        Err(_) => {
-            let legacy = legacy_preferences_path();
-            match tokio::fs::read_to_string(legacy).await {
-                Ok(raw) => raw,
-                Err(_) => return SessionsSidebarPreferences::default(),
-            }
-        }
+        Err(_) => return SessionsSidebarPreferences::default(),
     };
 
     let parsed = serde_json::from_str::<SessionsSidebarPreferences>(&raw)

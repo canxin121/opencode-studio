@@ -19,7 +19,6 @@ export type ChatSidebarUiPrefs = {
 type JsonObject = Record<string, JsonLike>
 
 const STORAGE_KEY = 'oc2.chat.sidebarUiPrefs.v1'
-const LEGACY_STORAGE_KEY = 'oc2.sessions.sidebarUiPrefs.v1'
 
 const DEFAULT_UI_PREFS: ChatSidebarUiPrefs = {
   version: 0,
@@ -84,9 +83,7 @@ export function defaultChatSidebarUiPrefs(): ChatSidebarUiPrefs {
 }
 
 function readStorageRaw(): string | null {
-  const next = localStorage.getItem(STORAGE_KEY)
-  if (next) return next
-  return localStorage.getItem(LEGACY_STORAGE_KEY)
+  return localStorage.getItem(STORAGE_KEY)
 }
 
 export function loadChatSidebarUiPrefs(): ChatSidebarUiPrefs {
@@ -164,8 +161,6 @@ export function saveChatSidebarUiPrefs(next: ChatSidebarUiPrefs) {
             : 0,
       }),
     )
-    // Best-effort cleanup after migration to the chat sidebar key.
-    localStorage.removeItem(LEGACY_STORAGE_KEY)
   } catch {
     // ignore persistence errors
   }
@@ -186,10 +181,3 @@ export function patchChatSidebarUiPrefs(
     sessionRootPageByDirectoryId: patch.sessionRootPageByDirectoryId ?? current.sessionRootPageByDirectoryId,
   }
 }
-
-// Backward-compatible aliases for in-progress naming migration.
-export type SessionsSidebarUiPrefs = ChatSidebarUiPrefs
-export const defaultSessionsSidebarUiPrefs = defaultChatSidebarUiPrefs
-export const loadSessionsSidebarUiPrefs = loadChatSidebarUiPrefs
-export const saveSessionsSidebarUiPrefs = saveChatSidebarUiPrefs
-export const patchSessionsSidebarUiPrefs = patchChatSidebarUiPrefs

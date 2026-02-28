@@ -473,16 +473,6 @@ pub(crate) async fn run(args: crate::Args) {
             "/ui/terminal/state/events",
             get(crate::terminal_ui_state::terminal_ui_state_events),
         )
-        // Legacy aliases kept for backward compatibility.
-        .route(
-            "/ui/sessions-sidebar/preferences",
-            get(crate::chat_sidebar_preferences::chat_sidebar_preferences_get)
-                .put(crate::chat_sidebar_preferences::chat_sidebar_preferences_put),
-        )
-        .route(
-            "/ui/sessions-sidebar/preferences/events",
-            get(crate::chat_sidebar_preferences::chat_sidebar_preferences_events),
-        )
         // SSE bridge
         .route(
             "/event",
@@ -510,27 +500,6 @@ pub(crate) async fn run(args: crate::Args) {
         )
         .route(
             "/chat-sidebar/state",
-            get(crate::chat_sidebar::chat_sidebar_state),
-        )
-        // Legacy aliases kept for backward compatibility.
-        .route(
-            "/sessions-sidebar/bootstrap",
-            get(crate::chat_sidebar::chat_sidebar_bootstrap),
-        )
-        .route(
-            "/sessions-sidebar/events",
-            get(crate::chat_sidebar::chat_sidebar_events),
-        )
-        .route(
-            "/sessions-sidebar/recent-index",
-            get(crate::chat_sidebar::chat_sidebar_recent_index),
-        )
-        .route(
-            "/sessions-sidebar/running-index",
-            get(crate::chat_sidebar::chat_sidebar_running_index),
-        )
-        .route(
-            "/sessions-sidebar/state",
             get(crate::chat_sidebar::chat_sidebar_state),
         )
         .route(

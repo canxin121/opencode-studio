@@ -152,6 +152,7 @@ struct ChatSidebarStateResponse {
     seq: u64,
     directories_page: Value,
     session_pages_by_directory_id: BTreeMap<String, Value>,
+    runtime_by_session_id: Value,
     recent_page: Value,
     running_page: Value,
 }
@@ -715,6 +716,7 @@ pub(crate) async fn chat_sidebar_state(
 ) -> crate::ApiResult<Response> {
     let preferences = crate::chat_sidebar_preferences::chat_sidebar_preferences_snapshot().await;
     let seq = crate::directory_sessions::directory_sessions_latest_seq();
+    let runtime_by_session_id = state.directory_session_index.runtime_snapshot_json();
 
     let directories_page_size = parse_limit(
         query.directories_page_size,
@@ -845,6 +847,7 @@ pub(crate) async fn chat_sidebar_state(
         seq,
         directories_page,
         session_pages_by_directory_id,
+        runtime_by_session_id,
         recent_page,
         running_page,
     })

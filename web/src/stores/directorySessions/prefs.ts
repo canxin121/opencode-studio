@@ -144,9 +144,3 @@ export function uiPrefsBodyEquals(left: ChatSidebarUiPrefs, right: ChatSidebarUi
     left.runningSessionsPage === right.runningSessionsPage
   )
 }
-
-// Backward-compatible aliases for in-progress naming migration.
-export type SessionsSidebarPatchOp = ChatSidebarPatchOp
-export type SessionsSidebarPreferencesPatchOp = ChatSidebarPreferencesPatchOp
-export const parseSessionsSidebarPatchOps = parseChatSidebarPatchOps
-export const parseSessionsSidebarPreferencesPatchOps = parseChatSidebarPreferencesPatchOps

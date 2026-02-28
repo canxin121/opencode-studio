@@ -23,7 +23,6 @@ import { isUiPrefsConflictError, readUiPrefsConflictCurrent } from '@/stores/uiP
 import { rebaseUiPrefsDeltaOntoRemote } from '@/stores/uiPrefsRebase'
 import {
   clearDirectorySessionSnapshot,
-  loadDirectorySessionSnapshot,
   saveDirectorySessionSnapshot,
   type DirectorySessionSnapshot,
   type SessionRuntimeSnapshot,
@@ -48,7 +47,6 @@ import {
   type ChatSidebarStateWire,
   type DirectorySessionPageState,
   type DirectorySessionTreeHint,
-  type DirectorySessionsBootstrapWire,
   type PagedIndexWire,
   type RecentIndexWireItem,
   type RecentIndexEntry,
@@ -88,12 +86,10 @@ import { createStringRefreshQueue } from '@/stores/directorySessions/sidebarRefr
 import { runNonCriticalSidebarHydration } from '@/stores/directorySessions/bootstrapHydration'
 import {
   SIDEBAR_STATE_ENDPOINT,
-  SIDEBAR_BOOTSTRAP_ENDPOINT,
   SNAPSHOT_SAVE_DEBOUNCE_MS,
   UI_PREFS_ENDPOINT,
   UI_PREFS_REMOTE_SAVE_DEBOUNCE_MS,
   jsonLikeDeepEqual,
-  metricNowMs,
 } from '@/stores/directorySessions/persistence'
 
 type EnsureDirectoryAggregateOpts = {
@@ -752,7 +748,7 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
 
   function applyChatSidebarPreferencesEvent(evt: SseEvent) {
     const type = readEventType(evt)
-    if (type !== 'chat-sidebar-preferences.patch' && type !== 'sessions-sidebar-preferences.patch') return
+    if (type !== 'chat-sidebar-preferences.patch') return
 
     const seq = parseSseSeq(evt)
     if (uiPrefsPatchOutOfSync) {
@@ -2098,11 +2094,11 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
 
     // When using a single global SSE connection, sidebar patch + prefs events
     // can arrive through /api/global/event. Reuse the existing handlers.
-    if (type === 'chat-sidebar.patch' || type === 'sessions-sidebar.patch') {
+    if (type === 'chat-sidebar.patch') {
       applyChatSidebarPatchEvent(evt)
       return
     }
-    if (type === 'chat-sidebar-preferences.patch' || type === 'sessions-sidebar-preferences.patch') {
+    if (type === 'chat-sidebar-preferences.patch') {
       applyChatSidebarPreferencesEvent(evt)
       return
     }
@@ -2387,7 +2383,7 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
 
   function applyChatSidebarPatchEvent(evt: SseEvent) {
     const type = readEventType(evt)
-    if (type !== 'chat-sidebar.patch' && type !== 'sessions-sidebar.patch') return
+    if (type !== 'chat-sidebar.patch') return
 
     const seq = parseSseSeq(evt)
     if (sidebarPatchOutOfSync) {
@@ -2447,196 +2443,6 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     const list = sessionSummariesByDirectoryId.value[dirId] || []
     const expanded = new Set(uiPrefs.value.expandedParentSessionIds)
     return buildFlattenedTree(list, expanded).rows
-  }
-
-  async function hydrateFromSnapshot() {
-    const startedAt = metricNowMs()
-    uiPrefs.value = loadChatSidebarUiPrefs()
-    const snapshot = await loadDirectorySessionSnapshot()
-    if (!snapshot) {
-      if (import.meta.env.DEV) {
-        console.debug('[directorySessionStore] snapshot hydrate', {
-          ms: Number((metricNowMs() - startedAt).toFixed(1)),
-          hasSnapshot: false,
-        })
-      }
-      return
-    }
-
-    setDirectoryEntries(snapshot.directoryEntries)
-    const snapshotSummaryEntries: Array<[string, SessionSummarySnapshot]> = []
-    for (const session of snapshot.sessionSummaries || []) {
-      const sid = readObjectId(session)
-      if (!sid) continue
-      snapshotSummaryEntries.push([sid, session])
-    }
-    sessionSummariesById.value = Object.fromEntries(snapshotSummaryEntries)
-
-    const nextDirectoryIdBySessionId: Record<string, string> = {}
-    const pathToDirectoryId = Object.fromEntries(
-      visibleDirectories.value.map((entry) => [entry.path.trim(), entry.id.trim()]),
-    )
-    for (const [sid, session] of Object.entries(sessionSummariesById.value)) {
-      const path = readSessionDirectory(session)
-      const mapped = path ? pathToDirectoryId[path] || '' : ''
-      if (mapped) {
-        nextDirectoryIdBySessionId[sid] = mapped
-      }
-    }
-    directoryIdBySessionId.value = nextDirectoryIdBySessionId
-
-    rootsByDirectoryId.value = snapshot.rootsByDirectoryId || {}
-    childrenByParentSessionId.value = snapshot.childrenByParentSessionId || {}
-
-    runtimeBySessionId.value = Object.fromEntries(
-      Object.entries(snapshot.runtimeBySessionId || {}).map(([sid, runtime]) => [sid, normalizeRuntime(runtime)]),
-    )
-
-    if (import.meta.env.DEV) {
-      console.debug('[directorySessionStore] snapshot hydrate', {
-        ms: Number((metricNowMs() - startedAt).toFixed(1)),
-        hasSnapshot: true,
-        directoryCount: directoryOrder.value.length,
-        sessionCount: Object.keys(sessionSummariesById.value).length,
-        runtimeCount: Object.keys(runtimeBySessionId.value).length,
-      })
-    }
-  }
-
-  async function revalidateFromLegacyBootstrap(opts?: { limitPerDirectory?: number }): Promise<void> {
-    const limit =
-      typeof opts?.limitPerDirectory === 'number' && Number.isFinite(opts.limitPerDirectory)
-        ? Math.max(1, Math.floor(opts.limitPerDirectory))
-        : 10
-
-    const collapsedSet = new Set(
-      (uiPrefs.value.collapsedDirectoryIds || []).map((id) => String(id || '').trim()).filter(Boolean),
-    )
-    const expandedDirectoryIds = Array.from(
-      new Set(
-        visibleDirectories.value.map((entry) => entry.id.trim()).filter((id) => Boolean(id) && !collapsedSet.has(id)),
-      ),
-    )
-    const bootstrapParams = new URLSearchParams()
-    bootstrapParams.set('limitPerDirectory', String(limit))
-    bootstrapParams.set('expandedDirectoryIds', expandedDirectoryIds.join(','))
-
-    const bootstrap = await apiJson<DirectorySessionsBootstrapWire>(
-      `${SIDEBAR_BOOTSTRAP_ENDPOINT}?${bootstrapParams.toString()}`,
-    )
-    lastSidebarPatchSeq = resolveSidebarSeqAfterBootstrap({
-      currentSeq: lastSidebarPatchSeq,
-      bootstrapSeq: bootstrap?.seq,
-      outOfSync: sidebarPatchOutOfSync,
-      sawReset: sidebarPatchSawSeqReset,
-    })
-
-    const entries = normalizeDirectories(bootstrap?.directoryEntries || [])
-    setDirectoryEntries(entries)
-
-    const directoryIdSet = new Set(entries.map((entry) => entry.id))
-    const pagesByDirectoryId = asRecord(bootstrap?.sessionSummariesByDirectoryId) || {}
-    const runtimePayload = asRecord(bootstrap?.runtimeBySessionId) || {}
-
-    const nextPageByDirectoryId: Record<string, DirectorySessionPageState> = {}
-    const nextSessionSummariesById: Record<string, SessionSummarySnapshot> = {}
-    const nextDirectoryIdBySessionId: Record<string, string> = {}
-    const nextAggregateAttemptedByDirectoryId: Record<string, boolean> = {}
-
-    for (const entry of entries) {
-      if (!Object.prototype.hasOwnProperty.call(pagesByDirectoryId, entry.id)) continue
-      const page = parseSessionPagePayload(pagesByDirectoryId[entry.id], limit)
-      const degraded = isDegradedConsistency(page.consistency)
-      if (degraded) {
-        scheduleAggregateReloadRetry(
-          entry.id,
-          entry.path,
-          {
-            pinnedSessionIds: uiPrefs.value.pinnedSessionIds || [],
-            page: 0,
-            pageSize: limit,
-            includeWorktrees: false,
-            force: true,
-          },
-          retryDelayFromConsistency(page.consistency, 220),
-        )
-      } else {
-        clearAggregateReloadRetry(entry.id)
-      }
-
-      const existingPage = sessionPageByDirectoryId.value[entry.id]
-      const preserveExisting =
-        degraded &&
-        page.sessions.length === 0 &&
-        Array.isArray(existingPage?.sessions) &&
-        existingPage.sessions.length > 0
-
-      const effectivePage = preserveExisting && existingPage ? existingPage : page
-      nextPageByDirectoryId[entry.id] = effectivePage
-      nextAggregateAttemptedByDirectoryId[entry.id] = true
-      for (const session of effectivePage.sessions) {
-        const sid = readObjectId(session)
-        if (!sid) continue
-        nextSessionSummariesById[sid] = session
-        const sessionDirectory = readSessionDirectory(session)
-        nextDirectoryIdBySessionId[sid] = directoryIdForPath(sessionDirectory) || entry.id
-      }
-    }
-
-    sessionPageByDirectoryId.value = nextPageByDirectoryId
-    sessionSummariesById.value = nextSessionSummariesById
-    directoryIdBySessionId.value = nextDirectoryIdBySessionId
-    aggregateAttemptedByDirectoryId.value = nextAggregateAttemptedByDirectoryId
-
-    pinnedSessionIdsByDirectoryId.value = Object.fromEntries(
-      Object.entries(pinnedSessionIdsByDirectoryId.value).filter(([directoryId]) => directoryIdSet.has(directoryId)),
-    )
-    pinnedSummaryKeyByDirectoryId.value = Object.fromEntries(
-      Object.entries(pinnedSummaryKeyByDirectoryId.value).filter(([directoryId]) => directoryIdSet.has(directoryId)),
-    )
-    worktreePathsByDirectoryId.value = Object.fromEntries(
-      Object.entries(worktreePathsByDirectoryId.value).filter(([directoryId]) => directoryIdSet.has(directoryId)),
-    )
-
-    const existingRuntime = runtimeBySessionId.value
-    runtimeBySessionId.value = Object.fromEntries(
-      Object.entries(runtimePayload).map(([sid, runtime]) => {
-        return [sid, mergeRuntimeState(existingRuntime[sid], toRuntimeSnapshot(runtime))]
-      }),
-    )
-
-    rootsByDirectoryId.value = {}
-    childrenByParentSessionId.value = {}
-    for (const entry of entries) {
-      rebuildDirectoryTreeIndexes(entry.id)
-    }
-
-    scheduleSnapshotPersist()
-
-    // Core sidebar bootstrap succeeded: resume patch consumption immediately.
-    // (Footer indexes are best-effort and must not keep us frozen.)
-    sidebarPatchOutOfSync = false
-    sidebarPatchSawSeqReset = false
-    stopSidebarPatchRetry()
-
-    // Footer/pinned hydration is non-critical and must not delay first render.
-    runNonCriticalSidebarHydration(
-      [
-        () => loadRecentIndexSlice({ offset: 0, limit: RECENT_INDEX_DEFAULT_LIMIT, append: false }),
-        () => loadRunningIndexSlice({ offset: 0, limit: RUNNING_INDEX_DEFAULT_LIMIT, append: false }),
-      ],
-      [
-        () => {
-          const recentPage = Math.max(0, Math.floor(uiPrefs.value.recentSessionsPage || 0))
-          return ensureRecentSessionRowsLoaded({ page: recentPage, pageSize: FOOTER_PAGE_SIZE_DEFAULT })
-        },
-        () => {
-          const runningPage = Math.max(0, Math.floor(uiPrefs.value.runningSessionsPage || 0))
-          return ensureRunningSessionRowsLoaded({ page: runningPage, pageSize: FOOTER_PAGE_SIZE_DEFAULT })
-        },
-        () => ensurePinnedSessionRowsLoaded(uiPrefs.value.pinnedSessionIds || []),
-      ],
-    )
   }
 
   async function revalidateFromStateApi(opts?: { limitPerDirectory?: number }): Promise<void> {
@@ -2779,13 +2585,8 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     loading.value = true
     error.value = null
     try {
-      try {
-        await revalidateFromStateApi(opts)
-        return true
-      } catch {
-        await revalidateFromLegacyBootstrap(opts)
-        return true
-      }
+      await revalidateFromStateApi(opts)
+      return true
     } catch (err) {
       error.value = err instanceof Error ? err.message : String(err)
       return false
@@ -2795,22 +2596,7 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
   }
 
   async function bootstrapWithStaleWhileRevalidate() {
-    loading.value = true
-    error.value = null
-    try {
-      try {
-        await revalidateFromStateApi()
-        return
-      } catch {
-        await hydrateFromSnapshot()
-        await revalidateUiPrefsFromApi()
-        await revalidateFromLegacyBootstrap()
-      }
-    } catch (err) {
-      error.value = err instanceof Error ? err.message : String(err)
-    } finally {
-      loading.value = false
-    }
+    await revalidateFromApi()
   }
 
   async function resetAllPersistedState() {
@@ -2933,11 +2719,7 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     applyGlobalEvent,
     applyChatSidebarPatchEvent,
     applyChatSidebarPreferencesEvent,
-    // Backward-compatible aliases for in-progress naming migration.
-    applySessionsSidebarPatchEvent: applyChatSidebarPatchEvent,
-    applySessionsSidebarPreferencesEvent: applyChatSidebarPreferencesEvent,
     getSidebarPatchCursor,
-    hydrateFromSnapshot,
     revalidateUiPrefsFromApi,
     revalidateFromApi,
     bootstrapWithStaleWhileRevalidate,
