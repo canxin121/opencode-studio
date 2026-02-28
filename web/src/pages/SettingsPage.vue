@@ -31,6 +31,7 @@ import {
   type DesktopConfig,
 } from '@/lib/desktopConfig'
 import { syncDesktopBackendTarget } from '@/lib/backend'
+import { localStorageKeys } from '@/lib/persistence/storageKeys'
 import {
   DEFAULT_CHAT_ACTIVITY_EXPAND_KEYS,
   DEFAULT_CHAT_TOOL_ACTIVITY_FILTERS,
@@ -60,7 +61,7 @@ const { startDesktopSidebarResize } = useDesktopSidebarResize()
 const { t } = useI18n()
 
 const useShellSidebar = computed(() => (ui.isMobile ? ui.isSessionSwitcherOpen : ui.isSidebarOpen))
-const SETTINGS_LAST_ROUTE_KEY = 'oc2.settings.lastRoute'
+const SETTINGS_LAST_ROUTE_KEY = localStorageKeys.settings.lastRoute
 
 function persistSettingsRoute(path: string) {
   try {

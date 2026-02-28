@@ -1,12 +1,13 @@
 import { getSessionString, setSessionString } from '@/lib/persist'
+import { sessionStorageKeys } from '@/lib/persistence/storageKeys'
 
 // Page-load tokens let the mobile sidebar mount/unmount without re-applying expensive defaults.
-const PAGE_LOAD_TOKEN_KEY = 'oc2.pageLoadToken'
+const PAGE_LOAD_TOKEN_KEY = sessionStorageKeys.app.pageLoadToken
 
 // Mobile sidebar can mount/unmount; avoid re-applying "boot collapse all" on every mount.
-const BOOT_COLLAPSE_APPLIED_TOKEN_KEY = 'oc2.sessions.bootCollapse.appliedToken'
+const BOOT_COLLAPSE_APPLIED_TOKEN_KEY = sessionStorageKeys.sessions.bootCollapseAppliedToken
 
-const AUTOLOAD_EXPANDED_APPLIED_TOKEN_KEY = 'oc2.sessions.autoLoadExpanded.appliedToken'
+const AUTOLOAD_EXPANDED_APPLIED_TOKEN_KEY = sessionStorageKeys.sessions.autoLoadExpandedAppliedToken
 
 function getPageLoadToken(): string {
   const stored = getSessionString(PAGE_LOAD_TOKEN_KEY)

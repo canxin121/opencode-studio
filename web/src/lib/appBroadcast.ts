@@ -1,3 +1,5 @@
+import { localStorageKeys, sessionStorageKeys } from './persistence/storageKeys'
+
 type BroadcastPayload = unknown
 
 export type AppBroadcastMessage = {
@@ -7,9 +9,9 @@ export type AppBroadcastMessage = {
   payload?: BroadcastPayload
 }
 
-const CHANNEL_NAME = 'oc2'
-const STORAGE_KEY = 'oc2.broadcast'
-const SENDER_ID_KEY = 'oc2.senderId'
+const CHANNEL_NAME = 'studio'
+const STORAGE_KEY = localStorageKeys.broadcast.channelFallbackEvent
+const SENDER_ID_KEY = sessionStorageKeys.broadcast.senderId
 
 function randomId(): string {
   try {

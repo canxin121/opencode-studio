@@ -1,4 +1,5 @@
 import type { StrictJsonObject, StrictJsonValue } from '@/types/json'
+import { indexedDbNames } from '@/lib/persistence/storageKeys'
 
 export type DirectoryEntrySnapshot = {
   id: string
@@ -27,7 +28,7 @@ export type DirectorySessionSnapshot = {
   childrenByParentSessionId: Record<string, string[]>
 }
 
-const DB_NAME = 'oc2.directorySessionSnapshot'
+const DB_NAME = indexedDbNames.directorySessionSnapshot
 const DB_VERSION = 1
 const STORE_NAME = 'snapshots'
 const SNAPSHOT_KEY = 'latest'

@@ -1,9 +1,10 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { localStorageKeys } from '@/lib/persistence/storageKeys'
 import type { JsonValue as JsonLike } from '@/types/json'
 
-const STORAGE_KEY = 'oc2.git.selectedRepoByProject'
-const CLOSED_STORAGE_KEY = 'oc2.git.closedReposByProject'
+const STORAGE_KEY = localStorageKeys.git.selectedRepoByProject
+const CLOSED_STORAGE_KEY = localStorageKeys.git.closedReposByProject
 
 type Map = Record<string, string>
 

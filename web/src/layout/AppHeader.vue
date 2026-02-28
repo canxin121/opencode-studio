@@ -24,6 +24,7 @@ import { useSettingsStore } from '@/stores/settings'
 import { useChatStore } from '@/stores/chat'
 import { apiJson } from '@/lib/api'
 import type { GitStatusResponse } from '@/types/git'
+import { localStorageKeys } from '@/lib/persistence/storageKeys'
 
 import IconButton from '@/components/ui/IconButton.vue'
 import DirectoryPathDialog from '@/components/ui/DirectoryPathDialog.vue'
@@ -243,7 +244,7 @@ function handleOpenSessionSwitcher() {
   ui.toggleSidebar()
 }
 
-const SETTINGS_LAST_ROUTE_KEY = 'oc2.settings.lastRoute'
+const SETTINGS_LAST_ROUTE_KEY = localStorageKeys.settings.lastRoute
 
 function getRememberedSettingsRoute(): string {
   try {

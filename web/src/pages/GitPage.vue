@@ -50,6 +50,7 @@ import { useGitReposStore } from '@/stores/gitRepos'
 import { useSettingsStore } from '@/stores/settings'
 import { useUiStore } from '@/stores/ui'
 import { useToastsStore } from '@/stores/toasts'
+import { gitRepoScopedStorageKey, localStorageKeys } from '@/lib/persistence/storageKeys'
 
 // Stores & State
 const settings = useSettingsStore()
@@ -283,8 +284,7 @@ const { selectedFile, diffSource, selectedIsConflict, selectFile } = useGitDiffS
 })
 
 function repoKey(suffix: string): string {
-  const dir = (repoRoot.value || '').trim()
-  return `oc2.git.${suffix}:${dir || 'none'}`
+  return gitRepoScopedStorageKey(suffix, repoRoot.value)
 }
 
 const commitState = useGitCommitState({ repoRoot, repoKey })
@@ -648,8 +648,8 @@ const patchOps = useGitPatchOps({
 })
 
 const gitmojiEnabled = computed(() => Boolean(settings.data?.gitmojiEnabled))
-const selectedGitmoji = ref(localStorage.getItem('oc2.git.gitmoji') || '')
-watch(selectedGitmoji, (v) => localStorage.setItem('oc2.git.gitmoji', v))
+const selectedGitmoji = ref(localStorage.getItem(localStorageKeys.git.gitmoji) || '')
+watch(selectedGitmoji, (v) => localStorage.setItem(localStorageKeys.git.gitmoji, v))
 
 const gitmojis = [
   { emoji: '✨', label: 'feat' },

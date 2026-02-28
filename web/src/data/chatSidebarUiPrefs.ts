@@ -1,4 +1,5 @@
 import type { JsonValue as JsonLike } from '@/types/json'
+import { localStorageKeys } from '../lib/persistence/storageKeys'
 
 export type ChatSidebarUiPrefs = {
   version: number
@@ -18,7 +19,7 @@ export type ChatSidebarUiPrefs = {
 
 type JsonObject = Record<string, JsonLike>
 
-const STORAGE_KEY = 'oc2.chat.sidebarUiPrefs.v1'
+const STORAGE_KEY = localStorageKeys.chat.sidebarUiPrefs
 
 const DEFAULT_UI_PREFS: ChatSidebarUiPrefs = {
   version: 0,

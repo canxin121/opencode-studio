@@ -1,6 +1,8 @@
+import { sessionStorageKeys } from './persistence/storageKeys'
+
 export const OC_AUTH_REQUIRED_EVENT = 'oc.auth-required'
 
-export const OC_AUTH_REQUIRED_STORAGE_KEY = 'oc2.authRequired'
+export const OC_AUTH_REQUIRED_STORAGE_KEY = sessionStorageKeys.auth.authRequired
 
 export type AuthRequiredDetail = {
   message?: string

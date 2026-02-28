@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory, type RouteLocationNormalizedLoaded, type RouteRecordRaw } from 'vue-router'
+import { sessionStorageKeys } from '@/lib/persistence/storageKeys'
 
-const CHUNK_RECOVERY_KEY = 'oc2.chunkRecoveryReloaded'
+const CHUNK_RECOVERY_KEY = sessionStorageKeys.app.chunkRecoveryReloaded
 
 function errMsg<T>(err: T): string {
   if (err instanceof Error) return err.message || String(err)

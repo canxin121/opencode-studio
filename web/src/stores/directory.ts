@@ -3,9 +3,10 @@ import { computed, ref, watch } from 'vue'
 
 import { apiJson } from '@/lib/api'
 import { getLocalString, removeLocalKey, setLocalString } from '@/lib/persist'
+import { localStorageKeys } from '@/lib/persistence/storageKeys'
 import { fsPathEquals, fsPathStartsWith, normalizeFsPath, trimTrailingFsSlashes } from '@/lib/path'
 
-const STORAGE_LAST_DIRECTORY = 'oc2.lastDirectory'
+const STORAGE_LAST_DIRECTORY = localStorageKeys.directory.lastDirectory
 
 type FsHomeResponse = { home?: string; path?: string }
 

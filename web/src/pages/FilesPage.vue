@@ -72,19 +72,20 @@ import {
 } from '@/features/files/api/filesApi'
 import type { FsContentSearchFileResult, FsContentSearchMatch } from '@/features/files/api/filesApi'
 import { useDesktopSidebarResize } from '@/composables/useDesktopSidebarResize'
+import { localStorageKeys } from '@/lib/persistence/storageKeys'
 import { useChatStore } from '@/stores/chat'
 import { useToastsStore } from '@/stores/toasts'
 import { useDirectoryStore } from '@/stores/directory'
 import { useUiStore } from '@/stores/ui'
 
-const STORAGE_FILES_SHOW_HIDDEN = 'oc2.files.showHidden'
-const STORAGE_FILES_RESPECT_GITIGNORE = 'oc2.files.respectGitignore'
-const STORAGE_FILES_AUTOSAVE = 'oc2.files.autosave'
-const STORAGE_FILES_SIDEBAR_MODE = 'oc2.files.sidebarMode'
-const STORAGE_FILES_SEARCH_MODE = 'oc2.files.searchMode'
-const STORAGE_FILES_CONTENT_SCOPE_MODE = 'oc2.files.contentScopeMode'
-const STORAGE_FILES_EXPLORER_UI_PREFIX = 'oc2.files.explorer.ui:'
-const STORAGE_FILES_EXPLORER_CACHE_PREFIX = 'oc2.files.explorer.cache:'
+const STORAGE_FILES_SHOW_HIDDEN = localStorageKeys.files.showHidden
+const STORAGE_FILES_RESPECT_GITIGNORE = localStorageKeys.files.respectGitignore
+const STORAGE_FILES_AUTOSAVE = localStorageKeys.files.autosave
+const STORAGE_FILES_SIDEBAR_MODE = localStorageKeys.files.sidebarMode
+const STORAGE_FILES_SEARCH_MODE = localStorageKeys.files.searchMode
+const STORAGE_FILES_CONTENT_SCOPE_MODE = localStorageKeys.files.contentScopeMode
+const STORAGE_FILES_EXPLORER_UI_PREFIX = localStorageKeys.files.explorerUiPrefix
+const STORAGE_FILES_EXPLORER_CACHE_PREFIX = localStorageKeys.files.explorerCachePrefix
 const DIRECTORY_PAGE_SIZE = 400
 const HIDDEN_FILE_RELATIVE_PATHS = new Set(['web/src/data/directorySessionSnapshotDb.ts'])
 
