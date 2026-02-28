@@ -18,6 +18,9 @@ const SIDEBAR_INDEX_CACHE_MAX_RECENT_VARIANTS: usize = 1;
 const SIDEBAR_INDEX_CACHE_MAX_RUNNING_VARIANTS: usize = 1;
 const DIRECTORY_SESSIONS_PAGE_CACHE_TTL: Duration = Duration::from_millis(1200);
 const DIRECTORY_SESSIONS_PAGE_CACHE_MAX_ENTRIES: usize = 256;
+const SIDEBAR_STATE_DIRECTORIES_PAGE_SIZE_DEFAULT: usize = 15;
+const SIDEBAR_STATE_DIRECTORY_SESSIONS_PAGE_SIZE_DEFAULT: usize = 10;
+const SIDEBAR_STATE_FOOTER_PAGE_SIZE_DEFAULT: usize = 10;
 
 #[derive(Debug, Clone)]
 struct RecentIndexCacheEntry {
@@ -72,6 +75,15 @@ struct DirectoryWire {
 pub(crate) struct ChatSidebarIndexQuery {
     pub offset: Option<usize>,
     pub limit: Option<usize>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ChatSidebarStateQuery {
+    pub directories_page_size: Option<usize>,
+    pub directory_sessions_page_size: Option<usize>,
+    pub recent_page_size: Option<usize>,
+    pub running_page_size: Option<usize>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -131,6 +143,17 @@ struct RunningIndexItem {
 struct SessionSummariesByIdsResponse {
     summaries: Vec<Value>,
     missing_ids: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ChatSidebarStateResponse {
+    preferences: crate::chat_sidebar_preferences::SessionsSidebarPreferences,
+    seq: u64,
+    directories_page: Value,
+    session_pages_by_directory_id: BTreeMap<String, Value>,
+    recent_page: Value,
+    running_page: Value,
 }
 
 fn normalize_path_for_match(path: &str) -> Option<String> {
@@ -346,6 +369,31 @@ fn session_parent_id(value: &Value) -> Option<String> {
         .and_then(|v| v.as_str())
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty())
+}
+
+fn expanded_directory_ids(
+    directories: &[DirectoryWire],
+    collapsed_directory_ids: &[String],
+) -> Vec<String> {
+    let collapsed = collapsed_directory_ids
+        .iter()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .collect::<HashSet<String>>();
+    directories
+        .iter()
+        .filter_map(|directory| {
+            if collapsed.contains(directory.id.trim()) {
+                None
+            } else {
+                Some(directory.id.clone())
+            }
+        })
+        .collect()
+}
+
+fn page_to_offset(page: usize, page_size: usize) -> usize {
+    page.saturating_mul(page_size)
 }
 
 fn attach_directory_tree_hint(payload: &mut Value) {
@@ -661,6 +709,148 @@ pub(crate) async fn chat_sidebar_running_index(
     Json(page(items, offset, limit)).into_response()
 }
 
+pub(crate) async fn chat_sidebar_state(
+    State(state): State<Arc<crate::AppState>>,
+    Query(query): Query<ChatSidebarStateQuery>,
+) -> crate::ApiResult<Response> {
+    let preferences = crate::chat_sidebar_preferences::chat_sidebar_preferences_snapshot().await;
+    let seq = crate::directory_sessions::directory_sessions_latest_seq();
+
+    let directories_page_size = parse_limit(
+        query.directories_page_size,
+        SIDEBAR_STATE_DIRECTORIES_PAGE_SIZE_DEFAULT,
+        400,
+    );
+    let directory_sessions_page_size = parse_limit(
+        query.directory_sessions_page_size,
+        SIDEBAR_STATE_DIRECTORY_SESSIONS_PAGE_SIZE_DEFAULT,
+        200,
+    );
+    let recent_page_size = parse_limit(
+        query.recent_page_size,
+        SIDEBAR_STATE_FOOTER_PAGE_SIZE_DEFAULT,
+        40,
+    );
+    let running_page_size = parse_limit(
+        query.running_page_size,
+        SIDEBAR_STATE_FOOTER_PAGE_SIZE_DEFAULT,
+        400,
+    );
+
+    let directories_offset = page_to_offset(preferences.directories_page, directories_page_size);
+    let directories_page_response = directories_get(
+        State(state.clone()),
+        Query(DirectoriesQuery {
+            offset: Some(directories_offset),
+            limit: Some(directories_page_size),
+            query: None,
+        }),
+    )
+    .await;
+    let Some(directories_page) = decode_json_response(directories_page_response).await else {
+        return Ok((
+            StatusCode::BAD_GATEWAY,
+            Json(json!({"error": "invalid directories response"})),
+        )
+            .into_response());
+    };
+
+    let configured = {
+        let settings = state.settings.read().await;
+        configured_directories(&settings)
+    };
+    let expanded_ids = expanded_directory_ids(&configured, &preferences.collapsed_directory_ids);
+
+    let mut session_pages_by_directory_id = BTreeMap::<String, Value>::new();
+    for directory_id in expanded_ids {
+        let root_page = preferences
+            .session_root_page_by_directory_id
+            .get(&directory_id)
+            .copied()
+            .unwrap_or(0);
+        let directory_response = directory_sessions_by_id_get(
+            State(state.clone()),
+            HeaderMap::new(),
+            AxumPath(DirectorySessionsPath {
+                directory_id: directory_id.clone(),
+            }),
+            Query(crate::opencode_session::SessionListQuery {
+                directory: None,
+                scope: Some("directory".to_string()),
+                roots: Some("true".to_string()),
+                start: None,
+                search: None,
+                offset: Some(page_to_offset(root_page, directory_sessions_page_size).to_string()),
+                limit: Some(directory_sessions_page_size.to_string()),
+                include_total: Some("true".to_string()),
+                include_children: Some("true".to_string()),
+                ids: None,
+                focus_session_id: None,
+            }),
+        )
+        .await?;
+        let Some(directory_page) = decode_json_response(directory_response).await else {
+            return Ok((
+                StatusCode::BAD_GATEWAY,
+                Json(json!({
+                    "error": "invalid directory sessions response",
+                    "directoryId": directory_id,
+                })),
+            )
+                .into_response());
+        };
+        session_pages_by_directory_id.insert(directory_id, directory_page);
+    }
+
+    let recent_page_response = chat_sidebar_recent_index(
+        State(state.clone()),
+        Query(ChatSidebarIndexQuery {
+            offset: Some(page_to_offset(
+                preferences.recent_sessions_page,
+                recent_page_size,
+            )),
+            limit: Some(recent_page_size),
+        }),
+    )
+    .await;
+    let Some(recent_page) = decode_json_response(recent_page_response).await else {
+        return Ok((
+            StatusCode::BAD_GATEWAY,
+            Json(json!({"error": "invalid recent index response"})),
+        )
+            .into_response());
+    };
+
+    let running_page_response = chat_sidebar_running_index(
+        State(state),
+        Query(ChatSidebarIndexQuery {
+            offset: Some(page_to_offset(
+                preferences.running_sessions_page,
+                running_page_size,
+            )),
+            limit: Some(running_page_size),
+        }),
+    )
+    .await;
+    let Some(running_page) = decode_json_response(running_page_response).await else {
+        return Ok((
+            StatusCode::BAD_GATEWAY,
+            Json(json!({"error": "invalid running index response"})),
+        )
+            .into_response());
+    };
+
+    Ok(Json(ChatSidebarStateResponse {
+        preferences,
+        seq,
+        directories_page,
+        session_pages_by_directory_id,
+        recent_page,
+        running_page,
+    })
+    .into_response())
+}
+
 pub(crate) async fn sessions_summaries_get(
     State(state): State<Arc<crate::AppState>>,
     Query(query): Query<SessionSummariesByIdsQuery>,
@@ -918,5 +1108,32 @@ mod tests {
             .and_then(|v| v.as_array())
             .expect("root children");
         assert_eq!(root_children.len(), 2);
+    }
+
+    #[test]
+    fn expanded_directory_ids_excludes_collapsed_entries() {
+        let directories = vec![
+            DirectoryWire {
+                id: "dir_a".to_string(),
+                path: "/tmp/a".to_string(),
+                added_at: 0,
+                last_opened_at: 0,
+            },
+            DirectoryWire {
+                id: "dir_b".to_string(),
+                path: "/tmp/b".to_string(),
+                added_at: 0,
+                last_opened_at: 0,
+            },
+        ];
+
+        let expanded = expanded_directory_ids(&directories, &[" dir_b ".to_string()]);
+        assert_eq!(expanded, vec!["dir_a".to_string()]);
+    }
+
+    #[test]
+    fn page_to_offset_saturates() {
+        assert_eq!(page_to_offset(3, 10), 30);
+        assert_eq!(page_to_offset(usize::MAX, 2), usize::MAX);
     }
 }
