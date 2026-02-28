@@ -1560,18 +1560,22 @@ export default {
         activityDetails: '活动详情',
         activityTable: {
           type: '类型',
-          transport: '传输',
+          summary: '摘要',
+          transport: '摘要',
           expand: '展开',
         },
         toolDetails: '工具详情',
         toolDetailsTable: {
           tool: '工具',
-          transport: '传输',
+          summary: '摘要',
+          transport: '摘要',
           expand: '展开',
         },
         toolDetailsHint: '工具展开默认值按工具分别配置。',
+        activitySummaryHelp:
+          'Summary 控制是否包含活动内容。Expand 控制默认展开状态，并在 Summary 始终开启时决定初始数据是否包含完整详情。',
         activityTransportHelp:
-          'Transport 控制是否请求活动数据。Expand 控制默认展开状态，并在 Transport 始终开启时决定初始数据是否包含完整详情。',
+          'Summary 控制是否包含活动内容。Expand 控制默认展开状态，并在 Summary 始终开启时决定初始数据是否包含完整详情。',
       },
     },
   },
