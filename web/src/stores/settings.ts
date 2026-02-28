@@ -28,6 +28,10 @@ export type Settings = {
   showReasoningTraces?: boolean
   showTextJustificationActivity?: boolean
   showChatTimestamps?: boolean
+  chatActivitySummaryFilters?: string[]
+  chatToolActivitySummaryFilters?: string[]
+
+  // Backward compatibility aliases.
   chatActivityFilters?: string[]
   chatActivityToolFilters?: string[]
   chatActivityDefaultExpanded?: string[]

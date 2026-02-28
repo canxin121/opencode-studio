@@ -10,7 +10,6 @@
 
 - Rust 工具链（stable）
 - Bun
-- Node.js（CI 使用 Node 20+）
 
 Web 应用：
 
@@ -26,7 +25,15 @@ Rust 服务端：
 cargo test -q --manifest-path server/Cargo.toml
 ```
 
+版本更新：
+
+```bash
+python3 scripts/version_sync.py set <version>
+python3 scripts/version_sync.py check
+```
+
 ## Pull Request
 
 - 尽量保持 PR 小而聚焦，并说明为什么这么改。
 - 请附上你的验证方式（命令 + 预期行为）。
+- 本地验证必须包含 `python3 scripts/version_sync.py check`。

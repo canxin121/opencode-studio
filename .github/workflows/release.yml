@@ -20,7 +20,6 @@ concurrency:
 env:
   RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
   RELEASE_REF: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.tag) || github.ref }}
-  BUN_VERSION: 1.3.9
   TAURI_CLI_VERSION: 2.10.0
   CACHE_VERSION: v1
 
@@ -76,14 +75,14 @@ jobs:
         continue-on-error: true
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: ${{ env.BUN_VERSION }}
+          bun-version: latest
           no-cache: true
 
       - name: Setup Bun (retry)
         if: steps.setup-bun-web.outcome == 'failure'
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: ${{ env.BUN_VERSION }}
+          bun-version: latest
           no-cache: true
 
       - name: Cache Bun downloads
@@ -96,9 +95,9 @@ jobs:
             web/node_modules/.tmp
             web/node_modules/.vite
             web/.prettier-cache
-          key: ${{ runner.os }}-web-${{ env.CACHE_VERSION }}-${{ env.BUN_VERSION }}-${{ hashFiles('web/bun.lock', 'web/package.json', 'web/vite.config.*', 'web/tsconfig*.json') }}
+          key: ${{ runner.os }}-web-${{ env.CACHE_VERSION }}-bun-latest-${{ hashFiles('web/bun.lock', 'web/package.json', 'web/vite.config.*', 'web/tsconfig*.json') }}
           restore-keys: |
-            ${{ runner.os }}-web-${{ env.CACHE_VERSION }}-${{ env.BUN_VERSION }}-
+            ${{ runner.os }}-web-${{ env.CACHE_VERSION }}-bun-latest-
 
       - name: Install web deps
         run: bun install --cwd web --frozen-lockfile

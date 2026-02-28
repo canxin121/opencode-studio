@@ -69,8 +69,8 @@ scoop install opencode
 # Windows（Chocolatey）
 choco install opencode
 
-# 任意平台（已安装 Node.js）
-npm i -g opencode-ai@latest
+# 任意平台（已安装 Bun）
+bun add -g opencode-ai@latest
 ```
 
 安装 Studio 服务前建议先确认：

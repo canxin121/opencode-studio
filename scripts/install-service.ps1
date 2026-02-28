@@ -23,7 +23,7 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 }
 
 Require-Command "sc.exe" "Windows service management requires sc.exe."
-Require-Command "opencode" "Install OpenCode first (for example: scoop install opencode, choco install opencode, or npm i -g opencode-ai@latest)."
+Require-Command "opencode" "Install OpenCode first (for example: scoop install opencode, choco install opencode, or bun add -g opencode-ai@latest)."
 
 function Get-TargetCandidates {
   $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture

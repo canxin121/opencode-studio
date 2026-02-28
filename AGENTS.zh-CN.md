@@ -12,6 +12,12 @@
 - 任何代码变更在提交前都应满足以下检查。
 - 不得通过降低标准绕过检查（如移除 `--locked`、取消 `-D warnings`）。
 
+## 版本更新
+
+- 更新项目版本号时，必须使用 `scripts/` 目录下的 Python 脚本，不要手动改各清单文件。
+- 命令：`python3 scripts/version_sync.py set <version>`（示例：`python3 scripts/version_sync.py set 0.1.0`）。
+- 版本更新后，本地校验必须包含 `python3 scripts/version_sync.py check`。
+
 ## 必过检查
 
 ### 版本一致性（对应 CI job: `version`）
@@ -48,5 +54,5 @@ python3 -m json.tool desktop/src-tauri/capabilities/default.json >/dev/null
 
 ## 版本对齐
 
-- Bun 版本对齐 CI：`1.3.9`。
-- CI 变更后，应同步更新本文件中的门槛命令。
+- Bun 版本策略跟随 CI（`bun-version: latest`）。
+- 当 CI 版本策略变更时，应同步更新本文件。

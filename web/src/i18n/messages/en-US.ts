@@ -1562,18 +1562,22 @@ export default {
         activityDetails: 'Activity details',
         activityTable: {
           type: 'Type',
-          transport: 'Transport',
+          summary: 'Summary',
+          transport: 'Summary',
           expand: 'Expand',
         },
         toolDetails: 'Tool details',
         toolDetailsTable: {
           tool: 'Tool',
-          transport: 'Transport',
+          summary: 'Summary',
+          transport: 'Summary',
           expand: 'Expand',
         },
         toolDetailsHint: 'Tool expand defaults are configured per tool.',
+        activitySummaryHelp:
+          'Summary controls whether activity content is included. Expand controls default open state, and with summary matching always on, whether full details are included in the initial payload.',
         activityTransportHelp:
-          'Transport controls whether activity payload is requested. Expand controls default open state and, with transport matching always on, whether full details are included in the initial payload.',
+          'Summary controls whether activity content is included. Expand controls default open state, and with summary matching always on, whether full details are included in the initial payload.',
       },
     },
   },

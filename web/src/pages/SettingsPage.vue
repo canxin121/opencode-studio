@@ -32,9 +32,11 @@ import {
 } from '@/lib/desktopConfig'
 import { syncDesktopBackendTarget } from '@/lib/backend'
 import {
-  DEFAULT_CHAT_ACTIVITY_FILTERS,
   DEFAULT_CHAT_ACTIVITY_EXPAND_KEYS,
   DEFAULT_CHAT_TOOL_ACTIVITY_FILTERS,
+  DEFAULT_CHAT_ACTIVITY_SUMMARY_FILTERS,
+  DEFAULT_CHAT_TOOL_ACTIVITY_SUMMARY_FILTERS,
+  DEFAULT_CHAT_ACTIVITY_EXPANDED_TOOL_FILTERS,
   normalizeChatActivityFilters,
   normalizeChatActivityDefaultExpanded,
   normalizeChatToolActivityFilters,
@@ -575,8 +577,8 @@ const monoFontPickerOptions = computed(() => [
 ])
 
 const showChatTimestamps = makeSetting('showChatTimestamps', true)
-const showReasoningTraces = makeSetting('showReasoningTraces', false)
-const showTextJustificationActivity = makeSetting('showTextJustificationActivity', false)
+const showReasoningTraces = makeSetting('showReasoningTraces', true)
+const showTextJustificationActivity = makeSetting('showTextJustificationActivity', true)
 
 const chatActivityAutoCollapseOnIdle = makeSetting('chatActivityAutoCollapseOnIdle', true)
 
@@ -605,23 +607,23 @@ function toggleActivityDefaultExpanded(id: ChatActivityExpandKey) {
   chatActivityDefaultExpanded.value = ordered
 }
 
-function activityTransportEnabled(id: ChatActivityExpandKey): boolean {
+function activitySummaryEnabled(id: ChatActivityExpandKey): boolean {
   if (id === 'thinking') return showReasoningTraces.value
   if (id === 'justification') return showTextJustificationActivity.value
-  return chatActivityFilters.value.includes(id as ChatActivityType)
+  return chatActivitySummaryFilters.value.includes(id as ChatActivityType)
 }
 
-function setActivityTransportEnabled(id: ChatActivityExpandKey, enabled: boolean) {
+function setActivitySummaryEnabled(id: ChatActivityExpandKey, enabled: boolean) {
   if (id === 'thinking') {
     showReasoningTraces.value = enabled
   } else if (id === 'justification') {
     showTextJustificationActivity.value = enabled
   } else {
-    const next = new Set(chatActivityFilters.value)
+    const next = new Set(chatActivitySummaryFilters.value)
     if (enabled) next.add(id as ChatActivityType)
     else next.delete(id as ChatActivityType)
-    const ordered = DEFAULT_CHAT_ACTIVITY_FILTERS.filter((t) => next.has(t))
-    chatActivityFilters.value = ordered
+    const ordered = DEFAULT_CHAT_ACTIVITY_SUMMARY_FILTERS.filter((t) => next.has(t))
+    chatActivitySummaryFilters.value = ordered
   }
 
   if (!enabled) {
@@ -632,8 +634,8 @@ function setActivityTransportEnabled(id: ChatActivityExpandKey, enabled: boolean
   }
 }
 
-function toggleActivityTransport(id: ChatActivityExpandKey) {
-  setActivityTransportEnabled(id, !activityTransportEnabled(id))
+function toggleActivitySummary(id: ChatActivityExpandKey) {
+  setActivitySummaryEnabled(id, !activitySummaryEnabled(id))
 }
 
 const chatActivityDefaultExpandedToolFilters = computed<ChatToolActivityType[]>({
@@ -642,7 +644,7 @@ const chatActivityDefaultExpandedToolFilters = computed<ChatToolActivityType[]>(
     if (s && Object.prototype.hasOwnProperty.call(s, 'chatActivityDefaultExpandedToolFilters')) {
       return normalizeChatToolActivityFilters(s.chatActivityDefaultExpandedToolFilters)
     }
-    return []
+    return DEFAULT_CHAT_ACTIVITY_EXPANDED_TOOL_FILTERS.slice()
   },
   set(value) {
     void settings.save({ chatActivityDefaultExpandedToolFilters: value })
@@ -661,15 +663,15 @@ function toggleActivityDefaultExpandedTool(id: ChatToolActivityType) {
   chatActivityDefaultExpandedToolFilters.value = ordered
 }
 
-function toggleToolDetailTransport(id: ChatToolActivityType) {
-  const next = new Set(chatToolActivityFilters.value)
+function toggleToolDetailSummary(id: ChatToolActivityType) {
+  const next = new Set(chatToolActivitySummaryFilters.value)
   if (next.has(id)) {
     next.delete(id)
   } else {
     next.add(id)
   }
-  const ordered = DEFAULT_CHAT_TOOL_ACTIVITY_FILTERS.filter((t) => next.has(t))
-  chatToolActivityFilters.value = ordered
+  const ordered = DEFAULT_CHAT_TOOL_ACTIVITY_SUMMARY_FILTERS.filter((t) => next.has(t))
+  chatToolActivitySummaryFilters.value = ordered
 
   if (!next.has(id)) {
     const expanded = new Set(chatActivityDefaultExpandedToolFilters.value)
@@ -679,34 +681,40 @@ function toggleToolDetailTransport(id: ChatToolActivityType) {
   }
 }
 
-const chatActivityFilters = computed<ChatActivityType[]>({
+const chatActivitySummaryFilters = computed<ChatActivityType[]>({
   get() {
     const s = settings.data
+    if (s && Object.prototype.hasOwnProperty.call(s, 'chatActivitySummaryFilters')) {
+      return normalizeChatActivityFilters(s.chatActivitySummaryFilters)
+    }
     if (s && Object.prototype.hasOwnProperty.call(s, 'chatActivityFilters')) {
       return normalizeChatActivityFilters(s.chatActivityFilters)
     }
-    return DEFAULT_CHAT_ACTIVITY_FILTERS.slice()
+    return DEFAULT_CHAT_ACTIVITY_SUMMARY_FILTERS.slice()
   },
   set(value) {
-    void settings.save({ chatActivityFilters: value })
+    void settings.save({ chatActivitySummaryFilters: value })
   },
 })
 
-const chatToolActivityFilters = computed<ChatToolActivityType[]>({
+const chatToolActivitySummaryFilters = computed<ChatToolActivityType[]>({
   get() {
     const s = settings.data
+    if (s && Object.prototype.hasOwnProperty.call(s, 'chatToolActivitySummaryFilters')) {
+      return normalizeChatToolActivityFilters(s.chatToolActivitySummaryFilters)
+    }
     if (s && Object.prototype.hasOwnProperty.call(s, 'chatActivityToolFilters')) {
       return normalizeChatToolActivityFilters(s.chatActivityToolFilters)
     }
-    return DEFAULT_CHAT_TOOL_ACTIVITY_FILTERS.slice()
+    return DEFAULT_CHAT_TOOL_ACTIVITY_SUMMARY_FILTERS.slice()
   },
   set(value) {
-    void settings.save({ chatActivityToolFilters: value })
+    void settings.save({ chatToolActivitySummaryFilters: value })
   },
 })
 
 function toolActivityEnabled(id: ChatToolActivityType): boolean {
-  return chatToolActivityFilters.value.includes(id)
+  return chatToolActivitySummaryFilters.value.includes(id)
 }
 
 const dirtyHint = computed(() => (settings.error ? settings.error : null))
@@ -1414,7 +1422,7 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
                               {{ t('settings.appearance.chat.activityTable.type') }}
                             </th>
                             <th class="px-3 py-2 text-center font-medium">
-                              {{ t('settings.appearance.chat.activityTable.transport') }}
+                              {{ t('settings.appearance.chat.activityTable.summary') }}
                             </th>
                             <th class="px-3 py-2 text-center font-medium">
                               {{ t('settings.appearance.chat.activityTable.expand') }}
@@ -1434,15 +1442,15 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
                             <td class="px-3 py-2 text-center align-middle">
                               <input
                                 type="checkbox"
-                                :checked="activityTransportEnabled(opt.id)"
-                                @change="toggleActivityTransport(opt.id)"
+                                :checked="activitySummaryEnabled(opt.id)"
+                                @change="toggleActivitySummary(opt.id)"
                               />
                             </td>
                             <td class="px-3 py-2 text-center align-middle">
                               <input
                                 type="checkbox"
                                 :checked="activityDefaultExpandedEnabled(opt.id)"
-                                :disabled="!activityTransportEnabled(opt.id)"
+                                :disabled="!activitySummaryEnabled(opt.id)"
                                 @change="toggleActivityDefaultExpanded(opt.id)"
                               />
                             </td>
@@ -1464,7 +1472,7 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
                               {{ t('settings.appearance.chat.toolDetailsTable.tool') }}
                             </th>
                             <th class="px-3 py-2 text-center font-medium">
-                              {{ t('settings.appearance.chat.toolDetailsTable.transport') }}
+                              {{ t('settings.appearance.chat.toolDetailsTable.summary') }}
                             </th>
                             <th class="px-3 py-2 text-center font-medium">
                               {{ t('settings.appearance.chat.toolDetailsTable.expand') }}
@@ -1485,7 +1493,7 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
                               <input
                                 type="checkbox"
                                 :checked="toolActivityEnabled(opt.id)"
-                                @change="toggleToolDetailTransport(opt.id)"
+                                @change="toggleToolDetailSummary(opt.id)"
                               />
                             </td>
                             <td class="px-3 py-2 text-center align-middle">
@@ -1506,7 +1514,7 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
                   </div>
 
                   <div class="text-xs text-muted-foreground">
-                    {{ t('settings.appearance.chat.activityTransportHelp') }}
+                    {{ t('settings.appearance.chat.activitySummaryHelp') }}
                   </div>
                 </div>
               </div>

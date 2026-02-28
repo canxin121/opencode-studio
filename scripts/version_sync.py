@@ -34,8 +34,6 @@ JSON_VERSION_FILES = [
     Path("desktop/src-tauri-cef/tauri.conf.full.json"),
 ]
 
-PACKAGE_LOCK_FILE = Path("web/package-lock.json")
-
 LOCK_PACKAGE_VERSION_FILES = [
     (Path("Cargo.lock"), "opencode-studio"),
     (Path("desktop/src-tauri/Cargo.lock"), "opencode-studio-desktop"),
@@ -295,9 +293,6 @@ def collect_versions() -> dict[str, str]:
         version = read_json_version(repo_path(rel_path))
         versions[str(rel_path)] = version
 
-    package_lock_version = read_package_lock_version(repo_path(PACKAGE_LOCK_FILE))
-    versions[str(PACKAGE_LOCK_FILE)] = package_lock_version
-
     for rel_path, package_name in LOCK_PACKAGE_VERSION_FILES:
         version = read_lock_package_version(repo_path(rel_path), package_name)
         versions[str(rel_path)] = version
@@ -355,9 +350,6 @@ def run_set(version_input: str, expected_tag: str | None) -> tuple[str, list[str
     for rel_path in JSON_VERSION_FILES:
         if write_json_version(repo_path(rel_path), new_version):
             changed_files.append(str(rel_path))
-
-    if write_package_lock_version(repo_path(PACKAGE_LOCK_FILE), new_version):
-        changed_files.append(str(PACKAGE_LOCK_FILE))
 
     for rel_path, package_name in LOCK_PACKAGE_VERSION_FILES:
         if write_lock_package_version(repo_path(rel_path), package_name, new_version):

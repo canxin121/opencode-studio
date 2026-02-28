@@ -10,7 +10,7 @@ export type ChatActivityType =
   | 'retry'
   | 'compaction'
 
-// Controls UI default expansion and (optionally) backend detail transport.
+// Controls UI default expansion and detail summary inclusion.
 // These include activity-like parts that aren't part of ChatActivityType filters.
 export type ChatActivityExpandKey = ChatActivityType | 'thinking' | 'justification'
 
@@ -42,14 +42,9 @@ export type ChatToolActivityType = KnownChatToolActivityType | (string & {})
 
 export const DEFAULT_CHAT_ACTIVITY_FILTERS: ChatActivityType[] = ['tool', 'snapshot', 'patch', 'retry', 'compaction']
 
-export const DEFAULT_CHAT_ACTIVITY_EXPAND_KEYS: ChatActivityExpandKey[] = [
-  'snapshot',
-  'patch',
-  'retry',
-  'compaction',
-  'thinking',
-  'justification',
-]
+export const DEFAULT_CHAT_ACTIVITY_SUMMARY_FILTERS: ChatActivityType[] = DEFAULT_CHAT_ACTIVITY_FILTERS
+
+export const DEFAULT_CHAT_ACTIVITY_EXPAND_KEYS: ChatActivityExpandKey[] = ['patch']
 
 export const DEFAULT_CHAT_TOOL_ACTIVITY_FILTERS: ChatToolActivityType[] = [
   'read',
@@ -74,6 +69,15 @@ export const DEFAULT_CHAT_TOOL_ACTIVITY_FILTERS: ChatToolActivityType[] = [
   'plan_enter',
   'plan_exit',
   'unknown',
+]
+
+export const DEFAULT_CHAT_TOOL_ACTIVITY_SUMMARY_FILTERS: ChatToolActivityType[] = DEFAULT_CHAT_TOOL_ACTIVITY_FILTERS
+
+export const DEFAULT_CHAT_ACTIVITY_EXPANDED_TOOL_FILTERS: ChatToolActivityType[] = [
+  'edit',
+  'write',
+  'apply_patch',
+  'multiedit',
 ]
 
 const CHAT_ACTIVITY_SET = new Set(DEFAULT_CHAT_ACTIVITY_FILTERS)

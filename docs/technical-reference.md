@@ -19,8 +19,7 @@ This document centralizes technical details and parameter references that are in
 ## Prerequisites
 
 - Rust toolchain (stable)
-- Bun (CI-aligned version: `1.3.9`)
-- Node.js (CI uses Node 20+)
+- Bun (CI policy: latest stable via `bun-version: latest`)
 - OpenCode CLI installed and available on `PATH` (`opencode --version`)
 - Windows service install only: elevated PowerShell + `sc.exe`
 
@@ -37,7 +36,7 @@ scoop install opencode
 # or
 choco install opencode
 # or
-npm i -g opencode-ai@latest
+bun add -g opencode-ai@latest
 ```
 
 ## Installation Paths

@@ -4,6 +4,9 @@ import test from 'node:test'
 import {
   ACTIVITY_DEFAULT_EXPANDED_OPTIONS,
   DEFAULT_CHAT_ACTIVITY_FILTERS,
+  DEFAULT_CHAT_ACTIVITY_EXPANDED_TOOL_FILTERS,
+  DEFAULT_CHAT_ACTIVITY_EXPAND_KEYS,
+  DEFAULT_CHAT_TOOL_ACTIVITY_FILTERS,
   normalizeChatActivityDefaultExpanded,
   normalizeChatActivityFilters,
 } from '../src/lib/chatActivity'
@@ -24,5 +27,14 @@ test('normalizers ignore removed step and agent keys', () => {
   assert.deepEqual(filters, ['tool', 'snapshot'])
 
   const expanded = normalizeChatActivityDefaultExpanded(['step-finish', 'agent', 'snapshot', 'thinking'])
-  assert.deepEqual(expanded, ['snapshot', 'thinking'])
+  assert.deepEqual(expanded, [])
+})
+
+test('default expansion only opens file-modifying details', () => {
+  assert.deepEqual(DEFAULT_CHAT_ACTIVITY_EXPAND_KEYS, ['patch'])
+
+  assert.deepEqual(DEFAULT_CHAT_ACTIVITY_EXPANDED_TOOL_FILTERS, ['edit', 'write', 'apply_patch', 'multiedit'])
+  for (const tool of DEFAULT_CHAT_ACTIVITY_EXPANDED_TOOL_FILTERS) {
+    assert.equal(DEFAULT_CHAT_TOOL_ACTIVITY_FILTERS.includes(tool), true)
+  }
 })

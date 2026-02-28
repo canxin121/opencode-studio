@@ -37,6 +37,7 @@ import type { MessageEntry } from '@/types/chat'
 import type { JsonObject, JsonValue } from '@/types/json'
 import {
   DEFAULT_CHAT_ACTIVITY_EXPAND_KEYS,
+  DEFAULT_CHAT_ACTIVITY_EXPANDED_TOOL_FILTERS,
   isKnownChatToolActivityType,
   normalizeChatActivityDefaultExpanded,
   normalizeChatToolActivityFilters,
@@ -759,7 +760,7 @@ const activityDefaultExpandedToolSet = computed<Set<string>>(() => {
   if (s && Object.prototype.hasOwnProperty.call(s, 'chatActivityDefaultExpandedToolFilters')) {
     return new Set(normalizeChatToolActivityFilters(s.chatActivityDefaultExpandedToolFilters))
   }
-  return new Set()
+  return new Set(DEFAULT_CHAT_ACTIVITY_EXPANDED_TOOL_FILTERS)
 })
 
 function activityExpandKeyForPart(part: JsonObject): ChatActivityExpandKey | '' {
@@ -785,8 +786,8 @@ function activityInitiallyExpandedForPart(part: JsonObject): boolean {
   return activityDefaultExpandedKeys.value.includes(key)
 }
 
-const showThinking = computed(() => Boolean(settingsData.value.showReasoningTraces))
-const showJustification = computed(() => Boolean(settingsData.value.showTextJustificationActivity))
+const showThinking = computed(() => settingsData.value.showReasoningTraces !== false)
+const showJustification = computed(() => settingsData.value.showTextJustificationActivity !== false)
 const showTimestamps = computed(() => settingsData.value.showChatTimestamps !== false)
 
 const renderBlocksApi = useChatRenderBlocks({

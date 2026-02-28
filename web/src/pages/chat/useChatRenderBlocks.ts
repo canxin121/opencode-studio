@@ -2,7 +2,8 @@ import { computed, ref, type ComputedRef } from 'vue'
 
 import {
   DEFAULT_CHAT_ACTIVITY_FILTERS,
-  DEFAULT_CHAT_TOOL_ACTIVITY_FILTERS,
+  DEFAULT_CHAT_ACTIVITY_SUMMARY_FILTERS,
+  DEFAULT_CHAT_TOOL_ACTIVITY_SUMMARY_FILTERS,
   isKnownChatToolActivityType,
   normalizeChatActivityFilters,
   normalizeChatToolActivityFilters,
@@ -149,23 +150,32 @@ export function useChatRenderBlocks(opts: {
 
   const chatActivityFilters = computed<ChatActivityType[]>(() => {
     const s = settingsData.value
+    if (Object.prototype.hasOwnProperty.call(s, 'chatActivitySummaryFilters')) {
+      return normalizeChatActivityFilters(s.chatActivitySummaryFilters)
+    }
     if (Object.prototype.hasOwnProperty.call(s, 'chatActivityFilters')) {
       return normalizeChatActivityFilters(s.chatActivityFilters)
     }
-    return DEFAULT_CHAT_ACTIVITY_FILTERS
+    return DEFAULT_CHAT_ACTIVITY_SUMMARY_FILTERS
   })
 
   const chatToolActivityFilters = computed<ChatToolActivityType[]>(() => {
     const s = settingsData.value
+    if (Object.prototype.hasOwnProperty.call(s, 'chatToolActivitySummaryFilters')) {
+      return normalizeChatToolActivityFilters(s.chatToolActivitySummaryFilters)
+    }
     if (Object.prototype.hasOwnProperty.call(s, 'chatActivityToolFilters')) {
       return normalizeChatToolActivityFilters(s.chatActivityToolFilters)
     }
-    return DEFAULT_CHAT_TOOL_ACTIVITY_FILTERS
+    return DEFAULT_CHAT_TOOL_ACTIVITY_SUMMARY_FILTERS
   })
 
   const toolFiltersExplicit = computed(() => {
     const s = settingsData.value
-    return Boolean(Object.prototype.hasOwnProperty.call(s, 'chatActivityToolFilters'))
+    return Boolean(
+      Object.prototype.hasOwnProperty.call(s, 'chatToolActivitySummaryFilters') ||
+      Object.prototype.hasOwnProperty.call(s, 'chatActivityToolFilters'),
+    )
   })
 
   const toolFilterSet = computed(() => {
