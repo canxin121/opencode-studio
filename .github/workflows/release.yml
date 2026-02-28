@@ -70,8 +70,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - ref: ${{ env.RELEASE_REF }}
-            ref_name: ${{ env.RELEASE_TAG }}
+          - ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.tag) || github.ref }}
+            ref_name: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -156,62 +156,62 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            ref: ${{ env.RELEASE_REF }}
+            ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.tag) || github.ref }}
             native: true
             build_tool: cargo
           - os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
-            ref: ${{ env.RELEASE_REF }}
+            ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.tag) || github.ref }}
             native: true
             build_tool: cargo
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            ref: ${{ env.RELEASE_REF }}
+            ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.tag) || github.ref }}
             native: true
             build_tool: cargo
           - os: windows-11-arm
             target: aarch64-pc-windows-msvc
-            ref: ${{ env.RELEASE_REF }}
+            ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.tag) || github.ref }}
             native: true
             build_tool: cargo
           - os: macos-14
             target: aarch64-apple-darwin
-            ref: ${{ env.RELEASE_REF }}
+            ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.tag) || github.ref }}
             native: true
             build_tool: cargo
           - os: macos-15-intel
             target: x86_64-apple-darwin
-            ref: ${{ env.RELEASE_REF }}
+            ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.tag) || github.ref }}
             native: true
             build_tool: cargo
           - os: ubuntu-latest
             target: x86_64-unknown-linux-musl
-            ref: ${{ env.RELEASE_REF }}
+            ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.tag) || github.ref }}
             native: false
             build_tool: cross
           - os: ubuntu-latest
             target: aarch64-unknown-linux-musl
-            ref: ${{ env.RELEASE_REF }}
+            ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.tag) || github.ref }}
             native: false
             build_tool: cross
           - os: ubuntu-latest
             target: armv7-unknown-linux-musleabihf
-            ref: ${{ env.RELEASE_REF }}
+            ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.tag) || github.ref }}
             native: false
             build_tool: cross
           - os: ubuntu-latest
             target: i686-unknown-linux-musl
-            ref: ${{ env.RELEASE_REF }}
+            ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.tag) || github.ref }}
             native: false
             build_tool: cross
           - os: ubuntu-latest
             target: armv7-unknown-linux-gnueabihf
-            ref: ${{ env.RELEASE_REF }}
+            ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.tag) || github.ref }}
             native: false
             build_tool: cross
           - os: ubuntu-latest
             target: i686-unknown-linux-gnu
-            ref: ${{ env.RELEASE_REF }}
+            ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.tag) || github.ref }}
             native: false
             build_tool: cross
     steps:
@@ -269,37 +269,37 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            ref: ${{ env.RELEASE_REF }}
+            ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.tag) || github.ref }}
             tauri: main
             suffix: ""
             flavor: full
           - os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
-            ref: ${{ env.RELEASE_REF }}
+            ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.tag) || github.ref }}
             tauri: main
             suffix: ""
             flavor: full
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            ref: ${{ env.RELEASE_REF }}
+            ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.tag) || github.ref }}
             tauri: main
             suffix: ""
             flavor: full
           - os: windows-11-arm
             target: aarch64-pc-windows-msvc
-            ref: ${{ env.RELEASE_REF }}
+            ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.tag) || github.ref }}
             tauri: main
             suffix: ""
             flavor: full
           - os: macos-14
             target: aarch64-apple-darwin
-            ref: ${{ env.RELEASE_REF }}
+            ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.tag) || github.ref }}
             tauri: main
             suffix: ""
             flavor: full
           - os: macos-15-intel
             target: x86_64-apple-darwin
-            ref: ${{ env.RELEASE_REF }}
+            ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.tag) || github.ref }}
             tauri: main
             suffix: ""
             flavor: full
@@ -553,37 +553,37 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            ref: ${{ env.RELEASE_REF }}
+            ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.tag) || github.ref }}
             tauri: cef
             suffix: "-cef"
             flavor: full
           - os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
-            ref: ${{ env.RELEASE_REF }}
+            ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.tag) || github.ref }}
             tauri: cef
             suffix: "-cef"
             flavor: full
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            ref: ${{ env.RELEASE_REF }}
+            ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.tag) || github.ref }}
             tauri: cef
             suffix: "-cef"
             flavor: full
           - os: windows-11-arm
             target: aarch64-pc-windows-msvc
-            ref: ${{ env.RELEASE_REF }}
+            ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.tag) || github.ref }}
             tauri: cef
             suffix: "-cef"
             flavor: full
           - os: macos-14
             target: aarch64-apple-darwin
-            ref: ${{ env.RELEASE_REF }}
+            ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.tag) || github.ref }}
             tauri: cef
             suffix: "-cef"
             flavor: full
           - os: macos-15-intel
             target: x86_64-apple-darwin
-            ref: ${{ env.RELEASE_REF }}
+            ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.tag) || github.ref }}
             tauri: cef
             suffix: "-cef"
             flavor: full
@@ -765,6 +765,45 @@ jobs:
           CONFIG="tauri.conf.full.json"
           EXTRA_BUNDLE_ARGS=""
 
+          CEF_SOURCE="(default)"
+          if [[ "${{ matrix.target }}" == "aarch64-pc-windows-msvc" ]]; then
+            export CEF_DOWNLOAD_URL="https://cef-builds.spotifycdn.com"
+            CEF_SOURCE="${CEF_DOWNLOAD_URL}"
+          elif [[ -n "${CEF_DOWNLOAD_URL:-}" ]]; then
+            CEF_SOURCE="${CEF_DOWNLOAD_URL}"
+          fi
+          echo "CEF target: ${{ matrix.target }}"
+          echo "CEF source: ${CEF_SOURCE}"
+
+          check_cef_runtime() {
+            local target="${{ matrix.target }}"
+            local release_dir="${CARGO_TARGET_DIR}/${target}/release"
+            local bundle_dir="${CARGO_TARGET_DIR}/${target}/release/bundle"
+
+            if [[ "${RUNNER_OS}" == "Windows" ]]; then
+              if [[ ! -f "${release_dir}/libcef.dll" ]]; then
+                echo "::error::missing CEF runtime for ${target}: ${release_dir}/libcef.dll"
+                exit 1
+              fi
+              return
+            fi
+
+            if [[ "${RUNNER_OS}" == "Linux" ]]; then
+              if [[ ! -f "${release_dir}/libcef.so" ]]; then
+                echo "::error::missing CEF runtime for ${target}: ${release_dir}/libcef.so"
+                exit 1
+              fi
+              return
+            fi
+
+            local app
+            app="$(ls -1 "${bundle_dir}"/macos/*.app 2>/dev/null | head -n 1 || true)"
+            if [[ -z "${app}" || ! -f "${app}/Contents/Frameworks/Chromium Embedded Framework.framework/Chromium Embedded Framework" ]]; then
+              echo "::error::missing CEF runtime for ${target}: ${bundle_dir}/macos/*.app/Contents/Frameworks/Chromium Embedded Framework.framework/Chromium Embedded Framework"
+              exit 1
+            fi
+          }
+
           if [[ "${RUNNER_OS}" == "Windows" && "${RELEASE_TAG}" == *-* ]]; then
             EXTRA_BUNDLE_ARGS="--bundles nsis"
           fi
@@ -772,6 +811,7 @@ jobs:
           rm -rf "${CARGO_TARGET_DIR}/${{ matrix.target }}/release/bundle" "${CARGO_TARGET_DIR}/release/bundle" || true
 
           if cargo tauri build --config "$CONFIG" --target ${{ matrix.target }} --features cef ${EXTRA_BUNDLE_ARGS}; then
+            check_cef_runtime
             exit 0
           fi
 
@@ -789,6 +829,7 @@ jobs:
           STAGE_DIR="$(mktemp -d)"
           cp -R "$APP" "$STAGE_DIR/"
           hdiutil create -volname "OpenCode Studio" -srcfolder "$STAGE_DIR" -ov -format UDZO "$BUNDLE_DIR/dmg/opencode-studio-fallback.dmg"
+          check_cef_runtime
 
       - name: Stage desktop installers (Unix)
         if: "!startsWith(matrix.os, 'windows-')"
