@@ -273,9 +273,7 @@ fn sanitize_state(input: TerminalUiState) -> TerminalUiState {
 }
 
 fn terminal_ui_state_path() -> PathBuf {
-    crate::settings::opencode_studio_data_dir()
-        .join("ui")
-        .join("terminal.state.json")
+    crate::persistence_paths::terminal_ui_state_path()
 }
 
 async fn acquire_state_disk_lock() -> Result<std::fs::File, String> {

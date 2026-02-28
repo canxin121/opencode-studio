@@ -179,16 +179,8 @@ impl OpenCodeStorageCache {
 
 static STORAGE_CACHE: LazyLock<OpenCodeStorageCache> = LazyLock::new(OpenCodeStorageCache::new);
 
-fn opencode_data_dir() -> PathBuf {
-    crate::path_utils::opencode_data_dir()
-}
-
-fn opencode_storage_dir() -> PathBuf {
-    opencode_data_dir().join("storage")
-}
-
 fn opencode_db_path() -> PathBuf {
-    opencode_data_dir().join("opencode.db")
+    crate::persistence_paths::opencode_db_path()
 }
 
 fn json_response(status: StatusCode, payload: Value) -> Response {
@@ -432,64 +424,6 @@ async fn list_json_ids_cached(dir: &Path) -> Vec<String> {
     ids
 }
 
-async fn list_session_bucket_dirs(session_root: &Path) -> Vec<PathBuf> {
-    let mut entries = match fs::read_dir(session_root).await {
-        Ok(entries) => entries,
-        Err(_) => return Vec::new(),
-    };
-
-    let mut dirs = Vec::new();
-    loop {
-        match entries.next_entry().await {
-            Ok(Some(entry)) => {
-                let path = entry.path();
-                let file_type = match entry.file_type().await {
-                    Ok(file_type) => file_type,
-                    Err(_) => continue,
-                };
-                if !file_type.is_dir() {
-                    continue;
-                }
-                dirs.push(path);
-            }
-            Ok(None) => break,
-            Err(_) => return Vec::new(),
-        }
-    }
-
-    dirs.sort();
-    dirs
-}
-
-async fn append_legacy_directory_scope_session_dirs(
-    session_root: &Path,
-    session_dirs: &mut Vec<PathBuf>,
-) {
-    use std::collections::HashSet;
-
-    let mut seen = HashSet::<PathBuf>::new();
-    for dir in session_dirs.iter() {
-        seen.insert(dir.clone());
-    }
-
-    let all_dirs = list_session_bucket_dirs(session_root).await;
-    for dir in all_dirs {
-        if seen.contains(&dir) {
-            continue;
-        }
-        let is_global = dir
-            .file_name()
-            .and_then(|v| v.to_str())
-            .map(|v| v == "global")
-            .unwrap_or(false);
-        if is_global {
-            continue;
-        }
-        seen.insert(dir.clone());
-        session_dirs.push(dir);
-    }
-}
-
 fn parse_number(raw: Option<String>, name: &str) -> Result<Option<f64>, Box<Response>> {
     let Some(raw) = raw else {
         return Ok(None);
@@ -556,8 +490,6 @@ fn read_json_error_response(path: &Path, err: ReadJsonError) -> Response {
 fn session_parent_id(value: &Value) -> Option<String> {
     value
         .get("parentID")
-        .or_else(|| value.get("parentId"))
-        .or_else(|| value.get("parent_id"))
         .and_then(|v| v.as_str())
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty())
@@ -829,20 +761,8 @@ pub async fn session_list(
     } else {
         normalize_dir_for_compare(&directory)
     };
-    let session_root = opencode_storage_dir().join("session");
-    let mut session_dirs = vec![session_root.join(&project_id)];
-    if !scope_project && project_id != "global" {
-        // Historical sessions may remain in the shared global bucket from older
-        // OpenCode/project-id states. Include it as a strict directory-filtered
-        // fallback to avoid silent omissions.
-        session_dirs.push(session_root.join("global"));
-    }
-    if !scope_project {
-        // Git history rewrites can rotate project IDs and orphan historical session
-        // buckets. For directory scope we can safely include legacy buckets because
-        // filtering remains strict to the requested directory path.
-        append_legacy_directory_scope_session_dirs(&session_root, &mut session_dirs).await;
-    }
+    let session_root = crate::persistence_paths::opencode_sessions_dir();
+    let session_dirs = vec![session_root.join(&project_id)];
 
     let offset_value = offset_raw.unwrap_or(0.0);
     let mut offset = if offset_value.is_sign_negative() {
@@ -962,8 +882,6 @@ pub async fn session_list(
         record.parent_id = record
             .value
             .get("parentID")
-            .or_else(|| record.value.get("parentId"))
-            .or_else(|| record.value.get("parent_id"))
             .and_then(|v| v.as_str())
             .map(|v| v.trim().to_string())
             .filter(|v| !v.is_empty());
@@ -1049,8 +967,6 @@ pub async fn session_list(
 
                     let parent_id = session
                         .get("parentID")
-                        .or_else(|| session.get("parentId"))
-                        .or_else(|| session.get("parent_id"))
                         .and_then(|v| v.as_str())
                         .map(|v| v.trim().to_string())
                         .filter(|v| !v.is_empty());
@@ -1149,8 +1065,6 @@ pub async fn session_list(
 
                         let parent_id = session
                             .get("parentID")
-                            .or_else(|| session.get("parentId"))
-                            .or_else(|| session.get("parent_id"))
                             .and_then(|v| v.as_str())
                             .map(|v| v.trim().to_string())
                             .filter(|v| !v.is_empty());
@@ -1473,8 +1387,7 @@ pub async fn session_message_get(
             consistency.note_io_skip();
         }
 
-        let storage_dir = opencode_storage_dir();
-        let message_dir = storage_dir.join("message").join(&session_id);
+        let message_dir = crate::persistence_paths::opencode_messages_dir().join(&session_id);
         let message_ids = list_json_ids_cached(&message_dir).await;
         total = message_ids.len();
         let mut skipped = 0usize;
@@ -1502,7 +1415,7 @@ pub async fn session_message_get(
                 consistency.note_stale_read();
             }
 
-            let parts_dir = storage_dir.join("part").join(message_id);
+            let parts_dir = crate::persistence_paths::opencode_message_parts_dir().join(message_id);
             let part_ids = list_json_ids_cached(&parts_dir).await;
             let mut parts = Vec::new();
             for part_id in part_ids {
@@ -1547,7 +1460,7 @@ pub async fn session_message_get(
     };
 
     // Ensure each part carries stable IDs so the web UI can lazy-load details by
-    // (sessionID, messageID, partID).
+    // (sessionId, messageId, partId).
     for entry in entries.iter_mut() {
         let Some(obj) = entry.as_object_mut() else {
             continue;
@@ -1570,16 +1483,16 @@ pub async fn session_message_get(
             let Some(pobj) = part.as_object_mut() else {
                 continue;
             };
-            pobj.insert("sessionID".to_string(), Value::String(session_id.clone()));
-            pobj.insert("messageID".to_string(), Value::String(message_id.clone()));
+            pobj.insert("sessionId".to_string(), Value::String(session_id.clone()));
+            pobj.insert("messageId".to_string(), Value::String(message_id.clone()));
             let pid = pobj
                 .get("id")
                 .and_then(|v| v.as_str())
-                .or_else(|| pobj.get("partID").and_then(|v| v.as_str()))
+                .or_else(|| pobj.get("partId").and_then(|v| v.as_str()))
                 .unwrap_or("")
                 .trim();
             if !pid.is_empty() {
-                pobj.insert("partID".to_string(), Value::String(pid.to_string()));
+                pobj.insert("partId".to_string(), Value::String(pid.to_string()));
             }
         }
     }
@@ -1625,8 +1538,7 @@ pub(crate) async fn load_session_messages_unfiltered(session_id: &str) -> Vec<Va
         return page.entries;
     }
 
-    let storage_dir = opencode_storage_dir();
-    let message_dir = storage_dir.join("message").join(sid);
+    let message_dir = crate::persistence_paths::opencode_messages_dir().join(sid);
     let message_ids = list_json_ids_cached(&message_dir).await;
     if message_ids.is_empty() {
         return Vec::new();
@@ -1640,7 +1552,7 @@ pub(crate) async fn load_session_messages_unfiltered(session_id: &str) -> Vec<Va
             Err(_) => continue,
         };
 
-        let parts_dir = storage_dir.join("part").join(message_id);
+        let parts_dir = crate::persistence_paths::opencode_message_parts_dir().join(message_id);
         let part_ids = list_json_ids_cached(&parts_dir).await;
         let mut parts = Vec::new();
         for part_id in part_ids {
@@ -1685,9 +1597,7 @@ pub async fn session_message_part_get(
     let (info, part) = if let Some((info, part)) = sqlite {
         (info, part)
     } else {
-        let storage_dir = opencode_storage_dir();
-        let message_path = storage_dir
-            .join("message")
+        let message_path = crate::persistence_paths::opencode_messages_dir()
             .join(sid)
             .join(format!("{mid}.json"));
         let (info, _) = match read_json_value(&message_path).await {
@@ -1695,8 +1605,7 @@ pub async fn session_message_part_get(
             Err(err) => return Ok(read_json_error_response(&message_path, err)),
         };
 
-        let part_path = storage_dir
-            .join("part")
+        let part_path = crate::persistence_paths::opencode_message_parts_dir()
             .join(mid)
             .join(format!("{pid}.json"));
         let (part, _) = match read_json_value(&part_path).await {
@@ -1741,9 +1650,9 @@ pub async fn session_message_part_get(
     };
 
     if let Some(obj) = part.as_object_mut() {
-        obj.insert("sessionID".to_string(), Value::String(sid.to_string()));
-        obj.insert("messageID".to_string(), Value::String(mid.to_string()));
-        obj.insert("partID".to_string(), Value::String(pid.to_string()));
+        obj.insert("sessionId".to_string(), Value::String(sid.to_string()));
+        obj.insert("messageId".to_string(), Value::String(mid.to_string()));
+        obj.insert("partId".to_string(), Value::String(pid.to_string()));
         if obj
             .get("id")
             .and_then(|v| v.as_str())
@@ -2167,10 +2076,10 @@ mod tests {
         assert_eq!(parts.len(), 1);
         let p0 = parts[0].as_object().expect("part object");
         assert_eq!(
-            p0.get("sessionID").and_then(|v| v.as_str()),
+            p0.get("sessionId").and_then(|v| v.as_str()),
             Some("ses_compat")
         );
-        assert_eq!(p0.get("messageID").and_then(|v| v.as_str()), Some("msg_1"));
+        assert_eq!(p0.get("messageId").and_then(|v| v.as_str()), Some("msg_1"));
     }
 
     #[tokio::test]
@@ -2189,7 +2098,7 @@ mod tests {
 
         let page = load_session_message_page_from_sqlite(&sid, 0, Some(25), true)
             .await
-            .expect("expected local opencode.db to exist and be readable");
+            .expect("expected local opencode sqlite db to exist and be readable");
         assert!(
             !page.entries.is_empty(),
             "expected session to have messages"
@@ -2212,7 +2121,7 @@ mod tests {
         tokio::fs::create_dir_all(&proj2).await.unwrap();
 
         let storage = tmp.join("opencode").join("storage");
-        let session_dir = storage.join("session").join("global");
+        let session_dir = storage.join("sessions").join("global");
 
         // Three sessions in the same global project; two share the same directory.
         write_json(
@@ -2389,7 +2298,7 @@ mod tests {
         tokio::fs::create_dir_all(&other).await.unwrap();
 
         let storage = tmp.join("opencode").join("storage");
-        let session_dir = storage.join("session").join("global");
+        let session_dir = storage.join("sessions").join("global");
 
         write_json(
             &session_dir.join("root.json"),
@@ -2542,7 +2451,7 @@ mod tests {
         tokio::fs::create_dir_all(&proj).await.unwrap();
 
         let storage = tmp.join("opencode").join("storage");
-        let session_dir = storage.join("session").join("global");
+        let session_dir = storage.join("sessions").join("global");
 
         write_json(
             &session_dir.join("slashy.json"),
@@ -2592,36 +2501,33 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn session_list_directory_scope_reads_legacy_data_dir_on_windows_like_env() {
+    async fn session_list_directory_scope_reads_preferred_data_dir_on_windows_like_env() {
         let _env_lock = ENV_LOCK.lock().unwrap();
         STORAGE_CACHE.clear();
 
-        let tmp = unique_tmp_dir("session-list-legacy-windows-home");
+        let tmp = unique_tmp_dir("session-list-preferred-windows-home");
         tokio::fs::create_dir_all(&tmp).await.unwrap();
 
-        let home = tmp.join("home");
-        let local_app = tmp.join("localapp");
-        let legacy_data = home.join(".local").join("share").join("opencode");
-        tokio::fs::create_dir_all(legacy_data.join("storage").join("session").join("global"))
-            .await
-            .unwrap();
-        tokio::fs::create_dir_all(local_app.join("opencode"))
+        let xdg_data = tmp.join("xdg-data");
+        tokio::fs::create_dir_all(xdg_data.join("opencode").join("storage").join("sessions"))
             .await
             .unwrap();
 
-        let _home = EnvVarGuard::set("HOME", home.to_string_lossy().to_string());
-        let _local = EnvVarGuard::set("LOCALAPPDATA", local_app.to_string_lossy().to_string());
-        let _xdg = EnvVarGuard::set("XDG_DATA_HOME", "".to_string());
+        let _xdg = EnvVarGuard::set("XDG_DATA_HOME", xdg_data.to_string_lossy().to_string());
+
+        let proj = tmp.join("proj");
+        tokio::fs::create_dir_all(&proj).await.unwrap();
 
         write_json(
-            &legacy_data
+            &xdg_data
+                .join("opencode")
                 .join("storage")
-                .join("session")
+                .join("sessions")
                 .join("global")
                 .join("win-home.json"),
             &serde_json::json!({
                 "id": "win-home",
-                "directory": "C:\\Users\\canxin.LAPTOP",
+                "directory": proj.to_string_lossy(),
                 "title": "WinHome",
                 "slug": "win-home",
                 "time": {"updated": 55.0}
@@ -2633,7 +2539,7 @@ mod tests {
             State(dummy_state()),
             HeaderMap::new(),
             Query(SessionListQuery {
-                directory: Some("C%3A%2FUsers%2Fcanxin.LAPTOP".to_string()),
+                directory: Some(proj.to_string_lossy().to_string()),
                 scope: Some("directory".to_string()),
                 roots: None,
                 start: None,
@@ -2665,11 +2571,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn session_list_directory_scope_includes_legacy_global_bucket_for_git_dirs() {
+    async fn session_list_directory_scope_does_not_include_global_bucket_for_git_dirs() {
         let _env_lock = ENV_LOCK.lock().unwrap();
         STORAGE_CACHE.clear();
 
-        let tmp = unique_tmp_dir("session-list-legacy-global");
+        let tmp = unique_tmp_dir("session-list-no-global-bucket");
         tokio::fs::create_dir_all(&tmp).await.unwrap();
         let _xdg = EnvVarGuard::set("XDG_DATA_HOME", tmp.to_string_lossy().to_string());
 
@@ -2684,7 +2590,7 @@ mod tests {
 
         write_json(
             &storage
-                .join("session")
+                .join("sessions")
                 .join("project_bucket")
                 .join("newer.json"),
             &serde_json::json!({
@@ -2698,7 +2604,7 @@ mod tests {
         .await;
 
         write_json(
-            &storage.join("session").join("global").join("older.json"),
+            &storage.join("sessions").join("global").join("older.json"),
             &serde_json::json!({
                 "id": "older",
                 "directory": proj.to_string_lossy(),
@@ -2736,24 +2642,20 @@ mod tests {
             .and_then(|v| v.as_array())
             .expect("sessions array");
 
-        assert_eq!(sessions.len(), 2);
-        assert_eq!(json.get("total").and_then(|v| v.as_u64()), Some(2));
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(json.get("total").and_then(|v| v.as_u64()), Some(1));
         assert_eq!(
             sessions[0].get("id").and_then(|v| v.as_str()),
             Some("newer")
         );
-        assert_eq!(
-            sessions[1].get("id").and_then(|v| v.as_str()),
-            Some("older")
-        );
     }
 
     #[tokio::test]
-    async fn session_list_directory_scope_includes_legacy_project_bucket_for_git_dirs() {
+    async fn session_list_directory_scope_does_not_include_other_project_bucket_for_git_dirs() {
         let _env_lock = ENV_LOCK.lock().unwrap();
         STORAGE_CACHE.clear();
 
-        let tmp = unique_tmp_dir("session-list-legacy-project-bucket");
+        let tmp = unique_tmp_dir("session-list-no-other-project-bucket");
         tokio::fs::create_dir_all(&tmp).await.unwrap();
         let _xdg = EnvVarGuard::set("XDG_DATA_HOME", tmp.to_string_lossy().to_string());
 
@@ -2768,7 +2670,7 @@ mod tests {
 
         write_json(
             &storage
-                .join("session")
+                .join("sessions")
                 .join("project_bucket_old")
                 .join("legacy.json"),
             &serde_json::json!({
@@ -2777,6 +2679,21 @@ mod tests {
                 "title": "Legacy",
                 "slug": "legacy",
                 "time": {"updated": 42.0}
+            }),
+        )
+        .await;
+
+        write_json(
+            &storage
+                .join("sessions")
+                .join("project_bucket_new")
+                .join("active.json"),
+            &serde_json::json!({
+                "id": "active",
+                "directory": proj.to_string_lossy(),
+                "title": "Active",
+                "slug": "active",
+                "time": {"updated": 45.0}
             }),
         )
         .await;
@@ -2812,7 +2729,7 @@ mod tests {
         assert_eq!(json.get("total").and_then(|v| v.as_u64()), Some(1));
         assert_eq!(
             sessions[0].get("id").and_then(|v| v.as_str()),
-            Some("legacy")
+            Some("active")
         );
     }
 
@@ -2828,7 +2745,7 @@ mod tests {
         let proj = tmp.join("proj");
         tokio::fs::create_dir_all(&proj).await.unwrap();
 
-        let db_path = tmp.join("opencode").join("opencode.db");
+        let db_path = tmp.join("opencode").join("storage").join("opencode.sqlite");
         if let Some(parent) = db_path.parent() {
             tokio::fs::create_dir_all(parent).await.unwrap();
         }
@@ -2901,7 +2818,7 @@ mod tests {
             .await
             .unwrap();
 
-        let db_path = tmp.join("opencode").join("opencode.db");
+        let db_path = tmp.join("opencode").join("storage").join("opencode.sqlite");
         if let Some(parent) = db_path.parent() {
             tokio::fs::create_dir_all(parent).await.unwrap();
         }
@@ -2986,7 +2903,7 @@ mod tests {
         tokio::fs::create_dir_all(&child_dir).await.unwrap();
         tokio::fs::create_dir_all(&parent_dir).await.unwrap();
 
-        let db_path = tmp.join("opencode").join("opencode.db");
+        let db_path = tmp.join("opencode").join("storage").join("opencode.sqlite");
         if let Some(parent) = db_path.parent() {
             tokio::fs::create_dir_all(parent).await.unwrap();
         }
@@ -3081,7 +2998,7 @@ mod tests {
         tokio::fs::create_dir_all(&child_dir_a).await.unwrap();
         tokio::fs::create_dir_all(&child_dir_b).await.unwrap();
 
-        let db_path = tmp.join("opencode").join("opencode.db");
+        let db_path = tmp.join("opencode").join("storage").join("opencode.sqlite");
         if let Some(parent) = db_path.parent() {
             tokio::fs::create_dir_all(parent).await.unwrap();
         }
@@ -3191,7 +3108,7 @@ mod tests {
         tokio::fs::create_dir_all(&proj).await.unwrap();
 
         let storage = tmp.join("opencode").join("storage");
-        let session_dir = storage.join("session").join("global");
+        let session_dir = storage.join("sessions").join("global");
 
         write_json(
             &session_dir.join("ses_1.json"),
@@ -3266,7 +3183,7 @@ mod tests {
         tokio::fs::create_dir_all(&proj).await.unwrap();
 
         let storage = tmp.join("opencode").join("storage");
-        let session_path = storage.join("session").join("global").join("ses_1.json");
+        let session_path = storage.join("sessions").join("global").join("ses_1.json");
 
         write_json(
             &session_path,
@@ -3365,7 +3282,7 @@ mod tests {
         tokio::fs::create_dir_all(&tmp).await.unwrap();
         let _xdg = EnvVarGuard::set("XDG_DATA_HOME", tmp.to_string_lossy().to_string());
 
-        let db_path = tmp.join("opencode").join("opencode.db");
+        let db_path = tmp.join("opencode").join("storage").join("opencode.sqlite");
         if let Some(parent) = db_path.parent() {
             tokio::fs::create_dir_all(parent).await.unwrap();
         }
@@ -3408,7 +3325,7 @@ mod tests {
         .bind(
             serde_json::json!({
                 "id": "msg_old",
-                "sessionID": "ses_sql",
+                "sessionId": "ses_sql",
                 "role": "user",
                 "time": {"created": 10}
             })
@@ -3428,7 +3345,7 @@ mod tests {
         .bind(
             serde_json::json!({
                 "id": "msg_new",
-                "sessionID": "ses_sql",
+                "sessionId": "ses_sql",
                 "role": "assistant",
                 "time": {"created": 20}
             })
@@ -3450,8 +3367,8 @@ mod tests {
         .bind(
             serde_json::json!({
                 "id": "part_new",
-                "messageID": "msg_new",
-                "sessionID": "ses_sql",
+                "messageId": "msg_new",
+                "sessionId": "ses_sql",
                 "type": "text",
                 "text": "latest"
             })
@@ -3502,7 +3419,7 @@ mod tests {
                 .get("parts")
                 .and_then(|v| v.as_array())
                 .and_then(|arr| arr.first())
-                .and_then(|v| v.get("partID"))
+                .and_then(|v| v.get("partId"))
                 .and_then(|v| v.as_str()),
             Some("part_new")
         );
@@ -3517,7 +3434,7 @@ mod tests {
         tokio::fs::create_dir_all(&tmp).await.unwrap();
         let _xdg = EnvVarGuard::set("XDG_DATA_HOME", tmp.to_string_lossy().to_string());
 
-        let db_path = tmp.join("opencode").join("opencode.db");
+        let db_path = tmp.join("opencode").join("storage").join("opencode.sqlite");
         if let Some(parent) = db_path.parent() {
             tokio::fs::create_dir_all(parent).await.unwrap();
         }
@@ -3529,21 +3446,24 @@ mod tests {
 
         let storage = tmp.join("opencode").join("storage");
         write_json(
-            &storage.join("message").join("ses_json").join("msg_1.json"),
+            &storage.join("messages").join("ses_json").join("msg_1.json"),
             &serde_json::json!({
                 "id": "msg_1",
-                "sessionID": "ses_json",
+                "sessionId": "ses_json",
                 "role": "user",
                 "time": {"created": 1}
             }),
         )
         .await;
         write_json(
-            &storage.join("part").join("msg_1").join("part_1.json"),
+            &storage
+                .join("message-parts")
+                .join("msg_1")
+                .join("part_1.json"),
             &serde_json::json!({
                 "id": "part_1",
-                "sessionID": "ses_json",
-                "messageID": "msg_1",
+                "sessionId": "ses_json",
+                "messageId": "msg_1",
                 "type": "text",
                 "text": "fallback"
             }),
@@ -3605,7 +3525,7 @@ mod tests {
         tokio::fs::create_dir_all(&tmp).await.unwrap();
         let _xdg = EnvVarGuard::set("XDG_DATA_HOME", tmp.to_string_lossy().to_string());
 
-        let db_path = tmp.join("opencode").join("opencode.db");
+        let db_path = tmp.join("opencode").join("storage").join("opencode.sqlite");
         if let Some(parent) = db_path.parent() {
             tokio::fs::create_dir_all(parent).await.unwrap();
         }
@@ -3648,7 +3568,7 @@ mod tests {
         .bind(
             serde_json::json!({
                 "id": "msg_sql",
-                "sessionID": "ses_sql",
+                "sessionId": "ses_sql",
                 "role": "assistant",
                 "time": {"created": 20}
             })
@@ -3670,8 +3590,8 @@ mod tests {
         .bind(
             serde_json::json!({
                 "id": "part_sql",
-                "sessionID": "ses_sql",
-                "messageID": "msg_sql",
+                "sessionId": "ses_sql",
+                "messageId": "msg_sql",
                 "type": "tool",
                 "tool": {"name": "bash", "status": "completed"}
             })
@@ -3699,15 +3619,15 @@ mod tests {
         let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(payload.get("id").and_then(|v| v.as_str()), Some("part_sql"));
         assert_eq!(
-            payload.get("sessionID").and_then(|v| v.as_str()),
+            payload.get("sessionId").and_then(|v| v.as_str()),
             Some("ses_sql")
         );
         assert_eq!(
-            payload.get("messageID").and_then(|v| v.as_str()),
+            payload.get("messageId").and_then(|v| v.as_str()),
             Some("msg_sql")
         );
         assert_eq!(
-            payload.get("partID").and_then(|v| v.as_str()),
+            payload.get("partId").and_then(|v| v.as_str()),
             Some("part_sql")
         );
     }
@@ -3722,8 +3642,8 @@ mod tests {
         let _xdg = EnvVarGuard::set("XDG_DATA_HOME", tmp.to_string_lossy().to_string());
 
         let storage = tmp.join("opencode").join("storage");
-        let message_dir = storage.join("message").join("ses_1");
-        let part_dir = storage.join("part").join("ok_msg");
+        let message_dir = storage.join("messages").join("ses_1");
+        let part_dir = storage.join("message-parts").join("ok_msg");
 
         write_json(
             &message_dir.join("ok_msg.json"),
@@ -3811,8 +3731,8 @@ mod tests {
         let _xdg = EnvVarGuard::set("XDG_DATA_HOME", tmp.to_string_lossy().to_string());
 
         let storage = tmp.join("opencode").join("storage");
-        let message_dir = storage.join("message").join("ses_2");
-        let part_dir = storage.join("part").join("msg_1");
+        let message_dir = storage.join("messages").join("ses_2");
+        let part_dir = storage.join("message-parts").join("msg_1");
 
         write_json(
             &message_dir.join("msg_1.json"),

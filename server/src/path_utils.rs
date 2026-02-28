@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 fn decode_url_encoded_path_component(input: &str) -> String {
     if !input.as_bytes().contains(&b'%') {
@@ -139,62 +139,12 @@ pub(crate) fn cache_home_dir() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("."))
 }
 
-fn has_opencode_config(dir: &Path) -> bool {
-    dir.join("opencode.json").exists() || dir.join("opencode.jsonc").exists()
-}
-
-fn has_opencode_data(dir: &Path) -> bool {
-    dir.join("opencode.db").exists()
-        || dir.join("auth.json").exists()
-        || dir.join("storage").exists()
-}
-
 pub(crate) fn opencode_config_dir() -> PathBuf {
-    let preferred = config_home_dir().join("opencode");
-    let legacy = home_dir_path().map(|home| home.join(".config").join("opencode"));
-
-    let explicit_config_home = std::env::var("XDG_CONFIG_HOME")
-        .ok()
-        .map(|v| !v.trim().is_empty())
-        .unwrap_or(false);
-
-    if explicit_config_home {
-        return preferred;
-    }
-
-    if has_opencode_config(&preferred) {
-        return preferred;
-    }
-    if let Some(legacy) = legacy
-        && has_opencode_config(&legacy)
-    {
-        return legacy;
-    }
-    preferred
+    config_home_dir().join("opencode")
 }
 
 pub(crate) fn opencode_data_dir() -> PathBuf {
-    let preferred = data_home_dir().join("opencode");
-    let legacy = home_dir_path().map(|home| home.join(".local").join("share").join("opencode"));
-
-    let explicit_data_home = std::env::var("XDG_DATA_HOME")
-        .ok()
-        .map(|v| !v.trim().is_empty())
-        .unwrap_or(false);
-
-    if explicit_data_home {
-        return preferred;
-    }
-
-    if has_opencode_data(&preferred) {
-        return preferred;
-    }
-    if let Some(legacy) = legacy
-        && has_opencode_data(&legacy)
-    {
-        return legacy;
-    }
-    preferred
+    data_home_dir().join("opencode")
 }
 
 pub(crate) fn normalize_directory_path(input: &str) -> String {
@@ -302,45 +252,34 @@ mod tests {
     }
 
     #[test]
-    fn opencode_data_dir_falls_back_to_legacy_home_when_preferred_missing() {
+    fn opencode_data_dir_uses_data_home_without_legacy_fallback() {
         let _env_lock = ENV_LOCK.lock().unwrap();
         let tmp =
             std::env::temp_dir().join(format!("opencode-path-utils-data-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&tmp);
 
-        let home = tmp.join("home");
-        let local_app = tmp.join("localapp");
-        let legacy = home.join(".local").join("share").join("opencode");
-        let preferred = local_app.join("opencode");
-        std::fs::create_dir_all(legacy.join("storage").join("session")).unwrap();
+        let xdg_data = tmp.join("xdg-data");
+        let preferred = xdg_data.join("opencode");
         std::fs::create_dir_all(&preferred).unwrap();
 
-        let _home = EnvVarGuard::set("HOME", home.to_string_lossy().to_string());
-        let _local = EnvVarGuard::set("LOCALAPPDATA", local_app.to_string_lossy().to_string());
-        let _xdg = EnvVarGuard::set("XDG_DATA_HOME", "".to_string());
+        let _xdg = EnvVarGuard::set("XDG_DATA_HOME", xdg_data.to_string_lossy().to_string());
 
-        assert_eq!(opencode_data_dir(), legacy);
+        assert_eq!(opencode_data_dir(), preferred);
     }
 
     #[test]
-    fn opencode_config_dir_falls_back_to_legacy_home_when_preferred_missing() {
+    fn opencode_config_dir_uses_config_home_without_legacy_fallback() {
         let _env_lock = ENV_LOCK.lock().unwrap();
         let tmp =
             std::env::temp_dir().join(format!("opencode-path-utils-config-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&tmp);
 
-        let home = tmp.join("home");
-        let appdata = tmp.join("appdata");
-        let legacy = home.join(".config").join("opencode");
-        let preferred = appdata.join("opencode");
-        std::fs::create_dir_all(&legacy).unwrap();
+        let xdg_config = tmp.join("xdg-config");
+        let preferred = xdg_config.join("opencode");
         std::fs::create_dir_all(&preferred).unwrap();
-        std::fs::write(legacy.join("opencode.json"), "{}\n").unwrap();
 
-        let _home = EnvVarGuard::set("HOME", home.to_string_lossy().to_string());
-        let _appdata = EnvVarGuard::set("APPDATA", appdata.to_string_lossy().to_string());
-        let _xdg = EnvVarGuard::set("XDG_CONFIG_HOME", "".to_string());
+        let _xdg = EnvVarGuard::set("XDG_CONFIG_HOME", xdg_config.to_string_lossy().to_string());
 
-        assert_eq!(opencode_config_dir(), legacy);
+        assert_eq!(opencode_config_dir(), preferred);
     }
 }

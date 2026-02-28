@@ -203,8 +203,6 @@ impl DirectorySessionIndexManager {
 
         let parent_id = session
             .get("parentID")
-            .or_else(|| session.get("parentId"))
-            .or_else(|| session.get("parent_id"))
             .and_then(|v| v.as_str())
             .map(|v| v.trim().to_string())
             .filter(|v| !v.is_empty());

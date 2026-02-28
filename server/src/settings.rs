@@ -15,7 +15,7 @@ pub struct Settings {
     #[serde(default)]
     pub github_scopes: Option<String>,
 
-    // Preserve unknown fields so we can round-trip settings.json even when
+    // Preserve unknown fields so we can round-trip the settings file even when
     // only a subset is explicitly modeled.
     #[serde(flatten)]
     pub extra: BTreeMap<String, serde_json::Value>,
@@ -32,18 +32,8 @@ pub struct Project {
     pub last_opened_at: i64,
 }
 
-pub fn opencode_studio_data_dir() -> PathBuf {
-    if let Ok(dir) = std::env::var("OPENCODE_STUDIO_DATA_DIR")
-        && !dir.trim().is_empty()
-    {
-        return PathBuf::from(dir);
-    }
-
-    crate::path_utils::config_home_dir().join("opencode-studio")
-}
-
 pub fn settings_path() -> PathBuf {
-    opencode_studio_data_dir().join("settings.json")
+    crate::persistence_paths::studio_settings_path()
 }
 
 async fn read_json_file(path: &Path) -> Option<serde_json::Value> {

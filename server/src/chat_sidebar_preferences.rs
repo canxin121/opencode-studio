@@ -238,9 +238,7 @@ fn sanitize_preferences(input: SessionsSidebarPreferences) -> SessionsSidebarPre
 }
 
 fn preferences_path() -> PathBuf {
-    crate::settings::opencode_studio_data_dir()
-        .join("ui")
-        .join("chat-sidebar.preferences.json")
+    crate::persistence_paths::sidebar_preferences_path()
 }
 
 async fn acquire_preferences_disk_lock() -> Result<std::fs::File, String> {
