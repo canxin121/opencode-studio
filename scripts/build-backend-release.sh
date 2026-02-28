@@ -73,18 +73,22 @@ case "$TARGET_TRIPLE" in
 esac
 
 BUILD_CMD=("$BUILD_TOOL")
+TARGET_DIR="$ROOT_DIR/server/target"
+if [[ "$BUILD_TOOL" == "cross" ]]; then
+  TARGET_DIR="$ROOT_DIR/server/target-cross-$TARGET_TRIPLE"
+fi
 
 echo "Building Rust backend (server) release for ${TARGET_TRIPLE} via ${BUILD_TOOL}..."
 if [[ "$BUILD_TOOL" == "cross" ]]; then
   (
     cd "$ROOT_DIR"
-    "${BUILD_CMD[@]}" build --manifest-path "server/Cargo.toml" --release --locked --target "$TARGET_TRIPLE" --target-dir "server/target"
+    "${BUILD_CMD[@]}" build --config 'build.rustc-wrapper=""' --manifest-path "server/Cargo.toml" --release --locked --target "$TARGET_TRIPLE" --target-dir "$TARGET_DIR"
   )
 else
-  "${BUILD_CMD[@]}" build --manifest-path "$ROOT_DIR/server/Cargo.toml" --release --locked --target "$TARGET_TRIPLE" --target-dir "$ROOT_DIR/server/target"
+  "${BUILD_CMD[@]}" build --manifest-path "$ROOT_DIR/server/Cargo.toml" --release --locked --target "$TARGET_TRIPLE" --target-dir "$TARGET_DIR"
 fi
 
-BIN_DIR="$ROOT_DIR/server/target/$TARGET_TRIPLE/release"
+BIN_DIR="$TARGET_DIR/$TARGET_TRIPLE/release"
 BIN_NAME="opencode-studio$EXT"
 BIN_PATH="$BIN_DIR/$BIN_NAME"
 if [[ ! -f "$BIN_PATH" ]]; then

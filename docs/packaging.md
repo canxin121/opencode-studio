@@ -121,6 +121,12 @@ Two workflows are relevant:
 
 Architecture matrix used by `Package`:
 
+- Backend (service artifacts):
+  - Linux (native): `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`
+  - Linux (cross): `x86_64-unknown-linux-musl`, `aarch64-unknown-linux-musl`, `armv7-unknown-linux-musleabihf`, `i686-unknown-linux-musl`, `armv7-unknown-linux-gnueabihf`, `i686-unknown-linux-gnu`
+  - Windows: `x86_64-pc-windows-msvc`, `aarch64-pc-windows-msvc`
+  - macOS: `aarch64-apple-darwin`, `x86_64-apple-darwin`
+
 - Desktop (main + CEF):
   - Linux: `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`
   - Windows: `x86_64-pc-windows-msvc`, `aarch64-pc-windows-msvc`
@@ -147,6 +153,12 @@ For releases:
     plus the same again using Tauri's CEF runtime (suffix `-cef`)
 
 Architecture matrix used by `Release`:
+
+- Backend (service artifacts):
+  - Linux (native): `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`
+  - Linux (cross): `x86_64-unknown-linux-musl`, `aarch64-unknown-linux-musl`, `armv7-unknown-linux-musleabihf`, `i686-unknown-linux-musl`, `armv7-unknown-linux-gnueabihf`, `i686-unknown-linux-gnu`
+  - Windows: `x86_64-pc-windows-msvc`, `aarch64-pc-windows-msvc`
+  - macOS: `aarch64-apple-darwin`, `x86_64-apple-darwin`
 
 - Desktop (main + CEF):
   - Linux: `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`

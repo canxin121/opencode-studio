@@ -1,0 +1,124 @@
+name: Backend Build Matrix
+
+on:
+  push:
+    paths:
+      - ".github/workflows/backend-build-matrix.yml"
+      - ".github/workflows/package.yml"
+      - ".github/workflows/release.yml"
+      - "server/**"
+      - "scripts/build-backend-release.sh"
+      - "Cargo.lock"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-matrix-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux native builds
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            native: true
+            build_tool: cargo
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            native: true
+            build_tool: cargo
+
+          # Linux cross builds
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            native: false
+            build_tool: cross
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+            native: false
+            build_tool: cross
+          - os: ubuntu-latest
+            target: armv7-unknown-linux-musleabihf
+            native: false
+            build_tool: cross
+          - os: ubuntu-latest
+            target: i686-unknown-linux-musl
+            native: false
+            build_tool: cross
+          - os: ubuntu-latest
+            target: armv7-unknown-linux-gnueabihf
+            native: false
+            build_tool: cross
+          - os: ubuntu-latest
+            target: i686-unknown-linux-gnu
+            native: false
+            build_tool: cross
+
+          # Windows native and x86 cross-arch builds
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            native: true
+            build_tool: cargo
+          - os: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            native: true
+            build_tool: cargo
+          - os: windows-latest
+            target: i686-pc-windows-msvc
+            native: false
+            build_tool: cargo
+
+          # macOS native and cross-arch builds
+          - os: macos-14
+            target: aarch64-apple-darwin
+            native: true
+            build_tool: cargo
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+            native: true
+            build_tool: cargo
+          - os: macos-14
+            target: x86_64-apple-darwin
+            native: false
+            build_tool: cargo
+          - os: macos-15-intel
+            target: aarch64-apple-darwin
+            native: false
+            build_tool: cargo
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Validate native target mapping
+        if: matrix.native == true
+        run: python scripts/assert_native_target.py ${{ matrix.target }}
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross
+        if: matrix.build_tool == 'cross'
+        run: cargo install cross --locked --version 0.2.5
+
+      - name: Cache Rust builds
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            server -> server/target
+          save-if: true
+          add-job-id-key: false
+
+      - name: Build backend release artifact
+        shell: bash
+        run: ./scripts/build-backend-release.sh --target ${{ matrix.target }} --out-dir release-assets/backend-matrix --build-tool ${{ matrix.build_tool }}

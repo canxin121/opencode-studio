@@ -118,6 +118,12 @@ cargo install tauri-cli --locked --git https://github.com/tauri-apps/tauri --bra
 
 `Package` 使用的架构矩阵：
 
+- 后端（服务端产物）：
+  - Linux（原生）：`x86_64-unknown-linux-gnu`、`aarch64-unknown-linux-gnu`
+  - Linux（cross）：`x86_64-unknown-linux-musl`、`aarch64-unknown-linux-musl`、`armv7-unknown-linux-musleabihf`、`i686-unknown-linux-musl`、`armv7-unknown-linux-gnueabihf`、`i686-unknown-linux-gnu`
+  - Windows：`x86_64-pc-windows-msvc`、`aarch64-pc-windows-msvc`
+  - macOS：`aarch64-apple-darwin`、`x86_64-apple-darwin`
+
 - 桌面端（main + CEF）：
   - Linux：`x86_64-unknown-linux-gnu`、`aarch64-unknown-linux-gnu`
   - Windows：`x86_64-pc-windows-msvc`、`aarch64-pc-windows-msvc`
@@ -144,6 +150,12 @@ Release 场景：
     同时附加 CEF 运行时版本（后缀 `-cef`）
 
 `Release` 使用的架构矩阵：
+
+- 后端（服务端产物）：
+  - Linux（原生）：`x86_64-unknown-linux-gnu`、`aarch64-unknown-linux-gnu`
+  - Linux（cross）：`x86_64-unknown-linux-musl`、`aarch64-unknown-linux-musl`、`armv7-unknown-linux-musleabihf`、`i686-unknown-linux-musl`、`armv7-unknown-linux-gnueabihf`、`i686-unknown-linux-gnu`
+  - Windows：`x86_64-pc-windows-msvc`、`aarch64-pc-windows-msvc`
+  - macOS：`aarch64-apple-darwin`、`x86_64-apple-darwin`
 
 - 桌面端（main + CEF）：
   - Linux：`x86_64-unknown-linux-gnu`、`aarch64-unknown-linux-gnu`
