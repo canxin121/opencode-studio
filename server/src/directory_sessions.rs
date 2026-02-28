@@ -49,7 +49,7 @@ struct SessionPageWire {
     consistency: Option<Value>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct DirectorySessionsBootstrapWire {
     directory_entries: Vec<DirectoryEntryWire>,
@@ -62,6 +62,15 @@ struct DirectorySessionsBootstrapWire {
 struct SequencedPatchEvent {
     seq: u64,
     payload: String,
+}
+
+#[derive(Debug, Default, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PatchRefreshHints {
+    refresh_all: bool,
+    refresh_directory_ids: Vec<String>,
+    refresh_recent_index: bool,
+    refresh_running_index: bool,
 }
 
 #[derive(Debug, Default)]
@@ -86,6 +95,19 @@ struct SnapshotBundle {
     fetched_directory_ids: HashSet<String>,
 }
 
+#[derive(Debug, Clone)]
+struct BootstrapProjectionCacheEntry {
+    key: String,
+    created_at: Instant,
+    wire: DirectorySessionsBootstrapWire,
+}
+
+#[derive(Debug, Default)]
+struct BootstrapProjectionCache {
+    entries: BTreeMap<String, BootstrapProjectionCacheEntry>,
+    lru: VecDeque<String>,
+}
+
 struct DirectorySessionsEventHub {
     tx: broadcast::Sender<SequencedPatchEvent>,
     buffer: Mutex<PatchReplayBuffer>,
@@ -103,6 +125,8 @@ const DIRECTORY_SESSIONS_LIMIT_MIN: usize = 10;
 const DIRECTORY_SESSIONS_LIMIT_MAX: usize = 200;
 const DIRECTORY_SESSIONS_INDEX_SEED_LIMIT: usize = 40;
 const DIRECTORY_SESSIONS_INTERNAL_BODY_LIMIT: usize = 5 * 1024 * 1024;
+const SIDEBAR_BOOTSTRAP_CACHE_TTL: Duration = Duration::from_millis(1500);
+const SIDEBAR_BOOTSTRAP_CACHE_MAX_ENTRIES: usize = 32;
 
 impl DirectorySessionsEventHub {
     fn new() -> Self {
@@ -130,16 +154,23 @@ impl DirectorySessionsEventHub {
         let _ = self.latest_unbuffered_seq.fetch_max(seq, Ordering::SeqCst);
     }
 
+    #[cfg(test)]
     fn publish_ops(&self, ops: Vec<Value>) {
+        self.publish_ops_with_hints(ops, None);
+    }
+
+    fn publish_ops_with_hints(&self, ops: Vec<Value>, hints: Option<PatchRefreshHints>) {
         if ops.is_empty() {
             return;
         }
 
         let seq = self.next_seq.fetch_add(1, Ordering::SeqCst);
+        let hints_wire = hints.unwrap_or_default();
         let payload = serde_json::to_string(&json!({
             "seq": seq,
             "ts": now_millis(),
             "ops": ops,
+            "hints": hints_wire,
         }))
         .unwrap_or_else(|_| "{}".to_string());
 
@@ -237,6 +268,74 @@ impl DirectorySessionsEventHub {
 
 static EVENT_HUB: LazyLock<DirectorySessionsEventHub> =
     LazyLock::new(DirectorySessionsEventHub::new);
+static SIDEBAR_BOOTSTRAP_CACHE: LazyLock<Mutex<BootstrapProjectionCache>> =
+    LazyLock::new(|| Mutex::new(BootstrapProjectionCache::default()));
+
+pub(crate) fn directory_sessions_latest_seq() -> u64 {
+    EVENT_HUB.latest_seq()
+}
+
+impl BootstrapProjectionCache {
+    fn cache_key(
+        limit_per_directory: usize,
+        expanded_directory_ids: Option<&HashSet<String>>,
+    ) -> String {
+        if let Some(ids) = expanded_directory_ids {
+            let mut sorted_ids = ids
+                .iter()
+                .map(|v| v.trim().to_string())
+                .filter(|v| !v.is_empty())
+                .collect::<Vec<_>>();
+            sorted_ids.sort();
+            sorted_ids.dedup();
+            return format!("l={limit_per_directory}|expanded={}", sorted_ids.join(","));
+        }
+        format!("l={limit_per_directory}|expanded=*")
+    }
+
+    fn get_fresh(&mut self, key: &str) -> Option<DirectorySessionsBootstrapWire> {
+        let now = Instant::now();
+        let stale_keys = self
+            .entries
+            .iter()
+            .filter_map(|(entry_key, entry)| {
+                if now.duration_since(entry.created_at) > SIDEBAR_BOOTSTRAP_CACHE_TTL {
+                    Some(entry_key.clone())
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+        for stale_key in stale_keys {
+            self.entries.remove(&stale_key);
+            self.lru.retain(|v| v != &stale_key);
+        }
+
+        let entry = self.entries.get(key)?.wire.clone();
+        self.lru.retain(|v| v != key);
+        self.lru.push_back(key.to_string());
+        Some(entry)
+    }
+
+    fn insert(&mut self, entry: BootstrapProjectionCacheEntry) {
+        let key = entry.key.clone();
+        self.entries.insert(key.clone(), entry);
+        self.lru.retain(|v| v != &key);
+        self.lru.push_back(key.clone());
+
+        while self.entries.len() > SIDEBAR_BOOTSTRAP_CACHE_MAX_ENTRIES {
+            let Some(oldest_key) = self.lru.pop_front() else {
+                break;
+            };
+            self.entries.remove(&oldest_key);
+        }
+    }
+
+    #[cfg(test)]
+    fn len(&self) -> usize {
+        self.entries.len()
+    }
+}
 
 struct DirectorySessionsClientLimitGuard {
     client_id: Option<u64>,
@@ -542,6 +641,39 @@ async fn build_snapshot_bundle(
     bundle
 }
 
+async fn load_bootstrap_wire(
+    state: &Arc<crate::AppState>,
+    limit_per_directory: usize,
+    expanded_directory_ids: Option<&HashSet<String>>,
+) -> DirectorySessionsBootstrapWire {
+    let cache_key =
+        BootstrapProjectionCache::cache_key(limit_per_directory, expanded_directory_ids);
+    if let Ok(mut cache) = SIDEBAR_BOOTSTRAP_CACHE.lock()
+        && let Some(wire) = cache.get_fresh(&cache_key)
+    {
+        return wire;
+    }
+
+    let seq_baseline = EVENT_HUB.latest_seq();
+    let bundle = build_snapshot_bundle(state, limit_per_directory, expanded_directory_ids).await;
+    let wire = DirectorySessionsBootstrapWire {
+        directory_entries: bundle.directory_entries,
+        session_summaries_by_directory_id: bundle.pages_by_directory_id,
+        runtime_by_session_id: bundle.runtime_by_session_id,
+        seq: seq_baseline,
+    };
+
+    if let Ok(mut cache) = SIDEBAR_BOOTSTRAP_CACHE.lock() {
+        cache.insert(BootstrapProjectionCacheEntry {
+            key: cache_key,
+            created_at: Instant::now(),
+            wire: wire.clone(),
+        });
+    }
+
+    wire
+}
+
 async fn seed_index_from_collapsed_directories(
     state: &Arc<crate::AppState>,
     entries: &[DirectoryEntryWire],
@@ -787,6 +919,92 @@ fn diff_snapshots(prev: &SidebarSnapshot, next: &SidebarSnapshot) -> Vec<Value> 
     ops
 }
 
+fn derive_patch_refresh_hints<FSession, FPath>(
+    ops: &[Value],
+    mut directory_id_for_session_id: FSession,
+    mut directory_id_for_path: FPath,
+) -> PatchRefreshHints
+where
+    FSession: FnMut(&str) -> Option<String>,
+    FPath: FnMut(&str) -> Option<String>,
+{
+    let mut refresh_all = false;
+    let mut refresh_recent_index = false;
+    let mut refresh_running_index = false;
+    let mut refresh_directory_ids = std::collections::BTreeSet::<String>::new();
+
+    for op in ops {
+        let kind = op
+            .get("type")
+            .and_then(|value| value.as_str())
+            .unwrap_or("");
+        match kind {
+            "sessionRuntime.upsert" | "sessionRuntime.remove" => {
+                refresh_running_index = true;
+            }
+            "directoryEntry.upsert" | "directoryEntry.remove" => {
+                refresh_all = true;
+                refresh_recent_index = true;
+                refresh_running_index = true;
+            }
+            "sessionSummary.upsert" => {
+                refresh_recent_index = true;
+                refresh_running_index = true;
+                let sid = op
+                    .get("session")
+                    .and_then(|value| value.get("id"))
+                    .and_then(|value| value.as_str())
+                    .map(|value| value.trim())
+                    .unwrap_or("");
+                if !sid.is_empty() {
+                    if let Some(did) = directory_id_for_session_id(sid) {
+                        refresh_directory_ids.insert(did);
+                    }
+                    let path = op
+                        .get("session")
+                        .and_then(|value| value.get("directory"))
+                        .and_then(|value| value.as_str())
+                        .map(|value| value.trim())
+                        .unwrap_or("");
+                    if !path.is_empty() {
+                        if let Some(did) = directory_id_for_path(path) {
+                            refresh_directory_ids.insert(did);
+                        } else {
+                            refresh_all = true;
+                        }
+                    }
+                } else {
+                    refresh_all = true;
+                }
+            }
+            "sessionSummary.remove" => {
+                refresh_recent_index = true;
+                refresh_running_index = true;
+                let sid = op
+                    .get("sessionId")
+                    .and_then(|value| value.as_str())
+                    .map(|value| value.trim())
+                    .unwrap_or("");
+                if sid.is_empty() {
+                    refresh_all = true;
+                } else if let Some(did) = directory_id_for_session_id(sid) {
+                    refresh_directory_ids.insert(did);
+                } else {
+                    refresh_all = true;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    PatchRefreshHints {
+        refresh_all,
+        refresh_directory_ids: refresh_directory_ids.into_iter().collect(),
+        refresh_recent_index,
+        refresh_running_index,
+    }
+}
+
 fn start_directory_sessions_poller_if_needed(state: Arc<crate::AppState>) {
     if !EVENT_HUB.mark_poller_started() {
         return;
@@ -925,7 +1143,17 @@ fn start_directory_sessions_poller_if_needed(state: Arc<crate::AppState>) {
             }
 
             let ops_count = ops.len();
-            EVENT_HUB.publish_ops(ops);
+            let hints = derive_patch_refresh_hints(
+                &ops,
+                |sid| {
+                    state
+                        .directory_session_index
+                        .directory_for_session(sid)
+                        .and_then(|path| state.directory_session_index.directory_id_for_path(&path))
+                },
+                |path| state.directory_session_index.directory_id_for_path(path),
+            );
+            EVENT_HUB.publish_ops_with_hints(ops, Some(hints));
             tracing::debug!(
                 target: "opencode_studio.directory_sessions.metrics",
                 patch_latency_ms = patch_started.elapsed().as_secs_f64() * 1000.0,
@@ -955,18 +1183,8 @@ pub(crate) async fn directory_sessions_bootstrap(
         .map(parse_directory_ids_csv);
     start_directory_sessions_poller_if_needed(state.clone());
 
-    // Capture the sequence baseline before building the snapshot so clients can
-    // replay all patches that happened during snapshot construction.
-    let seq_baseline = EVENT_HUB.latest_seq();
-
-    let bundle =
-        build_snapshot_bundle(&state, limit_per_directory, expanded_directory_ids.as_ref()).await;
-    let out = DirectorySessionsBootstrapWire {
-        directory_entries: bundle.directory_entries,
-        session_summaries_by_directory_id: bundle.pages_by_directory_id,
-        runtime_by_session_id: bundle.runtime_by_session_id,
-        seq: seq_baseline,
-    };
+    let out =
+        load_bootstrap_wire(&state, limit_per_directory, expanded_directory_ids.as_ref()).await;
 
     Json(out).into_response()
 }
@@ -1004,6 +1222,12 @@ pub(crate) async fn directory_sessions_events(
             "seq": forced_seq,
             "ts": now_millis(),
             "ops": forced_ops,
+            "hints": PatchRefreshHints {
+                refresh_all: true,
+                refresh_directory_ids: Vec::new(),
+                refresh_recent_index: true,
+                refresh_running_index: true,
+            },
         }))
         .unwrap_or_else(|_| "{}".to_string());
         forced_snapshot_event = Some(SequencedPatchEvent {
@@ -1347,6 +1571,65 @@ mod tests {
     }
 
     #[test]
+    fn bootstrap_projection_cache_key_sorts_expanded_ids() {
+        let mut ids = HashSet::new();
+        ids.insert("dir_b".to_string());
+        ids.insert("dir_a".to_string());
+        let key = BootstrapProjectionCache::cache_key(10, Some(&ids));
+        assert_eq!(key, "l=10|expanded=dir_a,dir_b");
+    }
+
+    #[test]
+    fn bootstrap_projection_cache_is_bounded() {
+        let mut cache = BootstrapProjectionCache::default();
+        for i in 0..(SIDEBAR_BOOTSTRAP_CACHE_MAX_ENTRIES + 5) {
+            let key = format!("k_{i}");
+            cache.insert(BootstrapProjectionCacheEntry {
+                key: key.clone(),
+                created_at: Instant::now(),
+                wire: DirectorySessionsBootstrapWire {
+                    directory_entries: vec![],
+                    session_summaries_by_directory_id: Map::new(),
+                    runtime_by_session_id: Value::Object(Map::new()),
+                    seq: i as u64,
+                },
+            });
+        }
+
+        assert_eq!(cache.len(), SIDEBAR_BOOTSTRAP_CACHE_MAX_ENTRIES);
+        assert!(cache.get_fresh("k_0").is_none());
+        assert!(cache.get_fresh("k_5").is_some());
+    }
+
+    #[test]
+    fn bootstrap_projection_cache_ttl_expires_entries() {
+        let mut cache = BootstrapProjectionCache::default();
+        cache.insert(BootstrapProjectionCacheEntry {
+            key: "fresh".to_string(),
+            created_at: Instant::now(),
+            wire: DirectorySessionsBootstrapWire {
+                directory_entries: vec![],
+                session_summaries_by_directory_id: Map::new(),
+                runtime_by_session_id: Value::Object(Map::new()),
+                seq: 1,
+            },
+        });
+        cache.insert(BootstrapProjectionCacheEntry {
+            key: "stale".to_string(),
+            created_at: Instant::now() - SIDEBAR_BOOTSTRAP_CACHE_TTL - Duration::from_millis(5),
+            wire: DirectorySessionsBootstrapWire {
+                directory_entries: vec![],
+                session_summaries_by_directory_id: Map::new(),
+                runtime_by_session_id: Value::Object(Map::new()),
+                seq: 2,
+            },
+        });
+
+        assert!(cache.get_fresh("stale").is_none());
+        assert!(cache.get_fresh("fresh").is_some());
+    }
+
+    #[test]
     fn parse_session_page_preserves_consistency_metadata() {
         let payload = json!({
             "sessions": [{"id": "ses_1", "directory": "/tmp/proj"}],
@@ -1395,5 +1678,40 @@ mod tests {
 
         assert!(kinds.iter().any(|k| k == "sessionSummary.remove"));
         assert!(kinds.iter().any(|k| k == "sessionSummary.upsert"));
+    }
+
+    #[test]
+    fn derive_patch_refresh_hints_prefers_directory_targets_when_known() {
+        let ops = vec![json!({
+            "type": "sessionSummary.upsert",
+            "session": {
+                "id": "s_1",
+                "directory": "/tmp/a"
+            }
+        })];
+
+        let hints = derive_patch_refresh_hints(
+            &ops,
+            |_| Some("dir_a".to_string()),
+            |_| Some("dir_a".to_string()),
+        );
+
+        assert!(!hints.refresh_all);
+        assert_eq!(hints.refresh_directory_ids, vec!["dir_a".to_string()]);
+        assert!(hints.refresh_recent_index);
+        assert!(hints.refresh_running_index);
+    }
+
+    #[test]
+    fn derive_patch_refresh_hints_marks_full_refresh_when_directory_unknown() {
+        let ops = vec![json!({
+            "type": "sessionSummary.remove",
+            "sessionId": "s_missing"
+        })];
+
+        let hints = derive_patch_refresh_hints(&ops, |_| None, |_| None);
+        assert!(hints.refresh_all);
+        assert!(hints.refresh_recent_index);
+        assert!(hints.refresh_running_index);
     }
 }
