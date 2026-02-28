@@ -23,8 +23,8 @@ const props = withDefaults(
 const container = ref<HTMLElement | null>(null)
 const error = ref<string | null>(null)
 
-const MIN_LINE_NUMBER_DIGITS = 2
-const DEFAULT_LINE_NUMBER_DIGITS = 3
+const MIN_LINE_NUMBER_DIGITS = 1
+const DEFAULT_LINE_NUMBER_DIGITS = 2
 const MAX_LINE_NUMBER_DIGITS = 6
 
 function applyAdaptiveLineNumberWidth(target: HTMLElement) {
@@ -153,7 +153,7 @@ watchEffect(() => {
   /* Keep diffs compact (tighter than diff2html defaults). */
   --oc-diff-line-height: 1.25;
   --oc-diff-linenumber-digits: 3;
-  --oc-diff-linenumber-pad-x: 0.2rem;
+  --oc-diff-linenumber-pad-x: 0.1rem;
   --oc-diff-linenumber-cell-width: calc(
     (var(--oc-diff-linenumber-digits) * 1ch) + (var(--oc-diff-linenumber-pad-x) * 2)
   );
