@@ -40,6 +40,13 @@ struct DirectoryEntryWire {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+struct SessionTreeHintWire {
+    root_session_ids: Vec<String>,
+    children_by_parent_session_id: BTreeMap<String, Vec<String>>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct SessionPageWire {
     offset: usize,
     limit: usize,
@@ -47,6 +54,8 @@ struct SessionPageWire {
     sessions: Vec<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     consistency: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tree_hint: Option<SessionTreeHintWire>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -433,15 +442,82 @@ fn sanitize_session_summary_list(sessions: Vec<Value>) -> Vec<Value> {
         .collect()
 }
 
+fn session_summary_id(value: &Value) -> Option<String> {
+    value
+        .get("id")
+        .and_then(|v| v.as_str())
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+}
+
+fn session_summary_parent_id(value: &Value) -> Option<String> {
+    value
+        .get("parentID")
+        .or_else(|| value.get("parentId"))
+        .or_else(|| value.get("parent_id"))
+        .and_then(|v| v.as_str())
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+}
+
+fn extract_session_tree_hint(sessions: &[Value]) -> Option<SessionTreeHintWire> {
+    let session_ids = sessions
+        .iter()
+        .filter_map(session_summary_id)
+        .collect::<HashSet<_>>();
+
+    if session_ids.is_empty() {
+        return None;
+    }
+
+    let mut root_session_ids = Vec::<String>::new();
+    let mut children_by_parent_session_id = BTreeMap::<String, Vec<String>>::new();
+
+    for session in sessions {
+        let Some(session_id) = session_summary_id(session) else {
+            continue;
+        };
+        let parent_id = session_summary_parent_id(session);
+        if let Some(parent_id) = parent_id
+            && session_ids.contains(&parent_id)
+        {
+            children_by_parent_session_id
+                .entry(parent_id)
+                .or_default()
+                .push(session_id);
+            continue;
+        }
+        root_session_ids.push(session_id);
+    }
+
+    root_session_ids.sort();
+    root_session_ids.dedup();
+    for child_ids in children_by_parent_session_id.values_mut() {
+        child_ids.sort();
+        child_ids.dedup();
+    }
+
+    if root_session_ids.is_empty() && children_by_parent_session_id.is_empty() {
+        None
+    } else {
+        Some(SessionTreeHintWire {
+            root_session_ids,
+            children_by_parent_session_id,
+        })
+    }
+}
+
 fn parse_session_page(payload: &Value, limit: usize) -> SessionPageWire {
     if let Some(list) = payload.as_array() {
         let sessions = sanitize_session_summary_list(list.to_vec());
+        let tree_hint = extract_session_tree_hint(&sessions);
         return SessionPageWire {
             offset: 0,
             limit,
             total: sessions.len(),
             sessions,
             consistency: None,
+            tree_hint,
         };
     }
 
@@ -470,6 +546,7 @@ fn parse_session_page(payload: &Value, limit: usize) -> SessionPageWire {
         .get("consistency")
         .and_then(|v| v.as_object())
         .map(|obj| Value::Object(obj.clone()));
+    let tree_hint = extract_session_tree_hint(&sessions);
 
     SessionPageWire {
         offset,
@@ -477,6 +554,7 @@ fn parse_session_page(payload: &Value, limit: usize) -> SessionPageWire {
         total,
         sessions,
         consistency,
+        tree_hint,
     }
 }
 
@@ -494,6 +572,7 @@ fn degraded_session_page(limit: usize) -> SessionPageWire {
         total: 0,
         sessions: Vec::new(),
         consistency: Some(degraded_page_consistency()),
+        tree_hint: None,
     }
 }
 
@@ -1568,6 +1647,53 @@ mod tests {
         assert!(s.get("projectID").is_none());
         assert!(s.get("summary").is_none());
         assert!(s.get("time").and_then(|v| v.get("completed")).is_none());
+    }
+
+    #[test]
+    fn extract_session_tree_hint_supports_parent_variants_and_deterministic_children() {
+        let sessions = vec![
+            json!({"id": "child_b", "parentID": "root_a"}),
+            json!({"id": "root_b"}),
+            json!({"id": "child_a", "parentId": "root_a"}),
+            json!({"id": "root_a"}),
+            json!({"id": "child_c", "parent_id": "root_a"}),
+            json!({"id": "orphan", "parentId": "missing_root"}),
+            json!({"id": "child_a", "parentID": "root_a"}),
+        ];
+
+        let hint = extract_session_tree_hint(&sessions).expect("tree hint");
+        assert_eq!(hint.root_session_ids, vec!["orphan", "root_a", "root_b"]);
+        assert_eq!(
+            hint.children_by_parent_session_id.get("root_a"),
+            Some(&vec![
+                "child_a".to_string(),
+                "child_b".to_string(),
+                "child_c".to_string()
+            ])
+        );
+    }
+
+    #[test]
+    fn parse_session_page_emits_tree_hint_with_stable_ordering() {
+        let payload = json!({
+            "sessions": [
+                {"id": "child_2", "parentID": "root_1"},
+                {"id": "root_1"},
+                {"id": "child_1", "parentID": "root_1"},
+                {"id": "child_1", "parentID": "root_1"}
+            ],
+            "total": 4,
+            "offset": 0,
+            "limit": 4
+        });
+
+        let page = parse_session_page(&payload, 80);
+        let hint = page.tree_hint.expect("tree hint");
+        assert_eq!(hint.root_session_ids, vec!["root_1"]);
+        assert_eq!(
+            hint.children_by_parent_session_id.get("root_1"),
+            Some(&vec!["child_1".to_string(), "child_2".to_string()])
+        );
     }
 
     #[test]
