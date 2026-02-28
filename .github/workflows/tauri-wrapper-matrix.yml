@@ -111,7 +111,7 @@ jobs:
         if: "!startsWith(matrix.os, 'windows-')"
         uses: actions/upload-artifact@v6
         with:
-          name: opencode-studio-wrapper-${{ matrix.target }}
+          name: opencode-studio-wrapper-${{ matrix.target }}-${{ matrix.os }}
           path: ${{ env.CARGO_TARGET_DIR }}/${{ matrix.target }}/release/opencode-studio-desktop
           if-no-files-found: error
 
@@ -119,6 +119,6 @@ jobs:
         if: startsWith(matrix.os, 'windows-')
         uses: actions/upload-artifact@v6
         with:
-          name: opencode-studio-wrapper-${{ matrix.target }}
+          name: opencode-studio-wrapper-${{ matrix.target }}-${{ matrix.os }}
           path: ${{ env.CARGO_TARGET_DIR }}/${{ matrix.target }}/release/opencode-studio-desktop.exe
           if-no-files-found: error
