@@ -38,6 +38,7 @@ import { useSidebarLocate } from '@/layout/chatSidebar/useSidebarLocate'
 import { normalizeDirectories } from '@/features/sessions/model/projects'
 import { normalizeSidebarUiPrefsForUi } from '@/features/sessions/model/sidebarUiPrefs'
 import { DIRECTORIES_PAGE_SIZE_DEFAULT } from '@/stores/directorySessions/index'
+import { shouldReloadExpandedDirectoryAggregate } from '@/stores/directorySessions/pagination'
 import { ApiError } from '@/lib/api'
 
 const props = defineProps<{ mobileVariant?: boolean }>()
@@ -1258,7 +1259,15 @@ function autoLoadExpandedDirectoriesOnce() {
     if (isDirectoryCollapsed(pid)) continue
     const attempted = Boolean(aggregateAttemptedByDirectoryId.value[pid])
     const hasCache = hasCachedSessionsForDirectory(pid)
-    if (attempted && hasCache) continue
+    const cachedPage = directorySessions.sessionPageByDirectoryId?.[pid]?.page
+    const targetPage = sessionRootPage(pid)
+    const shouldReload = shouldReloadExpandedDirectoryAggregate({
+      attempted,
+      hasCache,
+      cachedPage,
+      targetPage,
+    })
+    if (!shouldReload) continue
     void ensureDirectoryAggregateLoaded(pid, p.path, { force: attempted && !hasCache })
   }
 }

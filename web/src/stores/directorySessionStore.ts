@@ -65,6 +65,7 @@ import {
 } from '@/stores/directorySessions/pageState'
 import { hasActiveRuntimeInDirectoryScope } from '@/stores/directorySessions/runtimeDirectoryActivity'
 import { runtimePatchWithEventTimestamp } from '@/stores/directorySessions/runtimeEvent'
+import { isDirectoryAggregatePageSatisfied, normalizePage } from '@/stores/directorySessions/pagination'
 import { matchDirectoryEntryForPath } from '@/stores/directorySessions/pathMatch'
 import { extractSessionId, readParentId, readUpdatedAt } from '@/stores/directorySessions/runtime'
 import type { JsonObject as UnknownRecord, JsonValue } from '@/types/json'
@@ -1674,10 +1675,10 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     const focusId = typeof opts?.focusSessionId === 'string' ? opts.focusSessionId.trim() : ''
     const wantsFocus = Boolean(focusId)
     const pageSize = Math.max(1, Math.floor(opts?.pageSize || 10))
-    const targetPage = Math.max(0, Math.floor(opts?.page || 0))
+    const targetPage = normalizePage(opts?.page)
     const cached = sessionPageByDirectoryId.value[did]
 
-    if (!force && !wantsFocus && cached && cached.page === targetPage) {
+    if (!force && !wantsFocus && isDirectoryAggregatePageSatisfied(cached?.page, targetPage)) {
       await ensurePinnedSummariesLoaded(did, root, opts.pinnedSessionIds, { force: false })
       if (opts.includeWorktrees) {
         await ensureDirectoryWorktreesLoaded(did, root, { force: false })
