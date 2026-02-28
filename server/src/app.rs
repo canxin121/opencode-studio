@@ -508,6 +508,10 @@ pub(crate) async fn run(args: crate::Args) {
             "/chat-sidebar/running-index",
             get(crate::chat_sidebar::chat_sidebar_running_index),
         )
+        .route(
+            "/chat-sidebar/state",
+            get(crate::chat_sidebar::chat_sidebar_state),
+        )
         // Legacy aliases kept for backward compatibility.
         .route(
             "/sessions-sidebar/bootstrap",
@@ -524,6 +528,10 @@ pub(crate) async fn run(args: crate::Args) {
         .route(
             "/sessions-sidebar/running-index",
             get(crate::chat_sidebar::chat_sidebar_running_index),
+        )
+        .route(
+            "/sessions-sidebar/state",
+            get(crate::chat_sidebar::chat_sidebar_state),
         )
         .route(
             "/sessions/summaries",
