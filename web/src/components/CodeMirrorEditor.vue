@@ -504,9 +504,7 @@ const editorOptions = computed<Monaco.editor.IStandaloneEditorConstructionOption
   automaticLayout: true,
   fontFamily: resolvedFontFamily.value,
   fontSize: 13,
-  // Keep glyph margin enabled in the file viewer so blame markers
-  // render reliably even if markers arrive after mount.
-  glyphMargin: Boolean(props.useFilesTheme) || glyphMarginEnabled.value,
+  glyphMargin: glyphMarginEnabled.value,
   lineDecorationsWidth: 12,
   lineNumbers: 'on',
   minimap: { enabled: false },
