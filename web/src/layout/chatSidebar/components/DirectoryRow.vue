@@ -83,23 +83,23 @@ function handleMobileOpenActionsClick(event: MouseEvent) {
     </template>
 
     <div class="flex min-w-0 flex-col justify-center gap-0.5 py-px">
-      <span
-        class="typography-ui-label truncate text-left leading-[1.3]"
+      <div
+        class="typography-ui-label min-w-0 pb-px text-left leading-[1.4]"
         :class="focused ? 'text-primary' : 'text-foreground'"
       >
-        <span class="inline-flex items-center gap-2 min-w-0">
-          <span class="truncate">{{ directoryEntryLabel(directory) }}</span>
+        <div class="flex min-w-0 items-center gap-2">
+          <div class="min-w-0 flex-1 truncate">{{ directoryEntryLabel(directory) }}</div>
           <span
             v-if="hasActiveOrBlocked"
             class="inline-flex h-1.5 w-1.5 rounded-full bg-primary animate-pulse flex-shrink-0"
             :title="String(t('chat.sidebar.directoriesList.activeSessions'))"
             :aria-label="String(t('chat.sidebar.directoriesList.activeSessions'))"
           />
-        </span>
-      </span>
-      <span class="typography-micro truncate font-mono text-left leading-tight text-muted-foreground/60">{{
-        directory.path
-      }}</span>
+        </div>
+      </div>
+      <div class="typography-micro min-w-0 truncate pb-px font-mono text-left leading-tight text-muted-foreground/60">
+        {{ directory.path }}
+      </div>
     </div>
 
     <template #actions>
