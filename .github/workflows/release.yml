@@ -26,6 +26,7 @@ env:
 
 jobs:
   validate-tag:
+    name: Validate release tag
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -48,6 +49,7 @@ jobs:
         run: python3 scripts/version_sync.py check --tag "${{ env.RELEASE_TAG }}"
 
   create-release:
+    name: Create GitHub release
     needs: validate-tag
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -60,13 +62,20 @@ jobs:
           generate_release_notes: true
 
   web:
+    name: Web dist
     needs: create-release
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - ref: ${{ env.RELEASE_REF }}
+            ref_name: ${{ env.RELEASE_TAG }}
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ env.RELEASE_REF }}
+          ref: ${{ matrix.ref }}
 
       - name: Setup Bun
         id: setup-bun-web
@@ -106,19 +115,18 @@ jobs:
       - name: Web tests
         run: bun test --cwd web
 
-      - name: Web build
+      - name: Build web
         env:
           NODE_OPTIONS: --max-old-space-size=4096
         run: bun run --cwd web build
 
-      - name: Pack web dist
-        run: mkdir -p release-assets
-
       - name: Archive web dist
-        working-directory: web
         run: |
-          tar -czf ../release-assets/opencode-studio-web-dist-${{ env.RELEASE_TAG }}.tar.gz dist
-          zip -r ../release-assets/opencode-studio-web-dist-${{ env.RELEASE_TAG }}.zip dist
+          mkdir -p release-assets
+          tar -czf release-assets/opencode-studio-web-dist.tar.gz -C web dist
+          (cd web && zip -r ../release-assets/opencode-studio-web-dist.zip dist)
+          cp release-assets/opencode-studio-web-dist.tar.gz "release-assets/opencode-studio-web-dist-${{ env.RELEASE_TAG }}.tar.gz"
+          cp release-assets/opencode-studio-web-dist.zip "release-assets/opencode-studio-web-dist-${{ env.RELEASE_TAG }}.zip"
 
       - name: Upload web assets to GitHub Release
         uses: softprops/action-gh-release@v2
@@ -133,107 +141,87 @@ jobs:
         with:
           name: opencode-studio-web-dist
           path: |
-            release-assets/opencode-studio-web-dist-${{ env.RELEASE_TAG }}.tar.gz
-            release-assets/opencode-studio-web-dist-${{ env.RELEASE_TAG }}.zip
+            release-assets/opencode-studio-web-dist.tar.gz
+            release-assets/opencode-studio-web-dist.zip
           if-no-files-found: error
 
-  rust:
+  backend:
+    name: Backend bin (${{ matrix.target }})
     needs: create-release
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
+            ref: ${{ env.RELEASE_REF }}
             native: true
             build_tool: cargo
           - os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
-            native: true
-            build_tool: cargo
-          - os: macos-14
-            target: aarch64-apple-darwin
-            native: true
-            build_tool: cargo
-          - os: macos-15-intel
-            target: x86_64-apple-darwin
+            ref: ${{ env.RELEASE_REF }}
             native: true
             build_tool: cargo
           - os: windows-latest
             target: x86_64-pc-windows-msvc
+            ref: ${{ env.RELEASE_REF }}
             native: true
             build_tool: cargo
           - os: windows-11-arm
             target: aarch64-pc-windows-msvc
+            ref: ${{ env.RELEASE_REF }}
+            native: true
+            build_tool: cargo
+          - os: macos-14
+            target: aarch64-apple-darwin
+            ref: ${{ env.RELEASE_REF }}
+            native: true
+            build_tool: cargo
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+            ref: ${{ env.RELEASE_REF }}
             native: true
             build_tool: cargo
           - os: ubuntu-latest
             target: x86_64-unknown-linux-musl
+            ref: ${{ env.RELEASE_REF }}
             native: false
             build_tool: cross
           - os: ubuntu-latest
             target: aarch64-unknown-linux-musl
+            ref: ${{ env.RELEASE_REF }}
             native: false
             build_tool: cross
           - os: ubuntu-latest
             target: armv7-unknown-linux-musleabihf
+            ref: ${{ env.RELEASE_REF }}
             native: false
             build_tool: cross
           - os: ubuntu-latest
             target: i686-unknown-linux-musl
+            ref: ${{ env.RELEASE_REF }}
             native: false
             build_tool: cross
           - os: ubuntu-latest
             target: armv7-unknown-linux-gnueabihf
+            ref: ${{ env.RELEASE_REF }}
             native: false
             build_tool: cross
           - os: ubuntu-latest
             target: i686-unknown-linux-gnu
+            ref: ${{ env.RELEASE_REF }}
             native: false
             build_tool: cross
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ env.RELEASE_REF }}
+          ref: ${{ matrix.ref }}
 
       - name: Validate native target mapping
         if: matrix.native == true
-        shell: bash
-        run: |
-          set -euo pipefail
-          TARGET="${{ matrix.target }}"
-
-          case "$TARGET" in
-            *windows*) TARGET_OS="Windows" ;;
-            *apple-darwin*) TARGET_OS="macOS" ;;
-            *linux*) TARGET_OS="Linux" ;;
-            *)
-              echo "::error::unsupported target OS in triple: $TARGET"
-              exit 1
-              ;;
-          esac
-
-          TARGET_ARCH_RAW="${TARGET%%-*}"
-          case "$TARGET_ARCH_RAW" in
-            x86_64|amd64) TARGET_ARCH="X64" ;;
-            aarch64|arm64) TARGET_ARCH="ARM64" ;;
-            armv7|armv7l) TARGET_ARCH="ARM" ;;
-            i686|x86) TARGET_ARCH="X86" ;;
-            *) TARGET_ARCH="$TARGET_ARCH_RAW" ;;
-          esac
-
-          if [[ "$TARGET_OS" != "$RUNNER_OS" ]]; then
-            echo "::error::target OS $TARGET_OS does not match runner OS $RUNNER_OS"
-            exit 1
-          fi
-          if [[ "$TARGET_ARCH" != "$RUNNER_ARCH" ]]; then
-            echo "::error::target arch $TARGET_ARCH does not match runner arch $RUNNER_ARCH"
-            exit 1
-          fi
-
-          echo "OK: native target validation passed ($TARGET on $RUNNER_OS/$RUNNER_ARCH)"
+        run: python scripts/assert_native_target.py ${{ matrix.target }}
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -263,94 +251,65 @@ jobs:
           files: |
             release-assets/opencode-studio-backend-${{ matrix.target }}-${{ env.RELEASE_TAG }}.*
 
+      - name: Upload backend artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: opencode-studio-backend-${{ matrix.target }}
+          path: release-assets/opencode-studio-backend-${{ matrix.target }}-${{ env.RELEASE_TAG }}.*
+          if-no-files-found: error
+
   desktop:
-    needs: [create-release, web]
+    name: Desktop (main, ${{ matrix.flavor }}, ${{ matrix.target }})
+    needs: [web, backend]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
         include:
-          # Release ref (tag)
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
+            ref: ${{ env.RELEASE_REF }}
+            tauri: main
             suffix: ""
             flavor: full
-            cef: false
           - os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
+            ref: ${{ env.RELEASE_REF }}
+            tauri: main
             suffix: ""
             flavor: full
-            cef: false
           - os: windows-latest
             target: x86_64-pc-windows-msvc
+            ref: ${{ env.RELEASE_REF }}
+            tauri: main
             suffix: ""
             flavor: full
-            cef: false
           - os: windows-11-arm
             target: aarch64-pc-windows-msvc
+            ref: ${{ env.RELEASE_REF }}
+            tauri: main
             suffix: ""
             flavor: full
-            cef: false
           - os: macos-14
             target: aarch64-apple-darwin
+            ref: ${{ env.RELEASE_REF }}
+            tauri: main
             suffix: ""
             flavor: full
-            cef: false
           - os: macos-15-intel
             target: x86_64-apple-darwin
+            ref: ${{ env.RELEASE_REF }}
+            tauri: main
             suffix: ""
             flavor: full
-            cef: false
-
-          # Extra builds using Tauri's CEF runtime (suffix -cef)
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            suffix: "-cef"
-            flavor: full
-            cef: true
-          - os: ubuntu-24.04-arm
-            target: aarch64-unknown-linux-gnu
-            suffix: "-cef"
-            flavor: full
-            cef: true
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            suffix: "-cef"
-            flavor: full
-            cef: true
-          - os: windows-11-arm
-            target: aarch64-pc-windows-msvc
-            suffix: "-cef"
-            flavor: full
-            cef: true
-          - os: macos-14
-            target: aarch64-apple-darwin
-            suffix: "-cef"
-            flavor: full
-            cef: true
-          - os: macos-15-intel
-            target: x86_64-apple-darwin
-            suffix: "-cef"
-            flavor: full
-            cef: true
-
-    runs-on: ${{ matrix.os }}
-    env:
-      # Keep build output paths short (notably on Windows + CEF) and consistent
-      # across steps (staging expects installers under this target dir).
-      CARGO_TARGET_DIR: ${{ matrix.cef == true && format('{0}/t-cef', github.workspace) || format('{0}/t-main', github.workspace) }}
-    timeout-minutes: 60
     steps:
-      - name: Checkout release source (web/backend)
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
         with:
-          ref: ${{ env.RELEASE_REF }}
-          path: src-main
+          ref: ${{ matrix.ref }}
 
-      - name: Checkout desktop source (Tauri variant)
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ env.RELEASE_REF }}
-          path: src-tauri
+      - name: Validate native target mapping
+        run: python scripts/assert_native_target.py ${{ matrix.target }}
 
       - name: Install Linux deps (Tauri)
         if: startsWith(matrix.os, 'ubuntu-')
@@ -369,7 +328,7 @@ jobs:
             zsync
           sudo apt-get install -y libwebkit2gtk-4.1-dev || sudo apt-get install -y libwebkit2gtk-4.0-dev
 
-      - name: Download web dist artifact
+      - name: Download web dist
         uses: actions/download-artifact@v7
         with:
           name: opencode-studio-web-dist
@@ -380,208 +339,132 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf src-tauri/web/dist
-          mkdir -p src-tauri/web
-          tar -xzf "release-assets/opencode-studio-web-dist-${{ env.RELEASE_TAG }}.tar.gz" -C src-tauri/web
-          test -f src-tauri/web/dist/index.html
+          rm -rf web/dist
+          mkdir -p web
+          tar -xzf release-assets/opencode-studio-web-dist.tar.gz -C web
+          test -f web/dist/index.html
 
       - name: Extract web dist (Windows)
         if: startsWith(matrix.os, 'windows-')
         shell: pwsh
         run: |
-          if (Test-Path 'src-tauri/web/dist') { Remove-Item -Recurse -Force 'src-tauri/web/dist' }
-          New-Item -ItemType Directory -Force -Path 'src-tauri/web' | Out-Null
-          Expand-Archive -Force -Path "release-assets/opencode-studio-web-dist-${{ env.RELEASE_TAG }}.zip" -DestinationPath 'src-tauri/web'
-          if (-not (Test-Path 'src-tauri/web/dist/index.html')) { throw 'src-tauri/web/dist/index.html missing after extract' }
+          if (Test-Path 'web/dist') { Remove-Item -Recurse -Force 'web/dist' }
+          New-Item -ItemType Directory -Force -Path web | Out-Null
+          Expand-Archive -Force -Path 'release-assets/opencode-studio-web-dist.zip' -DestinationPath 'web'
+          if (-not (Test-Path 'web/dist/index.html')) { throw 'web/dist/index.html missing after extract' }
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
-      - name: Validate native target mapping
-        shell: bash
-        run: |
-          set -euo pipefail
-          TARGET="${{ matrix.target }}"
-
-          case "$TARGET" in
-            *windows*) TARGET_OS="Windows" ;;
-            *apple-darwin*) TARGET_OS="macOS" ;;
-            *linux*) TARGET_OS="Linux" ;;
-            *)
-              echo "::error::unsupported target OS in triple: $TARGET"
-              exit 1
-              ;;
-          esac
-
-          TARGET_ARCH_RAW="${TARGET%%-*}"
-          case "$TARGET_ARCH_RAW" in
-            x86_64|amd64) TARGET_ARCH="X64" ;;
-            aarch64|arm64) TARGET_ARCH="ARM64" ;;
-            armv7|armv7l) TARGET_ARCH="ARM" ;;
-            i686|x86) TARGET_ARCH="X86" ;;
-            *) TARGET_ARCH="$TARGET_ARCH_RAW" ;;
-          esac
-
-          if [[ "$TARGET_OS" != "$RUNNER_OS" ]]; then
-            echo "::error::target OS $TARGET_OS does not match runner OS $RUNNER_OS"
-            exit 1
-          fi
-          if [[ "$TARGET_ARCH" != "$RUNNER_ARCH" ]]; then
-            echo "::error::target arch $TARGET_ARCH does not match runner arch $RUNNER_ARCH"
-            exit 1
-          fi
-
-          echo "OK: native target validation passed ($TARGET on $RUNNER_OS/$RUNNER_ARCH)"
-
-      - name: Add x86_64 macOS target (cef arm64)
-        if: matrix.cef == true && matrix.target == 'aarch64-apple-darwin'
-        run: rustup target add x86_64-apple-darwin
-
-      - name: Add aarch64 macOS target (cef intel)
-        if: matrix.cef == true && matrix.target == 'x86_64-apple-darwin'
-        run: rustup target add aarch64-apple-darwin
-
-      - name: Cache Rust builds (main)
-        if: matrix.cef != true
+      - name: Cache Rust builds
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
-            src-tauri/desktop/src-tauri -> ${{ env.CARGO_TARGET_DIR }}
-            src-main/server -> target
+            desktop/src-tauri -> target
           save-if: true
           add-job-id-key: false
-
-      - name: Cache Rust builds (cef)
-        if: matrix.cef == true
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: |
-            src-tauri/desktop/src-tauri-cef -> ${{ env.CARGO_TARGET_DIR }}
-            src-main/server -> target
-          save-if: true
-          add-job-id-key: false
-
-      - name: Cache CEF runtime (Linux)
-        if: matrix.cef == true && startsWith(matrix.os, 'ubuntu-')
-        uses: actions/cache@v5
-        with:
-          path: ~/.cache/tauri-cef
-          key: ${{ runner.os }}-tauri-cef-${{ hashFiles('src-tauri/desktop/src-tauri-cef/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-tauri-cef-
-
-      - name: Cache CEF runtime (macOS)
-        if: matrix.cef == true && (matrix.os == 'macos-14' || matrix.os == 'macos-15-intel')
-        uses: actions/cache@v5
-        with:
-          path: ~/Library/Caches/tauri-cef
-          key: ${{ runner.os }}-tauri-cef-${{ hashFiles('src-tauri/desktop/src-tauri-cef/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-tauri-cef-
-
-      - name: Cache CEF runtime (Windows)
-        if: matrix.cef == true && startsWith(matrix.os, 'windows-')
-        uses: actions/cache@v5
-        with:
-          path: ${{ env.LOCALAPPDATA }}\tauri-cef
-          key: ${{ runner.os }}-tauri-cef-${{ hashFiles('src-tauri/desktop/src-tauri-cef/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-tauri-cef-
 
       - name: Cache Tauri CLI (main)
-        if: matrix.cef != true
+        if: matrix.tauri == 'main'
         id: cache-tauri-cli-main
         uses: actions/cache@v5
+        continue-on-error: true
         with:
           path: |
             ~/.cargo/bin/tauri*
             ~/.cargo/bin/cargo-tauri*
             ~/.cargo/.crates2.json
             ~/.cargo/.crates.toml
-          key: ${{ runner.os }}-${{ matrix.target }}-tauri-cli-main-${{ env.CACHE_VERSION }}-${{ env.TAURI_CLI_VERSION }}
+          key: ${{ runner.os }}-${{ runner.arch }}-tauri-cli-main-${{ env.CACHE_VERSION }}-${{ env.TAURI_CLI_VERSION }}
           restore-keys: |
-            ${{ runner.os }}-${{ matrix.target }}-tauri-cli-main-${{ env.CACHE_VERSION }}-
+            ${{ runner.os }}-${{ runner.arch }}-tauri-cli-main-${{ env.CACHE_VERSION }}-
 
-      - name: Cache Tauri CLI (cef)
-        if: matrix.cef == true
-        id: cache-tauri-cli-cef
-        uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cargo/bin/tauri*
-            ~/.cargo/bin/cargo-tauri*
-            ~/.cargo/.crates2.json
-            ~/.cargo/.crates.toml
-          key: ${{ runner.os }}-${{ matrix.target }}-tauri-cli-cef-${{ env.CACHE_VERSION }}-feat-cef
-          restore-keys: |
-            ${{ runner.os }}-${{ matrix.target }}-tauri-cli-cef-${{ env.CACHE_VERSION }}-
-
-      - name: Install Tauri CLI (main)
-        if: matrix.cef != true && steps.cache-tauri-cli-main.outputs.cache-hit != 'true'
+      - name: Install Tauri CLI
+        if: matrix.tauri == 'main' && steps.cache-tauri-cli-main.outputs.cache-hit != 'true'
         run: cargo install tauri-cli --locked --version ${{ env.TAURI_CLI_VERSION }}
 
-      - name: Install Tauri CLI (cef)
-        if: matrix.cef == true && steps.cache-tauri-cli-cef.outputs.cache-hit != 'true'
-        run: cargo install tauri-cli --locked --git https://github.com/tauri-apps/tauri --branch feat/cef
+      - name: Download backend artifact (full only)
+        if: matrix.flavor == 'full'
+        uses: actions/download-artifact@v7
+        with:
+          name: opencode-studio-backend-${{ matrix.target }}
+          path: release-assets/backend
 
-      - name: Build + install backend sidecar (full only, Unix)
+      - name: Install backend sidecar (full only, Unix)
         if: matrix.flavor == 'full' && !startsWith(matrix.os, 'windows-')
         shell: bash
         run: |
           set -euo pipefail
-          cargo build --manifest-path src-main/server/Cargo.toml --release --target ${{ matrix.target }} --locked --target-dir src-main/server/target
-          BIN="src-main/server/target/${{ matrix.target }}/release/opencode-studio"
-          test -f "$BIN"
-          TAURI_BIN_DIR="src-tauri/desktop/src-tauri/binaries"
-          if [ "${{ matrix.cef }}" = "true" ]; then
-            TAURI_BIN_DIR="src-tauri/desktop/src-tauri-cef/binaries"
+          mkdir -p desktop/src-tauri/binaries
+          mkdir -p release-assets/backend-extract
+          ARCHIVE="release-assets/backend/opencode-studio-backend-${{ matrix.target }}-${{ env.RELEASE_TAG }}.tar.gz"
+          if [[ ! -f "$ARCHIVE" ]]; then
+            ARCHIVE="release-assets/backend/opencode-studio-backend-${{ matrix.target }}.tar.gz"
           fi
-          mkdir -p "$TAURI_BIN_DIR"
-          cp "$BIN" "$TAURI_BIN_DIR/opencode-studio-${{ matrix.target }}"
-          chmod +x "$TAURI_BIN_DIR/opencode-studio-${{ matrix.target }}"
+          if [[ ! -f "$ARCHIVE" ]]; then
+            ARCHIVE="release-assets/backend/opencode-studio-${{ matrix.target }}-${{ env.RELEASE_TAG }}.tar.gz"
+          fi
+          if [[ ! -f "$ARCHIVE" ]]; then
+            ARCHIVE="release-assets/backend/opencode-studio-${{ matrix.target }}.tar.gz"
+          fi
+          test -f "$ARCHIVE"
+          tar -xzf "$ARCHIVE" -C release-assets/backend-extract
+          test -f release-assets/backend-extract/opencode-studio
+          cp release-assets/backend-extract/opencode-studio "desktop/src-tauri/binaries/opencode-studio-${{ matrix.target }}"
+          chmod +x "desktop/src-tauri/binaries/opencode-studio-${{ matrix.target }}"
 
-      - name: Build + install backend sidecar (full only, Windows)
+      - name: Install backend sidecar (full only, Windows)
         if: matrix.flavor == 'full' && startsWith(matrix.os, 'windows-')
         shell: pwsh
         run: |
-          & cargo build --manifest-path src-main/server/Cargo.toml --release --target ${{ matrix.target }} --locked --target-dir src-main/server/target
-          $bin = "src-main/server/target/${{ matrix.target }}/release/opencode-studio.exe"
-          if (-not (Test-Path $bin)) { throw "Missing backend binary: $bin" }
-          $tauriBinDir = "src-tauri/desktop/src-tauri/binaries"
-          if ("${{ matrix.cef }}" -eq "true") { $tauriBinDir = "src-tauri/desktop/src-tauri-cef/binaries" }
-          New-Item -ItemType Directory -Force -Path $tauriBinDir | Out-Null
-          Copy-Item -Force $bin (Join-Path $tauriBinDir "opencode-studio-${{ matrix.target }}.exe")
+          New-Item -ItemType Directory -Force -Path 'desktop/src-tauri/binaries' | Out-Null
+          New-Item -ItemType Directory -Force -Path 'release-assets/backend-extract' | Out-Null
+          $archive = "release-assets/backend/opencode-studio-backend-${{ matrix.target }}-${{ env.RELEASE_TAG }}.zip"
+          if (-not (Test-Path $archive)) {
+            $archive = "release-assets/backend/opencode-studio-backend-${{ matrix.target }}.zip"
+          }
+          if (-not (Test-Path $archive)) {
+            $archive = "release-assets/backend/opencode-studio-${{ matrix.target }}-${{ env.RELEASE_TAG }}.zip"
+          }
+          if (-not (Test-Path $archive)) {
+            $archive = "release-assets/backend/opencode-studio-${{ matrix.target }}.zip"
+          }
+          if (-not (Test-Path $archive)) {
+            throw "Missing backend archive for ${{ matrix.target }}"
+          }
+          Expand-Archive -Force -Path $archive -DestinationPath 'release-assets/backend-extract'
+          if (-not (Test-Path 'release-assets/backend-extract/opencode-studio.exe')) { throw 'opencode-studio.exe missing after extract' }
+          Copy-Item -Force 'release-assets/backend-extract/opencode-studio.exe' "desktop/src-tauri/binaries/opencode-studio-${{ matrix.target }}.exe"
 
-      - name: Tauri build (main)
-        if: matrix.cef != true
-        working-directory: src-tauri/desktop/src-tauri
+      - name: Tauri build
+        working-directory: desktop/src-tauri
         shell: bash
         run: |
           set -euo pipefail
           CONFIG="tauri.conf.full.json"
           EXTRA_BUNDLE_ARGS=""
 
-          # MSI does not accept semver prerelease identifiers like "-beta.2".
-          # Keep prerelease builds on NSIS to avoid WiX/version failures.
           if [[ "${RUNNER_OS}" == "Windows" && "${RELEASE_TAG}" == *-* ]]; then
             EXTRA_BUNDLE_ARGS="--bundles nsis"
           fi
 
-          rm -rf "${CARGO_TARGET_DIR}/${{ matrix.target }}/release/bundle" "${CARGO_TARGET_DIR}/release/bundle" || true
+          TARGET_DIR="desktop/src-tauri/target"
+          if [[ -n "${CARGO_TARGET_DIR:-}" ]]; then
+            TARGET_DIR="${CARGO_TARGET_DIR}"
+          fi
+          rm -rf "$TARGET_DIR/${{ matrix.target }}/release/bundle" "$TARGET_DIR/release/bundle" || true
 
           if cargo tauri build --config "$CONFIG" --target ${{ matrix.target }} ${EXTRA_BUNDLE_ARGS}; then
             exit 0
           fi
 
-          # Workaround: DMG bundling may fail to execute the generated script on macOS.
-          # If the `.app` exists, generate a basic DMG with `hdiutil` so releases continue.
           if [[ "${RUNNER_OS}" != "macOS" ]]; then
             exit 1
           fi
 
-          BUNDLE_DIR="${CARGO_TARGET_DIR}/${{ matrix.target }}/release/bundle"
+          BUNDLE_DIR="$TARGET_DIR/${{ matrix.target }}/release/bundle"
           APP="$(ls -1 "$BUNDLE_DIR"/macos/*.app 2>/dev/null | head -n 1 || true)"
           if [[ -z "$APP" ]]; then
             exit 1
@@ -592,9 +475,290 @@ jobs:
           cp -R "$APP" "$STAGE_DIR/"
           hdiutil create -volname "OpenCode Studio" -srcfolder "$STAGE_DIR" -ov -format UDZO "$BUNDLE_DIR/dmg/opencode-studio-fallback.dmg"
 
-      - name: Tauri build (cef)
-        if: matrix.cef == true
-        working-directory: src-tauri/desktop/src-tauri-cef
+      - name: Stage desktop installers (Unix)
+        if: "!startsWith(matrix.os, 'windows-')"
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          BUNDLE_DIR="desktop/src-tauri/target/${{ matrix.target }}/release/bundle"
+          if [ ! -d "$BUNDLE_DIR" ]; then BUNDLE_DIR="desktop/src-tauri/target/release/bundle"; fi
+
+          TARGET="${{ matrix.target }}"
+          SUFFIX="${{ matrix.suffix }}"
+          TAG="${{ env.RELEASE_TAG }}"
+
+          if [[ "${RUNNER_OS}" == "macOS" ]]; then
+            SRC="$(ls -1 "$BUNDLE_DIR"/dmg/*.dmg 2>/dev/null | head -n 1 || true)"
+            test -n "$SRC"
+            cp "$SRC" "release-assets/opencode-studio-desktop-${TARGET}${SUFFIX}-${TAG}.dmg"
+          else
+            SRC_APPIMAGE="$(ls -1 "$BUNDLE_DIR"/appimage/*.AppImage 2>/dev/null | head -n 1 || true)"
+            test -n "$SRC_APPIMAGE"
+            cp "$SRC_APPIMAGE" "release-assets/opencode-studio-desktop-${TARGET}${SUFFIX}-${TAG}.AppImage"
+
+            SRC_DEB="$(ls -1 "$BUNDLE_DIR"/deb/*.deb 2>/dev/null | head -n 1 || true)"
+            test -n "$SRC_DEB"
+            cp "$SRC_DEB" "release-assets/opencode-studio-desktop-${TARGET}${SUFFIX}-${TAG}.deb"
+            SRC_RPM="$(ls -1 "$BUNDLE_DIR"/rpm/*.rpm 2>/dev/null | head -n 1 || true)"
+            test -n "$SRC_RPM"
+            cp "$SRC_RPM" "release-assets/opencode-studio-desktop-${TARGET}${SUFFIX}-${TAG}.rpm"
+          fi
+
+      - name: Stage desktop installers (Windows)
+        if: startsWith(matrix.os, 'windows-')
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release-assets | Out-Null
+          $bundleDir = "desktop/src-tauri/target/${{ matrix.target }}/release/bundle"
+          if (-not (Test-Path $bundleDir)) { $bundleDir = "desktop/src-tauri/target/release/bundle" }
+          $target = "${{ matrix.target }}"
+          $suffix = "${{ matrix.suffix }}"
+          $tag = "${{ env.RELEASE_TAG }}"
+
+          $msi = $null
+          if ($tag -notmatch '-') {
+            $msi = Get-ChildItem -Path (Join-Path $bundleDir 'msi') -Filter '*.msi' -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($msi) {
+              Copy-Item -Force $msi.FullName (Join-Path 'release-assets' ("opencode-studio-desktop-$target$suffix-$tag.msi"))
+            }
+          }
+
+          $exe = Get-ChildItem -Path (Join-Path $bundleDir 'nsis') -Filter '*.exe' -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($exe) {
+            Copy-Item -Force $exe.FullName (Join-Path 'release-assets' ("opencode-studio-desktop-$target$suffix-$tag.exe"))
+          }
+
+          if (-not $msi -and -not $exe) {
+            throw "No Windows installer found under $bundleDir (expected msi/*.msi or nsis/*.exe)"
+          }
+
+      - name: Upload desktop assets to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          files: |
+            release-assets/opencode-studio-desktop-${{ matrix.target }}${{ matrix.suffix }}-${{ env.RELEASE_TAG }}.*
+
+  desktop-cef:
+    name: Desktop (cef, ${{ matrix.flavor }}, ${{ matrix.target }})
+    needs: [web, backend]
+    runs-on: ${{ matrix.os }}
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/t-cef
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            ref: ${{ env.RELEASE_REF }}
+            tauri: cef
+            suffix: "-cef"
+            flavor: full
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            ref: ${{ env.RELEASE_REF }}
+            tauri: cef
+            suffix: "-cef"
+            flavor: full
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            ref: ${{ env.RELEASE_REF }}
+            tauri: cef
+            suffix: "-cef"
+            flavor: full
+          - os: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            ref: ${{ env.RELEASE_REF }}
+            tauri: cef
+            suffix: "-cef"
+            flavor: full
+          - os: macos-14
+            target: aarch64-apple-darwin
+            ref: ${{ env.RELEASE_REF }}
+            tauri: cef
+            suffix: "-cef"
+            flavor: full
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+            ref: ${{ env.RELEASE_REF }}
+            tauri: cef
+            suffix: "-cef"
+            flavor: full
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ matrix.ref }}
+
+      - name: Validate native target mapping
+        run: python scripts/assert_native_target.py ${{ matrix.target }}
+
+      - name: Install Linux deps (Tauri)
+        if: startsWith(matrix.os, 'ubuntu-')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            pkg-config \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            rpm \
+            fakeroot \
+            dpkg-dev \
+            xdg-utils \
+            zsync
+          sudo apt-get install -y libwebkit2gtk-4.1-dev || sudo apt-get install -y libwebkit2gtk-4.0-dev
+
+      - name: Cache CEF runtime (Linux)
+        if: startsWith(matrix.os, 'ubuntu-')
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/tauri-cef
+          key: ${{ runner.os }}-tauri-cef-${{ hashFiles('desktop/src-tauri-cef/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-tauri-cef-
+
+      - name: Cache CEF runtime (macOS)
+        if: matrix.os == 'macos-14' || matrix.os == 'macos-15-intel'
+        uses: actions/cache@v5
+        with:
+          path: ~/Library/Caches/tauri-cef
+          key: ${{ runner.os }}-tauri-cef-${{ hashFiles('desktop/src-tauri-cef/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-tauri-cef-
+
+      - name: Cache CEF runtime (Windows)
+        if: startsWith(matrix.os, 'windows-')
+        uses: actions/cache@v5
+        with:
+          path: ${{ env.LOCALAPPDATA }}\tauri-cef
+          key: ${{ runner.os }}-tauri-cef-${{ hashFiles('desktop/src-tauri-cef/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-tauri-cef-
+
+      - name: Download web dist
+        uses: actions/download-artifact@v7
+        with:
+          name: opencode-studio-web-dist
+          path: release-assets
+
+      - name: Extract web dist (Unix)
+        if: "!startsWith(matrix.os, 'windows-')"
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf web/dist
+          mkdir -p web
+          tar -xzf release-assets/opencode-studio-web-dist.tar.gz -C web
+          test -f web/dist/index.html
+
+      - name: Extract web dist (Windows)
+        if: startsWith(matrix.os, 'windows-')
+        shell: pwsh
+        run: |
+          if (Test-Path 'web/dist') { Remove-Item -Recurse -Force 'web/dist' }
+          New-Item -ItemType Directory -Force -Path web | Out-Null
+          Expand-Archive -Force -Path 'release-assets/opencode-studio-web-dist.zip' -DestinationPath 'web'
+          if (-not (Test-Path 'web/dist/index.html')) { throw 'web/dist/index.html missing after extract' }
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Add x86_64 macOS target (cef arm64)
+        if: matrix.os == 'macos-14'
+        run: rustup target add x86_64-apple-darwin
+
+      - name: Add aarch64 macOS target (cef intel)
+        if: matrix.os == 'macos-15-intel'
+        run: rustup target add aarch64-apple-darwin
+
+      - name: Cache Rust builds
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            desktop/src-tauri-cef -> ${{ env.CARGO_TARGET_DIR }}
+          save-if: true
+          add-job-id-key: false
+
+      - name: Cache Tauri CLI (cef)
+        if: matrix.tauri == 'cef'
+        id: cache-tauri-cli-cef
+        uses: actions/cache@v5
+        continue-on-error: true
+        with:
+          path: |
+            ~/.cargo/bin/tauri*
+            ~/.cargo/bin/cargo-tauri*
+            ~/.cargo/.crates2.json
+            ~/.cargo/.crates.toml
+          key: ${{ runner.os }}-${{ runner.arch }}-tauri-cli-cef-${{ env.CACHE_VERSION }}-feat-cef
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-tauri-cli-cef-${{ env.CACHE_VERSION }}-
+
+      - name: Install Tauri CLI
+        if: matrix.tauri == 'cef' && steps.cache-tauri-cli-cef.outputs.cache-hit != 'true'
+        run: cargo install tauri-cli --locked --git https://github.com/tauri-apps/tauri --branch feat/cef
+
+      - name: Download backend artifact (full only)
+        if: matrix.flavor == 'full'
+        uses: actions/download-artifact@v7
+        with:
+          name: opencode-studio-backend-${{ matrix.target }}
+          path: release-assets/backend
+
+      - name: Install backend sidecar (full only, Unix)
+        if: matrix.flavor == 'full' && !startsWith(matrix.os, 'windows-')
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p desktop/src-tauri-cef/binaries
+          mkdir -p release-assets/backend-extract
+          ARCHIVE="release-assets/backend/opencode-studio-backend-${{ matrix.target }}-${{ env.RELEASE_TAG }}.tar.gz"
+          if [[ ! -f "$ARCHIVE" ]]; then
+            ARCHIVE="release-assets/backend/opencode-studio-backend-${{ matrix.target }}.tar.gz"
+          fi
+          if [[ ! -f "$ARCHIVE" ]]; then
+            ARCHIVE="release-assets/backend/opencode-studio-${{ matrix.target }}-${{ env.RELEASE_TAG }}.tar.gz"
+          fi
+          if [[ ! -f "$ARCHIVE" ]]; then
+            ARCHIVE="release-assets/backend/opencode-studio-${{ matrix.target }}.tar.gz"
+          fi
+          test -f "$ARCHIVE"
+          tar -xzf "$ARCHIVE" -C release-assets/backend-extract
+          test -f release-assets/backend-extract/opencode-studio
+          cp release-assets/backend-extract/opencode-studio "desktop/src-tauri-cef/binaries/opencode-studio-${{ matrix.target }}"
+          chmod +x "desktop/src-tauri-cef/binaries/opencode-studio-${{ matrix.target }}"
+
+      - name: Install backend sidecar (full only, Windows)
+        if: matrix.flavor == 'full' && startsWith(matrix.os, 'windows-')
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path 'desktop/src-tauri-cef/binaries' | Out-Null
+          New-Item -ItemType Directory -Force -Path 'release-assets/backend-extract' | Out-Null
+          $archive = "release-assets/backend/opencode-studio-backend-${{ matrix.target }}-${{ env.RELEASE_TAG }}.zip"
+          if (-not (Test-Path $archive)) {
+            $archive = "release-assets/backend/opencode-studio-backend-${{ matrix.target }}.zip"
+          }
+          if (-not (Test-Path $archive)) {
+            $archive = "release-assets/backend/opencode-studio-${{ matrix.target }}-${{ env.RELEASE_TAG }}.zip"
+          }
+          if (-not (Test-Path $archive)) {
+            $archive = "release-assets/backend/opencode-studio-${{ matrix.target }}.zip"
+          }
+          if (-not (Test-Path $archive)) {
+            throw "Missing backend archive for ${{ matrix.target }}"
+          }
+          Expand-Archive -Force -Path $archive -DestinationPath 'release-assets/backend-extract'
+          if (-not (Test-Path 'release-assets/backend-extract/opencode-studio.exe')) { throw 'opencode-studio.exe missing after extract' }
+          Copy-Item -Force 'release-assets/backend-extract/opencode-studio.exe' "desktop/src-tauri-cef/binaries/opencode-studio-${{ matrix.target }}.exe"
+
+      - name: Tauri build
+        working-directory: desktop/src-tauri-cef
         shell: bash
         run: |
           set -euo pipefail
@@ -632,20 +796,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p release-assets
-
-          TAURI_DIR="src-tauri/desktop/src-tauri"
-          if [ "${{ matrix.cef }}" = "true" ]; then
-            TAURI_DIR="src-tauri/desktop/src-tauri-cef"
-          fi
-
-          TARGET_DIR="$TAURI_DIR/target"
-          if [[ -n "${CARGO_TARGET_DIR:-}" ]]; then
-            TARGET_DIR="${CARGO_TARGET_DIR}"
-          fi
-          BUNDLE_DIR="$TARGET_DIR/${{ matrix.target }}/release/bundle"
-          if [ ! -d "$BUNDLE_DIR" ]; then
-            BUNDLE_DIR="$TARGET_DIR/release/bundle"
-          fi
+          BUNDLE_DIR="${CARGO_TARGET_DIR}/${{ matrix.target }}/release/bundle"
+          if [ ! -d "$BUNDLE_DIR" ]; then BUNDLE_DIR="${CARGO_TARGET_DIR}/release/bundle"; fi
 
           TARGET="${{ matrix.target }}"
           SUFFIX="${{ matrix.suffix }}"
@@ -673,27 +825,25 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path release-assets | Out-Null
-
-          $tauriDir = "src-tauri/desktop/src-tauri"
-          if ("${{ matrix.cef }}" -eq "true") { $tauriDir = "src-tauri/desktop/src-tauri-cef" }
-
-          $targetDir = "$tauriDir/target"
-          if ($env:CARGO_TARGET_DIR) { $targetDir = $env:CARGO_TARGET_DIR }
-          $bundleDir = Join-Path $targetDir "${{ matrix.target }}/release/bundle"
-          if (-not (Test-Path $bundleDir)) { $bundleDir = Join-Path $targetDir "release/bundle" }
-
+          $bundleDir = Join-Path $env:CARGO_TARGET_DIR "${{ matrix.target }}/release/bundle"
+          if (-not (Test-Path $bundleDir)) { $bundleDir = Join-Path $env:CARGO_TARGET_DIR "release/bundle" }
           $target = "${{ matrix.target }}"
           $suffix = "${{ matrix.suffix }}"
           $tag = "${{ env.RELEASE_TAG }}"
 
-          $msi = Get-ChildItem -Path (Join-Path $bundleDir 'msi') -Filter '*.msi' -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-          if ($msi) {
-            Copy-Item -Force $msi.FullName (Join-Path 'release-assets' ("opencode-studio-desktop-$target$suffix-$tag.msi"))
+          $msi = $null
+          if ($tag -notmatch '-') {
+            $msi = Get-ChildItem -Path (Join-Path $bundleDir 'msi') -Filter '*.msi' -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($msi) {
+              Copy-Item -Force $msi.FullName (Join-Path 'release-assets' ("opencode-studio-desktop-$target$suffix-$tag.msi"))
+            }
           }
+
           $exe = Get-ChildItem -Path (Join-Path $bundleDir 'nsis') -Filter '*.exe' -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
           if ($exe) {
             Copy-Item -Force $exe.FullName (Join-Path 'release-assets' ("opencode-studio-desktop-$target$suffix-$tag.exe"))
           }
+
           if (-not $msi -and -not $exe) {
             throw "No Windows installer found under $bundleDir (expected msi/*.msi or nsis/*.exe)"
           }
@@ -703,4 +853,4 @@ jobs:
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           files: |
-            release-assets/*
+            release-assets/opencode-studio-desktop-${{ matrix.target }}${{ matrix.suffix }}-${{ env.RELEASE_TAG }}.*
