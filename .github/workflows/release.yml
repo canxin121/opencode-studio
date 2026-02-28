@@ -765,6 +765,45 @@ jobs:
           CONFIG="tauri.conf.full.json"
           EXTRA_BUNDLE_ARGS=""
 
+          CEF_SOURCE="(default)"
+          if [[ "${{ matrix.target }}" == "aarch64-pc-windows-msvc" ]]; then
+            export CEF_DOWNLOAD_URL="https://cef-builds.spotifycdn.com"
+            CEF_SOURCE="${CEF_DOWNLOAD_URL}"
+          elif [[ -n "${CEF_DOWNLOAD_URL:-}" ]]; then
+            CEF_SOURCE="${CEF_DOWNLOAD_URL}"
+          fi
+          echo "CEF target: ${{ matrix.target }}"
+          echo "CEF source: ${CEF_SOURCE}"
+
+          check_cef_runtime() {
+            local target="${{ matrix.target }}"
+            local release_dir="${CARGO_TARGET_DIR}/${target}/release"
+            local bundle_dir="${CARGO_TARGET_DIR}/${target}/release/bundle"
+
+            if [[ "${RUNNER_OS}" == "Windows" ]]; then
+              if [[ ! -f "${release_dir}/libcef.dll" ]]; then
+                echo "::error::missing CEF runtime for ${target}: ${release_dir}/libcef.dll"
+                exit 1
+              fi
+              return
+            fi
+
+            if [[ "${RUNNER_OS}" == "Linux" ]]; then
+              if [[ ! -f "${release_dir}/libcef.so" ]]; then
+                echo "::error::missing CEF runtime for ${target}: ${release_dir}/libcef.so"
+                exit 1
+              fi
+              return
+            fi
+
+            local app
+            app="$(ls -1 "${bundle_dir}"/macos/*.app 2>/dev/null | head -n 1 || true)"
+            if [[ -z "${app}" || ! -f "${app}/Contents/Frameworks/Chromium Embedded Framework.framework/Chromium Embedded Framework" ]]; then
+              echo "::error::missing CEF runtime for ${target}: ${bundle_dir}/macos/*.app/Contents/Frameworks/Chromium Embedded Framework.framework/Chromium Embedded Framework"
+              exit 1
+            fi
+          }
+
           if [[ "${RUNNER_OS}" == "Windows" && "${RELEASE_TAG}" == *-* ]]; then
             EXTRA_BUNDLE_ARGS="--bundles nsis"
           fi
@@ -772,6 +811,7 @@ jobs:
           rm -rf "${CARGO_TARGET_DIR}/${{ matrix.target }}/release/bundle" "${CARGO_TARGET_DIR}/release/bundle" || true
 
           if cargo tauri build --config "$CONFIG" --target ${{ matrix.target }} --features cef ${EXTRA_BUNDLE_ARGS}; then
+            check_cef_runtime
             exit 0
           fi
 
@@ -789,6 +829,7 @@ jobs:
           STAGE_DIR="$(mktemp -d)"
           cp -R "$APP" "$STAGE_DIR/"
           hdiutil create -volname "OpenCode Studio" -srcfolder "$STAGE_DIR" -ov -format UDZO "$BUNDLE_DIR/dmg/opencode-studio-fallback.dmg"
+          check_cef_runtime
 
       - name: Stage desktop installers (Unix)
         if: "!startsWith(matrix.os, 'windows-')"
