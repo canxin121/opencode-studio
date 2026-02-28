@@ -43,6 +43,7 @@ import {
   RECENT_INDEX_DEFAULT_LIMIT,
   RECENT_INDEX_MAX_ITEMS,
   RUNNING_INDEX_DEFAULT_LIMIT,
+  RUNNING_INDEX_MAX_ITEMS,
   type DirectoriesPageWire,
   type DirectorySessionPageState,
   type DirectorySessionsBootstrapWire,
@@ -62,6 +63,9 @@ import {
   upsertRuntimeOnlyRunningIndexEntry,
   upsertSessionInPageState,
 } from '@/stores/directorySessions/pageState'
+import { hasActiveRuntimeInDirectoryScope } from '@/stores/directorySessions/runtimeDirectoryActivity'
+import { runtimePatchWithEventTimestamp } from '@/stores/directorySessions/runtimeEvent'
+import { isDirectoryAggregatePageSatisfied, normalizePage } from '@/stores/directorySessions/pagination'
 import { matchDirectoryEntryForPath } from '@/stores/directorySessions/pathMatch'
 import { extractSessionId, readParentId, readUpdatedAt } from '@/stores/directorySessions/runtime'
 import type { JsonObject as UnknownRecord, JsonValue } from '@/types/json'
@@ -886,10 +890,7 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     }
 
     const offset = Math.max(0, Math.floor(opts?.offset || 0))
-    const limit = Math.max(
-      1,
-      Math.min(FOOTER_PAGE_SIZE_DEFAULT, Math.floor(opts?.limit || RUNNING_INDEX_DEFAULT_LIMIT)),
-    )
+    const limit = Math.max(1, Math.min(RUNNING_INDEX_MAX_ITEMS, Math.floor(opts?.limit || RUNNING_INDEX_DEFAULT_LIMIT)))
     const append = Boolean(opts?.append)
 
     const task = (async () => {
@@ -1671,10 +1672,10 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     const focusId = typeof opts?.focusSessionId === 'string' ? opts.focusSessionId.trim() : ''
     const wantsFocus = Boolean(focusId)
     const pageSize = Math.max(1, Math.floor(opts?.pageSize || 10))
-    const targetPage = Math.max(0, Math.floor(opts?.page || 0))
+    const targetPage = normalizePage(opts?.page)
     const cached = sessionPageByDirectoryId.value[did]
 
-    if (!force && !wantsFocus && cached && cached.page === targetPage) {
+    if (!force && !wantsFocus && isDirectoryAggregatePageSatisfied(cached?.page, targetPage)) {
       await ensurePinnedSummariesLoaded(did, root, opts.pinnedSessionIds, { force: false })
       if (opts.includeWorktrees) {
         await ensureDirectoryWorktreesLoaded(did, root, { force: false })
@@ -1838,6 +1839,22 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     return runtimeIsActive(runtimeBySessionId.value[sid], opts)
   }
 
+  function hasActiveRuntimeInDirectory(
+    directoryId: string,
+    directoryPath: string,
+    opts?: { includeCooldown?: boolean },
+  ) {
+    return hasActiveRuntimeInDirectoryScope({
+      directoryId,
+      directoryPath,
+      runtimeBySessionId: runtimeBySessionId.value,
+      directoryIdBySessionId: directoryIdBySessionId.value,
+      sessionSummariesById: sessionSummariesById.value,
+      runningIndex: runningIndex.value,
+      includeCooldown: opts?.includeCooldown,
+    })
+  }
+
   function syncRuntimeFromStores(input: {
     sessionStatusBySession: Record<string, JsonValue>
     attentionBySession: Record<string, JsonValue>
@@ -1953,10 +1970,8 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     }
     const sessionId = extractSessionId(evt)
     const eventUpdatedAt = readEventUpdatedAt(evt)
-    const runtimePatch = (patch: Partial<SessionRuntimeState>): Partial<SessionRuntimeState> => {
-      if (eventUpdatedAt === undefined) return patch
-      return { ...patch, updatedAt: eventUpdatedAt }
-    }
+    const runtimePatch = (patch: Partial<SessionRuntimeState>): Partial<SessionRuntimeState> =>
+      runtimePatchWithEventTimestamp(patch, eventUpdatedAt)
 
     if (type === 'session.created' || type === 'session.updated') {
       const props = readEventProperties(evt)
@@ -1974,6 +1989,9 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
               ...(title ? { title } : {}),
               ...(slug ? { slug } : {}),
             })
+          }
+          if (type === 'session.updated') {
+            void hydrateSessionSummariesByIds([sid]).catch(() => {})
           }
         }
       }
@@ -2906,6 +2924,7 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     ensurePinnedSessionRowsLoaded,
     statusLabelForSessionId,
     isSessionRuntimeActive,
+    hasActiveRuntimeInDirectory,
     syncRuntimeFromStores,
     applyGlobalEvent,
     applyChatSidebarPatchEvent,

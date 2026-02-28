@@ -23,6 +23,30 @@ const props = withDefaults(
 const container = ref<HTMLElement | null>(null)
 const error = ref<string | null>(null)
 
+const MIN_LINE_NUMBER_DIGITS = 2
+const DEFAULT_LINE_NUMBER_DIGITS = 3
+const MAX_LINE_NUMBER_DIGITS = 6
+
+function applyAdaptiveLineNumberWidth(target: HTMLElement) {
+  const lineNumberCells = target.querySelectorAll<HTMLElement>('.line-num1, .line-num2, .d2h-code-side-linenumber')
+
+  let maxDigits = 0
+  for (const cell of lineNumberCells) {
+    const raw = String(cell.textContent || '').trim()
+    if (!raw) continue
+    const normalized = raw.replace(/\D+/g, '')
+    const digits = normalized.length > 0 ? normalized.length : raw.length
+    if (digits > maxDigits) maxDigits = digits
+  }
+
+  const resolvedDigits = Math.max(
+    MIN_LINE_NUMBER_DIGITS,
+    Math.min(MAX_LINE_NUMBER_DIGITS, maxDigits || DEFAULT_LINE_NUMBER_DIGITS),
+  )
+
+  target.style.setProperty('--oc-diff-linenumber-digits', String(resolvedDigits))
+}
+
 const themeTick = ref(0)
 let themeObserver: MutationObserver | null = null
 
@@ -93,6 +117,7 @@ watchEffect(() => {
         hljs,
       )
       ui.draw()
+      applyAdaptiveLineNumberWidth(target)
     } catch (e) {
       console.error(e)
       error.value = 'Failed to render diff'
@@ -127,9 +152,14 @@ watchEffect(() => {
   /* Local diff2html tuning knobs */
   /* Keep diffs compact (tighter than diff2html defaults). */
   --oc-diff-line-height: 1.25;
-  /* Line-by-line view uses a combined (old+new) gutter; default is very wide. */
-  --oc-diff-linenumber-width: 6em;
-  --oc-diff-code-pad: 6.6em;
+  --oc-diff-linenumber-digits: 3;
+  --oc-diff-linenumber-pad-x: 0.2rem;
+  --oc-diff-linenumber-cell-width: calc(
+    (var(--oc-diff-linenumber-digits) * 1ch) + (var(--oc-diff-linenumber-pad-x) * 2)
+  );
+  /* Line-by-line view has two line numbers (old/new) in one gutter. */
+  --oc-diff-linenumber-width: calc((var(--oc-diff-linenumber-cell-width) * 2) + 0.3rem);
+  --oc-diff-code-pad: calc(var(--oc-diff-linenumber-width) + 0.5rem);
 }
 /*
   diff2html styling
@@ -251,12 +281,22 @@ watchEffect(() => {
 /* Reduce gutter + code padding (diff2html defaults are extremely roomy). */
 .diff-content .line-num1,
 .diff-content .line-num2 {
-  width: 2.9em;
-  padding: 0 0.25em;
+  width: var(--oc-diff-linenumber-cell-width);
+  min-width: var(--oc-diff-linenumber-cell-width);
+  padding-left: var(--oc-diff-linenumber-pad-x);
+  padding-right: var(--oc-diff-linenumber-pad-x);
+  text-align: right;
 }
 
 .diff-content .d2h-code-linenumber {
   width: var(--oc-diff-linenumber-width);
+}
+
+.diff-content .d2h-code-side-linenumber {
+  width: var(--oc-diff-linenumber-cell-width);
+  min-width: var(--oc-diff-linenumber-cell-width);
+  padding-left: var(--oc-diff-linenumber-pad-x);
+  padding-right: var(--oc-diff-linenumber-pad-x);
 }
 
 .diff-content .d2h-code-line {

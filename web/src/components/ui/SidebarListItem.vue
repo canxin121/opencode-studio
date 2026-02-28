@@ -25,7 +25,7 @@ const emit = defineEmits<{
 
 const rootClass = computed(() =>
   cn(
-    'group flex w-full min-w-0 items-center gap-2 overflow-hidden rounded-md py-1 pl-2 pr-1.5 text-left text-sm transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset',
+    'group flex w-full min-w-0 items-center gap-2 overflow-x-hidden rounded-md py-1 pl-2 pr-1.5 text-left text-sm transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset',
     props.active
       ? 'bg-primary/12 text-foreground dark:bg-accent/80 font-medium'
       : 'text-muted-foreground hover:bg-primary/6 hover:text-foreground hover:dark:bg-accent/40',
@@ -58,7 +58,7 @@ const actionsClass = computed(() =>
     </div>
 
     <!-- Main Content -->
-    <div class="flex min-w-0 flex-1 flex-col justify-center overflow-hidden">
+    <div class="flex min-w-0 flex-1 flex-col justify-center overflow-x-hidden overflow-y-visible">
       <slot />
     </div>
 
