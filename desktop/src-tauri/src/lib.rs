@@ -45,7 +45,7 @@ pub fn run() {
         .setup(|app| {
             let app_handle = app.handle().clone();
 
-            // Ensure a user-editable config file exists.
+            // Ensure a user-editable runtime config file exists.
             if let Ok(cfg) = config::load_or_create(&app_handle) {
                 if let Err(err) = apply_autostart_on_boot(&app_handle, cfg.autostart_on_boot) {
                     eprintln!("desktop autostart apply failed: {err}");
@@ -71,7 +71,8 @@ pub fn run() {
                 None::<&str>,
             )?;
             let logs_i = MenuItem::with_id(app, "open_logs", "Open logs", true, None::<&str>)?;
-            let cfg_i = MenuItem::with_id(app, "open_config", "Open config", true, None::<&str>)?;
+            let cfg_i =
+                MenuItem::with_id(app, "open_config", "Open runtime config", true, None::<&str>)?;
             let autostart_i = MenuItem::with_id(
                 app,
                 "toggle_autostart_on_boot",
@@ -194,7 +195,7 @@ fn desktop_open_logs_dir(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 fn desktop_open_config(app: AppHandle) -> Result<(), String> {
-    config::open_config_file(&app)
+    config::open_runtime_config_file(&app)
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -390,7 +391,7 @@ async fn handle_tray_menu(app: &AppHandle, id: &str) {
             let _ = backend::open_logs_dir(app);
         }
         "open_config" => {
-            let _ = config::open_config_file(app);
+            let _ = config::open_runtime_config_file(app);
         }
         "toggle_autostart_on_boot" => {
             let _ = toggle_autostart_on_boot(app);

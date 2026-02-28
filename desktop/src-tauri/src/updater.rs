@@ -13,6 +13,7 @@ use crate::AppHandle;
 use crate::backend::BackendManager;
 
 const USER_AGENT: &str = "opencode-studio-desktop-updater";
+const UPDATE_DOWNLOAD_DIR_NAME: &str = "update-downloads";
 
 #[derive(Debug, Clone, serde::Serialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -108,7 +109,7 @@ pub(crate) async fn apply_service_update(
             ));
         }
 
-        let updates_dir = updates_cache_dir(app)?;
+        let downloads_dir = update_downloads_dir(app)?;
         let suffix = unique_suffix();
         let fallback = if cfg!(target_os = "windows") {
             "opencode-studio.zip"
@@ -117,8 +118,8 @@ pub(crate) async fn apply_service_update(
         };
         let archive_name = infer_asset_name(&asset_url, Some(fallback))
             .ok_or_else(|| "unable to derive service package filename".to_string())?;
-        let archive_path = updates_dir.join(format!("service-{suffix}-{archive_name}"));
-        let extracted_path = updates_dir.join(if cfg!(target_os = "windows") {
+        let archive_path = downloads_dir.join(format!("service-{suffix}-{archive_name}"));
+        let extracted_path = downloads_dir.join(if cfg!(target_os = "windows") {
             format!("service-{suffix}.exe")
         } else {
             format!("service-{suffix}")
@@ -194,11 +195,11 @@ pub(crate) async fn apply_installer_update(
 
     let result: Result<(), String> = async {
         let asset_url = normalize_http_url(&asset_url)?;
-        let updates_dir = updates_cache_dir(app)?;
+        let downloads_dir = update_downloads_dir(app)?;
         let suffix = unique_suffix();
         let installer_name = infer_asset_name(&asset_url, asset_name.as_deref())
             .ok_or_else(|| "unable to derive installer package filename".to_string())?;
-        let installer_path = updates_dir.join(format!("desktop-{suffix}-{installer_name}"));
+        let installer_path = downloads_dir.join(format!("desktop-{suffix}-{installer_name}"));
 
         let progress_clone = progress.clone();
         download_asset_to_path(&asset_url, &installer_path, move |downloaded, total| {
@@ -256,7 +257,7 @@ where
 {
     if let Some(parent) = destination.parent() {
         fs::create_dir_all(parent)
-            .map_err(|err| format!("create update cache dir {}: {err}", parent.display()))?;
+            .map_err(|err| format!("create update download dir {}: {err}", parent.display()))?;
     }
 
     let client = reqwest::Client::builder()
@@ -301,15 +302,14 @@ where
     Ok(())
 }
 
-fn updates_cache_dir(app: &AppHandle) -> Result<PathBuf, String> {
+fn update_downloads_dir(app: &AppHandle) -> Result<PathBuf, String> {
     let base = app
         .path()
         .app_cache_dir()
-        .or_else(|_| app.path().app_data_dir())
-        .map_err(|err| format!("resolve desktop update cache dir: {err}"))?;
-    let dir = base.join("updates");
+        .map_err(|err| format!("resolve desktop update download dir: {err}"))?;
+    let dir = base.join(UPDATE_DOWNLOAD_DIR_NAME);
     fs::create_dir_all(&dir)
-        .map_err(|err| format!("create desktop update cache dir {}: {err}", dir.display()))?;
+        .map_err(|err| format!("create desktop update download dir {}: {err}", dir.display()))?;
     Ok(dir)
 }
 

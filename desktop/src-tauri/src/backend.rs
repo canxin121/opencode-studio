@@ -60,9 +60,9 @@ impl BackendManager {
         }
 
         let cfg = config::load_or_create(app).unwrap_or_default();
-        let config_path =
-            config::config_path(app).ok_or_else(|| "unable to resolve config path".to_string())?;
-        let (child, url) = spawn_sidecar(app, &cfg, &config_path).await?;
+        let runtime_config_path = config::runtime_config_path(app)
+            .ok_or_else(|| "unable to resolve runtime config path".to_string())?;
+        let (child, url) = spawn_sidecar(app, &cfg, &runtime_config_path).await?;
 
         {
             let mut guard = self.inner.lock().await;
@@ -118,7 +118,7 @@ fn backend_log_path(app: &AppHandle) -> Option<PathBuf> {
 async fn spawn_sidecar(
     app: &AppHandle,
     cfg: &DesktopConfig,
-    config_path: &Path,
+    runtime_config_path: &Path,
 ) -> Result<(tauri_plugin_shell::process::CommandChild, String), String> {
     // If the sidecar is not bundled, startup fails and desktop commands can
     // still report status/manage retries.
@@ -149,7 +149,7 @@ async fn spawn_sidecar(
             "--port",
             &port.to_string(),
             "--config",
-            config_path.to_string_lossy().as_ref(),
+            runtime_config_path.to_string_lossy().as_ref(),
             "--ui-dir",
             ui_dir.to_string_lossy().as_ref(),
         ])
@@ -289,7 +289,7 @@ fn pick_port(preferred: u16) -> Result<u16, String> {
     }
 
     Err(format!(
-        "backend port {port} is not available. Edit opencode-studio.toml to change the port, or stop the other process using it."
+        "backend port {port} is not available. Edit the desktop runtime config file (opencode-studio.toml) to change the port, or stop the other process using it."
     ))
 }
 
