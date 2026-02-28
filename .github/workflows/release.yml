@@ -221,7 +221,57 @@ jobs:
 
       - name: Validate native target mapping
         if: matrix.native == true
-        run: python scripts/assert_native_target.py ${{ matrix.target }}
+        shell: bash
+        run: |
+          python - "${{ matrix.target }}" <<'PY'
+          import platform
+          import sys
+
+          ARCH_MAP = {
+              "x86_64": "x86_64",
+              "amd64": "x86_64",
+              "aarch64": "aarch64",
+              "arm64": "aarch64",
+              "armv7l": "armv7",
+              "armv7": "armv7",
+          }
+
+          OS_MAP = {
+              "linux": "linux",
+              "darwin": "darwin",
+              "windows": "windows",
+          }
+
+          target = sys.argv[1]
+
+          if "windows" in target:
+              t_os = "windows"
+          elif "apple-darwin" in target:
+              t_os = "darwin"
+          elif "linux" in target:
+              t_os = "linux"
+          else:
+              t_os = "unknown"
+
+          t_arch = ARCH_MAP.get(target.split("-")[0], target.split("-")[0])
+          h_os = OS_MAP.get(platform.system().lower(), platform.system().lower())
+          h_arch = ARCH_MAP.get(platform.machine().lower(), platform.machine().lower())
+
+          errors = []
+          if t_os == "unknown":
+              errors.append(f"unsupported target OS in triple: {target}")
+          if t_os != h_os:
+              errors.append(f"target OS {t_os} does not match runner OS {h_os}")
+          if t_arch != h_arch:
+              errors.append(f"target arch {t_arch} does not match runner arch {h_arch}")
+
+          if errors:
+              for err in errors:
+                  print(f"ERROR: {err}", file=sys.stderr)
+              raise SystemExit(1)
+
+          print(f"OK: native target validation passed ({target} on {h_os}/{h_arch})")
+          PY
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -309,7 +359,57 @@ jobs:
           ref: ${{ matrix.ref }}
 
       - name: Validate native target mapping
-        run: python scripts/assert_native_target.py ${{ matrix.target }}
+        shell: bash
+        run: |
+          python - "${{ matrix.target }}" <<'PY'
+          import platform
+          import sys
+
+          ARCH_MAP = {
+              "x86_64": "x86_64",
+              "amd64": "x86_64",
+              "aarch64": "aarch64",
+              "arm64": "aarch64",
+              "armv7l": "armv7",
+              "armv7": "armv7",
+          }
+
+          OS_MAP = {
+              "linux": "linux",
+              "darwin": "darwin",
+              "windows": "windows",
+          }
+
+          target = sys.argv[1]
+
+          if "windows" in target:
+              t_os = "windows"
+          elif "apple-darwin" in target:
+              t_os = "darwin"
+          elif "linux" in target:
+              t_os = "linux"
+          else:
+              t_os = "unknown"
+
+          t_arch = ARCH_MAP.get(target.split("-")[0], target.split("-")[0])
+          h_os = OS_MAP.get(platform.system().lower(), platform.system().lower())
+          h_arch = ARCH_MAP.get(platform.machine().lower(), platform.machine().lower())
+
+          errors = []
+          if t_os == "unknown":
+              errors.append(f"unsupported target OS in triple: {target}")
+          if t_os != h_os:
+              errors.append(f"target OS {t_os} does not match runner OS {h_os}")
+          if t_arch != h_arch:
+              errors.append(f"target arch {t_arch} does not match runner arch {h_arch}")
+
+          if errors:
+              for err in errors:
+                  print(f"ERROR: {err}", file=sys.stderr)
+              raise SystemExit(1)
+
+          print(f"OK: native target validation passed ({target} on {h_os}/{h_arch})")
+          PY
 
       - name: Install Linux deps (Tauri)
         if: startsWith(matrix.os, 'ubuntu-')
@@ -593,7 +693,57 @@ jobs:
           ref: ${{ matrix.ref }}
 
       - name: Validate native target mapping
-        run: python scripts/assert_native_target.py ${{ matrix.target }}
+        shell: bash
+        run: |
+          python - "${{ matrix.target }}" <<'PY'
+          import platform
+          import sys
+
+          ARCH_MAP = {
+              "x86_64": "x86_64",
+              "amd64": "x86_64",
+              "aarch64": "aarch64",
+              "arm64": "aarch64",
+              "armv7l": "armv7",
+              "armv7": "armv7",
+          }
+
+          OS_MAP = {
+              "linux": "linux",
+              "darwin": "darwin",
+              "windows": "windows",
+          }
+
+          target = sys.argv[1]
+
+          if "windows" in target:
+              t_os = "windows"
+          elif "apple-darwin" in target:
+              t_os = "darwin"
+          elif "linux" in target:
+              t_os = "linux"
+          else:
+              t_os = "unknown"
+
+          t_arch = ARCH_MAP.get(target.split("-")[0], target.split("-")[0])
+          h_os = OS_MAP.get(platform.system().lower(), platform.system().lower())
+          h_arch = ARCH_MAP.get(platform.machine().lower(), platform.machine().lower())
+
+          errors = []
+          if t_os == "unknown":
+              errors.append(f"unsupported target OS in triple: {target}")
+          if t_os != h_os:
+              errors.append(f"target OS {t_os} does not match runner OS {h_os}")
+          if t_arch != h_arch:
+              errors.append(f"target arch {t_arch} does not match runner arch {h_arch}")
+
+          if errors:
+              for err in errors:
+                  print(f"ERROR: {err}", file=sys.stderr)
+              raise SystemExit(1)
+
+          print(f"OK: native target validation passed ({target} on {h_os}/{h_arch})")
+          PY
 
       - name: Install Linux deps (Tauri)
         if: startsWith(matrix.os, 'ubuntu-')

@@ -1,12 +1,6 @@
 name: Tauri Wrapper Matrix
 
 on:
-  push:
-    paths:
-      - ".github/workflows/tauri-wrapper-matrix.yml"
-      - "desktop/**"
-      - "Cargo.lock"
-      - "scripts/assert_native_target.py"
   workflow_dispatch:
 
 permissions:
