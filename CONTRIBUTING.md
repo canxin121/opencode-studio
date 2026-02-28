@@ -25,7 +25,15 @@ Rust server:
 cargo test -q --manifest-path server/Cargo.toml
 ```
 
+Version updates:
+
+```bash
+python3 scripts/version_sync.py set <version>
+python3 scripts/version_sync.py check
+```
+
 ## Pull requests
 
 - Keep PRs small and focused; explain the why.
 - Include how you verified the change (commands + expected behavior).
+- Local verification must include `python3 scripts/version_sync.py check`.

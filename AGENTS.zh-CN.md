@@ -12,6 +12,12 @@
 - 任何代码变更在提交前都应满足以下检查。
 - 不得通过降低标准绕过检查（如移除 `--locked`、取消 `-D warnings`）。
 
+## 版本更新
+
+- 更新项目版本号时，必须使用 `scripts/` 目录下的 Python 脚本，不要手动改各清单文件。
+- 命令：`python3 scripts/version_sync.py set <version>`（示例：`python3 scripts/version_sync.py set 0.1.0`）。
+- 版本更新后，本地校验必须包含 `python3 scripts/version_sync.py check`。
+
 ## 必过检查
 
 ### 版本一致性（对应 CI job: `version`）

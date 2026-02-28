@@ -12,6 +12,12 @@ If this file and CI config diverge, CI is the source of truth.
 - Any code change should satisfy the checks below before commit.
 - Do not bypass checks by lowering standards (for example removing `--locked` or `-D warnings`).
 
+## Version Updates
+
+- When updating project version numbers, use the Python script under `scripts/` instead of manually editing manifests.
+- Command: `python3 scripts/version_sync.py set <version>` (example: `python3 scripts/version_sync.py set 0.1.0`).
+- After updating versions, run `python3 scripts/version_sync.py check` as part of local validation.
+
 ## Required Checks
 
 ### Version consistency (CI job: `version`)
