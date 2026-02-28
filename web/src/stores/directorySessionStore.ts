@@ -45,6 +45,7 @@ import {
   RUNNING_INDEX_DEFAULT_LIMIT,
   RUNNING_INDEX_MAX_ITEMS,
   type DirectoriesPageWire,
+  type ChatSidebarStateWire,
   type DirectorySessionPageState,
   type DirectorySessionTreeHint,
   type DirectorySessionsBootstrapWire,
@@ -86,6 +87,7 @@ import {
 import { createStringRefreshQueue } from '@/stores/directorySessions/sidebarRefreshQueue'
 import { runNonCriticalSidebarHydration } from '@/stores/directorySessions/bootstrapHydration'
 import {
+  SIDEBAR_STATE_ENDPOINT,
   SIDEBAR_BOOTSTRAP_ENDPOINT,
   SNAPSHOT_SAVE_DEBOUNCE_MS,
   UI_PREFS_ENDPOINT,
@@ -536,6 +538,71 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     // an authoritative body convergence.
     persistUiPrefs({ remote: false })
     return true
+  }
+
+  function adoptAuthoritativeUiPrefs(incomingRaw: Partial<ChatSidebarUiPrefs> | null | undefined) {
+    const incoming = normalizeUiPrefs(incomingRaw)
+    uiPrefs.value = incoming
+    uiPrefsLocalRevision = 0
+    uiPrefsAckedRevision = 0
+    markUiPrefsConverged(incoming)
+    persistUiPrefs({ remote: false })
+  }
+
+  function normalizePagedIndexTotal(rawTotal: number | undefined, fallback: number): number {
+    if (typeof rawTotal === 'number' && Number.isFinite(rawTotal)) {
+      return Math.max(0, Math.floor(rawTotal))
+    }
+    return Math.max(0, Math.floor(fallback))
+  }
+
+  function applyRecentIndexPageWire(pageRaw: JsonValue) {
+    const page = asRecord(pageRaw)
+    const list = Array.isArray(page?.items) ? page.items : []
+    const normalized = list
+      .map((item) => normalizeRecentIndexItem(item as RecentIndexWireItem))
+      .filter((item): item is RecentIndexEntry => Boolean(item))
+
+    normalized.sort((a, b) => {
+      const diff = b.updatedAt - a.updatedAt
+      if (diff !== 0) return diff
+      return a.sessionId.localeCompare(b.sessionId)
+    })
+
+    recentIndex.value = normalized.slice(0, RECENT_INDEX_MAX_ITEMS)
+    recentIndexTotal.value = Math.min(
+      RECENT_INDEX_MAX_ITEMS,
+      Math.max(
+        normalizePagedIndexTotal(page?.total as number | undefined, recentIndex.value.length),
+        recentIndex.value.length,
+      ),
+    )
+  }
+
+  function applyRunningIndexPageWire(pageRaw: JsonValue) {
+    const page = asRecord(pageRaw)
+    const list = Array.isArray(page?.items) ? page.items : []
+    const normalized = list
+      .map((item) => normalizeRunningIndexItem(item as RunningIndexWireItem))
+      .filter((item): item is RunningIndexEntry => Boolean(item))
+
+    normalized.sort((a, b) => {
+      const diff = b.updatedAt - a.updatedAt
+      if (diff !== 0) return diff
+      return a.sessionId.localeCompare(b.sessionId)
+    })
+
+    runningIndex.value = normalized
+    runningIndexTotal.value = Math.max(
+      normalizePagedIndexTotal(page?.total as number | undefined, normalized.length),
+      normalized.length,
+    )
+
+    const nextRuntime = { ...runtimeBySessionId.value }
+    for (const item of normalized) {
+      nextRuntime[item.sessionId] = mergeRuntimeState(nextRuntime[item.sessionId], item.runtime)
+    }
+    runtimeBySessionId.value = nextRuntime
   }
 
   function scheduleUiPrefsRemotePersist() {
@@ -2436,145 +2503,289 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     }
   }
 
-  async function revalidateFromApi(opts?: { limitPerDirectory?: number }): Promise<boolean> {
-    loading.value = true
-    error.value = null
+  async function revalidateFromLegacyBootstrap(opts?: { limitPerDirectory?: number }): Promise<void> {
     const limit =
       typeof opts?.limitPerDirectory === 'number' && Number.isFinite(opts.limitPerDirectory)
         ? Math.max(1, Math.floor(opts.limitPerDirectory))
         : 10
 
+    const collapsedSet = new Set(
+      (uiPrefs.value.collapsedDirectoryIds || []).map((id) => String(id || '').trim()).filter(Boolean),
+    )
+    const expandedDirectoryIds = Array.from(
+      new Set(
+        visibleDirectories.value.map((entry) => entry.id.trim()).filter((id) => Boolean(id) && !collapsedSet.has(id)),
+      ),
+    )
+    const bootstrapParams = new URLSearchParams()
+    bootstrapParams.set('limitPerDirectory', String(limit))
+    bootstrapParams.set('expandedDirectoryIds', expandedDirectoryIds.join(','))
+
+    const bootstrap = await apiJson<DirectorySessionsBootstrapWire>(
+      `${SIDEBAR_BOOTSTRAP_ENDPOINT}?${bootstrapParams.toString()}`,
+    )
+    lastSidebarPatchSeq = resolveSidebarSeqAfterBootstrap({
+      currentSeq: lastSidebarPatchSeq,
+      bootstrapSeq: bootstrap?.seq,
+      outOfSync: sidebarPatchOutOfSync,
+      sawReset: sidebarPatchSawSeqReset,
+    })
+
+    const entries = normalizeDirectories(bootstrap?.directoryEntries || [])
+    setDirectoryEntries(entries)
+
+    const directoryIdSet = new Set(entries.map((entry) => entry.id))
+    const pagesByDirectoryId = asRecord(bootstrap?.sessionSummariesByDirectoryId) || {}
+    const runtimePayload = asRecord(bootstrap?.runtimeBySessionId) || {}
+
+    const nextPageByDirectoryId: Record<string, DirectorySessionPageState> = {}
+    const nextSessionSummariesById: Record<string, SessionSummarySnapshot> = {}
+    const nextDirectoryIdBySessionId: Record<string, string> = {}
+    const nextAggregateAttemptedByDirectoryId: Record<string, boolean> = {}
+
+    for (const entry of entries) {
+      if (!Object.prototype.hasOwnProperty.call(pagesByDirectoryId, entry.id)) continue
+      const page = parseSessionPagePayload(pagesByDirectoryId[entry.id], limit)
+      const degraded = isDegradedConsistency(page.consistency)
+      if (degraded) {
+        scheduleAggregateReloadRetry(
+          entry.id,
+          entry.path,
+          {
+            pinnedSessionIds: uiPrefs.value.pinnedSessionIds || [],
+            page: 0,
+            pageSize: limit,
+            includeWorktrees: false,
+            force: true,
+          },
+          retryDelayFromConsistency(page.consistency, 220),
+        )
+      } else {
+        clearAggregateReloadRetry(entry.id)
+      }
+
+      const existingPage = sessionPageByDirectoryId.value[entry.id]
+      const preserveExisting =
+        degraded &&
+        page.sessions.length === 0 &&
+        Array.isArray(existingPage?.sessions) &&
+        existingPage.sessions.length > 0
+
+      const effectivePage = preserveExisting && existingPage ? existingPage : page
+      nextPageByDirectoryId[entry.id] = effectivePage
+      nextAggregateAttemptedByDirectoryId[entry.id] = true
+      for (const session of effectivePage.sessions) {
+        const sid = readObjectId(session)
+        if (!sid) continue
+        nextSessionSummariesById[sid] = session
+        const sessionDirectory = readSessionDirectory(session)
+        nextDirectoryIdBySessionId[sid] = directoryIdForPath(sessionDirectory) || entry.id
+      }
+    }
+
+    sessionPageByDirectoryId.value = nextPageByDirectoryId
+    sessionSummariesById.value = nextSessionSummariesById
+    directoryIdBySessionId.value = nextDirectoryIdBySessionId
+    aggregateAttemptedByDirectoryId.value = nextAggregateAttemptedByDirectoryId
+
+    pinnedSessionIdsByDirectoryId.value = Object.fromEntries(
+      Object.entries(pinnedSessionIdsByDirectoryId.value).filter(([directoryId]) => directoryIdSet.has(directoryId)),
+    )
+    pinnedSummaryKeyByDirectoryId.value = Object.fromEntries(
+      Object.entries(pinnedSummaryKeyByDirectoryId.value).filter(([directoryId]) => directoryIdSet.has(directoryId)),
+    )
+    worktreePathsByDirectoryId.value = Object.fromEntries(
+      Object.entries(worktreePathsByDirectoryId.value).filter(([directoryId]) => directoryIdSet.has(directoryId)),
+    )
+
+    const existingRuntime = runtimeBySessionId.value
+    runtimeBySessionId.value = Object.fromEntries(
+      Object.entries(runtimePayload).map(([sid, runtime]) => {
+        return [sid, mergeRuntimeState(existingRuntime[sid], toRuntimeSnapshot(runtime))]
+      }),
+    )
+
+    rootsByDirectoryId.value = {}
+    childrenByParentSessionId.value = {}
+    for (const entry of entries) {
+      rebuildDirectoryTreeIndexes(entry.id)
+    }
+
+    scheduleSnapshotPersist()
+
+    // Core sidebar bootstrap succeeded: resume patch consumption immediately.
+    // (Footer indexes are best-effort and must not keep us frozen.)
+    sidebarPatchOutOfSync = false
+    sidebarPatchSawSeqReset = false
+    stopSidebarPatchRetry()
+
+    // Footer/pinned hydration is non-critical and must not delay first render.
+    runNonCriticalSidebarHydration(
+      [
+        () => loadRecentIndexSlice({ offset: 0, limit: RECENT_INDEX_DEFAULT_LIMIT, append: false }),
+        () => loadRunningIndexSlice({ offset: 0, limit: RUNNING_INDEX_DEFAULT_LIMIT, append: false }),
+      ],
+      [
+        () => {
+          const recentPage = Math.max(0, Math.floor(uiPrefs.value.recentSessionsPage || 0))
+          return ensureRecentSessionRowsLoaded({ page: recentPage, pageSize: FOOTER_PAGE_SIZE_DEFAULT })
+        },
+        () => {
+          const runningPage = Math.max(0, Math.floor(uiPrefs.value.runningSessionsPage || 0))
+          return ensureRunningSessionRowsLoaded({ page: runningPage, pageSize: FOOTER_PAGE_SIZE_DEFAULT })
+        },
+        () => ensurePinnedSessionRowsLoaded(uiPrefs.value.pinnedSessionIds || []),
+      ],
+    )
+  }
+
+  async function revalidateFromStateApi(opts?: { limitPerDirectory?: number }): Promise<void> {
+    const state = await apiJson<ChatSidebarStateWire>(SIDEBAR_STATE_ENDPOINT)
+    const stateRecord = asRecord((state as JsonValue) || undefined) || {}
+    if (!Object.prototype.hasOwnProperty.call(stateRecord, 'preferences')) {
+      throw new Error('chat sidebar state payload is missing preferences')
+    }
+    adoptAuthoritativeUiPrefs((stateRecord.preferences as Partial<ChatSidebarUiPrefs>) || undefined)
+
+    const limit =
+      typeof opts?.limitPerDirectory === 'number' && Number.isFinite(opts.limitPerDirectory)
+        ? Math.max(1, Math.floor(opts.limitPerDirectory))
+        : 10
+
+    const directoriesPage = asRecord(stateRecord.directoriesPage as JsonValue)
+    const entries = normalizeDirectories((directoriesPage?.items as JsonValue) || [])
+    setDirectoryEntries(entries)
+
+    directoryPageRows.value = entries
+    directoryPageTotal.value =
+      typeof directoriesPage?.total === 'number' && Number.isFinite(directoriesPage.total)
+        ? Math.max(0, Math.floor(directoriesPage.total))
+        : entries.length
+    const sessionPageLimit =
+      typeof directoriesPage?.limit === 'number' && Number.isFinite(directoriesPage.limit) && directoriesPage.limit > 0
+        ? Math.max(1, Math.floor(directoriesPage.limit))
+        : limit
+
+    const directoryIdSet = new Set(entries.map((entry) => entry.id))
+    const pagesByDirectoryId = asRecord(stateRecord.sessionPagesByDirectoryId as JsonValue) || {}
+    const runtimePayload = asRecord(stateRecord.runtimeBySessionId as JsonValue) || {}
+
+    const nextPageByDirectoryId: Record<string, DirectorySessionPageState> = {}
+    const nextSessionSummariesById: Record<string, SessionSummarySnapshot> = {}
+    const nextDirectoryIdBySessionId: Record<string, string> = {}
+    const nextAggregateAttemptedByDirectoryId: Record<string, boolean> = {}
+
+    for (const entry of entries) {
+      if (!Object.prototype.hasOwnProperty.call(pagesByDirectoryId, entry.id)) continue
+      const page = parseSessionPagePayload(pagesByDirectoryId[entry.id], sessionPageLimit)
+      const degraded = isDegradedConsistency(page.consistency)
+      if (degraded) {
+        scheduleAggregateReloadRetry(
+          entry.id,
+          entry.path,
+          {
+            pinnedSessionIds: uiPrefs.value.pinnedSessionIds || [],
+            page: 0,
+            pageSize: sessionPageLimit,
+            includeWorktrees: false,
+            force: true,
+          },
+          retryDelayFromConsistency(page.consistency, 220),
+        )
+      } else {
+        clearAggregateReloadRetry(entry.id)
+      }
+
+      const existingPage = sessionPageByDirectoryId.value[entry.id]
+      const preserveExisting =
+        degraded &&
+        page.sessions.length === 0 &&
+        Array.isArray(existingPage?.sessions) &&
+        existingPage.sessions.length > 0
+      const effectivePage = preserveExisting && existingPage ? existingPage : page
+
+      nextPageByDirectoryId[entry.id] = effectivePage
+      nextAggregateAttemptedByDirectoryId[entry.id] = true
+      for (const session of effectivePage.sessions) {
+        const sid = readObjectId(session)
+        if (!sid) continue
+        nextSessionSummariesById[sid] = session
+        const sessionDirectory = readSessionDirectory(session)
+        nextDirectoryIdBySessionId[sid] = directoryIdForPath(sessionDirectory) || entry.id
+      }
+    }
+
+    sessionPageByDirectoryId.value = nextPageByDirectoryId
+    sessionSummariesById.value = nextSessionSummariesById
+    directoryIdBySessionId.value = nextDirectoryIdBySessionId
+    aggregateAttemptedByDirectoryId.value = nextAggregateAttemptedByDirectoryId
+
+    pinnedSessionIdsByDirectoryId.value = Object.fromEntries(
+      Object.entries(pinnedSessionIdsByDirectoryId.value).filter(([directoryId]) => directoryIdSet.has(directoryId)),
+    )
+    pinnedSummaryKeyByDirectoryId.value = Object.fromEntries(
+      Object.entries(pinnedSummaryKeyByDirectoryId.value).filter(([directoryId]) => directoryIdSet.has(directoryId)),
+    )
+    worktreePathsByDirectoryId.value = Object.fromEntries(
+      Object.entries(worktreePathsByDirectoryId.value).filter(([directoryId]) => directoryIdSet.has(directoryId)),
+    )
+
+    const existingRuntime = runtimeBySessionId.value
+    runtimeBySessionId.value = Object.fromEntries(
+      Object.entries(runtimePayload).map(([sid, runtime]) => [
+        sid,
+        mergeRuntimeState(existingRuntime[sid], toRuntimeSnapshot(runtime)),
+      ]),
+    )
+
+    rootsByDirectoryId.value = {}
+    childrenByParentSessionId.value = {}
+    for (const entry of entries) {
+      rebuildDirectoryTreeIndexes(entry.id)
+    }
+
+    applyRecentIndexPageWire(stateRecord.recentPage as JsonValue)
+    applyRunningIndexPageWire(stateRecord.runningPage as JsonValue)
+
+    scheduleSnapshotPersist()
+
+    lastSidebarPatchSeq = resolveSidebarSeqAfterBootstrap({
+      currentSeq: lastSidebarPatchSeq,
+      bootstrapSeq: state?.seq,
+      outOfSync: sidebarPatchOutOfSync,
+      sawReset: sidebarPatchSawSeqReset,
+    })
+    sidebarPatchOutOfSync = false
+    sidebarPatchSawSeqReset = false
+    stopSidebarPatchRetry()
+
+    runNonCriticalSidebarHydration(
+      [],
+      [
+        () => {
+          const recentPage = Math.max(0, Math.floor(uiPrefs.value.recentSessionsPage || 0))
+          return ensureRecentSessionRowsLoaded({ page: recentPage, pageSize: FOOTER_PAGE_SIZE_DEFAULT })
+        },
+        () => {
+          const runningPage = Math.max(0, Math.floor(uiPrefs.value.runningSessionsPage || 0))
+          return ensureRunningSessionRowsLoaded({ page: runningPage, pageSize: FOOTER_PAGE_SIZE_DEFAULT })
+        },
+        () => ensurePinnedSessionRowsLoaded(uiPrefs.value.pinnedSessionIds || []),
+      ],
+    )
+  }
+
+  async function revalidateFromApi(opts?: { limitPerDirectory?: number }): Promise<boolean> {
+    loading.value = true
+    error.value = null
     try {
-      const collapsedSet = new Set(
-        (uiPrefs.value.collapsedDirectoryIds || []).map((id) => String(id || '').trim()).filter(Boolean),
-      )
-      const expandedDirectoryIds = Array.from(
-        new Set(
-          visibleDirectories.value.map((entry) => entry.id.trim()).filter((id) => Boolean(id) && !collapsedSet.has(id)),
-        ),
-      )
-      const bootstrapParams = new URLSearchParams()
-      bootstrapParams.set('limitPerDirectory', String(limit))
-      bootstrapParams.set('expandedDirectoryIds', expandedDirectoryIds.join(','))
-
-      const bootstrap = await apiJson<DirectorySessionsBootstrapWire>(
-        `${SIDEBAR_BOOTSTRAP_ENDPOINT}?${bootstrapParams.toString()}`,
-      )
-      lastSidebarPatchSeq = resolveSidebarSeqAfterBootstrap({
-        currentSeq: lastSidebarPatchSeq,
-        bootstrapSeq: bootstrap?.seq,
-        outOfSync: sidebarPatchOutOfSync,
-        sawReset: sidebarPatchSawSeqReset,
-      })
-
-      const entries = normalizeDirectories(bootstrap?.directoryEntries || [])
-      setDirectoryEntries(entries)
-
-      const directoryIdSet = new Set(entries.map((entry) => entry.id))
-      const pagesByDirectoryId = asRecord(bootstrap?.sessionSummariesByDirectoryId) || {}
-      const runtimePayload = asRecord(bootstrap?.runtimeBySessionId) || {}
-
-      const nextPageByDirectoryId: Record<string, DirectorySessionPageState> = {}
-      const nextSessionSummariesById: Record<string, SessionSummarySnapshot> = {}
-      const nextDirectoryIdBySessionId: Record<string, string> = {}
-      const nextAggregateAttemptedByDirectoryId: Record<string, boolean> = {}
-
-      for (const entry of entries) {
-        if (!Object.prototype.hasOwnProperty.call(pagesByDirectoryId, entry.id)) continue
-        const page = parseSessionPagePayload(pagesByDirectoryId[entry.id], limit)
-        const degraded = isDegradedConsistency(page.consistency)
-        if (degraded) {
-          scheduleAggregateReloadRetry(
-            entry.id,
-            entry.path,
-            {
-              pinnedSessionIds: uiPrefs.value.pinnedSessionIds || [],
-              page: 0,
-              pageSize: limit,
-              includeWorktrees: false,
-              force: true,
-            },
-            retryDelayFromConsistency(page.consistency, 220),
-          )
-        } else {
-          clearAggregateReloadRetry(entry.id)
-        }
-
-        const existingPage = sessionPageByDirectoryId.value[entry.id]
-        const preserveExisting =
-          degraded &&
-          page.sessions.length === 0 &&
-          Array.isArray(existingPage?.sessions) &&
-          existingPage.sessions.length > 0
-
-        const effectivePage = preserveExisting && existingPage ? existingPage : page
-        nextPageByDirectoryId[entry.id] = effectivePage
-        nextAggregateAttemptedByDirectoryId[entry.id] = true
-        for (const session of effectivePage.sessions) {
-          const sid = readObjectId(session)
-          if (!sid) continue
-          nextSessionSummariesById[sid] = session
-          const sessionDirectory = readSessionDirectory(session)
-          nextDirectoryIdBySessionId[sid] = directoryIdForPath(sessionDirectory) || entry.id
-        }
+      try {
+        await revalidateFromStateApi(opts)
+        return true
+      } catch {
+        await revalidateFromLegacyBootstrap(opts)
+        return true
       }
-
-      sessionPageByDirectoryId.value = nextPageByDirectoryId
-      sessionSummariesById.value = nextSessionSummariesById
-      directoryIdBySessionId.value = nextDirectoryIdBySessionId
-      aggregateAttemptedByDirectoryId.value = nextAggregateAttemptedByDirectoryId
-
-      pinnedSessionIdsByDirectoryId.value = Object.fromEntries(
-        Object.entries(pinnedSessionIdsByDirectoryId.value).filter(([directoryId]) => directoryIdSet.has(directoryId)),
-      )
-      pinnedSummaryKeyByDirectoryId.value = Object.fromEntries(
-        Object.entries(pinnedSummaryKeyByDirectoryId.value).filter(([directoryId]) => directoryIdSet.has(directoryId)),
-      )
-      worktreePathsByDirectoryId.value = Object.fromEntries(
-        Object.entries(worktreePathsByDirectoryId.value).filter(([directoryId]) => directoryIdSet.has(directoryId)),
-      )
-
-      const existingRuntime = runtimeBySessionId.value
-      runtimeBySessionId.value = Object.fromEntries(
-        Object.entries(runtimePayload).map(([sid, runtime]) => {
-          return [sid, mergeRuntimeState(existingRuntime[sid], toRuntimeSnapshot(runtime))]
-        }),
-      )
-
-      rootsByDirectoryId.value = {}
-      childrenByParentSessionId.value = {}
-      for (const entry of entries) {
-        rebuildDirectoryTreeIndexes(entry.id)
-      }
-
-      scheduleSnapshotPersist()
-
-      // Core sidebar bootstrap succeeded: resume patch consumption immediately.
-      // (Footer indexes are best-effort and must not keep us frozen.)
-      sidebarPatchOutOfSync = false
-      sidebarPatchSawSeqReset = false
-      stopSidebarPatchRetry()
-
-      // Footer/pinned hydration is non-critical and must not delay first render.
-      runNonCriticalSidebarHydration(
-        [
-          () => loadRecentIndexSlice({ offset: 0, limit: RECENT_INDEX_DEFAULT_LIMIT, append: false }),
-          () => loadRunningIndexSlice({ offset: 0, limit: RUNNING_INDEX_DEFAULT_LIMIT, append: false }),
-        ],
-        [
-          () => {
-            const recentPage = Math.max(0, Math.floor(uiPrefs.value.recentSessionsPage || 0))
-            return ensureRecentSessionRowsLoaded({ page: recentPage, pageSize: FOOTER_PAGE_SIZE_DEFAULT })
-          },
-          () => {
-            const runningPage = Math.max(0, Math.floor(uiPrefs.value.runningSessionsPage || 0))
-            return ensureRunningSessionRowsLoaded({ page: runningPage, pageSize: FOOTER_PAGE_SIZE_DEFAULT })
-          },
-          () => ensurePinnedSessionRowsLoaded(uiPrefs.value.pinnedSessionIds || []),
-        ],
-      )
-
-      return true
     } catch (err) {
       error.value = err instanceof Error ? err.message : String(err)
       return false
@@ -2584,9 +2795,22 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
   }
 
   async function bootstrapWithStaleWhileRevalidate() {
-    await hydrateFromSnapshot()
-    await revalidateUiPrefsFromApi()
-    await revalidateFromApi()
+    loading.value = true
+    error.value = null
+    try {
+      try {
+        await revalidateFromStateApi()
+        return
+      } catch {
+        await hydrateFromSnapshot()
+        await revalidateUiPrefsFromApi()
+        await revalidateFromLegacyBootstrap()
+      }
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : String(err)
+    } finally {
+      loading.value = false
+    }
   }
 
   async function resetAllPersistedState() {

@@ -25,6 +25,15 @@ export type DirectorySessionsBootstrapWire = {
   seq?: number
 }
 
+export type ChatSidebarStateWire = {
+  preferences?: JsonValue
+  seq?: number
+  directoriesPage?: JsonValue
+  sessionPagesByDirectoryId?: JsonValue
+  recentPage?: JsonValue
+  runningPage?: JsonValue
+}
+
 export type PagedIndexWire<T> = {
   items?: T[]
   total?: number
