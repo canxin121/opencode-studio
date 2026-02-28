@@ -142,7 +142,6 @@ jobs:
   backend:
     name: Backend bin (${{ matrix.target }})
     needs: create-release
-    if: ${{ !((github.event_name == 'workflow_dispatch' && github.event.inputs.tag == 'v0.1.0') || (github.event_name != 'workflow_dispatch' && github.ref_name == 'v0.1.0')) || matrix.legacy_supported }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     strategy:
@@ -151,62 +150,50 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            legacy_supported: true
             native: true
             build_tool: cargo
           - os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
-            legacy_supported: false
             native: true
             build_tool: cargo
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            legacy_supported: true
             native: true
             build_tool: cargo
           - os: windows-11-arm
             target: aarch64-pc-windows-msvc
-            legacy_supported: false
             native: true
             build_tool: cargo
           - os: macos-14
             target: aarch64-apple-darwin
-            legacy_supported: true
             native: true
             build_tool: cargo
           - os: macos-15-intel
             target: x86_64-apple-darwin
-            legacy_supported: true
             native: true
             build_tool: cargo
           - os: ubuntu-latest
             target: x86_64-unknown-linux-musl
-            legacy_supported: false
             native: false
             build_tool: cross
           - os: ubuntu-latest
             target: aarch64-unknown-linux-musl
-            legacy_supported: false
             native: false
             build_tool: cross
           - os: ubuntu-latest
             target: armv7-unknown-linux-musleabihf
-            legacy_supported: false
             native: false
             build_tool: cross
           - os: ubuntu-latest
             target: i686-unknown-linux-musl
-            legacy_supported: false
             native: false
             build_tool: cross
           - os: ubuntu-latest
             target: armv7-unknown-linux-gnueabihf
-            legacy_supported: false
             native: false
             build_tool: cross
           - os: ubuntu-latest
             target: i686-unknown-linux-gnu
-            legacy_supported: false
             native: false
             build_tool: cross
     steps:
@@ -272,7 +259,7 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Install cross
-        if: matrix.build_tool == 'cross'
+        if: ${{ matrix.build_tool == 'cross' && !((github.event_name == 'workflow_dispatch' && github.event.inputs.tag == 'v0.1.0') || (github.event_name != 'workflow_dispatch' && github.ref_name == 'v0.1.0')) }}
         run: cargo install cross --locked --version 0.2.5
 
       - name: Cache Rust builds
@@ -284,6 +271,7 @@ jobs:
           add-job-id-key: false
 
       - name: Build backend release artifact
+        if: ${{ matrix.build_tool != 'cross' || !((github.event_name == 'workflow_dispatch' && github.event.inputs.tag == 'v0.1.0') || (github.event_name != 'workflow_dispatch' && github.ref_name == 'v0.1.0')) }}
         shell: bash
         run: |
           set -euo pipefail
@@ -371,6 +359,7 @@ jobs:
           ls -l "$OUT_DIR"
 
       - name: Upload backend assets to GitHub Release
+        if: ${{ matrix.build_tool != 'cross' || !((github.event_name == 'workflow_dispatch' && github.event.inputs.tag == 'v0.1.0') || (github.event_name != 'workflow_dispatch' && github.ref_name == 'v0.1.0')) }}
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
@@ -378,6 +367,7 @@ jobs:
             release-assets/opencode-studio-backend-${{ matrix.target }}-${{ env.RELEASE_TAG }}.*
 
       - name: Upload backend artifact
+        if: ${{ matrix.build_tool != 'cross' || !((github.event_name == 'workflow_dispatch' && github.event.inputs.tag == 'v0.1.0') || (github.event_name != 'workflow_dispatch' && github.ref_name == 'v0.1.0')) }}
         uses: actions/upload-artifact@v6
         with:
           name: opencode-studio-backend-${{ matrix.target }}
@@ -387,7 +377,6 @@ jobs:
   desktop:
     name: Desktop (main, ${{ matrix.flavor }}, ${{ matrix.target }})
     needs: [web, backend]
-    if: ${{ !((github.event_name == 'workflow_dispatch' && github.event.inputs.tag == 'v0.1.0') || (github.event_name != 'workflow_dispatch' && github.ref_name == 'v0.1.0')) || matrix.legacy_supported }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     strategy:
@@ -396,37 +385,31 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            legacy_supported: true
             tauri: main
             suffix: ""
             flavor: full
           - os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
-            legacy_supported: false
             tauri: main
             suffix: ""
             flavor: full
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            legacy_supported: true
             tauri: main
             suffix: ""
             flavor: full
           - os: windows-11-arm
             target: aarch64-pc-windows-msvc
-            legacy_supported: false
             tauri: main
             suffix: ""
             flavor: full
           - os: macos-14
             target: aarch64-apple-darwin
-            legacy_supported: true
             tauri: main
             suffix: ""
             flavor: full
           - os: macos-15-intel
             target: x86_64-apple-darwin
-            legacy_supported: true
             tauri: main
             suffix: ""
             flavor: full
@@ -718,7 +701,6 @@ jobs:
   desktop-cef:
     name: Desktop (cef, ${{ matrix.flavor }}, ${{ matrix.target }})
     needs: [web, backend]
-    if: ${{ !((github.event_name == 'workflow_dispatch' && github.event.inputs.tag == 'v0.1.0') || (github.event_name != 'workflow_dispatch' && github.ref_name == 'v0.1.0')) || matrix.legacy_supported }}
     runs-on: ${{ matrix.os }}
     env:
       CARGO_TARGET_DIR: ${{ github.workspace }}/t-cef
@@ -729,37 +711,31 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            legacy_supported: true
             tauri: cef
             suffix: "-cef"
             flavor: full
           - os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
-            legacy_supported: false
             tauri: cef
             suffix: "-cef"
             flavor: full
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            legacy_supported: true
             tauri: cef
             suffix: "-cef"
             flavor: full
           - os: windows-11-arm
             target: aarch64-pc-windows-msvc
-            legacy_supported: false
             tauri: cef
             suffix: "-cef"
             flavor: full
           - os: macos-14
             target: aarch64-apple-darwin
-            legacy_supported: true
             tauri: cef
             suffix: "-cef"
             flavor: full
           - os: macos-15-intel
             target: x86_64-apple-darwin
-            legacy_supported: true
             tauri: cef
             suffix: "-cef"
             flavor: full
