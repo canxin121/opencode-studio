@@ -135,7 +135,6 @@ Architecture matrix used by `Package`:
 `Package` artifact naming strategy:
 
 - Backend archive: `opencode-studio-backend-<target>.tar.gz` (Unix) / `opencode-studio-backend-<target>.zip` (Windows)
-- Backend metadata: `opencode-studio-backend-<target>.json`
 - Desktop installers: `opencode-studio-desktop-<target><suffix>.<ext>`
 - Upload artifact names always include `<target>` so architecture is explicit.
 
@@ -170,7 +169,6 @@ Architecture matrix used by `Release`:
 - Backend archives (service artifacts):
   - `opencode-studio-backend-<target>-<tag>.tar.gz` (Unix)
   - `opencode-studio-backend-<target>-<tag>.zip` (Windows)
-  - metadata: `opencode-studio-backend-<target>-<tag>.json`
 - Desktop installers (installer artifacts):
   - `opencode-studio-desktop-<target><suffix>-<tag>.<ext>`
 

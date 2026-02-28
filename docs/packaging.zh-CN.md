@@ -132,7 +132,6 @@ cargo install tauri-cli --locked --git https://github.com/tauri-apps/tauri --bra
 `Package` 产物命名策略：
 
 - 后端归档：`opencode-studio-backend-<target>.tar.gz`（Unix）/ `opencode-studio-backend-<target>.zip`（Windows）
-- 后端元数据：`opencode-studio-backend-<target>.json`
 - 桌面安装包：`opencode-studio-desktop-<target><suffix>.<ext>`
 - 上传到 Actions 的 artifact 名称始终包含 `<target>`，可直接区分架构。
 
@@ -167,7 +166,6 @@ Release 场景：
 - 后端归档（服务端版本产物）：
   - `opencode-studio-backend-<target>-<tag>.tar.gz`（Unix）
   - `opencode-studio-backend-<target>-<tag>.zip`（Windows）
-  - 元数据：`opencode-studio-backend-<target>-<tag>.json`
 - 桌面安装包（安装包版本产物）：
   - `opencode-studio-desktop-<target><suffix>-<tag>.<ext>`
 

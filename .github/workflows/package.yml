@@ -172,7 +172,9 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: opencode-studio-backend-${{ matrix.target }}
-          path: release-assets/*
+          path: |
+            release-assets/opencode-studio-backend-${{ matrix.target }}.tar.gz
+            release-assets/opencode-studio-backend-${{ matrix.target }}.zip
           if-no-files-found: error
 
   desktop:

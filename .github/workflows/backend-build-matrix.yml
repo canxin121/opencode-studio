@@ -1,14 +1,6 @@
 name: Backend Build Matrix
 
 on:
-  push:
-    paths:
-      - ".github/workflows/backend-build-matrix.yml"
-      - ".github/workflows/package.yml"
-      - ".github/workflows/release.yml"
-      - "server/**"
-      - "scripts/build-backend-release.sh"
-      - "Cargo.lock"
   workflow_dispatch:
 
 permissions:

@@ -311,7 +311,6 @@ jobs:
           mkdir -p "$OUT_DIR"
           ARCHIVE_BASE="opencode-studio-backend-$TARGET_TRIPLE-$RELEASE_TAG"
           ARCHIVE_PATH="$OUT_DIR/$ARCHIVE_BASE.$ARCHIVE_EXT"
-          METADATA_PATH="$OUT_DIR/$ARCHIVE_BASE.json"
 
           PYTHON_BIN="$(command -v python3 || command -v python)"
           "$PYTHON_BIN" - "$ARCHIVE_EXT" "$BIN_PATH" "$BIN_NAME" "$ARCHIVE_PATH" <<'PY'
@@ -335,27 +334,6 @@ jobs:
                   tf.add(pathlib.Path(bin_path), arcname=bin_name)
           PY
 
-          "$PYTHON_BIN" - "$TARGET_TRIPLE" "$ARCHIVE_EXT" "$ARCHIVE_PATH" "$METADATA_PATH" <<'PY'
-          import json
-          import pathlib
-          import sys
-
-          target, archive_ext, archive_path, metadata_path = sys.argv[1:5]
-          parts = target.split("-")
-          arch = parts[0] if parts else "unknown"
-          os_name = "windows" if "windows" in target else "macos" if "apple" in target else "linux" if "linux" in target else "unknown"
-
-          metadata = {
-              "target": target,
-              "arch": arch,
-              "os": os_name,
-              "archive_format": archive_ext,
-              "archive_file": pathlib.Path(archive_path).name,
-          }
-
-          pathlib.Path(metadata_path).write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
-          PY
-
           ls -l "$OUT_DIR"
 
       - name: Upload backend assets to GitHub Release
@@ -364,14 +342,17 @@ jobs:
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           files: |
-            release-assets/opencode-studio-backend-${{ matrix.target }}-${{ env.RELEASE_TAG }}.*
+            release-assets/opencode-studio-backend-${{ matrix.target }}-${{ env.RELEASE_TAG }}.tar.gz
+            release-assets/opencode-studio-backend-${{ matrix.target }}-${{ env.RELEASE_TAG }}.zip
 
       - name: Upload backend artifact
         if: ${{ matrix.build_tool != 'cross' || !((github.event_name == 'workflow_dispatch' && github.event.inputs.tag == 'v0.1.0') || (github.event_name != 'workflow_dispatch' && github.ref_name == 'v0.1.0')) }}
         uses: actions/upload-artifact@v6
         with:
           name: opencode-studio-backend-${{ matrix.target }}
-          path: release-assets/opencode-studio-backend-${{ matrix.target }}-${{ env.RELEASE_TAG }}.*
+          path: |
+            release-assets/opencode-studio-backend-${{ matrix.target }}-${{ env.RELEASE_TAG }}.tar.gz
+            release-assets/opencode-studio-backend-${{ matrix.target }}-${{ env.RELEASE_TAG }}.zip
           if-no-files-found: error
 
   desktop:

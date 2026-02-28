@@ -126,27 +126,4 @@ else:
       tf.add(bin_path, arcname=bin_name)
 PY
 
-METADATA_PATH="$OUT_DIR/$ARCHIVE_BASE.json"
-python3 - "$TARGET_TRIPLE" "$ARCHIVE_EXT" "$ARCHIVE_PATH" "$METADATA_PATH" <<'PY'
-import json
-import pathlib
-import sys
-
-target, archive_ext, archive_path, metadata_path = sys.argv[1:5]
-parts = target.split("-")
-arch = parts[0] if parts else "unknown"
-os_name = "windows" if "windows" in target else "macos" if "apple" in target else "linux" if "linux" in target else "unknown"
-
-metadata = {
-    "target": target,
-    "arch": arch,
-    "os": os_name,
-    "archive_format": archive_ext,
-    "archive_file": pathlib.Path(archive_path).name,
-}
-
-pathlib.Path(metadata_path).write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
-PY
-
 echo "Done: $ARCHIVE_PATH"
-echo "Metadata: $METADATA_PATH"
