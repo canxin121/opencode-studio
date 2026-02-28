@@ -46,6 +46,7 @@ import {
   RUNNING_INDEX_MAX_ITEMS,
   type DirectoriesPageWire,
   type DirectorySessionPageState,
+  type DirectorySessionTreeHint,
   type DirectorySessionsBootstrapWire,
   type PagedIndexWire,
   type RecentIndexWireItem,
@@ -71,11 +72,19 @@ import { extractSessionId, readParentId, readUpdatedAt } from '@/stores/director
 import type { JsonObject as UnknownRecord, JsonValue } from '@/types/json'
 import {
   compareUiPrefsRecency,
+  type ChatSidebarPatchOp,
   normalizeUiPrefs,
   parseChatSidebarPatchOps,
   parseChatSidebarPreferencesPatchOps,
   uiPrefsBodyEquals,
 } from '@/stores/directorySessions/prefs'
+import {
+  parseSidebarPatchRefreshHint,
+  resolveSidebarPatchPlan,
+  type SidebarPatchRefreshHint,
+} from '@/stores/directorySessions/sidebarPatchPlanner'
+import { createStringRefreshQueue } from '@/stores/directorySessions/sidebarRefreshQueue'
+import { runNonCriticalSidebarHydration } from '@/stores/directorySessions/bootstrapHydration'
 import {
   SIDEBAR_BOOTSTRAP_ENDPOINT,
   SNAPSHOT_SAVE_DEBOUNCE_MS,
@@ -183,6 +192,14 @@ function readEventOps(evt: SseEvent): JsonValue[] {
   return Array.isArray(eventRecord?.ops) ? eventRecord.ops : []
 }
 
+function readEventPatchRefreshHint(evt: SseEvent): SidebarPatchRefreshHint | null {
+  const props = readEventProperties(evt)
+  const fromProps = parseSidebarPatchRefreshHint(props.hints as JsonValue)
+  if (fromProps) return fromProps
+  const eventRecord = asRecord(evt)
+  return parseSidebarPatchRefreshHint((eventRecord?.hints as JsonValue) || undefined)
+}
+
 function readRuntimeStatusType(value: JsonValue): SessionRuntimeState['statusType'] | null {
   const status = typeof value === 'string' ? value.trim() : ''
   if (status === 'busy' || status === 'retry' || status === 'idle') return status
@@ -257,6 +274,10 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
   // Note: delta rebase lives in uiPrefsRebase.ts for unit testing.
 
   const SSE_SEQ_GAP_THROTTLE_MS = 1500
+  const SIDEBAR_PATCH_REFRESH_THROTTLE_MS = 120
+  const SIDEBAR_PATCH_REFRESH_QUEUE_MAX = 64
+  const SIDEBAR_PATCH_REFRESH_ALL_KEY = '__all__'
+  const SIDEBAR_FOOTER_REFRESH_THROTTLE_MS = 180
   let lastSidebarPatchSeq = 0
   let lastSidebarPatchGapAt = 0
   let sidebarPatchOutOfSync = false
@@ -267,6 +288,15 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
   let uiPrefsPatchOutOfSync = false
   let uiPrefsPatchResyncInFlight = false
   let syncedAttentionSessionIds = new Set<string>()
+  const sidebarPatchRefreshQueue = createStringRefreshQueue({
+    maxItems: SIDEBAR_PATCH_REFRESH_QUEUE_MAX,
+  })
+  let sidebarPatchRefreshTimer: number | null = null
+  let sidebarPatchRefreshInFlight = false
+  let sidebarFooterRefreshTimer: number | null = null
+  let sidebarFooterRefreshInFlight = false
+  let sidebarFooterRefreshPendingRecent = false
+  let sidebarFooterRefreshPendingRunning = false
 
   const pinnedSummariesByDirectoryId = computed<Record<string, SessionSummarySnapshot[]>>(() => {
     const out: Record<string, SessionSummarySnapshot[]> = {}
@@ -1237,7 +1267,11 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     rebuildDirectoryTreeIndexesMany([dirId])
   }
 
-  function upsertDirectorySessionSummaries(directoryId: string, sessions: SessionSummarySnapshot[]) {
+  function upsertDirectorySessionSummaries(
+    directoryId: string,
+    sessions: SessionSummarySnapshot[],
+    opts?: { treeHint?: DirectorySessionTreeHint },
+  ) {
     const dirId = (directoryId || '').trim()
     if (!dirId) return
 
@@ -1264,7 +1298,42 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
 
     sessionSummariesById.value = nextById
     directoryIdBySessionId.value = nextDirectoryBySessionId
-    rebuildDirectoryTreeIndexes(dirId)
+
+    const treeHint = opts?.treeHint
+    if (treeHint) {
+      rootsByDirectoryId.value = {
+        ...rootsByDirectoryId.value,
+        [dirId]: treeHint.rootSessionIds.slice(),
+      }
+
+      const nextChildren = { ...childrenByParentSessionId.value }
+      const touchedParentIds = new Set<string>()
+      const previousSessions = sessionPageByDirectoryId.value[dirId]?.sessions || []
+      for (const session of previousSessions) {
+        const parentId = readParentId(session)
+        if (parentId) touchedParentIds.add(parentId)
+      }
+      for (const session of sessions) {
+        const parentId = readParentId(session)
+        if (parentId) touchedParentIds.add(parentId)
+      }
+      for (const parentId of Object.keys(treeHint.childrenByParentSessionId)) {
+        touchedParentIds.add(parentId)
+      }
+      for (const parentId of touchedParentIds) {
+        delete nextChildren[parentId]
+      }
+      for (const [parentId, childIds] of Object.entries(treeHint.childrenByParentSessionId)) {
+        const pid = String(parentId || '').trim()
+        if (!pid) continue
+        const ids = childIds.map((id) => String(id || '').trim()).filter(Boolean)
+        if (ids.length === 0) continue
+        nextChildren[pid] = Array.from(new Set(ids))
+      }
+      childrenByParentSessionId.value = nextChildren
+    } else {
+      rebuildDirectoryTreeIndexes(dirId)
+    }
     scheduleSnapshotPersist()
   }
 
@@ -1729,7 +1798,9 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
         },
       }
       setSessionRootPage(did, resolvedPage, pageSize)
-      upsertDirectorySessionSummaries(did, sessions)
+      upsertDirectorySessionSummaries(did, sessions, {
+        treeHint: effectivePage.treeHint,
+      })
 
       await ensurePinnedSummariesLoaded(did, root, opts.pinnedSessionIds, { force: force || wantsFocus })
       if (opts.includeWorktrees) {
@@ -2071,6 +2142,182 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     scheduleSidebarPatchRetry()
   }
 
+  function applyRuntimeOnlyPatchOps(ops: ChatSidebarPatchOp[]): boolean {
+    if (ops.length === 0) return false
+    const baseRuntime = runtimeBySessionId.value
+    let nextRuntime = baseRuntime
+    let runtimeChanged = false
+    const touchedRunningSessionIds = new Set<string>()
+
+    const ensureRuntime = () => {
+      if (runtimeChanged) return
+      nextRuntime = { ...baseRuntime }
+      runtimeChanged = true
+    }
+
+    for (const op of ops) {
+      if (op.type === 'sessionRuntime.upsert') {
+        const runtime = asRecord(op.runtime)
+        const sidRaw = runtime?.sessionID ?? runtime?.sessionId
+        const sid = typeof sidRaw === 'string' ? sidRaw.trim() : ''
+        if (!sid) continue
+        const next = mergeRuntimeState(nextRuntime[sid], runtime)
+        const previous = nextRuntime[sid]
+        if (previous && runtimeStateEquivalent(normalizeRuntime(previous), next)) continue
+        ensureRuntime()
+        nextRuntime[sid] = next
+        touchedRunningSessionIds.add(sid)
+        continue
+      }
+
+      if (op.type === 'sessionRuntime.remove') {
+        const sid = String(op.sessionId || '').trim()
+        if (!sid) continue
+        if (!Object.prototype.hasOwnProperty.call(nextRuntime, sid)) continue
+        ensureRuntime()
+        delete nextRuntime[sid]
+        touchedRunningSessionIds.add(sid)
+      }
+    }
+
+    if (!runtimeChanged) return false
+    runtimeBySessionId.value = nextRuntime
+    for (const sid of touchedRunningSessionIds) {
+      const runtime = nextRuntime[sid]
+      if (runtime) {
+        syncRunningIndexFromRuntime(sid, runtime)
+        continue
+      }
+      const hadRunning = runningIndex.value.some((item) => item.sessionId === sid)
+      if (hadRunning) {
+        runningIndex.value = runningIndex.value.filter((item) => item.sessionId !== sid)
+        runningIndexTotal.value = Math.max(0, runningIndexTotal.value - 1)
+      }
+    }
+    scheduleSnapshotPersist()
+    return true
+  }
+
+  function scheduleSidebarPatchProjectionRefresh(delayMs = SIDEBAR_PATCH_REFRESH_THROTTLE_MS) {
+    if (sidebarPatchRefreshTimer !== null) return
+    sidebarPatchRefreshTimer = window.setTimeout(
+      () => {
+        sidebarPatchRefreshTimer = null
+        void drainSidebarPatchProjectionRefreshQueue().catch(() => {})
+      },
+      Math.max(20, Math.floor(delayMs)),
+    )
+  }
+
+  async function drainSidebarPatchProjectionRefreshQueue() {
+    if (sidebarPatchRefreshInFlight) return
+    sidebarPatchRefreshInFlight = true
+    try {
+      while (true) {
+        const target = sidebarPatchRefreshQueue.shift()
+        if (!target) break
+
+        if (target === SIDEBAR_PATCH_REFRESH_ALL_KEY) {
+          await revalidateFromApi().catch(() => false)
+          continue
+        }
+
+        const directory = directoriesById.value[target]
+        if (!directory?.path) {
+          const enqueued = sidebarPatchRefreshQueue.enqueue(SIDEBAR_PATCH_REFRESH_ALL_KEY)
+          if (enqueued.accepted) {
+            scheduleSidebarPatchProjectionRefresh()
+          }
+          continue
+        }
+
+        const cachedPage = sessionPageByDirectoryId.value[target]
+        const pageSize = Math.max(1, cachedPage?.sessions?.length || 10)
+        await ensureDirectoryAggregateLoaded(target, directory.path, {
+          force: true,
+          pinnedSessionIds: uiPrefs.value.pinnedSessionIds || [],
+          page: normalizePage(cachedPage?.page),
+          pageSize,
+          includeWorktrees: false,
+        }).catch(() => {})
+      }
+    } finally {
+      sidebarPatchRefreshInFlight = false
+      if (sidebarPatchRefreshQueue.size() > 0) {
+        scheduleSidebarPatchProjectionRefresh()
+      }
+    }
+  }
+
+  function enqueueSidebarPatchProjectionRefresh(directoryIds: string[], refreshAll: boolean) {
+    let overflowed = false
+    if (refreshAll) {
+      const result = sidebarPatchRefreshQueue.enqueue(SIDEBAR_PATCH_REFRESH_ALL_KEY)
+      overflowed = overflowed || Boolean(result.dropped)
+    }
+
+    for (const rawId of directoryIds) {
+      const did = String(rawId || '').trim()
+      if (!did) continue
+      const result = sidebarPatchRefreshQueue.enqueue(did)
+      overflowed = overflowed || Boolean(result.dropped)
+    }
+
+    if (overflowed) {
+      sidebarPatchRefreshQueue.enqueue(SIDEBAR_PATCH_REFRESH_ALL_KEY)
+    }
+
+    scheduleSidebarPatchProjectionRefresh()
+  }
+
+  function scheduleSidebarFooterRefresh(delayMs = SIDEBAR_FOOTER_REFRESH_THROTTLE_MS) {
+    if (sidebarFooterRefreshTimer !== null) return
+    sidebarFooterRefreshTimer = window.setTimeout(
+      () => {
+        sidebarFooterRefreshTimer = null
+        void drainSidebarFooterRefresh().catch(() => {})
+      },
+      Math.max(40, Math.floor(delayMs)),
+    )
+  }
+
+  function enqueueSidebarFooterRefresh(opts: { recent?: boolean; running?: boolean }) {
+    if (opts.recent) sidebarFooterRefreshPendingRecent = true
+    if (opts.running) sidebarFooterRefreshPendingRunning = true
+    if (!sidebarFooterRefreshPendingRecent && !sidebarFooterRefreshPendingRunning) return
+    scheduleSidebarFooterRefresh()
+  }
+
+  async function drainSidebarFooterRefresh() {
+    if (sidebarFooterRefreshInFlight) return
+    sidebarFooterRefreshInFlight = true
+    try {
+      while (sidebarFooterRefreshPendingRecent || sidebarFooterRefreshPendingRunning) {
+        const refreshRecent = sidebarFooterRefreshPendingRecent
+        const refreshRunning = sidebarFooterRefreshPendingRunning
+        sidebarFooterRefreshPendingRecent = false
+        sidebarFooterRefreshPendingRunning = false
+
+        if (refreshRecent) {
+          await loadRecentIndexSlice({ offset: 0, limit: RECENT_INDEX_DEFAULT_LIMIT, append: false }).catch(() => {})
+          const page = Math.max(0, Math.floor(uiPrefs.value.recentSessionsPage || 0))
+          await ensureRecentSessionRowsLoaded({ page, pageSize: FOOTER_PAGE_SIZE_DEFAULT }).catch(() => {})
+        }
+
+        if (refreshRunning) {
+          await loadRunningIndexSlice({ offset: 0, limit: RUNNING_INDEX_DEFAULT_LIMIT, append: false }).catch(() => {})
+          const page = Math.max(0, Math.floor(uiPrefs.value.runningSessionsPage || 0))
+          await ensureRunningSessionRowsLoaded({ page, pageSize: FOOTER_PAGE_SIZE_DEFAULT }).catch(() => {})
+        }
+      }
+    } finally {
+      sidebarFooterRefreshInFlight = false
+      if (sidebarFooterRefreshPendingRecent || sidebarFooterRefreshPendingRunning) {
+        scheduleSidebarFooterRefresh()
+      }
+    }
+  }
+
   function applyChatSidebarPatchEvent(evt: SseEvent) {
     const type = readEventType(evt)
     if (type !== 'chat-sidebar.patch' && type !== 'sessions-sidebar.patch') return
@@ -2104,503 +2351,26 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     const opsRaw = readEventOps(evt)
     const ops = parseChatSidebarPatchOps(opsRaw)
     if (ops.length === 0) return
-
-    // Apply all ops against local drafts and commit once.
-    const baseSummaries = sessionSummariesById.value
-    let nextSummaries = baseSummaries
-    let summariesChanged = false
-    const ensureSummaries = () => {
-      if (summariesChanged) return
-      nextSummaries = { ...baseSummaries }
-      summariesChanged = true
-    }
-
-    const baseDirectoryBySession = directoryIdBySessionId.value
-    let nextDirectoryBySession = baseDirectoryBySession
-    let directoryBySessionChanged = false
-    const ensureDirectoryBySession = () => {
-      if (directoryBySessionChanged) return
-      nextDirectoryBySession = { ...baseDirectoryBySession }
-      directoryBySessionChanged = true
-    }
-
-    const baseDirectories = directoriesById.value
-    let nextDirectories = baseDirectories
-    let directoriesChanged = false
-    const ensureDirectories = () => {
-      if (directoriesChanged) return
-      nextDirectories = { ...baseDirectories }
-      directoriesChanged = true
-    }
-
-    const baseDirectoryOrder = directoryOrder.value
-    let nextOrder = baseDirectoryOrder
-    let orderChanged = false
-    const ensureOrder = () => {
-      if (orderChanged) return
-      nextOrder = baseDirectoryOrder.slice()
-      orderChanged = true
-    }
-
-    const basePagesByDirectory = sessionPageByDirectoryId.value
-    let nextPagesByDirectory = basePagesByDirectory
-    let pagesChanged = false
-    const ensurePages = () => {
-      if (pagesChanged) return
-      nextPagesByDirectory = { ...basePagesByDirectory }
-      pagesChanged = true
-    }
-
-    const basePinnedIdsByDirectory = pinnedSessionIdsByDirectoryId.value
-    let nextPinnedIdsByDirectory = basePinnedIdsByDirectory
-    let pinnedIdsChanged = false
-    const ensurePinnedIds = () => {
-      if (pinnedIdsChanged) return
-      nextPinnedIdsByDirectory = { ...basePinnedIdsByDirectory }
-      pinnedIdsChanged = true
-    }
-
-    const basePinnedKeyByDirectory = pinnedSummaryKeyByDirectoryId.value
-    let nextPinnedKeyByDirectory = basePinnedKeyByDirectory
-    let pinnedKeyChanged = false
-    const ensurePinnedKey = () => {
-      if (pinnedKeyChanged) return
-      nextPinnedKeyByDirectory = { ...basePinnedKeyByDirectory }
-      pinnedKeyChanged = true
-    }
-
-    const baseWorktreesByDirectory = worktreePathsByDirectoryId.value
-    let nextWorktreesByDirectory = baseWorktreesByDirectory
-    let worktreesChanged = false
-    const ensureWorktrees = () => {
-      if (worktreesChanged) return
-      nextWorktreesByDirectory = { ...baseWorktreesByDirectory }
-      worktreesChanged = true
-    }
-
-    const baseWorktreeLoadingByDirectory = worktreeLoadingByDirectoryId.value
-    let nextWorktreeLoadingByDirectory = baseWorktreeLoadingByDirectory
-    let worktreeLoadingChanged = false
-    const ensureWorktreeLoading = () => {
-      if (worktreeLoadingChanged) return
-      nextWorktreeLoadingByDirectory = { ...baseWorktreeLoadingByDirectory }
-      worktreeLoadingChanged = true
-    }
-
-    const baseAggregateLoadingByDirectory = aggregateLoadingByDirectoryId.value
-    let nextAggregateLoadingByDirectory = baseAggregateLoadingByDirectory
-    let aggregateLoadingChanged = false
-    const ensureAggregateLoading = () => {
-      if (aggregateLoadingChanged) return
-      nextAggregateLoadingByDirectory = { ...baseAggregateLoadingByDirectory }
-      aggregateLoadingChanged = true
-    }
-
-    const baseAggregateAttemptedByDirectory = aggregateAttemptedByDirectoryId.value
-    let nextAggregateAttemptedByDirectory = baseAggregateAttemptedByDirectory
-    let aggregateAttemptedChanged = false
-    const ensureAggregateAttempted = () => {
-      if (aggregateAttemptedChanged) return
-      nextAggregateAttemptedByDirectory = { ...baseAggregateAttemptedByDirectory }
-      aggregateAttemptedChanged = true
-    }
-
-    const baseRuntime = runtimeBySessionId.value
-    let nextRuntime = baseRuntime
-    let runtimeChanged = false
-    const ensureRuntime = () => {
-      if (runtimeChanged) return
-      nextRuntime = { ...baseRuntime }
-      runtimeChanged = true
-    }
-
-    let recentChanged = false
-    let nextRecentTotal = recentIndexTotal.value
-    const recentById = new Map<string, RecentIndexEntry>(
-      (recentIndex.value || []).map((item) => [item.sessionId, item] as const),
+    const hint = readEventPatchRefreshHint(evt)
+    const plan = resolveSidebarPatchPlan(
+      ops,
+      {
+        directoriesById: directoriesById.value,
+        directoryIdBySessionId: directoryIdBySessionId.value,
+        sessionSummariesById: sessionSummariesById.value,
+      },
+      hint,
     )
 
-    const removedDirectoryIds = new Set<string>()
-    const touchedDirectoryIds = new Set<string>()
-    const touchedRunningSessionIds = new Set<string>()
-
-    const directoryIdForPathDraft = (directoryPath: string): string | null => {
-      const normalized = normalizeDirForCompare(directoryPath)
-      if (!normalized) return null
-      for (const id of nextOrder) {
-        const entry = nextDirectories[id]
-        if (!entry) continue
-        if (normalizeDirForCompare(entry.path) === normalized) return entry.id
-      }
-      return null
+    applyRuntimeOnlyPatchOps(plan.runtimeOnlyOps)
+    if (plan.refreshAll || plan.refreshDirectoryIds.length > 0) {
+      enqueueSidebarPatchProjectionRefresh(plan.refreshDirectoryIds, plan.refreshAll)
     }
-
-    const removeRecentIfPresent = (sid: string) => {
-      if (!recentById.has(sid)) return
-      recentById.delete(sid)
-      nextRecentTotal = Math.max(0, nextRecentTotal - 1)
-      recentChanged = true
-    }
-
-    const upsertRecent = (entry: RecentIndexEntry) => {
-      recentById.set(entry.sessionId, entry)
-      recentChanged = true
-    }
-
-    const deleteDirectoryCaches = (directoryId: string) => {
-      const did = (directoryId || '').trim()
-      if (!did) return
-      ensurePages()
-      delete nextPagesByDirectory[did]
-
-      ensurePinnedIds()
-      delete nextPinnedIdsByDirectory[did]
-
-      ensurePinnedKey()
-      delete nextPinnedKeyByDirectory[did]
-
-      ensureWorktrees()
-      delete nextWorktreesByDirectory[did]
-
-      ensureWorktreeLoading()
-      delete nextWorktreeLoadingByDirectory[did]
-
-      ensureAggregateLoading()
-      delete nextAggregateLoadingByDirectory[did]
-
-      ensureAggregateAttempted()
-      delete nextAggregateAttemptedByDirectory[did]
-    }
-
-    const removeSessionFromDraft = (sid: string, opts?: { preserveRuntime?: boolean }) => {
-      const sessionId = (sid || '').trim()
-      if (!sessionId) return
-      const existingSummary = nextSummaries[sessionId] || null
-      const sessionWasRoot = existingSummary ? !readParentId(existingSummary) : false
-
-      const mappedDirectoryId = String(nextDirectoryBySession[sessionId] || '').trim()
-      if (mappedDirectoryId) {
-        touchedDirectoryIds.add(mappedDirectoryId)
-
-        // Best-effort remove from cached directory page lists so totals stay sane.
-        if (nextPagesByDirectory[mappedDirectoryId]) {
-          ensurePages()
-          const page = nextPagesByDirectory[mappedDirectoryId]
-          if (page) {
-            const containsSession = page.sessions.some((session) => readObjectId(session) === sessionId)
-            const decrementRootTotal = sessionWasRoot
-            if (containsSession || decrementRootTotal) {
-              const filtered = containsSession
-                ? page.sessions.filter((session) => readObjectId(session) !== sessionId)
-                : page.sessions
-              const removedRootCount = containsSession
-                ? page.sessions.filter((session) => {
-                    const id = readObjectId(session)
-                    return id === sessionId && !readParentId(session)
-                  }).length
-                : 0
-              const rootDelta = removedRootCount > 0 ? removedRootCount : decrementRootTotal ? 1 : 0
-              const totalRoots =
-                typeof page?.totalRoots === 'number' && Number.isFinite(page.totalRoots)
-                  ? Math.max(0, page.totalRoots - rootDelta)
-                  : page?.totalRoots
-              nextPagesByDirectory[mappedDirectoryId] = {
-                ...page,
-                totalRoots: typeof totalRoots === 'number' ? totalRoots : 0,
-                sessions: filtered,
-              }
-            }
-          }
-        }
-      }
-
-      if (Object.prototype.hasOwnProperty.call(nextSummaries, sessionId)) {
-        ensureSummaries()
-        delete nextSummaries[sessionId]
-      }
-      if (Object.prototype.hasOwnProperty.call(nextDirectoryBySession, sessionId)) {
-        ensureDirectoryBySession()
-        delete nextDirectoryBySession[sessionId]
-      }
-      if (!opts?.preserveRuntime && Object.prototype.hasOwnProperty.call(nextRuntime, sessionId)) {
-        ensureRuntime()
-        delete nextRuntime[sessionId]
-      }
-
-      removeRecentIfPresent(sessionId)
-      touchedRunningSessionIds.add(sessionId)
-    }
-
-    const applySessionSummaryPatchDraft = (incomingRaw: JsonValue) => {
-      const sid = readObjectId(incomingRaw)
-      if (!sid) return
-
-      const incoming = asRecord(incomingRaw) || {}
-      const previous = nextSummaries[sid] || null
-      const previousUpdatedAt = readUpdatedAt(previous)
-      const incomingUpdatedAt = readUpdatedAt(incoming)
-
-      if (previous && previousUpdatedAt > 0 && incomingUpdatedAt > 0 && incomingUpdatedAt < previousUpdatedAt) {
-        return
-      }
-
-      const { time: incomingTimeRaw, ...incomingRest } = incoming
-      const previousTime = readSessionTimeRecord(previous)
-      const incomingTime = asRecord(incomingTimeRaw)
-
-      const merged: SessionSummarySnapshot = {
-        ...(previous || {}),
-        ...incomingRest,
-        id: sid,
-      }
-
-      if (previousTime || incomingTime) {
-        const nextTime: UnknownRecord = {
-          ...(previousTime || {}),
-          ...(incomingTime || {}),
-        }
-        const mergedUpdatedAt =
-          incomingUpdatedAt > 0 ? Math.max(previousUpdatedAt, incomingUpdatedAt) : previousUpdatedAt
-        if (mergedUpdatedAt > 0) {
-          nextTime.updated = mergedUpdatedAt
-        }
-        merged.time = nextTime
-      }
-
-      if (previous && jsonLikeDeepEqual(previous, merged)) {
-        return
-      }
-
-      ensureSummaries()
-      nextSummaries[sid] = merged
-
-      const previousDirectoryId = String(nextDirectoryBySession[sid] || '').trim()
-      let mappedDirectoryId = previousDirectoryId
-      const patchDirectory = readSessionDirectory(merged)
-      const byPath = patchDirectory ? directoryIdForPathDraft(patchDirectory) : null
-      if (byPath) mappedDirectoryId = byPath
-      if (mappedDirectoryId && mappedDirectoryId !== previousDirectoryId) {
-        ensureDirectoryBySession()
-        nextDirectoryBySession[sid] = mappedDirectoryId
-      }
-
-      if (previousDirectoryId && previousDirectoryId !== mappedDirectoryId) {
-        const prevPage = nextPagesByDirectory[previousDirectoryId]
-        const decrementRootTotal = Boolean(previous && !readParentId(previous))
-        const patched = prevPage
-          ? removeSessionFromPageState(prevPage, sid, {
-              decrementRootTotal,
-              readSessionId: readObjectId,
-            })
-          : null
-        if (patched) {
-          ensurePages()
-          nextPagesByDirectory[previousDirectoryId] = patched
-        }
-      }
-
-      if (mappedDirectoryId) {
-        const currentPage = nextPagesByDirectory[mappedDirectoryId]
-        const isNewInDirectory = !previous || previousDirectoryId !== mappedDirectoryId
-        const incrementRootTotal = isNewInDirectory && !readParentId(merged)
-        const patched = currentPage
-          ? upsertSessionInPageState(currentPage, merged, {
-              incrementRootTotal,
-              maxRootCount: 10,
-              readSessionId: readObjectId,
-              readParentId,
-              equals: jsonLikeDeepEqual,
-            })
-          : null
-        if (patched) {
-          ensurePages()
-          nextPagesByDirectory[mappedDirectoryId] = patched
-        }
-      }
-
-      if (previousDirectoryId) touchedDirectoryIds.add(previousDirectoryId)
-      if (mappedDirectoryId) touchedDirectoryIds.add(mappedDirectoryId)
-
-      const updatedAt = readUpdatedAt(merged)
-      if (mappedDirectoryId) {
-        const dirPath =
-          String(nextDirectories[mappedDirectoryId]?.path || patchDirectory || '').trim() || patchDirectory
-        upsertRecent({ sessionId: sid, directoryId: mappedDirectoryId, directoryPath: dirPath, updatedAt })
-        nextRecentTotal = Math.min(RECENT_INDEX_MAX_ITEMS, Math.max(nextRecentTotal, recentById.size))
-      }
-
-      touchedRunningSessionIds.add(sid)
-    }
-
-    for (const op of ops) {
-      switch (op.type) {
-        case 'directoryEntry.upsert': {
-          const entryRaw = op.entry
-          const entryId = (entryRaw.id || '').trim()
-          const entryPath = (entryRaw.path || '').trim()
-          if (!entryId || !entryPath) break
-          if (!nextDirectories[entryId]) {
-            ensureOrder()
-            nextOrder.push(entryId)
-          }
-          ensureDirectories()
-          const prev = nextDirectories[entryId] || null
-          const prevLabel =
-            prev && typeof (prev as { label?: unknown }).label === 'string' ? String(prev.label).trim() : ''
-          const incomingLabel =
-            entryRaw && typeof (entryRaw as { label?: unknown }).label === 'string' ? String(entryRaw.label).trim() : ''
-
-          // Preserve fields that are not included in the server payload (e.g. label from settings)
-          // so sidebar SSE patches do not inadvertently erase them.
-          nextDirectories[entryId] = {
-            ...(prev || {}),
-            ...entryRaw,
-            id: entryId,
-            path: entryPath,
-            label: incomingLabel || prevLabel || undefined,
-          }
-          break
-        }
-        case 'directoryEntry.remove': {
-          const did = (op.directoryId || '').trim()
-          if (!did) break
-          removedDirectoryIds.add(did)
-          if (nextDirectories[did]) {
-            ensureDirectories()
-            delete nextDirectories[did]
-          }
-          if (nextOrder.includes(did)) {
-            ensureOrder()
-            nextOrder = nextOrder.filter((id) => id !== did)
-          }
-          deleteDirectoryCaches(did)
-          break
-        }
-        case 'sessionSummary.upsert': {
-          applySessionSummaryPatchDraft(op.session)
-          break
-        }
-        case 'sessionSummary.remove': {
-          removeSessionFromDraft(op.sessionId, { preserveRuntime: true })
-          break
-        }
-        case 'sessionRuntime.upsert': {
-          const runtime = op.runtime || null
-          const runtimeRecord = asRecord(runtime)
-          const sidRaw = runtimeRecord?.sessionID ?? runtimeRecord?.sessionId
-          const sid = typeof sidRaw === 'string' ? sidRaw.trim() : ''
-          if (!sid) break
-          ensureRuntime()
-          nextRuntime[sid] = mergeRuntimeState(nextRuntime[sid], runtime)
-          touchedRunningSessionIds.add(sid)
-          break
-        }
-        case 'sessionRuntime.remove': {
-          const sid = (op.sessionId || '').trim()
-          if (!sid) break
-          if (Object.prototype.hasOwnProperty.call(nextRuntime, sid)) {
-            ensureRuntime()
-            delete nextRuntime[sid]
-          }
-          touchedRunningSessionIds.add(sid)
-          // Runtime removal only affects running state; keep recent history intact.
-          break
-        }
-      }
-    }
-
-    // Directory removals also evict sessions that were mapped to that directory.
-    if (removedDirectoryIds.size > 0) {
-      const removeSessionIds = Object.entries(nextDirectoryBySession)
-        .filter(([, mappedDirectoryId]) => removedDirectoryIds.has(String(mappedDirectoryId || '').trim()))
-        .map(([sid]) => sid)
-      for (const sid of removeSessionIds) {
-        removeSessionFromDraft(sid)
-      }
-    }
-
-    if (directoriesChanged) {
-      directoriesById.value = nextDirectories
-    }
-    if (orderChanged) {
-      directoryOrder.value = nextOrder
-    }
-    if (pagesChanged) {
-      sessionPageByDirectoryId.value = nextPagesByDirectory
-    }
-    if (pinnedIdsChanged) {
-      pinnedSessionIdsByDirectoryId.value = nextPinnedIdsByDirectory
-    }
-    if (pinnedKeyChanged) {
-      pinnedSummaryKeyByDirectoryId.value = nextPinnedKeyByDirectory
-    }
-    if (worktreesChanged) {
-      worktreePathsByDirectoryId.value = nextWorktreesByDirectory
-    }
-    if (worktreeLoadingChanged) {
-      worktreeLoadingByDirectoryId.value = nextWorktreeLoadingByDirectory
-    }
-    if (aggregateLoadingChanged) {
-      aggregateLoadingByDirectoryId.value = nextAggregateLoadingByDirectory
-    }
-    if (aggregateAttemptedChanged) {
-      aggregateAttemptedByDirectoryId.value = nextAggregateAttemptedByDirectory
-    }
-
-    if (summariesChanged) {
-      sessionSummariesById.value = nextSummaries
-    }
-    if (directoryBySessionChanged) {
-      directoryIdBySessionId.value = nextDirectoryBySession
-    }
-    if (runtimeChanged) {
-      runtimeBySessionId.value = nextRuntime
-    }
-
-    if (touchedDirectoryIds.size > 0) {
-      rebuildDirectoryTreeIndexesMany(touchedDirectoryIds)
-    }
-
-    if (recentChanged) {
-      const merged = Array.from(recentById.values())
-      merged.sort((a, b) => {
-        const diff = b.updatedAt - a.updatedAt
-        if (diff !== 0) return diff
-        return a.sessionId.localeCompare(b.sessionId)
+    if (plan.refreshRecentIndex || plan.refreshRunningIndex) {
+      enqueueSidebarFooterRefresh({
+        recent: plan.refreshRecentIndex,
+        running: plan.refreshRunningIndex,
       })
-      const capped = merged.slice(0, RECENT_INDEX_MAX_ITEMS)
-      recentIndex.value = capped
-      recentIndexTotal.value = Math.min(RECENT_INDEX_MAX_ITEMS, Math.max(nextRecentTotal, capped.length))
-    }
-
-    if (touchedRunningSessionIds.size > 0) {
-      for (const sid of touchedRunningSessionIds) {
-        const runtime = runtimeBySessionId.value[sid]
-        if (runtime) {
-          syncRunningIndexFromRuntime(sid, runtime)
-          continue
-        }
-        const hadRunning = runningIndex.value.some((item) => item.sessionId === sid)
-        if (hadRunning) {
-          runningIndex.value = runningIndex.value.filter((item) => item.sessionId !== sid)
-          runningIndexTotal.value = Math.max(0, runningIndexTotal.value - 1)
-        }
-      }
-    }
-
-    if (
-      directoriesChanged ||
-      orderChanged ||
-      pagesChanged ||
-      pinnedIdsChanged ||
-      pinnedKeyChanged ||
-      summariesChanged ||
-      directoryBySessionChanged ||
-      runtimeChanged ||
-      recentChanged ||
-      touchedRunningSessionIds.size > 0
-    ) {
-      scheduleSnapshotPersist()
     }
   }
 
@@ -2785,27 +2555,24 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
       sidebarPatchSawSeqReset = false
       stopSidebarPatchRetry()
 
-      // Best-effort background hydration: do not fail the revalidate if these calls error.
-      try {
-        await Promise.allSettled([
-          loadRecentIndexSlice({ offset: 0, limit: RECENT_INDEX_DEFAULT_LIMIT, append: false }),
-          loadRunningIndexSlice({ offset: 0, limit: RUNNING_INDEX_DEFAULT_LIMIT, append: false }),
-        ])
-      } catch {
-        // ignore
-      }
-
-      try {
-        const recentPage = Math.max(0, Math.floor(uiPrefs.value.recentSessionsPage || 0))
-        const runningPage = Math.max(0, Math.floor(uiPrefs.value.runningSessionsPage || 0))
-        await Promise.allSettled([
-          ensureRecentSessionRowsLoaded({ page: recentPage, pageSize: FOOTER_PAGE_SIZE_DEFAULT }),
-          ensureRunningSessionRowsLoaded({ page: runningPage, pageSize: FOOTER_PAGE_SIZE_DEFAULT }),
-          ensurePinnedSessionRowsLoaded(uiPrefs.value.pinnedSessionIds || []),
-        ])
-      } catch {
-        // ignore
-      }
+      // Footer/pinned hydration is non-critical and must not delay first render.
+      runNonCriticalSidebarHydration(
+        [
+          () => loadRecentIndexSlice({ offset: 0, limit: RECENT_INDEX_DEFAULT_LIMIT, append: false }),
+          () => loadRunningIndexSlice({ offset: 0, limit: RUNNING_INDEX_DEFAULT_LIMIT, append: false }),
+        ],
+        [
+          () => {
+            const recentPage = Math.max(0, Math.floor(uiPrefs.value.recentSessionsPage || 0))
+            return ensureRecentSessionRowsLoaded({ page: recentPage, pageSize: FOOTER_PAGE_SIZE_DEFAULT })
+          },
+          () => {
+            const runningPage = Math.max(0, Math.floor(uiPrefs.value.runningSessionsPage || 0))
+            return ensureRunningSessionRowsLoaded({ page: runningPage, pageSize: FOOTER_PAGE_SIZE_DEFAULT })
+          },
+          () => ensurePinnedSessionRowsLoaded(uiPrefs.value.pinnedSessionIds || []),
+        ],
+      )
 
       return true
     } catch (err) {
@@ -2848,6 +2615,19 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     stopSidebarPatchRetry()
     stopUiPrefsPatchRetry()
     clearAllAggregateReloadRetries()
+    if (sidebarPatchRefreshTimer !== null) {
+      window.clearTimeout(sidebarPatchRefreshTimer)
+      sidebarPatchRefreshTimer = null
+    }
+    sidebarPatchRefreshQueue.clear()
+    sidebarPatchRefreshInFlight = false
+    if (sidebarFooterRefreshTimer !== null) {
+      window.clearTimeout(sidebarFooterRefreshTimer)
+      sidebarFooterRefreshTimer = null
+    }
+    sidebarFooterRefreshInFlight = false
+    sidebarFooterRefreshPendingRecent = false
+    sidebarFooterRefreshPendingRunning = false
     syncedAttentionSessionIds = new Set<string>()
 
     directoriesById.value = {}

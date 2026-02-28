@@ -10,6 +10,12 @@ export type DirectorySessionPageState = {
   totalRoots: number
   sessions: SessionSummarySnapshot[]
   consistency?: SessionPayloadConsistency
+  treeHint?: DirectorySessionTreeHint
+}
+
+export type DirectorySessionTreeHint = {
+  rootSessionIds: string[]
+  childrenByParentSessionId: Record<string, string[]>
 }
 
 export type DirectorySessionsBootstrapWire = {
@@ -117,10 +123,31 @@ export function parseSessionPagePayload(raw: JsonValue, fallbackLimit: number): 
       ? Math.max(1, Math.floor(payload.limit))
       : Math.max(1, Math.floor(fallbackLimit || 10))
   const consistency = parseSessionPayloadConsistency(payload?.consistency)
+  const treeHintRaw = asRecord(payload?.treeHint)
+  const rootSessionIds = Array.isArray(treeHintRaw?.rootSessionIds)
+    ? treeHintRaw.rootSessionIds.map((value) => String(value || '').trim()).filter(Boolean)
+    : []
+  const childrenByParentSessionId: Record<string, string[]> = {}
+  const rawChildren = asRecord(treeHintRaw?.childrenByParentSessionId)
+  for (const [parentIdRaw, childListRaw] of Object.entries(rawChildren || {})) {
+    const parentId = String(parentIdRaw || '').trim()
+    if (!parentId || !Array.isArray(childListRaw)) continue
+    const childIds = childListRaw.map((value) => String(value || '').trim()).filter(Boolean)
+    if (childIds.length === 0) continue
+    childrenByParentSessionId[parentId] = Array.from(new Set(childIds))
+  }
+  const treeHint =
+    rootSessionIds.length > 0 || Object.keys(childrenByParentSessionId).length > 0
+      ? {
+          rootSessionIds: Array.from(new Set(rootSessionIds)),
+          childrenByParentSessionId,
+        }
+      : undefined
   return {
     page: Math.floor(offset / limit),
     totalRoots,
     sessions,
+    ...(treeHint ? { treeHint } : {}),
     ...(consistency ? { consistency } : {}),
   }
 }
