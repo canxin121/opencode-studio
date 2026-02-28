@@ -128,6 +128,15 @@ jobs:
             release-assets/opencode-studio-web-dist-${{ env.RELEASE_TAG }}.tar.gz
             release-assets/opencode-studio-web-dist-${{ env.RELEASE_TAG }}.zip
 
+      - name: Upload web dist artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: opencode-studio-web-dist
+          path: |
+            release-assets/opencode-studio-web-dist-${{ env.RELEASE_TAG }}.tar.gz
+            release-assets/opencode-studio-web-dist-${{ env.RELEASE_TAG }}.zip
+          if-no-files-found: error
+
   rust:
     needs: create-release
     strategy:
@@ -191,7 +200,40 @@ jobs:
 
       - name: Validate native target mapping
         if: matrix.native == true
-        run: python scripts/assert_native_target.py ${{ matrix.target }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARGET="${{ matrix.target }}"
+
+          case "$TARGET" in
+            *windows*) TARGET_OS="Windows" ;;
+            *apple-darwin*) TARGET_OS="macOS" ;;
+            *linux*) TARGET_OS="Linux" ;;
+            *)
+              echo "::error::unsupported target OS in triple: $TARGET"
+              exit 1
+              ;;
+          esac
+
+          TARGET_ARCH_RAW="${TARGET%%-*}"
+          case "$TARGET_ARCH_RAW" in
+            x86_64|amd64) TARGET_ARCH="X64" ;;
+            aarch64|arm64) TARGET_ARCH="ARM64" ;;
+            armv7|armv7l) TARGET_ARCH="ARM" ;;
+            i686|x86) TARGET_ARCH="X86" ;;
+            *) TARGET_ARCH="$TARGET_ARCH_RAW" ;;
+          esac
+
+          if [[ "$TARGET_OS" != "$RUNNER_OS" ]]; then
+            echo "::error::target OS $TARGET_OS does not match runner OS $RUNNER_OS"
+            exit 1
+          fi
+          if [[ "$TARGET_ARCH" != "$RUNNER_ARCH" ]]; then
+            echo "::error::target arch $TARGET_ARCH does not match runner arch $RUNNER_ARCH"
+            exit 1
+          fi
+
+          echo "OK: native target validation passed ($TARGET on $RUNNER_OS/$RUNNER_ARCH)"
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -222,7 +264,7 @@ jobs:
             release-assets/opencode-studio-backend-${{ matrix.target }}-${{ env.RELEASE_TAG }}.*
 
   desktop:
-    needs: create-release
+    needs: [create-release, web]
     strategy:
       fail-fast: false
       matrix:
@@ -327,59 +369,30 @@ jobs:
             zsync
           sudo apt-get install -y libwebkit2gtk-4.1-dev || sudo apt-get install -y libwebkit2gtk-4.0-dev
 
-      - name: Setup Bun
-        id: setup-bun-desktop
-        continue-on-error: true
-        uses: oven-sh/setup-bun@v2
+      - name: Download web dist artifact
+        uses: actions/download-artifact@v7
         with:
-          bun-version: ${{ env.BUN_VERSION }}
-          no-cache: true
+          name: opencode-studio-web-dist
+          path: release-assets
 
-      - name: Setup Bun (retry)
-        if: steps.setup-bun-desktop.outcome == 'failure'
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
-          no-cache: true
-
-      - name: Cache Bun downloads
-        uses: actions/cache@v5
-        with:
-          path: |
-            ~/.bun/install/cache
-            src-main/web/node_modules
-            src-main/web/node_modules/.tmp
-            src-main/web/node_modules/.vite
-            src-main/web/.prettier-cache
-          key: ${{ runner.os }}-web-${{ env.CACHE_VERSION }}-${{ env.BUN_VERSION }}-${{ hashFiles('src-main/web/bun.lock', 'src-main/web/package.json', 'src-main/web/vite.config.*', 'src-main/web/tsconfig*.json') }}
-          restore-keys: |
-            ${{ runner.os }}-web-${{ env.CACHE_VERSION }}-${{ env.BUN_VERSION }}-
-
-      - name: Build web dist
-        env:
-          NODE_OPTIONS: --max-old-space-size=4096
-        run: |
-          bun install --cwd src-main/web --frozen-lockfile
-          bun run --cwd src-main/web build
-
-      - name: Copy web dist into desktop source (Unix)
+      - name: Extract web dist (Unix)
         if: "!startsWith(matrix.os, 'windows-')"
         shell: bash
         run: |
           set -euo pipefail
           rm -rf src-tauri/web/dist
           mkdir -p src-tauri/web
-          cp -a src-main/web/dist src-tauri/web/dist
+          tar -xzf "release-assets/opencode-studio-web-dist-${{ env.RELEASE_TAG }}.tar.gz" -C src-tauri/web
           test -f src-tauri/web/dist/index.html
 
-      - name: Copy web dist into desktop source (Windows)
+      - name: Extract web dist (Windows)
         if: startsWith(matrix.os, 'windows-')
         shell: pwsh
         run: |
           if (Test-Path 'src-tauri/web/dist') { Remove-Item -Recurse -Force 'src-tauri/web/dist' }
           New-Item -ItemType Directory -Force -Path 'src-tauri/web' | Out-Null
-          Copy-Item -Recurse -Force 'src-main/web/dist' 'src-tauri/web/dist'
-          if (-not (Test-Path 'src-tauri/web/dist/index.html')) { throw 'src-tauri/web/dist/index.html missing' }
+          Expand-Archive -Force -Path "release-assets/opencode-studio-web-dist-${{ env.RELEASE_TAG }}.zip" -DestinationPath 'src-tauri/web'
+          if (-not (Test-Path 'src-tauri/web/dist/index.html')) { throw 'src-tauri/web/dist/index.html missing after extract' }
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -387,7 +400,40 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Validate native target mapping
-        run: python scripts/assert_native_target.py ${{ matrix.target }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARGET="${{ matrix.target }}"
+
+          case "$TARGET" in
+            *windows*) TARGET_OS="Windows" ;;
+            *apple-darwin*) TARGET_OS="macOS" ;;
+            *linux*) TARGET_OS="Linux" ;;
+            *)
+              echo "::error::unsupported target OS in triple: $TARGET"
+              exit 1
+              ;;
+          esac
+
+          TARGET_ARCH_RAW="${TARGET%%-*}"
+          case "$TARGET_ARCH_RAW" in
+            x86_64|amd64) TARGET_ARCH="X64" ;;
+            aarch64|arm64) TARGET_ARCH="ARM64" ;;
+            armv7|armv7l) TARGET_ARCH="ARM" ;;
+            i686|x86) TARGET_ARCH="X86" ;;
+            *) TARGET_ARCH="$TARGET_ARCH_RAW" ;;
+          esac
+
+          if [[ "$TARGET_OS" != "$RUNNER_OS" ]]; then
+            echo "::error::target OS $TARGET_OS does not match runner OS $RUNNER_OS"
+            exit 1
+          fi
+          if [[ "$TARGET_ARCH" != "$RUNNER_ARCH" ]]; then
+            echo "::error::target arch $TARGET_ARCH does not match runner arch $RUNNER_ARCH"
+            exit 1
+          fi
+
+          echo "OK: native target validation passed ($TARGET on $RUNNER_OS/$RUNNER_ARCH)"
 
       - name: Add x86_64 macOS target (cef arm64)
         if: matrix.cef == true && matrix.target == 'aarch64-apple-darwin'
