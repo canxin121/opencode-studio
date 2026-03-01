@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 pub(crate) const SETTINGS_FILE: &str = "studio-settings.json";
 pub(crate) const LEGACY_SETTINGS_FILE: &str = "settings.json";
@@ -32,13 +32,58 @@ fn dedupe_paths(candidates: Vec<PathBuf>) -> Vec<PathBuf> {
     out
 }
 
+const PATH_PRIORITY_MISSING: u8 = 0;
+const PATH_PRIORITY_EMPTY_DIR: u8 = 1;
+const PATH_PRIORITY_EMPTY_FILE: u8 = 2;
+const PATH_PRIORITY_NON_EMPTY_DIR: u8 = 3;
+const PATH_PRIORITY_NON_EMPTY_FILE: u8 = 4;
+
+fn existing_path_priority(path: &Path) -> u8 {
+    let Ok(meta) = std::fs::metadata(path) else {
+        return PATH_PRIORITY_MISSING;
+    };
+
+    if meta.is_file() {
+        return if meta.len() > 0 {
+            PATH_PRIORITY_NON_EMPTY_FILE
+        } else {
+            PATH_PRIORITY_EMPTY_FILE
+        };
+    }
+
+    if meta.is_dir() {
+        return match std::fs::read_dir(path) {
+            Ok(mut entries) => {
+                if entries.next().is_some() {
+                    PATH_PRIORITY_NON_EMPTY_DIR
+                } else {
+                    PATH_PRIORITY_EMPTY_DIR
+                }
+            }
+            Err(_) => PATH_PRIORITY_EMPTY_DIR,
+        };
+    }
+
+    PATH_PRIORITY_EMPTY_FILE
+}
+
 fn select_existing_path(candidates: Vec<PathBuf>) -> PathBuf {
+    let mut best_priority = PATH_PRIORITY_MISSING;
+    let mut best: Option<PathBuf> = None;
+
     for path in &candidates {
-        if path.exists() {
-            return path.clone();
+        let priority = existing_path_priority(path);
+        if priority <= best_priority {
+            continue;
+        }
+        best_priority = priority;
+        best = Some(path.clone());
+        if priority == PATH_PRIORITY_NON_EMPTY_FILE {
+            break;
         }
     }
-    candidates.into_iter().next().unwrap_or_default()
+
+    best.unwrap_or_else(|| candidates.into_iter().next().unwrap_or_default())
 }
 
 pub(crate) fn studio_data_dir() -> PathBuf {
@@ -149,4 +194,111 @@ pub(crate) fn opencode_message_parts_dir_candidates() -> Vec<PathBuf> {
 
 pub(crate) fn opencode_message_parts_dir() -> PathBuf {
     select_existing_path(opencode_message_parts_dir_candidates())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{LazyLock, Mutex};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    static ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+
+    struct EnvVarGuard {
+        key: &'static str,
+        prev: Option<String>,
+    }
+
+    impl EnvVarGuard {
+        fn set(key: &'static str, value: String) -> Self {
+            let prev = std::env::var(key).ok();
+            unsafe {
+                std::env::set_var(key, value);
+            }
+            Self { key, prev }
+        }
+    }
+
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            unsafe {
+                match self.prev.as_deref() {
+                    Some(v) => std::env::set_var(self.key, v),
+                    None => std::env::remove_var(self.key),
+                }
+            }
+        }
+    }
+
+    fn unique_tmp_dir(label: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        std::env::temp_dir().join(format!("opencode-studio-{label}-{nanos}"))
+    }
+
+    #[test]
+    fn opencode_db_path_prefers_legacy_when_modern_db_is_empty() {
+        let _env_lock = ENV_LOCK.lock().unwrap();
+        let tmp = unique_tmp_dir("persistence-db-legacy-priority");
+        std::fs::create_dir_all(&tmp).unwrap();
+        let _xdg = EnvVarGuard::set("XDG_DATA_HOME", tmp.to_string_lossy().to_string());
+
+        let modern = tmp.join("opencode").join("storage").join(OPENCODE_DB_FILE);
+        let legacy = tmp.join("opencode").join(LEGACY_OPENCODE_DB_FILE);
+
+        std::fs::create_dir_all(modern.parent().unwrap_or(tmp.as_path())).unwrap();
+        std::fs::write(&modern, b"").unwrap();
+        std::fs::write(&legacy, b"legacy-db").unwrap();
+
+        assert_eq!(opencode_db_path(), legacy);
+    }
+
+    #[test]
+    fn opencode_messages_dir_prefers_non_empty_legacy_dir_when_modern_is_empty() {
+        let _env_lock = ENV_LOCK.lock().unwrap();
+        let tmp = unique_tmp_dir("persistence-message-dir-priority");
+        std::fs::create_dir_all(&tmp).unwrap();
+        let _xdg = EnvVarGuard::set("XDG_DATA_HOME", tmp.to_string_lossy().to_string());
+
+        let modern = tmp
+            .join("opencode")
+            .join(OPENCODE_STORAGE_DIRNAME)
+            .join(MESSAGE_RECORDS_DIR);
+        let legacy = tmp
+            .join("opencode")
+            .join(OPENCODE_STORAGE_DIRNAME)
+            .join(LEGACY_MESSAGE_RECORDS_DIR);
+
+        std::fs::create_dir_all(&modern).unwrap();
+        std::fs::create_dir_all(&legacy).unwrap();
+        std::fs::write(legacy.join("sentinel.json"), b"{}").unwrap();
+
+        assert_eq!(opencode_messages_dir(), legacy);
+    }
+
+    #[test]
+    fn opencode_messages_dir_prefers_modern_when_both_dirs_have_data() {
+        let _env_lock = ENV_LOCK.lock().unwrap();
+        let tmp = unique_tmp_dir("persistence-message-dir-modern-preferred");
+        std::fs::create_dir_all(&tmp).unwrap();
+        let _xdg = EnvVarGuard::set("XDG_DATA_HOME", tmp.to_string_lossy().to_string());
+
+        let modern = tmp
+            .join("opencode")
+            .join(OPENCODE_STORAGE_DIRNAME)
+            .join(MESSAGE_RECORDS_DIR);
+        let legacy = tmp
+            .join("opencode")
+            .join(OPENCODE_STORAGE_DIRNAME)
+            .join(LEGACY_MESSAGE_RECORDS_DIR);
+
+        std::fs::create_dir_all(&modern).unwrap();
+        std::fs::create_dir_all(&legacy).unwrap();
+        std::fs::write(modern.join("modern.json"), b"{}").unwrap();
+        std::fs::write(legacy.join("legacy.json"), b"{}").unwrap();
+
+        assert_eq!(opencode_messages_dir(), modern);
+    }
 }
