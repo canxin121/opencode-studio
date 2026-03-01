@@ -21,6 +21,7 @@ const DIRECTORY_SESSIONS_PAGE_CACHE_MAX_ENTRIES: usize = 256;
 const SIDEBAR_STATE_DIRECTORIES_PAGE_SIZE_DEFAULT: usize = 15;
 const SIDEBAR_STATE_DIRECTORY_SESSIONS_PAGE_SIZE_DEFAULT: usize = 10;
 const SIDEBAR_STATE_FOOTER_PAGE_SIZE_DEFAULT: usize = 10;
+const SIDEBAR_RECENT_INDEX_SEED_LIMIT: usize = 40;
 
 #[derive(Debug, Clone)]
 struct RecentIndexCacheEntry {
@@ -761,7 +762,18 @@ pub(crate) async fn chat_sidebar_state(
         let settings = state.settings.read().await;
         configured_directories(&settings)
     };
+    state.directory_session_index.replace_directory_mappings(
+        configured
+            .iter()
+            .map(|directory| (directory.id.clone(), directory.path.clone()))
+            .collect(),
+    );
+    let should_seed_recent_index = state
+        .directory_session_index
+        .recent_sessions_snapshot()
+        .is_empty();
     let expanded_ids = expanded_directory_ids(&configured, &preferences.collapsed_directory_ids);
+    let expanded_id_set = expanded_ids.iter().cloned().collect::<HashSet<String>>();
 
     let mut session_pages_by_directory_id = BTreeMap::<String, Value>::new();
     for directory_id in expanded_ids {
@@ -802,6 +814,48 @@ pub(crate) async fn chat_sidebar_state(
                 .into_response());
         };
         session_pages_by_directory_id.insert(directory_id, directory_page);
+    }
+
+    if should_seed_recent_index {
+        for directory in configured
+            .iter()
+            .filter(|directory| !expanded_id_set.contains(&directory.id))
+        {
+            let response = match directory_sessions_by_id_get(
+                State(state.clone()),
+                HeaderMap::new(),
+                AxumPath(DirectorySessionsPath {
+                    directory_id: directory.id.clone(),
+                }),
+                Query(crate::opencode_session::SessionListQuery {
+                    directory: None,
+                    scope: Some("directory".to_string()),
+                    roots: Some("true".to_string()),
+                    start: None,
+                    search: None,
+                    offset: Some("0".to_string()),
+                    limit: Some(SIDEBAR_RECENT_INDEX_SEED_LIMIT.to_string()),
+                    include_total: Some("false".to_string()),
+                    include_children: Some("true".to_string()),
+                    ids: None,
+                    focus_session_id: None,
+                }),
+            )
+            .await
+            {
+                Ok(response) => response,
+                Err(_) => continue,
+            };
+
+            let Some(payload) = decode_json_response(response).await else {
+                continue;
+            };
+            for session in extract_sessions(&payload) {
+                state
+                    .directory_session_index
+                    .upsert_summary_from_value(&session);
+            }
+        }
     }
 
     let recent_page_response = chat_sidebar_recent_index(

@@ -176,6 +176,33 @@ impl DirectorySessionIndexManager {
             };
             self.directory_id_by_path.insert(path_key, did.to_string());
         }
+        self.rebuild_recent_sessions_cache();
+    }
+
+    fn rebuild_recent_sessions_cache(&self) {
+        let mut rebuilt = RecentSessionsCache::default();
+        for summary in self.summaries_by_session.iter() {
+            let record = summary.value();
+            let Some(path_key) = normalize_directory_for_index(&record.directory_path) else {
+                continue;
+            };
+            let Some(directory_id) = self
+                .directory_id_by_path
+                .get(&path_key)
+                .map(|value| value.value().trim().to_string())
+                .filter(|value| !value.is_empty())
+            else {
+                continue;
+            };
+
+            rebuilt.upsert(
+                &record.session_id,
+                &directory_id,
+                &record.directory_path,
+                record.updated_at,
+            );
+        }
+        *self.recent_sessions.lock().unwrap() = rebuilt;
     }
 
     pub fn upsert_summary_from_value(&self, session: &Value) {
@@ -1037,6 +1064,27 @@ mod tests {
         let recent = idx.recent_sessions_snapshot();
         assert_eq!(recent.len(), 1);
         assert_eq!(recent[0].session_id, "s_2");
+    }
+
+    #[test]
+    fn replace_directory_mappings_backfills_recent_sessions_for_cached_summaries() {
+        let idx = DirectorySessionIndexManager::new();
+
+        idx.upsert_summary_from_value(&json!({
+            "id": "s_1",
+            "directory": "/tmp/a",
+            "title": "one",
+            "time": { "updated": 10.0 }
+        }));
+
+        assert!(idx.recent_sessions_snapshot().is_empty());
+
+        idx.replace_directory_mappings(vec![("d_1".to_string(), "/tmp/a".to_string())]);
+
+        let recent = idx.recent_sessions_snapshot();
+        assert_eq!(recent.len(), 1);
+        assert_eq!(recent[0].session_id, "s_1");
+        assert_eq!(recent[0].directory_id, "d_1");
     }
 
     #[test]
