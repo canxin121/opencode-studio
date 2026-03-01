@@ -296,7 +296,7 @@ pub fn derive_session_activity(payload: &Value) -> Option<(String, SessionPhase)
         }
     }
 
-    if ty == "message.updated" || ty == "message.part.updated" {
+    if ty == "message.updated" {
         let props = obj.get("properties").and_then(|v| v.as_object());
         let info = props
             .and_then(|p| p.get("info"))
@@ -313,8 +313,55 @@ pub fn derive_session_activity(payload: &Value) -> Option<(String, SessionPhase)
         };
         let session_id = read_session_id_from(info).or_else(|| read_session_id_from(props));
         let role = info.and_then(|i| i.get("role")).and_then(|v| v.as_str());
-        let finish = info.and_then(|i| i.get("finish")).and_then(|v| v.as_str());
-        if let (Some(session_id), Some("assistant"), Some("stop")) = (session_id, role, finish) {
+        let finish = info
+            .and_then(|i| i.get("finish"))
+            .and_then(|v| v.as_str())
+            .map(|v| v.trim().to_ascii_lowercase());
+        let is_terminal_finish = finish
+            .as_deref()
+            .map(|value| !value.is_empty() && value != "tool-calls" && value != "tool_calls")
+            .unwrap_or(false);
+        if let (Some(session_id), Some("assistant"), true) = (session_id, role, is_terminal_finish)
+        {
+            return Some((session_id, SessionPhase::Cooldown));
+        }
+    }
+
+    if ty == "message.part.updated" {
+        let props = obj.get("properties").and_then(|v| v.as_object());
+        let read_session_id_from = |map: Option<&serde_json::Map<String, Value>>| {
+            map.and_then(|m| {
+                m.get("sessionID")
+                    .or_else(|| m.get("sessionId"))
+                    .or_else(|| m.get("session_id"))
+                    .and_then(|v| v.as_str())
+            })
+            .map(|v| v.trim().to_string())
+            .filter(|v| !v.is_empty())
+        };
+
+        let part = props.and_then(|p| {
+            p.get("part")
+                .or_else(|| p.get("messagePart"))
+                .or_else(|| p.get("partInfo"))
+                .and_then(|v| v.as_object())
+        });
+        let session_id = read_session_id_from(part).or_else(|| read_session_id_from(props));
+        let part_type = part
+            .and_then(|part| part.get("type"))
+            .and_then(|v| v.as_str())
+            .map(|v| v.trim().to_ascii_lowercase())
+            .unwrap_or_default();
+        let finish_reason = part
+            .and_then(|part| part.get("reason"))
+            .and_then(|v| v.as_str())
+            .map(|v| v.trim().to_ascii_lowercase())
+            .unwrap_or_default();
+
+        let is_terminal_step_finish = part_type == "step-finish"
+            && finish_reason != "tool-calls"
+            && finish_reason != "tool_calls";
+        if let (Some(session_id), true) = (session_id, is_terminal_step_finish) {
             return Some((session_id, SessionPhase::Cooldown));
         }
     }
@@ -390,6 +437,57 @@ mod tests {
 
         let derived = derive_session_activity(&payload);
         assert_eq!(derived, Some(("s_1".to_string(), SessionPhase::Cooldown)));
+    }
+
+    #[test]
+    fn derive_session_activity_ignores_non_terminal_tool_calls_finish() {
+        let payload = serde_json::json!({
+            "type": "message.updated",
+            "properties": {
+                "info": {
+                    "sessionID": "s_1",
+                    "role": "assistant",
+                    "finish": "tool-calls"
+                }
+            }
+        });
+
+        let derived = derive_session_activity(&payload);
+        assert_eq!(derived, None);
+    }
+
+    #[test]
+    fn derive_session_activity_step_finish_part_marks_cooldown() {
+        let payload = serde_json::json!({
+            "type": "message.part.updated",
+            "properties": {
+                "part": {
+                    "sessionId": "s_1",
+                    "type": "step-finish",
+                    "reason": "stop"
+                }
+            }
+        });
+
+        let derived = derive_session_activity(&payload);
+        assert_eq!(derived, Some(("s_1".to_string(), SessionPhase::Cooldown)));
+    }
+
+    #[test]
+    fn derive_session_activity_step_finish_tool_calls_not_terminal() {
+        let payload = serde_json::json!({
+            "type": "message.part.updated",
+            "properties": {
+                "part": {
+                    "sessionId": "s_1",
+                    "type": "step-finish",
+                    "reason": "tool-calls"
+                }
+            }
+        });
+
+        let derived = derive_session_activity(&payload);
+        assert_eq!(derived, None);
     }
 
     #[test]

@@ -112,6 +112,118 @@ async fn fetch_session_status_map(
     resp.json::<serde_json::Value>().await.ok()
 }
 
+fn read_session_id_from_value(value: &serde_json::Value) -> Option<String> {
+    value
+        .as_object()
+        .and_then(|obj| {
+            obj.get("sessionID")
+                .or_else(|| obj.get("sessionId"))
+                .or_else(|| obj.get("session_id"))
+                .and_then(|v| v.as_str())
+        })
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+}
+
+fn collect_attention_session_ids_from_value(
+    value: &serde_json::Value,
+    depth: usize,
+    out: &mut HashSet<String>,
+) {
+    if depth > 8 {
+        return;
+    }
+
+    if let Some(session_id) = read_session_id_from_value(value) {
+        out.insert(session_id);
+    }
+
+    match value {
+        serde_json::Value::Array(arr) => {
+            for item in arr {
+                collect_attention_session_ids_from_value(item, depth + 1, out);
+            }
+        }
+        serde_json::Value::Object(obj) => {
+            for key in [
+                "items",
+                "data",
+                "value",
+                "payload",
+                "permissions",
+                "questions",
+                "results",
+            ] {
+                if let Some(nested) = obj.get(key) {
+                    collect_attention_session_ids_from_value(nested, depth + 1, out);
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+fn parse_attention_session_ids(payload: &serde_json::Value) -> HashSet<String> {
+    let mut out = HashSet::<String>::new();
+    collect_attention_session_ids_from_value(payload, 0, &mut out);
+    out
+}
+
+async fn fetch_attention_session_ids(
+    bridge: &crate::opencode::OpenCodeBridge,
+    endpoint: &str,
+) -> Option<HashSet<String>> {
+    let target = format!("{}{}", bridge.base_url.trim_end_matches('/'), endpoint);
+    let resp = bridge.client.get(target).send().await.ok()?;
+    if !resp.status().is_success() {
+        return None;
+    }
+
+    let payload = resp.json::<serde_json::Value>().await.ok()?;
+    Some(parse_attention_session_ids(&payload))
+}
+
+fn reconcile_runtime_attention_from_sets(
+    index: &crate::directory_session_index::DirectorySessionIndexManager,
+    permission_session_ids: &HashSet<String>,
+    question_session_ids: &HashSet<String>,
+) {
+    let mut scope = HashSet::<String>::new();
+    if let Some(runtime_map) = index.runtime_snapshot_json().as_object() {
+        scope.extend(runtime_map.keys().cloned());
+    }
+    scope.extend(permission_session_ids.iter().cloned());
+    scope.extend(question_session_ids.iter().cloned());
+
+    for session_id in scope {
+        if permission_session_ids.contains(&session_id) {
+            index.upsert_runtime_attention(&session_id, Some("permission"));
+        } else if question_session_ids.contains(&session_id) {
+            index.upsert_runtime_attention(&session_id, Some("question"));
+        } else {
+            index.upsert_runtime_attention(&session_id, None);
+        }
+    }
+}
+
+async fn reconcile_runtime_attention_from_opencode(
+    state: &Arc<AppState>,
+    bridge: &crate::opencode::OpenCodeBridge,
+) {
+    let permissions = fetch_attention_session_ids(bridge, "/permission").await;
+    let questions = fetch_attention_session_ids(bridge, "/question").await;
+    let (Some(permission_session_ids), Some(question_session_ids)) = (permissions, questions)
+    else {
+        return;
+    };
+
+    reconcile_runtime_attention_from_sets(
+        &state.directory_session_index,
+        &permission_session_ids,
+        &question_session_ids,
+    );
+}
+
 async fn reconcile_runtime_status_from_opencode(state: &Arc<AppState>) {
     let oc = state.opencode.status().await;
     if oc.restarting || !oc.ready {
@@ -127,8 +239,7 @@ async fn reconcile_runtime_status_from_opencode(state: &Arc<AppState>) {
         tracked_status_directories(&settings)
     };
 
-    let mut busy = HashSet::<String>::new();
-    let mut scope = HashSet::<String>::new();
+    let mut status_reconciled = false;
 
     if directories.is_empty() {
         if let Some(payload) = fetch_session_status_map(&bridge, None).await {
@@ -136,9 +247,13 @@ async fn reconcile_runtime_status_from_opencode(state: &Arc<AppState>) {
                 .directory_session_index
                 .reconcile_runtime_status_map(&payload);
             state.session_activity.reconcile_busy_set(&busy);
+            status_reconciled = true;
         }
-        return;
     } else {
+        let mut busy = HashSet::<String>::new();
+        let mut scope = HashSet::<String>::new();
+        let mut failed_fetches = 0usize;
+
         let tasks = futures_stream::iter(directories.into_iter().map(|directory| {
             let bridge = bridge.clone();
             async move {
@@ -152,6 +267,7 @@ async fn reconcile_runtime_status_from_opencode(state: &Arc<AppState>) {
 
         for (directory, payload) in tasks {
             let Some(payload) = payload else {
+                failed_fetches += 1;
                 continue;
             };
             let local_busy = state
@@ -165,18 +281,36 @@ async fn reconcile_runtime_status_from_opencode(state: &Arc<AppState>) {
             scope.extend(local_busy.iter().cloned());
             busy.extend(local_busy);
         }
+
+        if !scope.is_empty() {
+            state
+                .directory_session_index
+                .reconcile_busy_set_scoped(&busy, &scope);
+            state
+                .session_activity
+                .reconcile_busy_set_scoped(&busy, &scope);
+            status_reconciled = true;
+        }
+
+        if (failed_fetches > 0 || scope.is_empty())
+            && let Some(payload) = fetch_session_status_map(&bridge, None).await
+        {
+            let busy = state
+                .directory_session_index
+                .reconcile_runtime_status_map(&payload);
+            state.session_activity.reconcile_busy_set(&busy);
+            status_reconciled = true;
+        }
     }
 
-    if scope.is_empty() {
-        return;
-    }
+    reconcile_runtime_attention_from_opencode(state, &bridge).await;
 
-    state
-        .directory_session_index
-        .reconcile_busy_set_scoped(&busy, &scope);
-    state
-        .session_activity
-        .reconcile_busy_set_scoped(&busy, &scope);
+    if !status_reconciled {
+        tracing::debug!(
+            target: "opencode_studio.runtime.reconcile",
+            "skipped runtime status reconciliation (no usable status payload)"
+        );
+    }
 }
 
 async fn session_activity(
@@ -821,4 +955,76 @@ pub(crate) async fn run(args: crate::Args) {
 
     tracing::info!("OpenCode Studio listening on http://{}", addr);
     axum::serve(listener, app).await.expect("server run");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn parse_attention_session_ids_accepts_nested_aliases() {
+        let payload = json!({
+            "items": [
+                {"id": "perm_1", "sessionID": "ses_upper"},
+                {"id": "perm_2", "sessionId": "ses_camel"},
+                {
+                    "payload": {
+                        "questions": [
+                            {"id": "q_1", "session_id": "ses_snake"}
+                        ]
+                    }
+                }
+            ]
+        });
+
+        let parsed = parse_attention_session_ids(&payload);
+        assert_eq!(parsed.len(), 3);
+        assert!(parsed.contains("ses_upper"));
+        assert!(parsed.contains("ses_camel"));
+        assert!(parsed.contains("ses_snake"));
+    }
+
+    #[test]
+    fn reconcile_runtime_attention_from_sets_clears_stale_attention() {
+        let index = crate::directory_session_index::DirectorySessionIndexManager::new();
+
+        index.upsert_runtime_status("ses_stale", "busy");
+        index.upsert_runtime_attention("ses_stale", Some("question"));
+
+        let permission_session_ids = HashSet::from(["ses_perm".to_string()]);
+        let question_session_ids = HashSet::from(["ses_question".to_string()]);
+
+        reconcile_runtime_attention_from_sets(
+            &index,
+            &permission_session_ids,
+            &question_session_ids,
+        );
+
+        let snapshot = index.runtime_snapshot_json();
+        let snapshot = snapshot.as_object().expect("runtime snapshot object");
+
+        assert_eq!(
+            snapshot
+                .get("ses_perm")
+                .and_then(|v| v.get("attention"))
+                .and_then(|v| v.as_str()),
+            Some("permission")
+        );
+
+        assert_eq!(
+            snapshot
+                .get("ses_question")
+                .and_then(|v| v.get("attention"))
+                .and_then(|v| v.as_str()),
+            Some("question")
+        );
+
+        assert!(
+            snapshot
+                .get("ses_stale")
+                .and_then(|v| v.get("attention"))
+                .is_some_and(|v| v.is_null())
+        );
+    }
 }
