@@ -1105,14 +1105,26 @@ export const useChatStore = defineStore('chat', () => {
 
   async function ensureMessagePartDetail(part: JsonValue): Promise<void> {
     const partRecord = asRecord(part)
-    const sid = typeof partRecord?.sessionID === 'string' ? partRecord.sessionID.trim() : ''
-    const mid = typeof partRecord?.messageID === 'string' ? partRecord.messageID.trim() : ''
+    const sid =
+      typeof partRecord?.sessionID === 'string'
+        ? partRecord.sessionID.trim()
+        : typeof partRecord?.sessionId === 'string'
+          ? partRecord.sessionId.trim()
+          : ''
+    const mid =
+      typeof partRecord?.messageID === 'string'
+        ? partRecord.messageID.trim()
+        : typeof partRecord?.messageId === 'string'
+          ? partRecord.messageId.trim()
+          : ''
     const pidRaw =
       typeof partRecord?.partID === 'string'
         ? partRecord.partID
-        : typeof partRecord?.id === 'string'
-          ? partRecord.id
-          : ''
+        : typeof partRecord?.partId === 'string'
+          ? partRecord.partId
+          : typeof partRecord?.id === 'string'
+            ? partRecord.id
+            : ''
     const pid = typeof pidRaw === 'string' ? pidRaw.trim() : ''
     if (!sid || !mid || !pid) return
 
@@ -1136,8 +1148,11 @@ export const useChatStore = defineStore('chat', () => {
       const target =
         parts.find((p) => String(p?.id || '').trim() === pid) ??
         parts.find((p) => {
-          const alt = asRecord(p)?.partID
-          return typeof alt === 'string' && alt.trim() === pid
+          const partRecord = asRecord(p)
+          const legacy = partRecord?.partID
+          const modern = partRecord?.partId
+          const alt = typeof legacy === 'string' ? legacy : typeof modern === 'string' ? modern : ''
+          return alt.trim() === pid
         }) ??
         null
       if (!target) return

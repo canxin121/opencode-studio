@@ -406,6 +406,10 @@ pub(super) async fn load_session_message_page_from_sqlite(
                 "sessionId".to_string(),
                 Value::String(row_session_id.clone()),
             );
+            obj.insert(
+                "sessionID".to_string(),
+                Value::String(row_session_id.clone()),
+            );
 
             message_rows.push((id, row_session_id, info));
         }
@@ -476,7 +480,9 @@ pub(super) async fn load_session_message_page_from_sqlite(
                 };
                 obj.insert("id".to_string(), Value::String(id));
                 obj.insert("sessionId".to_string(), Value::String(session_id.clone()));
+                obj.insert("sessionID".to_string(), Value::String(session_id.clone()));
                 obj.insert("messageId".to_string(), Value::String(message_id.clone()));
+                obj.insert("messageID".to_string(), Value::String(message_id.clone()));
 
                 parts_by_message_id
                     .entry(message_id)
@@ -532,6 +538,7 @@ pub(super) async fn load_session_message_part_from_sqlite(
     let info_obj = info.as_object_mut()?;
     info_obj.insert("id".to_string(), Value::String(message_id.clone()));
     info_obj.insert("sessionId".to_string(), Value::String(session_id.clone()));
+    info_obj.insert("sessionID".to_string(), Value::String(session_id.clone()));
 
     let part_raw = run_sqlite_query(
         "load_session_message_part_from_sqlite.part",
@@ -548,8 +555,10 @@ pub(super) async fn load_session_message_part_from_sqlite(
     let mut part = serde_json::from_str::<Value>(&part_raw).ok()?;
     let part_obj = part.as_object_mut()?;
     part_obj.insert("id".to_string(), Value::String(part_id));
-    part_obj.insert("sessionId".to_string(), Value::String(session_id));
-    part_obj.insert("messageId".to_string(), Value::String(message_id));
+    part_obj.insert("sessionId".to_string(), Value::String(session_id.clone()));
+    part_obj.insert("sessionID".to_string(), Value::String(session_id));
+    part_obj.insert("messageId".to_string(), Value::String(message_id.clone()));
+    part_obj.insert("messageID".to_string(), Value::String(message_id));
 
     Some((info, part))
 }

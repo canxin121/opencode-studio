@@ -82,7 +82,14 @@ export function normalizeMessageInfoFromSse(evt: SseEvent): MessageInfo | null {
   if (!raw) return null
 
   const id = typeof raw.id === 'string' ? raw.id.trim() : ''
-  const sessionID = typeof raw.sessionID === 'string' ? raw.sessionID.trim() : ''
+  const sessionID =
+    typeof raw.sessionID === 'string'
+      ? raw.sessionID.trim()
+      : typeof raw.sessionId === 'string'
+        ? raw.sessionId.trim()
+        : typeof raw.session_id === 'string'
+          ? raw.session_id.trim()
+          : ''
 
   if (!id || !sessionID) return null
 
@@ -108,8 +115,22 @@ export function normalizeMessageInfoFromPartEvent(evt: SseEvent): MessageInfo | 
   const part = firstRecord(props, ['part', 'messagePart', 'partInfo'])
   if (!part) return null
 
-  const sessionID = typeof part.sessionID === 'string' ? part.sessionID.trim() : ''
-  const messageID = typeof part.messageID === 'string' ? part.messageID.trim() : ''
+  const sessionID =
+    typeof part.sessionID === 'string'
+      ? part.sessionID.trim()
+      : typeof part.sessionId === 'string'
+        ? part.sessionId.trim()
+        : typeof part.session_id === 'string'
+          ? part.session_id.trim()
+          : ''
+  const messageID =
+    typeof part.messageID === 'string'
+      ? part.messageID.trim()
+      : typeof part.messageId === 'string'
+        ? part.messageId.trim()
+        : typeof part.message_id === 'string'
+          ? part.message_id.trim()
+          : ''
   if (!sessionID || !messageID) return null
 
   const created = getNumber(asRecord(part.time), 'created') ?? Date.now()
@@ -136,7 +157,7 @@ export function normalizeMessagePartFromSse(evt: SseEvent, messageID: string, se
     // Some emitters send { partID, delta } instead of the full part.
     if (!raw && deltaFromProps) {
       raw = {
-        id: props.partID ?? '',
+        id: props.partID ?? props.partId ?? '',
         type: 'text',
         delta: deltaFromProps,
       }
@@ -158,7 +179,7 @@ export function normalizeMessagePartFromSse(evt: SseEvent, messageID: string, se
 
   // Some emitters provide partID outside the part object.
   if (!id && isRecord(props)) {
-    const pid = getString(props, 'partID').trim()
+    const pid = (getString(props, 'partID') || getString(props, 'partId')).trim()
     if (pid) id = pid
   }
 

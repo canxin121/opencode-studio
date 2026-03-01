@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex};
 use std::time::SystemTime;
@@ -424,6 +424,11 @@ async fn list_json_ids_cached(dir: &Path) -> Vec<String> {
     ids
 }
 
+fn dedupe_session_dirs(session_dirs: &mut Vec<PathBuf>) {
+    let mut seen = HashSet::<PathBuf>::new();
+    session_dirs.retain(|path| seen.insert(path.clone()));
+}
+
 fn parse_number(raw: Option<String>, name: &str) -> Result<Option<f64>, Box<Response>> {
     let Some(raw) = raw else {
         return Ok(None);
@@ -490,6 +495,8 @@ fn read_json_error_response(path: &Path, err: ReadJsonError) -> Response {
 fn session_parent_id(value: &Value) -> Option<String> {
     value
         .get("parentID")
+        .or_else(|| value.get("parentId"))
+        .or_else(|| value.get("parent_id"))
         .and_then(|v| v.as_str())
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty())
@@ -761,8 +768,11 @@ pub async fn session_list(
     } else {
         normalize_dir_for_compare(&directory)
     };
-    let session_root = crate::persistence_paths::opencode_sessions_dir();
-    let session_dirs = vec![session_root.join(&project_id)];
+    let mut session_dirs = Vec::<PathBuf>::new();
+    for session_root in crate::persistence_paths::opencode_sessions_dir_candidates() {
+        session_dirs.push(session_root.join(&project_id));
+    }
+    dedupe_session_dirs(&mut session_dirs);
 
     let offset_value = offset_raw.unwrap_or(0.0);
     let mut offset = if offset_value.is_sign_negative() {
@@ -879,12 +889,7 @@ pub async fn session_list(
             continue;
         }
 
-        record.parent_id = record
-            .value
-            .get("parentID")
-            .and_then(|v| v.as_str())
-            .map(|v| v.trim().to_string())
-            .filter(|v| !v.is_empty());
+        record.parent_id = session_parent_id(&record.value);
 
         state
             .directory_session_index
@@ -965,11 +970,7 @@ pub async fn session_list(
                         continue;
                     }
 
-                    let parent_id = session
-                        .get("parentID")
-                        .and_then(|v| v.as_str())
-                        .map(|v| v.trim().to_string())
-                        .filter(|v| !v.is_empty());
+                    let parent_id = session_parent_id(&session);
 
                     state
                         .directory_session_index
@@ -1063,11 +1064,7 @@ pub async fn session_list(
                             return ScanFetchResult::Record(None, read_outcome);
                         }
 
-                        let parent_id = session
-                            .get("parentID")
-                            .and_then(|v| v.as_str())
-                            .map(|v| v.trim().to_string())
-                            .filter(|v| !v.is_empty());
+                        let parent_id = session_parent_id(&session);
 
                         index.upsert_summary_from_value(&session);
                         ScanFetchResult::Record(
@@ -1460,7 +1457,7 @@ pub async fn session_message_get(
     };
 
     // Ensure each part carries stable IDs so the web UI can lazy-load details by
-    // (sessionId, messageId, partId).
+    // (sessionId, messageId, partId). Keep legacy aliases for compatibility.
     for entry in entries.iter_mut() {
         let Some(obj) = entry.as_object_mut() else {
             continue;
@@ -1484,15 +1481,20 @@ pub async fn session_message_get(
                 continue;
             };
             pobj.insert("sessionId".to_string(), Value::String(session_id.clone()));
+            pobj.insert("sessionID".to_string(), Value::String(session_id.clone()));
             pobj.insert("messageId".to_string(), Value::String(message_id.clone()));
+            pobj.insert("messageID".to_string(), Value::String(message_id.clone()));
             let pid = pobj
                 .get("id")
                 .and_then(|v| v.as_str())
                 .or_else(|| pobj.get("partId").and_then(|v| v.as_str()))
+                .or_else(|| pobj.get("partID").and_then(|v| v.as_str()))
                 .unwrap_or("")
-                .trim();
+                .trim()
+                .to_string();
             if !pid.is_empty() {
-                pobj.insert("partId".to_string(), Value::String(pid.to_string()));
+                pobj.insert("partId".to_string(), Value::String(pid.clone()));
+                pobj.insert("partID".to_string(), Value::String(pid));
             }
         }
     }
@@ -1651,8 +1653,11 @@ pub async fn session_message_part_get(
 
     if let Some(obj) = part.as_object_mut() {
         obj.insert("sessionId".to_string(), Value::String(sid.to_string()));
+        obj.insert("sessionID".to_string(), Value::String(sid.to_string()));
         obj.insert("messageId".to_string(), Value::String(mid.to_string()));
+        obj.insert("messageID".to_string(), Value::String(mid.to_string()));
         obj.insert("partId".to_string(), Value::String(pid.to_string()));
+        obj.insert("partID".to_string(), Value::String(pid.to_string()));
         if obj
             .get("id")
             .and_then(|v| v.as_str())
