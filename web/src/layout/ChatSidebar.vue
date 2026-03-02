@@ -122,7 +122,29 @@ const SESSION_ROOTS_PAGE_SIZE = 10
 
 // Search/filter (user-driven only).
 const sidebarQuery = ref('')
+const sidebarQueryDraft = ref('')
 const sidebarQueryNorm = computed(() => sidebarQuery.value.trim().toLowerCase())
+
+function submitSidebarQuery() {
+  const nextRaw = sidebarQueryDraft.value
+  const nextNorm = nextRaw.trim().toLowerCase()
+  const currentNorm = sidebarQueryNorm.value
+  if (nextNorm === currentNorm) {
+    scheduleSidebarStateFetch(0)
+    return
+  }
+  sidebarQuery.value = nextRaw
+}
+
+watch(
+  () => sidebarQuery.value,
+  (next) => {
+    if (sidebarQueryDraft.value !== next) {
+      sidebarQueryDraft.value = next
+    }
+  },
+  { immediate: true },
+)
 
 watch(
   () => directorySessions.uiPrefs,
@@ -286,7 +308,7 @@ watch(
       directoryPage.value = 0
       return
     }
-    scheduleSidebarStateFetch(next ? 180 : 0)
+    scheduleSidebarStateFetch(0)
   },
 )
 
@@ -1440,9 +1462,10 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
         :directoryPageCount="directoryPageCount"
         :directoryPaging="directoryPaging || directoryPageLoading"
         :sessionsLoading="sessionsLoading"
-        :query="sidebarQuery"
+        :query="sidebarQueryDraft"
         :is-mobile-pointer="ui.isMobilePointer"
-        @update:query="(v) => (sidebarQuery = v)"
+        @update:query="(v) => (sidebarQueryDraft = v)"
+        @submit-query="submitSidebarQuery"
         @update:directoryPage="
           (v) => {
             dismissDeepLinkFocus()

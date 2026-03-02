@@ -19,6 +19,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'update:query', v: string): void
+  (e: 'submit-query'): void
   (e: 'update:directoryPage', v: number): void
   (e: 'add-directory'): void
   (e: 'refresh'): void
@@ -70,14 +71,21 @@ const emit = defineEmits<{
 
   <div class="px-3 py-2 flex-shrink-0">
     <div class="relative">
-      <RiSearchLine
-        class="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60"
-      />
+      <button
+        type="button"
+        class="absolute left-1 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded text-muted-foreground/60 transition hover:bg-primary/6 hover:text-foreground dark:hover:bg-accent/40"
+        :aria-label="String(t('common.search'))"
+        :title="String(t('common.search'))"
+        @click="emit('submit-query')"
+      >
+        <RiSearchLine class="h-4 w-4" />
+      </button>
       <Input
         :model-value="query"
         @update:model-value="(v) => emit('update:query', String(v || ''))"
+        @keydown.enter.prevent="emit('submit-query')"
         :placeholder="String(t('chat.sidebar.header.searchPlaceholder'))"
-        class="h-8 pl-7 pr-7 text-xs"
+        class="h-8 pl-8 pr-7 text-xs"
         :aria-label="String(t('chat.sidebar.header.searchAria'))"
       />
       <IconButton
@@ -88,7 +96,12 @@ const emit = defineEmits<{
         :is-mobile-pointer="Boolean(props.isMobilePointer)"
         :aria-label="String(t('chat.sidebar.header.clearSearch'))"
         :title="String(t('common.clear'))"
-        @click="emit('update:query', '')"
+        @click="
+          () => {
+            emit('update:query', '')
+            emit('submit-query')
+          }
+        "
       >
         <RiCloseLine class="h-4 w-4" />
       </IconButton>
