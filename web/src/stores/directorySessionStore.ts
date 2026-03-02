@@ -11,15 +11,24 @@ import { normalizeDirForCompare } from '@/features/sessions/model/labels'
 import type { SseEvent } from '@/lib/sse'
 import { defaultChatSidebarUiPrefs, patchChatSidebarUiPrefs, type ChatSidebarUiPrefs } from '@/data/chatSidebarUiPrefs'
 
-import { type ChatSidebarStateWire } from './directorySessions/index'
 import { normalizeRuntime, runtimeIsActive, type SessionRuntimeState } from './directorySessionRuntime'
-import { normalizeUiPrefs, parseChatSidebarPreferencesPatchOps, uiPrefsBodyEquals } from './directorySessions/prefs'
-import {
-  SIDEBAR_STATE_ENDPOINT,
-  UI_PREFS_ENDPOINT,
-  UI_PREFS_REMOTE_SAVE_DEBOUNCE_MS,
-} from './directorySessions/persistence'
 import type { JsonObject as UnknownRecord, JsonValue } from '@/types/json'
+
+type ChatSidebarStateWire = {
+  preferences?: JsonValue
+  seq?: number
+  directoriesPage?: JsonValue
+  sessionPagesByDirectoryId?: JsonValue
+  runtimeBySessionId?: JsonValue
+  recentPage?: JsonValue
+  runningPage?: JsonValue
+  focus?: JsonValue
+  view?: JsonValue
+}
+
+const SIDEBAR_STATE_ENDPOINT = '/api/chat-sidebar/state'
+const UI_PREFS_ENDPOINT = '/api/ui/chat-sidebar/preferences'
+const UI_PREFS_REMOTE_SAVE_DEBOUNCE_MS = 300
 
 type SidebarSessionSummary = UnknownRecord & {
   id: string
@@ -77,6 +86,11 @@ type RevalidateRuntimeOpts = {
   silent?: boolean
 }
 
+type ChatSidebarPreferencesPatchOp = {
+  type: 'preferences.replace'
+  preferences: Partial<ChatSidebarUiPrefs>
+}
+
 type NormalizedSidebarView = {
   directorySidebarById: Record<string, DirectorySidebarView>
   pinnedFooterView: SidebarFooterView
@@ -125,16 +139,61 @@ function readEventOps(evt: SseEvent): JsonValue[] {
   return Array.isArray(root?.ops) ? root.ops : []
 }
 
-function readEventSidebarState(evt: SseEvent): JsonValue | null {
-  const props = readEventProperties(evt)
-  if (hasOwn(props, 'state')) {
-    return (props.state as JsonValue) || null
+function parseChatSidebarPreferencesPatchOps(raw: JsonValue): ChatSidebarPreferencesPatchOp[] {
+  if (!Array.isArray(raw)) return []
+  const out: ChatSidebarPreferencesPatchOp[] = []
+  for (const item of raw) {
+    const op = asRecord(item)
+    if (!op) continue
+    const ty = typeof op?.type === 'string' ? op.type.trim() : ''
+    if (ty !== 'preferences.replace') continue
+    const preferences = asRecord(op?.preferences)
+    if (!preferences) continue
+    out.push({
+      type: 'preferences.replace',
+      preferences: preferences as Partial<ChatSidebarUiPrefs>,
+    })
   }
-  const root = asRecord(evt)
-  if (root && hasOwn(root, 'state')) {
-    return (root.state as JsonValue) || null
+  return out
+}
+
+function normalizeUiPrefs(input: Partial<ChatSidebarUiPrefs> | null | undefined): ChatSidebarUiPrefs {
+  return patchChatSidebarUiPrefs(defaultChatSidebarUiPrefs(), (input || {}) as Partial<ChatSidebarUiPrefs>)
+}
+
+function sameStringArray(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) return false
+  for (let i = 0; i < left.length; i += 1) {
+    if (left[i] !== right[i]) return false
   }
-  return null
+  return true
+}
+
+function samePageMap(left: Record<string, number>, right: Record<string, number>): boolean {
+  const leftKeys = Object.keys(left)
+  const rightKeys = Object.keys(right)
+  if (leftKeys.length !== rightKeys.length) return false
+  for (const key of leftKeys) {
+    if (!Object.prototype.hasOwnProperty.call(right, key)) return false
+    if (left[key] !== right[key]) return false
+  }
+  return true
+}
+
+function uiPrefsBodyEquals(left: ChatSidebarUiPrefs, right: ChatSidebarUiPrefs): boolean {
+  return (
+    sameStringArray(left.collapsedDirectoryIds, right.collapsedDirectoryIds) &&
+    sameStringArray(left.expandedParentSessionIds, right.expandedParentSessionIds) &&
+    sameStringArray(left.pinnedSessionIds, right.pinnedSessionIds) &&
+    left.directoriesPage === right.directoriesPage &&
+    samePageMap(left.sessionRootPageByDirectoryId, right.sessionRootPageByDirectoryId) &&
+    left.pinnedSessionsOpen === right.pinnedSessionsOpen &&
+    left.pinnedSessionsPage === right.pinnedSessionsPage &&
+    left.recentSessionsOpen === right.recentSessionsOpen &&
+    left.recentSessionsPage === right.recentSessionsPage &&
+    left.runningSessionsOpen === right.runningSessionsOpen &&
+    left.runningSessionsPage === right.runningSessionsPage
+  )
 }
 
 function normalizePath(path: string): string {
@@ -402,6 +461,9 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
   let uiPrefsRemotePersistTimer: number | null = null
   let uiPrefsRemotePersistInFlight = false
   let uiPrefsRemotePersistQueued = false
+  let sidebarStateSyncTimer: number | null = null
+  let sidebarStateSyncInFlight = false
+  let sidebarStateSyncQueued = false
 
   const visibleDirectories = computed<DirectoryEntry[]>(() => {
     return directoryOrder.value
@@ -568,6 +630,41 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     applySidebarStatePayload(state as JsonValue)
   }
 
+  function scheduleSidebarStateSync(delayMs = 0) {
+    if (sidebarStateSyncTimer !== null) {
+      window.clearTimeout(sidebarStateSyncTimer)
+      sidebarStateSyncTimer = null
+    }
+
+    sidebarStateSyncTimer = window.setTimeout(
+      () => {
+        sidebarStateSyncTimer = null
+        void syncSidebarStateFromServer()
+      },
+      Math.max(0, Math.floor(delayMs)),
+    )
+  }
+
+  async function syncSidebarStateFromServer() {
+    if (sidebarStateSyncInFlight) {
+      sidebarStateSyncQueued = true
+      return
+    }
+
+    sidebarStateSyncInFlight = true
+    try {
+      await revalidateFromStateApi()
+    } catch {
+      // Keep existing sidebar cache on transient background sync failures.
+    } finally {
+      sidebarStateSyncInFlight = false
+      if (sidebarStateSyncQueued) {
+        sidebarStateSyncQueued = false
+        scheduleSidebarStateSync(120)
+      }
+    }
+  }
+
   async function revalidateFromApi(opts?: SidebarStateQuery, runtimeOpts?: RevalidateRuntimeOpts): Promise<boolean> {
     if (!runtimeOpts?.silent) {
       loading.value = true
@@ -589,11 +686,10 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
   function applyChatSidebarStateEvent(evt: SseEvent) {
     const type = readEventType(evt)
     if (type !== 'chat-sidebar.state') return
-    if (persistedStateQuery.directoryQuery) return
 
-    const state = readEventSidebarState(evt)
-    if (!state) return
-    applySidebarStatePayload(state)
+    // Backend owns sidebar derivation. Treat SSE as an invalidation signal and
+    // re-fetch authoritative state from /api/chat-sidebar/state.
+    scheduleSidebarStateSync(120)
   }
 
   function applyGlobalEvent(evt: SseEvent) {
@@ -761,6 +857,13 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
   }
 
   async function resetAllPersistedState() {
+    if (sidebarStateSyncTimer !== null) {
+      window.clearTimeout(sidebarStateSyncTimer)
+      sidebarStateSyncTimer = null
+    }
+    sidebarStateSyncInFlight = false
+    sidebarStateSyncQueued = false
+
     if (uiPrefsRemotePersistTimer !== null) {
       window.clearTimeout(uiPrefsRemotePersistTimer)
       uiPrefsRemotePersistTimer = null

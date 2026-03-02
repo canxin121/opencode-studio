@@ -30,7 +30,6 @@ import type { DirectoryEntry } from '@/features/sessions/model/types'
 import type { FlatTreeRow } from '@/features/sessions/model/tree'
 import { useSidebarLocate } from '@/layout/chatSidebar/useSidebarLocate'
 import { normalizeSidebarUiPrefsForUi } from '@/features/sessions/model/sidebarUiPrefs'
-import { DIRECTORIES_PAGE_SIZE_DEFAULT } from '@/stores/directorySessions/index'
 import { apiJson } from '@/lib/api'
 
 const props = defineProps<{ mobileVariant?: boolean }>()
@@ -110,7 +109,7 @@ const directoryPaging = ref(false)
 const directories = computed<DirectoryEntry[]>(() => directorySessions.visibleDirectories)
 
 // Paging (sidebar can contain many directories/sessions).
-const DIRECTORIES_PAGE_SIZE = DIRECTORIES_PAGE_SIZE_DEFAULT
+const DIRECTORIES_PAGE_SIZE = 15
 const SESSION_ROOTS_PAGE_SIZE = 10
 
 // Search/filter (user-driven only).

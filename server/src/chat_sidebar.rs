@@ -2184,30 +2184,18 @@ pub(crate) async fn chat_sidebar_state(
     .into_response())
 }
 
-pub(crate) async fn chat_sidebar_state_snapshot(
-    state: Arc<crate::AppState>,
-    query: ChatSidebarStateQuery,
-) -> Option<Value> {
-    let response = chat_sidebar_state(State(state), Query(query)).await.ok()?;
-    decode_json_response(response).await
-}
-
-pub(crate) async fn publish_chat_sidebar_state_event(
-    state: Arc<crate::AppState>,
-    query: ChatSidebarStateQuery,
+pub(crate) fn publish_chat_sidebar_state_event(
+    _state: Arc<crate::AppState>,
+    _query: ChatSidebarStateQuery,
 ) -> bool {
     if crate::global_sse_hub::downstream_client_count() == 0 {
         return false;
     }
 
-    let Some(sidebar_state) = chat_sidebar_state_snapshot(state, query).await else {
-        return false;
-    };
-
     let payload = serde_json::to_string(&json!({
         "type": "chat-sidebar.state",
         "properties": {
-            "state": sidebar_state,
+            "seq": crate::directory_sessions::directory_sessions_latest_seq(),
         }
     }))
     .unwrap_or_else(|_| "{}".to_string());

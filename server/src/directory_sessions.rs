@@ -636,8 +636,7 @@ fn start_directory_sessions_poller_if_needed(state: Arc<crate::AppState>) {
                 let _ = crate::chat_sidebar::publish_chat_sidebar_state_event(
                     state.clone(),
                     crate::chat_sidebar::ChatSidebarStateQuery::default(),
-                )
-                .await;
+                );
             }
 
             tracing::debug!(

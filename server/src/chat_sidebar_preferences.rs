@@ -479,8 +479,7 @@ pub(crate) async fn chat_sidebar_preferences_put(
         let _ = crate::chat_sidebar::publish_chat_sidebar_state_event(
             state,
             crate::chat_sidebar::ChatSidebarStateQuery::default(),
-        )
-        .await;
+        );
     }
 
     Json(preferences).into_response()
