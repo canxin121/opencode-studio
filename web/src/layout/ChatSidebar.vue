@@ -111,6 +111,7 @@ const directories = computed<DirectoryEntry[]>(() => directorySessions.visibleDi
 // Paging (sidebar can contain many directories/sessions).
 const DIRECTORIES_PAGE_SIZE = 15
 const SESSION_ROOTS_PAGE_SIZE = 10
+const SIDEBAR_FOOTER_PAGE_SIZE = 10
 
 // Search/filter (user-driven only).
 const sidebarQuery = ref('')
@@ -289,7 +290,15 @@ async function requestDirectoryPage(nextPage: number) {
   try {
     skipDirectoryPageWatchOnce = true
     directoryPage.value = target
-    await revalidateSidebarState({ directoriesPage: target, query: sidebarQueryNorm.value }, { silent: true })
+    const partialOk = await directorySessions.revalidateDirectoriesPageFromApi({
+      page: target,
+      pageSize: DIRECTORIES_PAGE_SIZE,
+      query: sidebarQueryNorm.value,
+      silent: true,
+    })
+    if (!partialOk) {
+      await revalidateSidebarState({ directoriesPage: target, query: sidebarQueryNorm.value }, { silent: true })
+    }
   } finally {
     directoryPaging.value = false
   }
@@ -330,6 +339,7 @@ watch(
 watch(
   () => directories.value.map((entry) => `${entry.id}:${entry.path}`).join('|'),
   () => {
+    if (directoryPaging.value) return
     scheduleSidebarStateFetch(0)
   },
   { immediate: true },
@@ -804,14 +814,21 @@ async function requestPinnedSessionsPage(nextPage: number) {
   pinnedSessionsPaging.value = true
   try {
     pinnedSessionsPage.value = target
-    await revalidateSidebarState(
-      {
-        directoriesPage: directoryPage.value,
-        query: sidebarQueryNorm.value,
-        pinnedPage: target,
-      },
-      { silent: true },
-    )
+    const partialOk = await directorySessions.revalidateFooterFromApi('pinned', {
+      page: target,
+      pageSize: SIDEBAR_FOOTER_PAGE_SIZE,
+      silent: true,
+    })
+    if (!partialOk) {
+      await revalidateSidebarState(
+        {
+          directoriesPage: directoryPage.value,
+          query: sidebarQueryNorm.value,
+          pinnedPage: target,
+        },
+        { silent: true },
+      )
+    }
   } finally {
     pinnedSessionsPaging.value = false
   }
@@ -826,14 +843,21 @@ async function requestRecentSessionsPage(nextPage: number) {
   recentSessionsPaging.value = true
   try {
     recentSessionsPage.value = target
-    await revalidateSidebarState(
-      {
-        directoriesPage: directoryPage.value,
-        query: sidebarQueryNorm.value,
-        recentPage: target,
-      },
-      { silent: true },
-    )
+    const partialOk = await directorySessions.revalidateFooterFromApi('recent', {
+      page: target,
+      pageSize: SIDEBAR_FOOTER_PAGE_SIZE,
+      silent: true,
+    })
+    if (!partialOk) {
+      await revalidateSidebarState(
+        {
+          directoriesPage: directoryPage.value,
+          query: sidebarQueryNorm.value,
+          recentPage: target,
+        },
+        { silent: true },
+      )
+    }
   } finally {
     recentSessionsPaging.value = false
   }
@@ -848,14 +872,21 @@ async function requestRunningSessionsPage(nextPage: number) {
   runningSessionsPaging.value = true
   try {
     runningSessionsPage.value = target
-    await revalidateSidebarState(
-      {
-        directoriesPage: directoryPage.value,
-        query: sidebarQueryNorm.value,
-        runningPage: target,
-      },
-      { silent: true },
-    )
+    const partialOk = await directorySessions.revalidateFooterFromApi('running', {
+      page: target,
+      pageSize: SIDEBAR_FOOTER_PAGE_SIZE,
+      silent: true,
+    })
+    if (!partialOk) {
+      await revalidateSidebarState(
+        {
+          directoriesPage: directoryPage.value,
+          query: sidebarQueryNorm.value,
+          runningPage: target,
+        },
+        { silent: true },
+      )
+    }
   } finally {
     runningSessionsPaging.value = false
   }
@@ -973,8 +1004,15 @@ async function ensureDirectorySidebarLoaded(
       ? Math.max(0, Math.floor(opts.page))
       : sessionRootPage(pid)
   directorySessions.setSessionRootPage(pid, targetPage, SESSION_ROOTS_PAGE_SIZE)
-  const ok = await revalidateSidebarState(undefined, { silent: true })
-  if (!ok) return null
+  const partialOk = await directorySessions.revalidateDirectorySessionPageFromApi(pid, {
+    page: targetPage,
+    pageSize: SESSION_ROOTS_PAGE_SIZE,
+    silent: true,
+  })
+  if (!partialOk) {
+    const ok = await revalidateSidebarState(undefined, { silent: true })
+    if (!ok) return null
+  }
   return {
     directoryId: pid,
     directoryPath: root,
@@ -1249,7 +1287,14 @@ async function setSessionRootPage(directoryId: string, page: number) {
   if (current === next) return
 
   directorySessions.setSessionRootPage(pid, next, SESSION_ROOTS_PAGE_SIZE)
-  await revalidateSidebarState(undefined, { silent: true })
+  const partialOk = await directorySessions.revalidateDirectorySessionPageFromApi(pid, {
+    page: next,
+    pageSize: SESSION_ROOTS_PAGE_SIZE,
+    silent: true,
+  })
+  if (!partialOk) {
+    await revalidateSidebarState(undefined, { silent: true })
+  }
 }
 
 function pagedRowsForDirectory(directoryId: string): FlatTreeRow[] {

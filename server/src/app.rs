@@ -613,8 +613,21 @@ pub(crate) async fn run(args: crate::Args) {
                 .put(crate::chat_sidebar::chat_sidebar_state_put),
         )
         .route(
+            "/chat-sidebar/directories-page",
+            get(crate::chat_sidebar::chat_sidebar_directories_page_get),
+        )
+        .route(
+            "/chat-sidebar/preferences",
+            get(crate::chat_sidebar::chat_sidebar_preferences_get)
+                .put(crate::chat_sidebar::chat_sidebar_preferences_put),
+        )
+        .route(
             "/chat-sidebar/session-search",
             get(crate::chat_sidebar::chat_sidebar_session_search),
+        )
+        .route(
+            "/chat-sidebar/footer/{kind}",
+            get(crate::chat_sidebar::chat_sidebar_footer_get),
         )
         .route(
             "/sessions/summaries",

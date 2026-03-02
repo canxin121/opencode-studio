@@ -313,6 +313,27 @@ pub(crate) struct ChatSidebarStateQuery {
 
 #[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
+pub(crate) struct ChatSidebarDirectoriesPageQuery {
+    pub page: Option<usize>,
+    pub page_size: Option<usize>,
+    pub query: Option<String>,
+    pub directory_sessions_page_size: Option<usize>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ChatSidebarFooterQuery {
+    pub page: Option<usize>,
+    pub page_size: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct ChatSidebarFooterPath {
+    pub kind: String,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct ChatSidebarSessionSearchQuery {
     pub query: Option<String>,
     pub limit: Option<usize>,
@@ -447,6 +468,63 @@ struct ChatSidebarStateResponse {
     running_page: Value,
     focus: Option<ChatSidebarFocusWire>,
     view: ChatSidebarViewWire,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ChatSidebarFooterResponse {
+    kind: String,
+    seq: u64,
+    view: SidebarFooterViewWire,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ChatSidebarDirectoriesPageViewWire {
+    directory_rows_by_id: BTreeMap<String, DirectorySidebarViewWire>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ChatSidebarDirectoriesPageResponse {
+    preferences: SessionsSidebarPreferences,
+    seq: u64,
+    directories_page: Value,
+    view: ChatSidebarDirectoriesPageViewWire,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ChatSidebarPreferencesResponse {
+    preferences: SessionsSidebarPreferences,
+    seq: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ChatSidebarFooterKind {
+    Pinned,
+    Recent,
+    Running,
+}
+
+impl ChatSidebarFooterKind {
+    fn parse(raw: &str) -> Option<Self> {
+        let normalized = raw.trim().to_ascii_lowercase();
+        match normalized.as_str() {
+            "pinned" => Some(Self::Pinned),
+            "recent" => Some(Self::Recent),
+            "running" => Some(Self::Running),
+            _ => None,
+        }
+    }
+
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Pinned => "pinned",
+            Self::Recent => "recent",
+            Self::Running => "running",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1539,26 +1617,9 @@ fn parse_paged_meta(page_payload: &Value, fallback_page_size: usize) -> (usize, 
     (total, offset / limit, limit)
 }
 
-struct ChatSidebarViewBuildInput<'a> {
-    state: &'a Arc<crate::AppState>,
-    directories_page: &'a Value,
-    session_pages_by_directory_id: &'a BTreeMap<String, Value>,
-    runtime_by_session_id: &'a Value,
-    recent_page: &'a Value,
-    running_page: &'a Value,
-    preferences: &'a SessionsSidebarPreferences,
-    directory_sessions_page_size: usize,
-    pinned_page_size: usize,
-    recent_page_size: usize,
-    running_page_size: usize,
-    pinned_page: usize,
-}
-
-fn build_chat_sidebar_view(input: ChatSidebarViewBuildInput<'_>) -> ChatSidebarViewWire {
-    let state = input.state;
+fn visible_directory_wires_from_page_payload(directories_page: &Value) -> Vec<DirectoryWire> {
     let mut visible_directories = Vec::<DirectoryWire>::new();
-    if let Some(items) = input
-        .directories_page
+    if let Some(items) = directories_page
         .get("items")
         .and_then(|value| value.as_array())
     {
@@ -1595,24 +1656,68 @@ fn build_chat_sidebar_view(input: ChatSidebarViewBuildInput<'_>) -> ChatSidebarV
             });
         }
     }
+    visible_directories
+}
 
-    let mut all_directories = visible_directories.clone();
-    let mut known_ids = all_directories
+fn build_directory_rows_by_id_for_visible_directories(
+    state: &Arc<crate::AppState>,
+    preferences: &SessionsSidebarPreferences,
+    configured: &[DirectoryWire],
+    visible_directories: &[DirectoryWire],
+    session_pages_by_directory_id: &BTreeMap<String, Value>,
+    runtime_by_session_id: &Value,
+    directory_sessions_page_size: usize,
+) -> BTreeMap<String, DirectorySidebarViewWire> {
+    let all_directories = all_known_sidebar_directories(state, configured);
+    let directories_by_id = normalize_directory_wires_by_id(&all_directories);
+    let directory_id_by_path = normalize_directory_id_by_path(&all_directories);
+    let expanded_parent_ids = preferences
+        .expanded_parent_session_ids
         .iter()
-        .map(|entry| entry.id.clone())
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
         .collect::<HashSet<_>>();
-    for recent in state.directory_session_index.recent_sessions_snapshot() {
-        if known_ids.contains(&recent.directory_id) {
-            continue;
-        }
-        known_ids.insert(recent.directory_id.clone());
-        all_directories.push(DirectoryWire {
-            id: recent.directory_id,
-            path: recent.directory_path,
-            added_at: 0,
-            last_opened_at: 0,
-        });
+    let active_directory_ids =
+        collect_active_directory_ids(state, runtime_by_session_id, &directory_id_by_path);
+
+    let directory_ctx = DirectorySidebarBuildCtx {
+        state,
+        preferences,
+        expanded_parent_ids: &expanded_parent_ids,
+        directories_by_id: &directories_by_id,
+        directory_id_by_path: &directory_id_by_path,
+        active_directory_ids: &active_directory_ids,
+        directory_sessions_page_size,
+    };
+
+    let mut directory_rows_by_id = BTreeMap::<String, DirectorySidebarViewWire>::new();
+    for directory in visible_directories {
+        let page_payload = session_pages_by_directory_id.get(&directory.id);
+        let section = build_directory_sidebar_view(&directory_ctx, directory, page_payload);
+        directory_rows_by_id.insert(directory.id.clone(), section);
     }
+    directory_rows_by_id
+}
+
+struct ChatSidebarViewBuildInput<'a> {
+    state: &'a Arc<crate::AppState>,
+    directories_page: &'a Value,
+    session_pages_by_directory_id: &'a BTreeMap<String, Value>,
+    runtime_by_session_id: &'a Value,
+    recent_page: &'a Value,
+    running_page: &'a Value,
+    preferences: &'a SessionsSidebarPreferences,
+    directory_sessions_page_size: usize,
+    pinned_page_size: usize,
+    recent_page_size: usize,
+    running_page_size: usize,
+    pinned_page: usize,
+}
+
+fn build_chat_sidebar_view(input: ChatSidebarViewBuildInput<'_>) -> ChatSidebarViewWire {
+    let state = input.state;
+    let visible_directories = visible_directory_wires_from_page_payload(input.directories_page);
+    let all_directories = all_known_sidebar_directories(state, &visible_directories);
 
     let directories_by_id = normalize_directory_wires_by_id(&all_directories);
     let directory_id_by_path = normalize_directory_id_by_path(&all_directories);
@@ -1624,25 +1729,15 @@ fn build_chat_sidebar_view(input: ChatSidebarViewBuildInput<'_>) -> ChatSidebarV
         .filter(|value| !value.is_empty())
         .collect::<HashSet<_>>();
 
-    let active_directory_ids =
-        collect_active_directory_ids(state, input.runtime_by_session_id, &directory_id_by_path);
-
-    let directory_ctx = DirectorySidebarBuildCtx {
+    let directory_rows_by_id = build_directory_rows_by_id_for_visible_directories(
         state,
-        preferences: input.preferences,
-        expanded_parent_ids: &expanded_parent_ids,
-        directories_by_id: &directories_by_id,
-        directory_id_by_path: &directory_id_by_path,
-        active_directory_ids: &active_directory_ids,
-        directory_sessions_page_size: input.directory_sessions_page_size,
-    };
-
-    let mut directory_rows_by_id = BTreeMap::<String, DirectorySidebarViewWire>::new();
-    for directory in &visible_directories {
-        let page_payload = input.session_pages_by_directory_id.get(&directory.id);
-        let section = build_directory_sidebar_view(&directory_ctx, directory, page_payload);
-        directory_rows_by_id.insert(directory.id.clone(), section);
-    }
+        input.preferences,
+        &visible_directories,
+        &visible_directories,
+        input.session_pages_by_directory_id,
+        input.runtime_by_session_id,
+        input.directory_sessions_page_size,
+    );
 
     let pinned_all_root_ids = input
         .preferences
@@ -1798,6 +1893,30 @@ fn build_chat_sidebar_view(input: ChatSidebarViewBuildInput<'_>) -> ChatSidebarV
         recent_footer,
         running_footer,
     }
+}
+
+fn all_known_sidebar_directories(
+    state: &Arc<crate::AppState>,
+    configured: &[DirectoryWire],
+) -> Vec<DirectoryWire> {
+    let mut all_directories = configured.to_vec();
+    let mut known_ids = all_directories
+        .iter()
+        .map(|entry| entry.id.clone())
+        .collect::<HashSet<_>>();
+    for recent in state.directory_session_index.recent_sessions_snapshot() {
+        if known_ids.contains(&recent.directory_id) {
+            continue;
+        }
+        known_ids.insert(recent.directory_id.clone());
+        all_directories.push(DirectoryWire {
+            id: recent.directory_id,
+            path: recent.directory_path,
+            added_at: 0,
+            last_opened_at: 0,
+        });
+    }
+    all_directories
 }
 
 pub(crate) async fn directories_get(
@@ -2402,17 +2521,328 @@ pub(crate) async fn chat_sidebar_state(
     .into_response())
 }
 
+pub(crate) async fn chat_sidebar_directories_page_get(
+    State(state): State<Arc<crate::AppState>>,
+    Query(query): Query<ChatSidebarDirectoriesPageQuery>,
+) -> crate::ApiResult<Response> {
+    crate::directory_sessions::ensure_directory_sessions_poller_started(state.clone());
+
+    let preferences = chat_sidebar_preferences_snapshot().await;
+    let seq = crate::directory_sessions::directory_sessions_latest_seq();
+
+    let directories_page_size = parse_limit(
+        query.page_size,
+        SIDEBAR_STATE_DIRECTORIES_PAGE_SIZE_DEFAULT,
+        400,
+    );
+    let directory_sessions_page_size = parse_limit(
+        query.directory_sessions_page_size,
+        SIDEBAR_STATE_DIRECTORY_SESSIONS_PAGE_SIZE_DEFAULT,
+        200,
+    );
+    let directories_page = query.page.unwrap_or(preferences.directories_page);
+    let directory_query = query
+        .query
+        .as_deref()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+
+    let configured = {
+        let settings = state.settings.read().await;
+        configured_directories(&settings)
+    };
+    state.directory_session_index.replace_directory_mappings(
+        configured
+            .iter()
+            .map(|directory| (directory.id.clone(), directory.path.clone()))
+            .collect(),
+    );
+
+    let directories_offset = page_to_offset(directories_page, directories_page_size);
+    let directories_page_response = directories_get(
+        State(state.clone()),
+        Query(DirectoriesQuery {
+            offset: Some(directories_offset),
+            limit: Some(directories_page_size),
+            query: directory_query,
+        }),
+    )
+    .await;
+    let Some(directories_page) = decode_json_response(directories_page_response).await else {
+        return Ok((
+            StatusCode::BAD_GATEWAY,
+            Json(json!({"error": "invalid directories response"})),
+        )
+            .into_response());
+    };
+
+    let visible_directories = visible_directory_wires_from_page_payload(&directories_page);
+    let expanded_visible_ids =
+        expanded_directory_ids(&visible_directories, &preferences.collapsed_directory_ids);
+
+    let mut session_pages_by_directory_id = BTreeMap::<String, Value>::new();
+    for directory_id in expanded_visible_ids {
+        let root_page = preferences
+            .session_root_page_by_directory_id
+            .get(&directory_id)
+            .copied()
+            .unwrap_or(0);
+
+        let directory_response = directory_sessions_by_id_get(
+            State(state.clone()),
+            HeaderMap::new(),
+            AxumPath(DirectorySessionsPath {
+                directory_id: directory_id.clone(),
+            }),
+            Query(crate::opencode_session::SessionListQuery {
+                directory: None,
+                scope: Some("directory".to_string()),
+                roots: Some("true".to_string()),
+                start: None,
+                search: None,
+                offset: Some(page_to_offset(root_page, directory_sessions_page_size).to_string()),
+                limit: Some(directory_sessions_page_size.to_string()),
+                include_total: Some("true".to_string()),
+                include_children: Some("true".to_string()),
+                ids: None,
+                focus_session_id: None,
+            }),
+        )
+        .await?;
+        let Some(directory_page) = decode_json_response(directory_response).await else {
+            return Ok((
+                StatusCode::BAD_GATEWAY,
+                Json(json!({
+                    "error": "invalid directory sessions response",
+                    "directoryId": directory_id,
+                })),
+            )
+                .into_response());
+        };
+        session_pages_by_directory_id.insert(directory_id, directory_page);
+    }
+
+    let runtime_by_session_id = state.directory_session_index.runtime_snapshot_json();
+    let directory_rows_by_id = build_directory_rows_by_id_for_visible_directories(
+        &state,
+        &preferences,
+        &configured,
+        &visible_directories,
+        &session_pages_by_directory_id,
+        &runtime_by_session_id,
+        directory_sessions_page_size,
+    );
+
+    Ok(Json(ChatSidebarDirectoriesPageResponse {
+        preferences,
+        seq,
+        directories_page,
+        view: ChatSidebarDirectoriesPageViewWire {
+            directory_rows_by_id,
+        },
+    })
+    .into_response())
+}
+
+pub(crate) async fn chat_sidebar_footer_get(
+    State(state): State<Arc<crate::AppState>>,
+    AxumPath(path): AxumPath<ChatSidebarFooterPath>,
+    Query(query): Query<ChatSidebarFooterQuery>,
+) -> Response {
+    let Some(kind) = ChatSidebarFooterKind::parse(&path.kind) else {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "error": "invalid footer kind",
+                "expected": ["pinned", "recent", "running"],
+            })),
+        )
+            .into_response();
+    };
+
+    let preferences = chat_sidebar_preferences_snapshot().await;
+    let page_size = match kind {
+        ChatSidebarFooterKind::Pinned => parse_limit(
+            query.page_size,
+            SIDEBAR_STATE_FOOTER_PAGE_SIZE_DEFAULT,
+            SIDEBAR_STATE_FOOTER_PAGE_SIZE_DEFAULT,
+        ),
+        ChatSidebarFooterKind::Recent => {
+            parse_limit(query.page_size, SIDEBAR_STATE_FOOTER_PAGE_SIZE_DEFAULT, 40)
+        }
+        ChatSidebarFooterKind::Running => {
+            parse_limit(query.page_size, SIDEBAR_STATE_FOOTER_PAGE_SIZE_DEFAULT, 400)
+        }
+    };
+    let page = query.page.unwrap_or(match kind {
+        ChatSidebarFooterKind::Pinned => preferences.pinned_sessions_page,
+        ChatSidebarFooterKind::Recent => preferences.recent_sessions_page,
+        ChatSidebarFooterKind::Running => preferences.running_sessions_page,
+    });
+
+    let configured = {
+        let settings = state.settings.read().await;
+        configured_directories(&settings)
+    };
+    state.directory_session_index.replace_directory_mappings(
+        configured
+            .iter()
+            .map(|directory| (directory.id.clone(), directory.path.clone()))
+            .collect(),
+    );
+
+    let all_directories = all_known_sidebar_directories(&state, &configured);
+    let directories_by_id = normalize_directory_wires_by_id(&all_directories);
+    let directory_id_by_path = normalize_directory_id_by_path(&all_directories);
+    let expanded_parent_ids = preferences
+        .expanded_parent_session_ids
+        .iter()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .collect::<HashSet<_>>();
+
+    let view = match kind {
+        ChatSidebarFooterKind::Pinned => {
+            let all_root_ids = preferences
+                .pinned_session_ids
+                .iter()
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty())
+                .collect::<Vec<_>>();
+            let mut root_directory_hint = BTreeMap::<String, DirectoryWire>::new();
+            for root_id in &all_root_ids {
+                let Some(summary) = state.directory_session_index.summary(root_id) else {
+                    continue;
+                };
+                if let Some(directory) = directory_wire_for_path(
+                    &summary.directory_path,
+                    &directory_id_by_path,
+                    &directories_by_id,
+                ) {
+                    root_directory_hint.insert(root_id.clone(), directory);
+                }
+            }
+
+            let ctx = SidebarFooterBuildCtx {
+                state: &state,
+                expanded_parent_ids: &expanded_parent_ids,
+                directories_by_id: &directories_by_id,
+                directory_id_by_path: &directory_id_by_path,
+                root_directory_hint: &root_directory_hint,
+            };
+            build_sidebar_footer_view(&ctx, &all_root_ids, page, page_size)
+        }
+        ChatSidebarFooterKind::Recent => {
+            let mut all_root_ids = Vec::<String>::new();
+            let mut root_directory_hint = BTreeMap::<String, DirectoryWire>::new();
+            for item in build_recent_index_items(&state) {
+                let sid = item.session_id.trim();
+                if sid.is_empty() {
+                    continue;
+                }
+                let sid = sid.to_string();
+                all_root_ids.push(sid.clone());
+
+                let directory = directories_by_id
+                    .get(item.directory_id.trim())
+                    .cloned()
+                    .or_else(|| {
+                        directory_wire_for_path(
+                            &item.directory_path,
+                            &directory_id_by_path,
+                            &directories_by_id,
+                        )
+                    });
+                if let Some(directory) = directory {
+                    root_directory_hint.insert(sid, directory);
+                }
+            }
+
+            let ctx = SidebarFooterBuildCtx {
+                state: &state,
+                expanded_parent_ids: &expanded_parent_ids,
+                directories_by_id: &directories_by_id,
+                directory_id_by_path: &directory_id_by_path,
+                root_directory_hint: &root_directory_hint,
+            };
+            build_sidebar_footer_view(&ctx, &all_root_ids, page, page_size)
+        }
+        ChatSidebarFooterKind::Running => {
+            let mut all_root_ids = Vec::<String>::new();
+            let mut root_directory_hint = BTreeMap::<String, DirectoryWire>::new();
+            for item in build_running_index_items(&state).await {
+                let sid = item.session_id.trim();
+                if sid.is_empty() {
+                    continue;
+                }
+                let sid = sid.to_string();
+                all_root_ids.push(sid.clone());
+
+                let directory = item
+                    .directory_id
+                    .as_deref()
+                    .and_then(|directory_id| directories_by_id.get(directory_id.trim()).cloned())
+                    .or_else(|| {
+                        item.directory_path.as_deref().and_then(|directory_path| {
+                            directory_wire_for_path(
+                                directory_path,
+                                &directory_id_by_path,
+                                &directories_by_id,
+                            )
+                        })
+                    });
+                if let Some(directory) = directory {
+                    root_directory_hint.insert(sid, directory);
+                }
+            }
+
+            let ctx = SidebarFooterBuildCtx {
+                state: &state,
+                expanded_parent_ids: &expanded_parent_ids,
+                directories_by_id: &directories_by_id,
+                directory_id_by_path: &directory_id_by_path,
+                root_directory_hint: &root_directory_hint,
+            };
+            build_sidebar_footer_view(&ctx, &all_root_ids, page, page_size)
+        }
+    };
+
+    let seq = crate::directory_sessions::directory_sessions_latest_seq();
+    Json(ChatSidebarFooterResponse {
+        kind: kind.as_str().to_string(),
+        seq,
+        view,
+    })
+    .into_response()
+}
+
 pub(crate) async fn chat_sidebar_state_put(
     State(state): State<Arc<crate::AppState>>,
     Query(query): Query<ChatSidebarStateQuery>,
     headers: HeaderMap,
     Json(body): Json<SessionsSidebarPreferences>,
 ) -> crate::ApiResult<Response> {
+    match persist_sidebar_preferences_with_precondition(&headers, body).await {
+        Ok(_) => {}
+        Err(response) => return Ok(response),
+    }
+
+    if crate::global_sse_hub::downstream_client_count() > 0 {
+        let _ = publish_chat_sidebar_state_event(state.clone(), ChatSidebarStateQuery::default());
+    }
+
+    chat_sidebar_state(State(state), Query(query)).await
+}
+
+async fn persist_sidebar_preferences_with_precondition(
+    headers: &HeaderMap,
+    body: SessionsSidebarPreferences,
+) -> Result<SessionsSidebarPreferences, Response> {
     let _put_guard = SIDEBAR_PREFS_PUT_LOCK.lock().await;
     let _disk_lock = match acquire_sidebar_preferences_disk_lock().await {
         Ok(lock) => lock,
         Err(error) => {
-            return Ok((
+            return Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({ "error": error })),
             )
@@ -2423,10 +2853,10 @@ pub(crate) async fn chat_sidebar_state_put(
     let current = load_sidebar_preferences_from_disk().await;
     write_sidebar_preferences_cached(current.clone()).await;
 
-    match validate_put_precondition(&headers, current.version) {
+    match validate_put_precondition(headers, current.version) {
         PutPrecondition::Ok => {}
         PutPrecondition::Missing => {
-            return Ok((
+            return Err((
                 StatusCode::PRECONDITION_REQUIRED,
                 Json(json!({
                     "error": "Missing If-Match version precondition",
@@ -2437,7 +2867,7 @@ pub(crate) async fn chat_sidebar_state_put(
                 .into_response());
         }
         PutPrecondition::Conflict => {
-            return Ok((
+            return Err((
                 StatusCode::CONFLICT,
                 Json(json!({
                     "error": "Sessions sidebar preferences version conflict",
@@ -2453,20 +2883,40 @@ pub(crate) async fn chat_sidebar_state_put(
     preferences.version = current.version.saturating_add(1);
     preferences.updated_at = now_millis();
     if let Err(error) = persist_sidebar_preferences_to_disk(&preferences).await {
-        return Ok((
+        return Err((
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({ "error": error })),
         )
             .into_response());
     }
 
-    write_sidebar_preferences_cached(preferences).await;
+    write_sidebar_preferences_cached(preferences.clone()).await;
+
+    Ok(preferences)
+}
+
+pub(crate) async fn chat_sidebar_preferences_get() -> Response {
+    let preferences = chat_sidebar_preferences_snapshot().await;
+    let seq = crate::directory_sessions::directory_sessions_latest_seq();
+    Json(ChatSidebarPreferencesResponse { preferences, seq }).into_response()
+}
+
+pub(crate) async fn chat_sidebar_preferences_put(
+    State(state): State<Arc<crate::AppState>>,
+    headers: HeaderMap,
+    Json(body): Json<SessionsSidebarPreferences>,
+) -> crate::ApiResult<Response> {
+    let preferences = match persist_sidebar_preferences_with_precondition(&headers, body).await {
+        Ok(preferences) => preferences,
+        Err(response) => return Ok(response),
+    };
 
     if crate::global_sse_hub::downstream_client_count() > 0 {
         let _ = publish_chat_sidebar_state_event(state.clone(), ChatSidebarStateQuery::default());
     }
 
-    chat_sidebar_state(State(state), Query(query)).await
+    let seq = crate::directory_sessions::directory_sessions_latest_seq();
+    Ok(Json(ChatSidebarPreferencesResponse { preferences, seq }).into_response())
 }
 
 pub(crate) fn publish_chat_sidebar_state_event(
