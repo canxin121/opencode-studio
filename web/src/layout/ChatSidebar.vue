@@ -1,18 +1,12 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { RiAddLine, RiDeleteBinLine, RiRefreshLine, RiStarFill, RiStarLine } from '@remixicon/vue'
 
 import RenameSessionDialog from '@/components/chat/RenameSessionDialog.vue'
-import {
-  autoLoadExpandedAlreadyAppliedThisLoad,
-  markAutoLoadExpandedAppliedThisLoad,
-} from '@/layout/chatSidebar/useChatSidebarPersistedState'
 import { patchSessionIdInQuery } from '@/app/navigation/sessionQuery'
 import { useChatStore } from '@/stores/chat'
-import * as chatApi from '@/stores/chat/api'
-import { useSessionActivityStore } from '@/stores/sessionActivity'
 import { useSettingsStore } from '@/stores/settings'
 import { useToastsStore } from '@/stores/toasts'
 import { useUiStore } from '@/stores/ui'
@@ -33,13 +27,12 @@ import {
   type SessionActionItem,
 } from '@/layout/chatSidebar/useSessionActionMenu'
 import type { DirectoryEntry } from '@/features/sessions/model/types'
-import { buildFlattenedTree, type FlatTreeRow } from '@/features/sessions/model/tree'
+import type { FlatTreeRow } from '@/features/sessions/model/tree'
 import { useSidebarLocate } from '@/layout/chatSidebar/useSidebarLocate'
 import { normalizeDirectories } from '@/features/sessions/model/projects'
 import { normalizeSidebarUiPrefsForUi } from '@/features/sessions/model/sidebarUiPrefs'
 import { DIRECTORIES_PAGE_SIZE_DEFAULT } from '@/stores/directorySessions/index'
-import { shouldReloadExpandedDirectoryAggregate } from '@/stores/directorySessions/pagination'
-import { ApiError } from '@/lib/api'
+import { apiJson } from '@/lib/api'
 
 const props = defineProps<{ mobileVariant?: boolean }>()
 
@@ -50,7 +43,6 @@ const ui = useUiStore()
 const chat = useChatStore()
 const settings = useSettingsStore()
 const toasts = useToastsStore()
-const activity = useSessionActivityStore()
 const directoryStore = useDirectoryStore()
 const directorySessions = useDirectorySessionStore()
 const { t } = useI18n()
@@ -67,14 +59,6 @@ function pushSidebarErrorToast(key: string, message: string, timeoutMs = 4500, d
   if (prev && prev.message === msg && now - prev.at < Math.max(0, Math.floor(dedupeWindowMs))) return
   lastSidebarErrorToastByKey.set(k, { at: now, message: msg })
   toasts.push('error', msg, timeoutMs)
-}
-
-function isUiAuthRequiredError(err: unknown): boolean {
-  if (err instanceof ApiError) {
-    return err.status === 401 && (err.code || '').trim().toLowerCase() === 'auth_required'
-  }
-  const msg = err instanceof Error ? err.message : String(err)
-  return msg.trim().toLowerCase() === 'ui authentication required'
 }
 
 function isUiAuthRequiredMessage(message: string): boolean {
@@ -166,12 +150,6 @@ const SESSION_ROOTS_PAGE_SIZE = 10
 const sidebarQuery = ref('')
 const sidebarQueryNorm = computed(() => sidebarQuery.value.trim().toLowerCase())
 
-// Bottom footer: a compact view of currently active/blocked sessions.
-// This uses best-effort metadata (loaded sessions) but counts from live status/activity.
-const RUNNING_SESSIONS_PAGE_SIZE = 10
-const PINNED_SESSIONS_PAGE_SIZE = 10
-const RECENT_SESSIONS_PAGE_SIZE = 10
-
 watch(
   () => ({
     collapsedDirectoryIds: Array.from(collapsedDirectories.value),
@@ -243,13 +221,6 @@ function readSessionDirectory(value: SessionValue): string {
   return typeof raw === 'string' ? raw.trim() : ''
 }
 
-function readSessionUpdatedAt(value: SessionValue): number {
-  const time = asRecord(value)?.time
-  const raw = asRecord(time)?.updated
-  const parsed = Number(raw)
-  return Number.isFinite(parsed) ? parsed : 0
-}
-
 function isAbortError(err: SessionValue): boolean {
   if (err instanceof DOMException) return err.name === 'AbortError'
   const name = asRecord(err)?.name
@@ -281,34 +252,53 @@ const directoryPageCount = computed(() => {
 })
 
 const directoryPageLoading = computed<boolean>(() => {
-  return Boolean(directorySessions.directoryPageLoading)
+  return Boolean(directorySessions.loading)
 })
 
-let directoryPageFetchTimer: number | null = null
+let sidebarStateFetchTimer: number | null = null
 let skipDirectoryPageWatchOnce = false
 
-function scheduleDirectoryPageFetch(delayMs = 0) {
-  if (directoryPageFetchTimer !== null) {
-    window.clearTimeout(directoryPageFetchTimer)
-    directoryPageFetchTimer = null
+async function revalidateSidebarState(
+  opts?: {
+    directoriesPage?: number
+    focusSessionId?: string
+    pinnedPage?: number
+    recentPage?: number
+    runningPage?: number
+    query?: string
+  },
+  runtimeOpts?: { silent?: boolean },
+) {
+  const directoriesPage =
+    typeof opts?.directoriesPage === 'number' && Number.isFinite(opts.directoriesPage)
+      ? Math.max(0, Math.floor(opts.directoriesPage))
+      : Math.max(0, Math.floor(directoryPage.value || 0))
+  const directoryQuery = typeof opts?.query === 'string' ? opts.query.trim() : sidebarQueryNorm.value
+
+  const ok = await directorySessions.revalidateFromApi({
+    directoriesPage,
+    directoryQuery,
+    focusSessionId: opts?.focusSessionId,
+    pinnedPage: opts?.pinnedPage,
+    recentPage: opts?.recentPage,
+    runningPage: opts?.runningPage,
+  })
+
+  if (!ok && runtimeOpts?.silent !== true) {
+    pushSidebarErrorToast('sidebar:state', String(t('chat.sidebar.errors.failedToLoadSessions')), 4500, 8000)
   }
-  directoryPageFetchTimer = window.setTimeout(
+  return ok
+}
+
+function scheduleSidebarStateFetch(delayMs = 0) {
+  if (sidebarStateFetchTimer !== null) {
+    window.clearTimeout(sidebarStateFetchTimer)
+    sidebarStateFetchTimer = null
+  }
+  sidebarStateFetchTimer = window.setTimeout(
     () => {
-      directoryPageFetchTimer = null
-      const page = Math.max(0, Math.floor(directoryPage.value || 0))
-      void directorySessions
-        .loadDirectoryPage({ page, pageSize: DIRECTORIES_PAGE_SIZE, query: sidebarQueryNorm.value })
-        .then((result) => {
-          const resolvedPage =
-            typeof result?.page === 'number' && Number.isFinite(result.page) ? Math.floor(result.page) : page
-          if (resolvedPage !== directoryPage.value) {
-            skipDirectoryPageWatchOnce = true
-            directoryPage.value = resolvedPage
-          }
-        })
-        .catch(() => {
-          // keep current directory page data when paging fetch fails
-        })
+      sidebarStateFetchTimer = null
+      void revalidateSidebarState(undefined, { silent: true })
     },
     Math.max(0, Math.floor(delayMs)),
   )
@@ -322,19 +312,9 @@ async function requestDirectoryPage(nextPage: number) {
 
   directoryPaging.value = true
   try {
-    const result = await directorySessions.loadDirectoryPage({
-      page: target,
-      pageSize: DIRECTORIES_PAGE_SIZE,
-      query: sidebarQueryNorm.value,
-    })
-    const resolvedPage =
-      typeof result?.page === 'number' && Number.isFinite(result.page) ? Math.floor(result.page) : target
-    if (resolvedPage !== directoryPage.value) {
-      skipDirectoryPageWatchOnce = true
-      directoryPage.value = resolvedPage
-    }
-  } catch {
-    // keep current directory page data when paging fetch fails
+    skipDirectoryPageWatchOnce = true
+    directoryPage.value = target
+    await revalidateSidebarState({ directoriesPage: target, query: sidebarQueryNorm.value }, { silent: true })
   } finally {
     directoryPaging.value = false
   }
@@ -347,7 +327,7 @@ watch(
       directoryPage.value = 0
       return
     }
-    scheduleDirectoryPageFetch(next ? 180 : 0)
+    scheduleSidebarStateFetch(next ? 180 : 0)
   },
 )
 
@@ -358,14 +338,24 @@ watch(
       skipDirectoryPageWatchOnce = false
       return
     }
-    scheduleDirectoryPageFetch(0)
+    scheduleSidebarStateFetch(0)
+  },
+)
+
+watch(
+  () => directoryPageCount.value,
+  (count) => {
+    const maxPage = Math.max(0, Math.floor(count || 1) - 1)
+    if (directoryPage.value > maxPage) {
+      directoryPage.value = maxPage
+    }
   },
 )
 
 watch(
   () => directories.value.map((entry) => `${entry.id}:${entry.path}`).join('|'),
   () => {
-    scheduleDirectoryPageFetch(0)
+    scheduleSidebarStateFetch(0)
   },
   { immediate: true },
 )
@@ -540,13 +530,12 @@ function openDirectoryActions(p: DirectoryEntry) {
 
 // Desktop: show inline action buttons on hover (Session-style).
 async function refreshDirectoryInline(p: DirectoryEntry) {
-  await ensureDirectoryAggregateLoaded(p.id, p.path, { force: true })
+  void p
+  await revalidateSidebarState(undefined, { silent: false })
 }
 
 async function refreshVisibleDirectories() {
-  for (const p of pagedDirectories.value) {
-    await ensureDirectoryAggregateLoaded(p.id, p.path, { force: true })
-  }
+  await revalidateSidebarState(undefined, { silent: false })
 }
 
 async function handleSidebarRefresh() {
@@ -576,7 +565,7 @@ function openSessionActions(directory: DirectoryEntry, session: SessionLike) {
 async function directoryActionRefresh() {
   const p = directoryActionsTarget.value
   if (!p) return
-  await ensureDirectoryAggregateLoaded(p.id, p.path, { force: true })
+  await revalidateSidebarState(undefined, { silent: false })
   directoryActionsOpen.value = false
 }
 
@@ -729,24 +718,12 @@ function togglePin(id: string) {
   else pinnedSessionIds.value.unshift(id)
 }
 
-const aggregateLoadingByDirectoryId = computed<Record<string, boolean>>(() => {
-  return directorySessions.aggregateLoadingByDirectoryId || {}
-})
-const aggregateAttemptedByDirectoryId = computed<Record<string, boolean>>(() => {
-  return directorySessions.aggregateAttemptedByDirectoryId || {}
-})
 const worktreesByDirectoryId = computed<Record<string, string[]>>(() => {
   return directorySessions.worktreePathsByDirectoryId || {}
 })
 const sessionsLoading = computed(() => {
-  if (chat.sessionsLoading) return true
-  if (directoryPageLoading.value) return true
-  return Object.values(aggregateLoadingByDirectoryId.value).some(Boolean)
+  return chat.sessionsLoading || directoryPageLoading.value
 })
-
-function hasCachedSessionsForDirectory(directoryId: string): boolean {
-  return directorySessions.hasCachedSessionsForDirectory(directoryId)
-}
 
 function toggleDirectoryCollapse(directoryId: string, _directoryPath: string) {
   void _directoryPath
@@ -765,191 +742,86 @@ function hasAttention(sessionId: string): 'permission' | 'question' | null {
   return value === 'permission' || value === 'question' ? value : null
 }
 
-type RunningSessionItem = {
+type ThreadSessionRow = {
   id: string
   session: SessionLike | null
   directory: DirectoryEntry | null
-  updatedAt: number
-  statusType: string
-  attention: 'permission' | 'question' | null
-}
-
-type RecentSessionItem = {
-  id: string
-  session: SessionLike
-  directory: DirectoryEntry
-  updatedAt: number
-}
-
-type PinnedSessionItem = {
-  id: string
-  session: SessionLike
-  directory: DirectoryEntry
-  updatedAt: number
-}
-
-type ThreadRootItem = {
-  id: string
-  session: SessionLike | null
-  directory: DirectoryEntry | null
-}
-
-type ThreadSessionRow = ThreadRootItem & {
   renderKey: string
   depth: number
+  parentId: string | null
+  rootId: string
   isParent: boolean
   isExpanded: boolean
 }
+const statusLabelForSessionId = (sessionId: string): { label: string; dotClass: string } =>
+  directorySessions.statusLabelForSessionId(sessionId)
 
-function childSessionIds(parentId: string): string[] {
-  const pid = (parentId || '').trim()
-  if (!pid) return []
-  const raw = directorySessions.childrenByParentSessionId?.[pid] || []
-  const seen = new Set<string>()
-  const out: string[] = []
-  for (const childId of raw) {
-    const sid = String(childId || '').trim()
-    if (!sid || seen.has(sid)) continue
-    seen.add(sid)
-    out.push(sid)
-  }
-  return out
+type DirectorySidebarView = {
+  sessionCount: number
+  rootPage: number
+  rootPageCount: number
+  hasActiveOrBlocked: boolean
+  pinnedRows: ThreadSessionRow[]
+  recentRows: ThreadSessionRow[]
+  recentParentById: Record<string, string | null>
+  recentRootIds: string[]
 }
 
-function resolveThreadNode(sessionId: string, fallbackDirectory: DirectoryEntry | null): ThreadRootItem {
-  const sid = (sessionId || '').trim()
-  if (!sid) {
-    return {
-      id: '',
-      session: null,
-      directory: fallbackDirectory,
-    }
-  }
-
-  const indexed = directorySessions.allSessionIndexById?.[sid] || null
-  const session = (indexed?.session as SessionLike | null) || (chat.getSessionById(sid) as SessionLike | null) || null
-  const sessionDirectoryPath = readSessionDirectory(session)
-  const sessionDirectory = sessionDirectoryPath
-    ? directories.value.find((entry) => (entry.path || '').trim() === sessionDirectoryPath) || null
-    : null
-
-  return {
-    id: sid,
-    session,
-    directory: indexed?.directory || sessionDirectory || fallbackDirectory || null,
-  }
-}
-
-function buildThreadRowsFromRoots(roots: ThreadRootItem[]): ThreadSessionRow[] {
-  const rows: ThreadSessionRow[] = []
-
-  const append = (node: ThreadRootItem, depth: number, ancestry: Set<string>, keyPrefix: string) => {
-    const sid = (node.id || '').trim()
-    if (!sid) return
-
-    const renderKey = keyPrefix ? `${keyPrefix}>${sid}` : sid
-
-    const children = childSessionIds(sid)
-    const isParent = children.length > 0
-    const isExpanded = isParent && expandedParents.value.has(sid)
-
-    rows.push({
-      id: sid,
-      session: node.session,
-      directory: node.directory,
-      renderKey,
-      depth,
-      isParent,
-      isExpanded,
-    })
-
-    if (!isExpanded) return
-
-    const nextAncestry = new Set(ancestry)
-    nextAncestry.add(sid)
-
-    for (const childId of children) {
-      if (nextAncestry.has(childId)) continue
-      const childNode = resolveThreadNode(childId, node.directory)
-      if (!childNode.session) continue
-      append(childNode, depth + 1, nextAncestry, renderKey)
-    }
-  }
-
-  for (const root of roots) {
-    const rootNode = resolveThreadNode(root.id, root.directory)
-    const sid = (rootNode.id || '').trim()
-    if (!sid) continue
-    append(
-      {
-        id: sid,
-        session: root.session || rootNode.session,
-        directory: root.directory || rootNode.directory,
-      },
-      0,
-      new Set(),
-      '',
-    )
-  }
-
-  return rows
-}
-
-const pinnedSessions = computed<PinnedSessionItem[]>(() => {
-  const out: PinnedSessionItem[] = []
-  const seen = new Set<string>()
-  const indexedById = directorySessions.allSessionIndexById || {}
-
-  for (const rawId of pinnedSessionIds.value) {
-    const sid = String(rawId || '').trim()
-    if (!sid || seen.has(sid)) continue
-    seen.add(sid)
-
-    const indexed = indexedById[sid] || null
-    const session = indexed?.session || chat.getSessionById(sid) || null
-    const directory = (indexed?.directory as DirectoryEntry | null) || null
-    if (!session || !directory) continue
-
-    out.push({
-      id: sid,
-      session,
-      directory,
-      updatedAt: readSessionUpdatedAt(session),
-    })
-  }
-
-  return out
+const directorySidebarById = computed<Record<string, DirectorySidebarView>>(() => {
+  return (directorySessions.directorySidebarById as Record<string, DirectorySidebarView>) || {}
 })
 
-const pinnedSessionsPageCount = computed(() => {
-  const total = pinnedSessions.value.length
-  return Math.max(1, Math.ceil(total / PINNED_SESSIONS_PAGE_SIZE))
-})
-
-watch(
-  () => [pinnedSessions.value.length, pinnedSessionsPageCount.value] as const,
-  () => {
-    const maxPage = Math.max(0, pinnedSessionsPageCount.value - 1)
-    if (pinnedSessionsPage.value > maxPage) pinnedSessionsPage.value = maxPage
-    if (pinnedSessionsPage.value < 0) pinnedSessionsPage.value = 0
-  },
-  { immediate: true },
+const pinnedFooterView = computed(
+  () => directorySessions.pinnedFooterView || { total: 0, page: 0, pageCount: 1, rows: [] },
+)
+const recentFooterView = computed(
+  () => directorySessions.recentFooterView || { total: 0, page: 0, pageCount: 1, rows: [] },
+)
+const runningFooterView = computed(
+  () => directorySessions.runningFooterView || { total: 0, page: 0, pageCount: 1, rows: [] },
 )
 
-const pagedPinnedSessions = computed(() => {
-  const page = Math.max(0, Math.min(pinnedSessionsPageCount.value - 1, Math.floor(pinnedSessionsPage.value || 0)))
-  const start = page * PINNED_SESSIONS_PAGE_SIZE
-  return pinnedSessions.value.slice(start, start + PINNED_SESSIONS_PAGE_SIZE)
-})
+const pinnedSessionsPageCount = computed(() => Math.max(1, Number(pinnedFooterView.value.pageCount || 1)))
+const recentSessionsPageCount = computed(() => Math.max(1, Number(recentFooterView.value.pageCount || 1)))
+const runningSessionsPageCount = computed(() => Math.max(1, Number(runningFooterView.value.pageCount || 1)))
 
-const pagedPinnedSessionRows = computed<ThreadSessionRow[]>(() => {
-  const roots: ThreadRootItem[] = pagedPinnedSessions.value.map((item) => ({
-    id: item.id,
-    session: item.session,
-    directory: item.directory,
-  }))
-  return buildThreadRowsFromRoots(roots)
-})
+const pinnedSessionsTotal = computed(() => Math.max(0, Number(pinnedFooterView.value.total || 0)))
+const recentSessionsTotal = computed(() => Math.max(0, Number(recentFooterView.value.total || 0)))
+const runningSessionsTotal = computed(() => Math.max(0, Number(runningFooterView.value.total || 0)))
+
+const pagedPinnedSessionRows = computed<ThreadSessionRow[]>(
+  () => (pinnedFooterView.value.rows || []) as ThreadSessionRow[],
+)
+const pagedRecentSessionRows = computed<ThreadSessionRow[]>(
+  () => (recentFooterView.value.rows || []) as ThreadSessionRow[],
+)
+const pagedRunningSessionRows = computed<ThreadSessionRow[]>(
+  () => (runningFooterView.value.rows || []) as ThreadSessionRow[],
+)
+
+watch(
+  () => pinnedFooterView.value.page,
+  (next) => {
+    const resolved = Math.max(0, Math.floor(Number(next || 0)))
+    if (pinnedSessionsPage.value !== resolved) pinnedSessionsPage.value = resolved
+  },
+)
+
+watch(
+  () => recentFooterView.value.page,
+  (next) => {
+    const resolved = Math.max(0, Math.floor(Number(next || 0)))
+    if (recentSessionsPage.value !== resolved) recentSessionsPage.value = resolved
+  },
+)
+
+watch(
+  () => runningFooterView.value.page,
+  (next) => {
+    const resolved = Math.max(0, Math.floor(Number(next || 0)))
+    if (runningSessionsPage.value !== resolved) runningSessionsPage.value = resolved
+  },
+)
 
 async function requestPinnedSessionsPage(nextPage: number) {
   if (pinnedSessionsPaging.value) return
@@ -959,57 +831,19 @@ async function requestPinnedSessionsPage(nextPage: number) {
 
   pinnedSessionsPaging.value = true
   try {
-    const start = target * PINNED_SESSIONS_PAGE_SIZE
-    const ids = pinnedSessionIds.value.slice(start, start + PINNED_SESSIONS_PAGE_SIZE)
-    await directorySessions.ensurePinnedSessionRowsLoaded(ids)
     pinnedSessionsPage.value = target
+    await revalidateSidebarState(
+      {
+        directoriesPage: directoryPage.value,
+        query: sidebarQueryNorm.value,
+        pinnedPage: target,
+      },
+      { silent: true },
+    )
   } finally {
     pinnedSessionsPaging.value = false
   }
 }
-
-const recentSessions = computed<RecentSessionItem[]>(() => {
-  return (directorySessions.recentSidebarRows || []).map((row) => ({
-    id: row.id,
-    session: row.session,
-    directory: row.directory,
-    updatedAt: row.updatedAt,
-  }))
-})
-
-const recentSessionsPageCount = computed(() => {
-  const total = Math.max(Number(directorySessions.recentIndexTotal || 0), recentSessions.value.length)
-  return Math.max(1, Math.ceil(total / RECENT_SESSIONS_PAGE_SIZE))
-})
-
-const recentSessionsTotal = computed(() => {
-  return Math.max(Number(directorySessions.recentIndexTotal || 0), recentSessions.value.length)
-})
-
-watch(
-  () => [recentSessions.value.length, recentSessionsPageCount.value] as const,
-  () => {
-    const maxPage = Math.max(0, recentSessionsPageCount.value - 1)
-    if (recentSessionsPage.value > maxPage) recentSessionsPage.value = maxPage
-    if (recentSessionsPage.value < 0) recentSessionsPage.value = 0
-  },
-  { immediate: true },
-)
-
-const pagedRecentSessions = computed(() => {
-  const page = Math.max(0, Math.min(recentSessionsPageCount.value - 1, Math.floor(recentSessionsPage.value || 0)))
-  const start = page * RECENT_SESSIONS_PAGE_SIZE
-  return recentSessions.value.slice(start, start + RECENT_SESSIONS_PAGE_SIZE)
-})
-
-const pagedRecentSessionRows = computed<ThreadSessionRow[]>(() => {
-  const roots: ThreadRootItem[] = pagedRecentSessions.value.map((item) => ({
-    id: item.id,
-    session: item.session,
-    directory: item.directory,
-  }))
-  return buildThreadRowsFromRoots(roots)
-})
 
 async function requestRecentSessionsPage(nextPage: number) {
   if (recentSessionsPaging.value) return
@@ -1019,76 +853,19 @@ async function requestRecentSessionsPage(nextPage: number) {
 
   recentSessionsPaging.value = true
   try {
-    await directorySessions.ensureRecentSessionRowsLoaded({
-      page: target,
-      pageSize: RECENT_SESSIONS_PAGE_SIZE,
-    })
     recentSessionsPage.value = target
+    await revalidateSidebarState(
+      {
+        directoriesPage: directoryPage.value,
+        query: sidebarQueryNorm.value,
+        recentPage: target,
+      },
+      { silent: true },
+    )
   } finally {
     recentSessionsPaging.value = false
   }
 }
-
-const runningSessions = computed<RunningSessionItem[]>(() => {
-  return (directorySessions.runningSidebarRows || []).map((row) => ({
-    id: row.id,
-    session: row.session,
-    directory: row.directory,
-    updatedAt: row.updatedAt,
-    statusType: row.statusType,
-    attention: row.attention,
-  }))
-})
-
-const statusLabelForSessionId = (sessionId: string): { label: string; dotClass: string } => {
-  return directorySessions.statusLabelForSessionId(sessionId)
-}
-
-watch(
-  () => [chat.sessionStatusBySession, chat.attentionBySession, activity.snapshot] as const,
-  () => {
-    directorySessions.syncRuntimeFromStores({
-      sessionStatusBySession: chat.sessionStatusBySession || {},
-      attentionBySession: chat.attentionBySession || {},
-      activitySnapshot: activity.snapshot || {},
-    })
-  },
-  { immediate: true },
-)
-
-const runningSessionsPageCount = computed(() => {
-  const total = Math.max(Number(directorySessions.runningIndexTotal || 0), runningSessions.value.length)
-  return Math.max(1, Math.ceil(total / RUNNING_SESSIONS_PAGE_SIZE))
-})
-
-const runningSessionsTotal = computed(() => {
-  return Math.max(Number(directorySessions.runningIndexTotal || 0), runningSessions.value.length)
-})
-
-watch(
-  () => [runningSessions.value.length, runningSessionsPageCount.value] as const,
-  () => {
-    const maxPage = Math.max(0, runningSessionsPageCount.value - 1)
-    if (runningSessionsPage.value > maxPage) runningSessionsPage.value = maxPage
-    if (runningSessionsPage.value < 0) runningSessionsPage.value = 0
-  },
-  { immediate: true },
-)
-
-const pagedRunningSessions = computed(() => {
-  const page = Math.max(0, Math.min(runningSessionsPageCount.value - 1, Math.floor(runningSessionsPage.value || 0)))
-  const start = page * RUNNING_SESSIONS_PAGE_SIZE
-  return runningSessions.value.slice(start, start + RUNNING_SESSIONS_PAGE_SIZE)
-})
-
-const pagedRunningSessionRows = computed<ThreadSessionRow[]>(() => {
-  const roots: ThreadRootItem[] = pagedRunningSessions.value.map((item) => ({
-    id: item.id,
-    session: item.session,
-    directory: item.directory,
-  }))
-  return buildThreadRowsFromRoots(roots)
-})
 
 async function requestRunningSessionsPage(nextPage: number) {
   if (runningSessionsPaging.value) return
@@ -1098,62 +875,24 @@ async function requestRunningSessionsPage(nextPage: number) {
 
   runningSessionsPaging.value = true
   try {
-    await directorySessions.ensureRunningSessionRowsLoaded({
-      page: target,
-      pageSize: RUNNING_SESSIONS_PAGE_SIZE,
-    })
     runningSessionsPage.value = target
+    await revalidateSidebarState(
+      {
+        directoriesPage: directoryPage.value,
+        query: sidebarQueryNorm.value,
+        runningPage: target,
+      },
+      { silent: true },
+    )
   } finally {
     runningSessionsPaging.value = false
   }
 }
 
-watch(
-  () =>
-    runningSessionsOpen.value
-      ? `${String(runningSessionsPage.value || 0)}|${pagedRunningSessions.value.map((item) => item.id).join('|')}`
-      : '',
-  () => {
-    if (!runningSessionsOpen.value) return
-    void directorySessions.ensureRunningSessionRowsLoaded({
-      page: Math.max(0, Math.floor(runningSessionsPage.value || 0)),
-      pageSize: RUNNING_SESSIONS_PAGE_SIZE,
-    })
-  },
-  { immediate: true },
-)
-
-watch(
-  () => (recentSessionsOpen.value ? String(recentSessionsPage.value || 0) : ''),
-  () => {
-    if (!recentSessionsOpen.value) return
-    void directorySessions.ensureRecentSessionRowsLoaded({
-      page: Math.max(0, Math.floor(recentSessionsPage.value || 0)),
-      pageSize: RECENT_SESSIONS_PAGE_SIZE,
-    })
-  },
-  { immediate: true },
-)
-
-watch(
-  () =>
-    pinnedSessionsOpen.value
-      ? `${Math.max(0, Math.floor(pinnedSessionsPage.value || 0))}|${pinnedSessionIds.value.join('|')}`
-      : '',
-  () => {
-    if (!pinnedSessionsOpen.value) return
-    const page = Math.max(0, Math.floor(pinnedSessionsPage.value || 0))
-    const start = page * PINNED_SESSIONS_PAGE_SIZE
-    const ids = pinnedSessionIds.value.slice(start, start + PINNED_SESSIONS_PAGE_SIZE)
-    void directorySessions.ensurePinnedSessionRowsLoaded(ids)
-  },
-  { immediate: true },
-)
-
 async function openRunningSession(sessionId: string) {
   const sid = (sessionId || '').trim()
   if (!sid) return
-  const row = runningSessions.value.find((item) => item.id === sid) || null
+  const row = pagedRunningSessionRows.value.find((item) => item.id === sid) || null
   const indexed = directorySessions.allSessionIndexById?.[sid] || null
   const directory = row?.directory || indexed?.directory || null
   if (directory?.id && directory?.path) {
@@ -1165,8 +904,9 @@ async function openRunningSession(sessionId: string) {
 async function openPinnedSession(sessionId: string) {
   const sid = (sessionId || '').trim()
   if (!sid) return
+  const row = pagedPinnedSessionRows.value.find((item) => item.id === sid) || null
   const indexed = directorySessions.allSessionIndexById?.[sid] || null
-  const directory = indexed?.directory || null
+  const directory = row?.directory || indexed?.directory || null
   if (directory?.id && directory?.path) {
     await selectDirectory(directory.id, directory.path)
   }
@@ -1176,7 +916,7 @@ async function openPinnedSession(sessionId: string) {
 async function openRecentSession(sessionId: string) {
   const sid = (sessionId || '').trim()
   if (!sid) return
-  const row = recentSessions.value.find((item) => item.id === sid) || null
+  const row = pagedRecentSessionRows.value.find((item) => item.id === sid) || null
   const indexed = directorySessions.allSessionIndexById?.[sid] || null
   const directory = row?.directory || indexed?.directory || null
   if (directory?.id && directory?.path) {
@@ -1186,213 +926,94 @@ async function openRecentSession(sessionId: string) {
 }
 
 function directoryHasActiveOrBlocked(p: DirectoryEntry): boolean {
-  return directorySessions.hasActiveRuntimeInDirectory(p.id, p.path, { includeCooldown: true })
+  const pid = (p.id || '').trim()
+  const section = directorySidebarById.value[pid]
+  if (!section) return false
+  return section.hasActiveOrBlocked === true
 }
 
-async function ensureDirectoryAggregateLoaded(
+async function ensureDirectorySidebarLoaded(
   directoryId: string,
   directoryPath: string,
   opts?: { force?: boolean; focusSessionId?: string; page?: number; pageSize?: number; includeWorktrees?: boolean },
-) {
+): Promise<{ directoryId: string; directoryPath: string } | null> {
   const pid = (directoryId || '').trim()
   const root = (directoryPath || '').trim()
-  if (!pid || !root) return
 
-  const pageSize = Math.max(1, Math.floor(opts?.pageSize || SESSION_ROOTS_PAGE_SIZE))
+  const focusSessionId = String(opts?.focusSessionId || '').trim()
+
+  if (focusSessionId) {
+    const ok = await revalidateSidebarState({ focusSessionId }, { silent: true })
+    if (!ok) return null
+
+    const focused = directorySessions.sidebarStateFocus
+    if (focused && focused.sessionId === focusSessionId) {
+      return {
+        directoryId: focused.directoryId,
+        directoryPath: focused.directoryPath,
+      }
+    }
+
+    const resolved = await directorySessions.resolveDirectoryForSession(focusSessionId, {
+      directoryId: pid,
+      directoryPath: root,
+      skipRemote: true,
+    })
+    if (resolved) {
+      return {
+        directoryId: resolved.directoryId,
+        directoryPath: resolved.directoryPath,
+      }
+    }
+
+    if (pid && root) {
+      return {
+        directoryId: pid,
+        directoryPath: root,
+      }
+    }
+    return null
+  }
+
+  if (!pid || !root) return null
+
   const targetPage =
     typeof opts?.page === 'number' && Number.isFinite(opts.page)
       ? Math.max(0, Math.floor(opts.page))
       : sessionRootPage(pid)
-
-  try {
-    await directorySessions.ensureDirectoryAggregateLoaded(pid, root, {
-      force: opts?.force,
-      focusSessionId: opts?.focusSessionId,
-      pinnedSessionIds: pinnedSessionIds.value,
-      page: targetPage,
-      pageSize,
-      includeWorktrees: opts?.includeWorktrees ?? true,
-    })
-  } catch (err) {
-    // Don't render errors inside the sidebar; use toasts instead.
-    if (isUiAuthRequiredError(err)) return
-    const msg = err instanceof Error ? err.message : String(err)
-    pushSidebarErrorToast('sidebar:sessions', msg || String(t('chat.sidebar.errors.failedToLoadSessions')), 4500, 8000)
+  directorySessions.setSessionRootPage(pid, targetPage, SESSION_ROOTS_PAGE_SIZE)
+  const ok = await revalidateSidebarState(undefined, { silent: true })
+  if (!ok) return null
+  return {
+    directoryId: pid,
+    directoryPath: root,
   }
 }
 
 watch(
   () => pinnedSessionIds.value.join('|'),
   () => {
-    for (const p of directories.value) {
-      const pid = (p.id || '').trim()
-      if (!pid) continue
-      if (!directorySessions.sessionPageByDirectoryId?.[pid]) continue
-      void ensureDirectoryAggregateLoaded(pid, p.path, { force: false })
-    }
+    scheduleSidebarStateFetch(120)
   },
 )
-
-function autoLoadExpandedDirectoryIfNeeded(directory: DirectoryEntry) {
-  const pid = (directory.id || '').trim()
-  if (!pid) return
-  if (isDirectoryCollapsed(pid)) return
-  const attempted = Boolean(aggregateAttemptedByDirectoryId.value[pid])
-  const hasCache = hasCachedSessionsForDirectory(pid)
-  const cachedPage = directorySessions.sessionPageByDirectoryId?.[pid]?.page
-  const targetPage = sessionRootPage(pid)
-  const shouldReload = shouldReloadExpandedDirectoryAggregate({
-    attempted,
-    hasCache,
-    cachedPage,
-    targetPage,
-  })
-  if (!shouldReload) return
-  void ensureDirectoryAggregateLoaded(pid, directory.path, { force: attempted && !hasCache })
-}
-
-function autoLoadExpandedDirectoriesOnce() {
-  for (const directory of directories.value) {
-    autoLoadExpandedDirectoryIfNeeded(directory)
-  }
-}
-
-let collapsedDirectoryWarmupTimer: number | null = null
-let collapsedDirectoryWarmupTask: Promise<void> | null = null
-
-function collapsedDirectoryWarmupCandidates(): DirectoryEntry[] {
-  if (sidebarQueryNorm.value) return []
-  return pagedDirectories.value.filter((directory) => {
-    const pid = String(directory?.id || '').trim()
-    if (!pid) return false
-    if (!isDirectoryCollapsed(pid)) return false
-    if (aggregateLoadingByDirectoryId.value[pid]) return false
-    if (aggregateAttemptedByDirectoryId.value[pid]) return false
-    if (hasCachedSessionsForDirectory(pid)) return false
-    return true
-  })
-}
-
-async function warmCollapsedDirectoriesInBackground() {
-  if (collapsedDirectoryWarmupTask) {
-    await collapsedDirectoryWarmupTask
-    return
-  }
-  const candidates = collapsedDirectoryWarmupCandidates()
-  if (candidates.length === 0) return
-
-  collapsedDirectoryWarmupTask = (async () => {
-    for (const directory of candidates) {
-      const pid = String(directory?.id || '').trim()
-      if (!pid) continue
-      if (!isDirectoryCollapsed(pid)) continue
-      if (aggregateLoadingByDirectoryId.value[pid]) continue
-      if (aggregateAttemptedByDirectoryId.value[pid]) continue
-      if (hasCachedSessionsForDirectory(pid)) continue
-      await ensureDirectoryAggregateLoaded(pid, directory.path, {
-        force: false,
-        page: sessionRootPage(pid),
-        pageSize: SESSION_ROOTS_PAGE_SIZE,
-        includeWorktrees: false,
-      }).catch(() => {})
-    }
-  })().finally(() => {
-    collapsedDirectoryWarmupTask = null
-    if (collapsedDirectoryWarmupCandidates().length > 0) {
-      scheduleCollapsedDirectoryWarmup(480)
-    }
-  })
-
-  await collapsedDirectoryWarmupTask
-}
-
-function scheduleCollapsedDirectoryWarmup(delayMs = 220) {
-  if (collapsedDirectoryWarmupTimer !== null) {
-    window.clearTimeout(collapsedDirectoryWarmupTimer)
-    collapsedDirectoryWarmupTimer = null
-  }
-  collapsedDirectoryWarmupTimer = window.setTimeout(
-    () => {
-      collapsedDirectoryWarmupTimer = null
-      void warmCollapsedDirectoriesInBackground().catch(() => {})
-    },
-    Math.max(0, Math.floor(delayMs)),
-  )
-}
-
-watch(
-  () => directories.value.map((p) => `${p.id}:${p.path}`).join('|'),
-  () => {
-    // Auto-load sessions for currently-expanded directories when directory list changes.
-    autoLoadExpandedDirectoriesOnce()
-  },
-  { immediate: true },
-)
-
-watch(
-  () =>
-    Array.from(collapsedDirectories.value)
-      .map((id) => String(id || '').trim())
-      .filter(Boolean)
-      .sort(),
-  (next, prev = []) => {
-    const nextSet = new Set(next)
-    const prevSet = new Set(prev)
-    for (const directory of directories.value) {
-      const pid = (directory.id || '').trim()
-      if (!pid) continue
-      // Load only directories that just transitioned from collapsed -> expanded.
-      if (!prevSet.has(pid) || nextSet.has(pid)) continue
-      autoLoadExpandedDirectoryIfNeeded(directory)
-    }
-  },
-)
-
-watch(
-  () => [
-    sidebarQueryNorm.value,
-    pagedDirectories.value.map((entry) => `${entry.id}:${entry.path}`).join('|'),
-    Array.from(collapsedDirectories.value)
-      .map((id) => String(id || '').trim())
-      .filter(Boolean)
-      .sort()
-      .join('|'),
-  ],
-  () => {
-    if (collapsedDirectoryWarmupCandidates().length === 0) return
-    scheduleCollapsedDirectoryWarmup(220)
-  },
-  { immediate: true },
-)
-
-onMounted(() => {
-  // Mobile sidebar mounts/unmounts; avoid refetching on every open.
-  if (!autoLoadExpandedAlreadyAppliedThisLoad()) {
-    autoLoadExpandedDirectoriesOnce()
-    markAutoLoadExpandedAppliedThisLoad()
-  }
-})
 
 onBeforeUnmount(() => {
-  if (directoryPageFetchTimer !== null) {
-    window.clearTimeout(directoryPageFetchTimer)
-    directoryPageFetchTimer = null
-  }
-  if (collapsedDirectoryWarmupTimer !== null) {
-    window.clearTimeout(collapsedDirectoryWarmupTimer)
-    collapsedDirectoryWarmupTimer = null
+  if (sidebarStateFetchTimer !== null) {
+    window.clearTimeout(sidebarStateFetchTimer)
+    sidebarStateFetchTimer = null
   }
 })
 
 async function selectDirectory(directoryId: string, directoryPath: string) {
+  void directoryId
   dismissDeepLinkFocus()
   directoryStore.setDirectory(directoryPath)
-  await ensureDirectoryAggregateLoaded(directoryId, directoryPath)
 }
 
 async function focusDirectoryContext(directoryId: string, directoryPath: string) {
   const pid = (directoryId || '').trim()
   const root = (directoryPath || '').trim()
+  void pid
   if (!pid || !root) return
   if ((directoryStore.currentDirectory || '').trim() !== root) {
     dismissDeepLinkFocus()
@@ -1409,12 +1030,7 @@ async function createSessionInDirectory(directoryId: string, directoryPath: stri
     const created = await chat.createSession()
     if (created?.id) {
       // Ensure the sidebar list reflects the new session without a manual refresh.
-      void ensureDirectoryAggregateLoaded(directoryId, directoryPath, {
-        force: true,
-        focusSessionId: created.id,
-      }).catch(() => {
-        // ignore
-      })
+      void revalidateSidebarState(undefined, { silent: true })
 
       ui.enableSessionQuery()
       const nextQuery = patchSessionIdInQuery(route.query, created.id)
@@ -1484,7 +1100,7 @@ async function deleteSession(sessionId: string) {
 
   // Reconcile the specific directory page so paging/children counts stay correct.
   if (directoryEntry) {
-    void ensureDirectoryAggregateLoaded(directoryEntry.id, directoryEntry.path, { force: true })
+    void revalidateSidebarState(undefined, { silent: true })
   }
 }
 
@@ -1508,130 +1124,50 @@ const isDirectoryFocused = (directory: DirectoryEntry) => {
   return wts.includes(dir)
 }
 
-const directoryById = computed<Record<string, DirectoryEntry>>(() => {
-  const out: Record<string, DirectoryEntry> = {}
-  for (const entry of directories.value) {
-    const id = String(entry?.id || '').trim()
-    if (!id) continue
-    out[id] = entry
-  }
-  return out
-})
-
-const pinnedSessionIdSet = computed<Set<string>>(() => {
-  return new Set(pinnedSessionIds.value.map((id) => String(id || '').trim()).filter(Boolean))
-})
-
 type FlattenedDirectoryTree = {
   rows: FlatTreeRow[]
   parentById: Record<string, string | null>
   rootIds: string[]
 }
 
-const aggregateSessionsCacheByDirectoryId = new Map<string, SessionLike[]>()
-const flattenedTreeCacheByDirectoryId = new Map<string, FlattenedDirectoryTree>()
-const pinnedRowsCacheByDirectoryId = new Map<string, ThreadSessionRow[]>()
+type SidebarSearchHit = { directory: DirectoryEntry; session: SessionLike }
 
-function clearDirectorySessionProjectionCaches() {
-  aggregateSessionsCacheByDirectoryId.clear()
-  flattenedTreeCacheByDirectoryId.clear()
-  pinnedRowsCacheByDirectoryId.clear()
-}
-
-function clearDirectoryTreeProjectionCaches() {
-  flattenedTreeCacheByDirectoryId.clear()
-  pinnedRowsCacheByDirectoryId.clear()
-}
-
-watch(
-  () => directorySessions.sessionPageByDirectoryId,
-  () => {
-    clearDirectorySessionProjectionCaches()
-  },
-  { deep: false },
-)
-
-watch(
-  () => directorySessions.sessionSummariesById,
-  () => {
-    clearDirectorySessionProjectionCaches()
-  },
-  { deep: false },
-)
-
-watch(
-  () => directorySessions.childrenByParentSessionId,
-  () => {
-    pinnedRowsCacheByDirectoryId.clear()
-  },
-  { deep: false },
-)
-
-watch(
-  () => directories.value.map((entry) => `${entry.id}:${entry.path}`).join('|'),
-  () => {
-    clearDirectorySessionProjectionCaches()
-  },
-)
-
-watch(
-  () => pinnedSessionIds.value.join('|'),
-  () => {
-    clearDirectorySessionProjectionCaches()
-  },
-)
-
-watch(
-  () => Array.from(expandedParents.value).join('|'),
-  () => {
-    clearDirectoryTreeProjectionCaches()
-  },
-)
-
-function aggregatedSessionsForDirectory(directoryId: string, directoryPath: string): SessionLike[] {
-  const pid = (directoryId || '').trim()
-  const root = (directoryPath || '').trim()
-  if (!pid || !root) return []
-
-  const cached = aggregateSessionsCacheByDirectoryId.get(pid)
-  if (cached) return cached
-
-  const list = directorySessions.aggregatedSessionsForDirectory(pid, root) as SessionLike[]
-  aggregateSessionsCacheByDirectoryId.set(pid, list)
-  return list
-}
-
-async function searchSessionsForDirectory(
-  directory: DirectoryEntry,
-  query: string,
-  limit: number,
-  signal?: AbortSignal,
-) {
-  const root = (directory?.path || '').trim()
+async function searchSessionHits(query: string, limit: number, signal?: AbortSignal): Promise<SidebarSearchHit[]> {
   const q = (query || '').trim()
-  if (!root || !q || limit <= 0) return []
+  if (!q || limit <= 0) return []
   try {
-    const resp = await chatApi.listSessions(root, {
-      scope: 'directory',
-      search: q,
-      limit,
-      includeTotal: false,
-      signal,
-    })
-    return Array.isArray(resp?.sessions) ? resp.sessions : []
+    const payload = await apiJson<SessionValue>(
+      `/api/chat-sidebar/session-search?query=${encodeURIComponent(q)}&limit=${encodeURIComponent(String(Math.max(1, Math.floor(limit))))}`,
+      signal ? { signal } : undefined,
+    )
+    const record = asRecord(payload)
+    const items = Array.isArray(record?.items) ? record.items : []
+    const out: SidebarSearchHit[] = []
+    for (const item of items) {
+      const row = asRecord(item)
+      const directoryRecord = asRecord(row?.directory)
+      const sessionRecord = asRecord(row?.session)
+      const directoryId = typeof directoryRecord?.id === 'string' ? directoryRecord.id.trim() : ''
+      const directoryPath = typeof directoryRecord?.path === 'string' ? directoryRecord.path.trim() : ''
+      const sessionId = readSessionId(sessionRecord)
+      if (!directoryId || !directoryPath || !sessionId) continue
+      out.push({
+        directory: {
+          id: directoryId,
+          path: directoryPath,
+        },
+        session: {
+          ...(sessionRecord as SessionLike),
+          id: sessionId,
+        },
+      })
+      if (out.length >= limit) break
+    }
+    return out
   } catch (err) {
     if (isAbortError(err)) throw err
     return []
   }
-}
-
-function recentSessionsForList(list: SessionLike[]) {
-  const pinnedSet = pinnedSessionIdSet.value
-  return list.filter((session) => {
-    const sid = readSessionId(session)
-    if (!sid) return true
-    return !pinnedSet.has(sid)
-  })
 }
 
 // Tree helpers extracted to '@/features/sessions/model/tree'.
@@ -1662,84 +1198,87 @@ function ensureAncestorsExpanded(parentById: Record<string, string | null>, sess
   expandedParents.value = next
 }
 
-function flattenedTreeForDirectory(directoryId: string, directoryPath?: string): FlattenedDirectoryTree | null {
+function buildBackendFlattenedTree(section: DirectorySidebarView | null | undefined): FlattenedDirectoryTree | null {
+  if (!section || !Array.isArray(section.recentRows)) return null
+
+  const rows: FlatTreeRow[] = section.recentRows
+    .map((row) => {
+      const sid = String(row?.id || '').trim()
+      if (!sid) return null
+      return {
+        id: sid,
+        session: row.session || ({ id: sid } as SessionLike),
+        depth: Number.isFinite(Number(row?.depth)) ? Math.max(0, Math.floor(Number(row.depth))) : 0,
+        isParent: row.isParent,
+        isExpanded: row.isExpanded,
+        rootId: String(row.rootId || sid).trim() || sid,
+      }
+    })
+    .filter((row): row is FlatTreeRow => Boolean(row))
+
+  const parentById = { ...(section.recentParentById || {}) }
+  const rootIds = Array.isArray(section.recentRootIds)
+    ? section.recentRootIds.map((value) => String(value || '').trim()).filter(Boolean)
+    : []
+
+  return {
+    rows,
+    parentById,
+    rootIds,
+  }
+}
+
+function flattenedTreeForDirectory(directoryId: string, _directoryPath?: string): FlattenedDirectoryTree | null {
+  void _directoryPath
   const pid = (directoryId || '').trim()
   if (!pid) return null
 
-  const cached = flattenedTreeCacheByDirectoryId.get(pid)
-  if (cached) return cached
-
-  const root = (directoryPath || directoryById.value[pid]?.path || '').trim()
-  if (!root) return null
-
-  // Show pinned separately; tree renders non-pinned sessions.
-  const list = recentSessionsForList(aggregatedSessionsForDirectory(pid, root))
-  const tree = buildFlattenedTree(list, expandedParents.value)
-  flattenedTreeCacheByDirectoryId.set(pid, tree)
-  return tree
+  const section = directorySidebarById.value[pid]
+  return buildBackendFlattenedTree(section)
 }
 
 function sessionCountForDirectory(directoryId: string, directoryPath: string): number {
-  return aggregatedSessionsForDirectory(directoryId, directoryPath).length
+  void directoryPath
+  const pid = (directoryId || '').trim()
+  const section = directorySidebarById.value[pid]
+  if (section && Number.isFinite(section.sessionCount)) {
+    return Math.max(0, Math.floor(section.sessionCount))
+  }
+  return 0
 }
 
 function pinnedRowsForDirectory(directoryId: string): ThreadSessionRow[] {
   const pid = (directoryId || '').trim()
   if (!pid) return []
-
-  const cached = pinnedRowsCacheByDirectoryId.get(pid)
-  if (cached) return cached
-
-  const directory = directoryById.value[pid] || null
-  const root = (directory?.path || '').trim()
-  if (!root) return []
-
-  const pinnedSet = pinnedSessionIdSet.value
-  if (pinnedSet.size === 0) {
-    pinnedRowsCacheByDirectoryId.set(pid, [])
-    return []
-  }
-
-  const roots: ThreadRootItem[] = []
-  const list = aggregatedSessionsForDirectory(pid, root)
-  for (const session of list) {
-    const sid = readSessionId(session)
-    if (!sid || !pinnedSet.has(sid)) continue
-    roots.push({
-      id: sid,
-      session,
-      directory,
-    })
-  }
-  const rows = buildThreadRowsFromRoots(roots)
-  pinnedRowsCacheByDirectoryId.set(pid, rows)
-  return rows
+  const section = directorySidebarById.value[pid]
+  if (section && Array.isArray(section.pinnedRows)) return section.pinnedRows
+  return []
 }
 
 function sessionRootPage(directoryId: string): number {
-  return directorySessions.sessionRootPage(directoryId, SESSION_ROOTS_PAGE_SIZE)
+  const pid = (directoryId || '').trim()
+  const section = directorySidebarById.value[pid]
+  if (!section || !Number.isFinite(section.rootPage)) return 0
+  return Math.max(0, Math.floor(section.rootPage))
 }
 
 function sessionRootPageCount(directoryId: string): number {
-  return directorySessions.sessionRootPageCount(directoryId, SESSION_ROOTS_PAGE_SIZE)
+  const pid = (directoryId || '').trim()
+  const section = directorySidebarById.value[pid]
+  if (!section || !Number.isFinite(section.rootPageCount)) return 1
+  return Math.max(1, Math.floor(section.rootPageCount))
 }
 
 async function setSessionRootPage(directoryId: string, page: number) {
   const pid = (directoryId || '').trim()
   if (!pid) return
-  const current = directorySessions.sessionRootPage(pid, SESSION_ROOTS_PAGE_SIZE)
+  const current = sessionRootPage(pid)
   const maxPage = Math.max(0, sessionRootPageCount(pid) - 1)
   const next = Math.max(0, Math.min(maxPage, Math.floor(page || 0)))
   if (current === next) return
 
-  const directory = directories.value.find((d) => (d.id || '').trim() === pid)
-  if (directory?.path) {
-    await ensureDirectoryAggregateLoaded(pid, directory.path, {
-      force: true,
-      page: next,
-      pageSize: SESSION_ROOTS_PAGE_SIZE,
-    })
-  }
+  directorySessions.setSessionRootPage(pid, next, SESSION_ROOTS_PAGE_SIZE)
+  await revalidateSidebarState(undefined, { silent: true })
 }
 
 function pagedRowsForDirectory(directoryId: string): FlatTreeRow[] {
@@ -1758,9 +1297,8 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
   pinnedSessionIds,
   sidebarQuery,
   sidebarQueryNorm,
-  aggregatedSessionsForDirectory,
-  searchSessions: searchSessionsForDirectory,
-  ensureDirectoryAggregateLoaded,
+  searchSessionHits,
+  ensureDirectorySidebarLoaded,
   resolveDirectoryForSession: directorySessions.resolveDirectoryForSession,
   getFlattenedTreeForDirectory: flattenedTreeForDirectory,
   ensureAncestorsExpanded,
@@ -1864,9 +1402,7 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
           :pinnedSessionIds="pinnedSessionIds"
           :chatSelectedSessionId="chat.selectedSessionId"
           :creatingSession="creatingSession"
-          :aggregateLoadingByDirectoryId="aggregateLoadingByDirectoryId"
-          :aggregateAttemptedByDirectoryId="aggregateAttemptedByDirectoryId"
-          :hasCachedSessionsForDirectory="hasCachedSessionsForDirectory"
+          :directoryPageLoading="directoryPageLoading"
           :isDirectoryCollapsed="isDirectoryCollapsed"
           :toggleDirectoryCollapse="toggleDirectoryCollapse"
           :isDirectoryFocused="isDirectoryFocused"
@@ -1915,7 +1451,7 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
           :page="pinnedSessionsPage"
           :paging="pinnedSessionsPaging"
           :pinnedSessionRows="pagedPinnedSessionRows"
-          :pinnedSessionsTotal="pinnedSessions.length"
+          :pinnedSessionsTotal="pinnedSessionsTotal"
           :pinnedSessionsPageCount="pinnedSessionsPageCount"
           :selectedSessionId="chat.selectedSessionId"
           :uiIsMobile="ui.isMobile"

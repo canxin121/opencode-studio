@@ -1357,7 +1357,7 @@ export const useChatStore = defineStore('chat', () => {
     if (dir && (directoryStore.currentDirectory || '').trim() !== String(dir || '').trim()) {
       void refreshSessionsForDirectory(String(dir)).catch(() => {})
     }
-    directorySessions.removeSessionFromAggregates(sid)
+    directorySessions.removeSessionFromSidebarState(sid)
     scheduleSessionsRefresh(1200)
   }
 
@@ -1590,7 +1590,7 @@ export const useChatStore = defineStore('chat', () => {
       sessionRunConfigBySession.value = nextRunConfig
       runConfigPersister.persistSoon()
 
-      directorySessions.removeSessionFromAggregates(sid)
+      directorySessions.removeSessionFromSidebarState(sid)
     }
 
     if (t === 'session.created') {

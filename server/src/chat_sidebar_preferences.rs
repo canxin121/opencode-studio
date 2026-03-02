@@ -61,6 +61,15 @@ struct SequencedPreferenceEvent {
     payload: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "type")]
+enum SidebarPreferencesPatchOp {
+    #[serde(rename = "preferences.replace")]
+    PreferencesReplace {
+        preferences: SessionsSidebarPreferences,
+    },
+}
+
 #[derive(Debug, Default)]
 struct PreferenceReplayBuffer {
     items: VecDeque<SequencedPreferenceEvent>,
@@ -133,18 +142,16 @@ impl SessionsSidebarPreferencesEventHub {
     fn publish_preferences_replace(&self, preferences: &SessionsSidebarPreferences) {
         let seq = self.next_seq.fetch_add(1, Ordering::SeqCst);
         let ts = now_millis();
+        let ops = vec![SidebarPreferencesPatchOp::PreferencesReplace {
+            preferences: preferences.clone(),
+        }];
 
         let payload = serde_json::to_string(&json!({
             "type": "chat-sidebar-preferences.patch",
             "seq": seq,
             "ts": ts,
             "properties": {
-                "ops": [
-                    {
-                        "type": "preferences.replace",
-                        "preferences": preferences,
-                    }
-                ]
+                "ops": ops,
             }
         }))
         .unwrap_or_else(|_| "{}".to_string());
@@ -486,17 +493,13 @@ pub(crate) async fn chat_sidebar_preferences_events(headers: HeaderMap) -> Respo
     let replay = if forced_replay {
         let preferences = read_cached_preferences().await;
         let forced_seq = seq_at_subscribe;
+        let ops = vec![SidebarPreferencesPatchOp::PreferencesReplace { preferences }];
         let payload = serde_json::to_string(&json!({
             "type": "chat-sidebar-preferences.patch",
             "seq": forced_seq,
             "ts": now_millis(),
             "properties": {
-                "ops": [
-                    {
-                        "type": "preferences.replace",
-                        "preferences": preferences,
-                    }
-                ]
+                "ops": ops,
             }
         }))
         .unwrap_or_else(|_| "{}".to_string());

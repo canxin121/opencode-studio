@@ -62,9 +62,7 @@ const props = defineProps<{
 
   creatingSession: boolean
 
-  aggregateLoadingByDirectoryId: Record<string, boolean>
-  aggregateAttemptedByDirectoryId: Record<string, boolean>
-  hasCachedSessionsForDirectory: (directoryId: string) => boolean
+  directoryPageLoading: boolean
 
   isDirectoryCollapsed: (directoryId: string) => boolean
   toggleDirectoryCollapse: (directoryId: string, directoryPath: string) => void
@@ -190,7 +188,7 @@ function statusMeta(sessionId: string) {
                 :collapsed="props.isDirectoryCollapsed(directory.id)"
                 :focused="props.isDirectoryFocused(directory)"
                 :has-active-or-blocked="props.directoryHasActiveOrBlocked(directory)"
-                :loading="aggregateLoadingByDirectoryId[directory.id]"
+                :loading="props.directoryPageLoading"
                 :creating-session="props.creatingSession"
                 @toggle-collapse="props.toggleDirectoryCollapse(directory.id, directory.path)"
                 @open-actions="props.openDirectoryActions(directory)"
@@ -204,8 +202,7 @@ function statusMeta(sessionId: string) {
               <div class="space-y-0.5">
                 <div
                   v-if="
-                    (aggregateLoadingByDirectoryId[directory.id] || !aggregateAttemptedByDirectoryId[directory.id]) &&
-                    !props.hasCachedSessionsForDirectory(directory.id)
+                    props.directoryPageLoading && props.sessionCountForDirectory(directory.id, directory.path) === 0
                   "
                   class="px-1.5 py-1.5"
                 >
@@ -299,7 +296,7 @@ function statusMeta(sessionId: string) {
                         v-if="props.sessionRootPageCount(directory.id) > 1"
                         :page="props.sessionRootPage(directory.id)"
                         :page-count="props.sessionRootPageCount(directory.id)"
-                        :disabled="Boolean(aggregateLoadingByDirectoryId[directory.id])"
+                        :disabled="props.directoryPageLoading"
                         :prev-label="String(t('chat.sidebar.directoriesList.prevSessionsPage'))"
                         :next-label="String(t('chat.sidebar.directoriesList.nextSessionsPage'))"
                         @update:page="(next) => props.setSessionRootPage(directory.id, next)"

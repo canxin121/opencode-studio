@@ -322,12 +322,14 @@ export function connectSse(opts: SseClientOptions): SseClient {
       if (Array.isArray(raw.ops)) {
         const seq = typeof raw.seq === 'number' && Number.isFinite(raw.seq) ? Number(raw.seq) : null
         const ts = typeof raw.ts === 'number' && Number.isFinite(raw.ts) ? Number(raw.ts) : null
+        const hints = raw.hints
         evt = {
           type: 'chat-sidebar.patch',
           properties: {
             ops: raw.ops,
             ...(seq !== null ? { seq } : {}),
             ...(ts !== null ? { ts } : {}),
+            ...(hints !== undefined ? { hints } : {}),
           },
         }
       } else {

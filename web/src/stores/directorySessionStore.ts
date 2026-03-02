@@ -4,11 +4,10 @@ import { i18n } from '@/i18n'
 
 import * as chatApi from '@/stores/chat/api'
 import { apiJson } from '@/lib/api'
-import { buildFlattenedTree, type FlatTreeRow } from '@/features/sessions/model/tree'
+import { buildFlattenedTree } from '@/features/sessions/model/tree'
 import { normalizeDirectories } from '@/features/sessions/model/projects'
 import type { DirectoryEntry } from '@/features/sessions/model/types'
 import { normalizeDirForCompare } from '@/features/sessions/model/labels'
-import { extractSessionActivityUpdate } from '@/lib/sessionActivityEvent.js'
 import type { SseEvent } from '@/lib/sse'
 import { postAppBroadcast } from '@/lib/appBroadcast'
 import { resolveSidebarSeqAfterBootstrap } from '@/stores/directorySessionSeq'
@@ -37,23 +36,15 @@ import {
 } from '@/data/chatSidebarUiPrefs'
 
 import {
-  DIRECTORIES_PAGE_SIZE_DEFAULT,
-  FOOTER_PAGE_SIZE_DEFAULT,
-  RECENT_INDEX_DEFAULT_LIMIT,
   RECENT_INDEX_MAX_ITEMS,
-  RUNNING_INDEX_DEFAULT_LIMIT,
-  RUNNING_INDEX_MAX_ITEMS,
-  type DirectoriesPageWire,
   type ChatSidebarStateWire,
   type DirectorySessionPageState,
   type DirectorySessionTreeHint,
-  type PagedIndexWire,
   type RecentIndexWireItem,
   type RecentIndexEntry,
   type RunningIndexWireItem,
   type RunningIndexEntry,
   type SessionPayloadConsistency,
-  type SessionSummariesWire,
   normalizeRecentIndexItem,
   normalizeRunningIndexItem,
   parseSessionPagePayload,
@@ -64,11 +55,8 @@ import {
   upsertSessionInPageState,
 } from '@/stores/directorySessions/pageState'
 import { applyRootTotalDelta, computeRootTotalDeltas } from '@/stores/directorySessions/rootTotals'
-import { hasActiveRuntimeInDirectoryScope } from '@/stores/directorySessions/runtimeDirectoryActivity'
-import { runtimePatchWithEventTimestamp } from '@/stores/directorySessions/runtimeEvent'
-import { isDirectoryAggregatePageSatisfied, normalizePage } from '@/stores/directorySessions/pagination'
 import { matchDirectoryEntryForPath } from '@/stores/directorySessions/pathMatch'
-import { extractSessionId, readParentId, readUpdatedAt } from '@/stores/directorySessions/runtime'
+import { readParentId, readUpdatedAt } from '@/stores/directorySessions/runtime'
 import type { JsonObject as UnknownRecord, JsonValue } from '@/types/json'
 import {
   compareUiPrefsRecency,
@@ -84,7 +72,6 @@ import {
   type SidebarPatchRefreshHint,
 } from '@/stores/directorySessions/sidebarPatchPlanner'
 import { createStringRefreshQueue } from '@/stores/directorySessions/sidebarRefreshQueue'
-import { runNonCriticalSidebarHydration } from '@/stores/directorySessions/bootstrapHydration'
 import {
   SIDEBAR_STATE_ENDPOINT,
   SNAPSHOT_SAVE_DEBOUNCE_MS,
@@ -93,29 +80,40 @@ import {
   jsonLikeDeepEqual,
 } from '@/stores/directorySessions/persistence'
 
-type EnsureDirectoryAggregateOpts = {
-  force?: boolean
-  focusSessionId?: string
-  pinnedSessionIds: string[]
-  page: number
-  pageSize: number
-  includeWorktrees?: boolean
-}
-
-type RunningSidebarRow = {
+type SidebarSessionRow = {
   id: string
   session: SessionSummarySnapshot | null
   directory: DirectoryEntry | null
-  updatedAt: number
-  statusType: string
-  attention: 'permission' | 'question' | null
+  renderKey: string
+  depth: number
+  parentId: string | null
+  rootId: string
+  isParent: boolean
+  isExpanded: boolean
 }
 
-type RecentSidebarRow = {
-  id: string
-  session: SessionSummarySnapshot
-  directory: DirectoryEntry
-  updatedAt: number
+type DirectorySidebarView = {
+  sessionCount: number
+  rootPage: number
+  rootPageCount: number
+  hasActiveOrBlocked: boolean
+  pinnedRows: SidebarSessionRow[]
+  recentRows: SidebarSessionRow[]
+  recentParentById: Record<string, string | null>
+  recentRootIds: string[]
+}
+
+type SidebarFooterView = {
+  total: number
+  page: number
+  pageCount: number
+  rows: SidebarSessionRow[]
+}
+
+type SidebarFocusedSession = {
+  sessionId: string
+  directoryId: string
+  directoryPath: string
 }
 
 function asRecord(value: JsonValue): UnknownRecord | null {
@@ -144,16 +142,6 @@ function toSessionSummarySnapshot(value: JsonValue): SessionSummarySnapshot | nu
   return { ...record, id }
 }
 
-function toSessionSummarySnapshotList(value: JsonValue): SessionSummarySnapshot[] {
-  if (!Array.isArray(value)) return []
-  const out: SessionSummarySnapshot[] = []
-  for (const item of value) {
-    const summary = toSessionSummarySnapshot(item)
-    if (summary) out.push(summary)
-  }
-  return out
-}
-
 function toRuntimeSnapshot(value: JsonValue): SessionRuntimeSnapshot {
   const runtime = asRecord(value)
   const attention = runtime?.attention
@@ -161,6 +149,7 @@ function toRuntimeSnapshot(value: JsonValue): SessionRuntimeSnapshot {
     statusType: typeof runtime?.statusType === 'string' ? runtime.statusType : undefined,
     phase: typeof runtime?.phase === 'string' ? runtime.phase : undefined,
     attention: attention === 'permission' || attention === 'question' || attention === null ? attention : undefined,
+    displayState: typeof runtime?.displayState === 'string' ? runtime.displayState : undefined,
     updatedAt:
       typeof runtime?.updatedAt === 'number' && Number.isFinite(runtime.updatedAt) ? runtime.updatedAt : undefined,
   }
@@ -168,12 +157,6 @@ function toRuntimeSnapshot(value: JsonValue): SessionRuntimeSnapshot {
 
 function isDegradedConsistency(consistency: SessionPayloadConsistency | undefined): boolean {
   return consistency?.degraded === true
-}
-
-function retryDelayFromConsistency(consistency: SessionPayloadConsistency | undefined, fallbackMs = 200): number {
-  const raw = consistency?.retryAfterMs
-  const parsed = typeof raw === 'number' && Number.isFinite(raw) ? Math.max(50, Math.floor(raw)) : fallbackMs
-  return Math.min(10_000, parsed)
 }
 
 function readEventType(evt: SseEvent): string {
@@ -199,18 +182,6 @@ function readEventPatchRefreshHint(evt: SseEvent): SidebarPatchRefreshHint | nul
   return parseSidebarPatchRefreshHint((eventRecord?.hints as JsonValue) || undefined)
 }
 
-function readRuntimeStatusType(value: JsonValue): SessionRuntimeState['statusType'] | null {
-  const status = typeof value === 'string' ? value.trim() : ''
-  if (status === 'busy' || status === 'retry' || status === 'idle') return status
-  return null
-}
-
-function readRuntimePhase(value: JsonValue): SessionRuntimeState['phase'] | null {
-  const phase = typeof value === 'string' ? value.trim() : ''
-  if (phase === 'idle' || phase === 'busy' || phase === 'cooldown') return phase
-  return null
-}
-
 export const useDirectorySessionStore = defineStore('directorySession', () => {
   const directoriesById = ref<Record<string, DirectoryEntry>>({})
   const directoryOrder = ref<string[]>([])
@@ -223,18 +194,18 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
   // Keep pinned lists as id arrays; session objects live in `sessionSummariesById`.
   // This avoids duplicated session objects across multiple caches.
   const pinnedSessionIdsByDirectoryId = ref<Record<string, string[]>>({})
-  const pinnedSummaryKeyByDirectoryId = ref<Record<string, string>>({})
   const worktreePathsByDirectoryId = ref<Record<string, string[]>>({})
-  const worktreeLoadingByDirectoryId = ref<Record<string, boolean>>({})
-  const aggregateLoadingByDirectoryId = ref<Record<string, boolean>>({})
-  const aggregateAttemptedByDirectoryId = ref<Record<string, boolean>>({})
   const recentIndex = ref<RecentIndexEntry[]>([])
   const recentIndexTotal = ref(0)
   const runningIndex = ref<RunningIndexEntry[]>([])
   const runningIndexTotal = ref(0)
+  const directorySidebarById = ref<Record<string, DirectorySidebarView>>({})
+  const pinnedFooterView = ref<SidebarFooterView>({ total: 0, page: 0, pageCount: 1, rows: [] })
+  const recentFooterView = ref<SidebarFooterView>({ total: 0, page: 0, pageCount: 1, rows: [] })
+  const runningFooterView = ref<SidebarFooterView>({ total: 0, page: 0, pageCount: 1, rows: [] })
+  const sidebarStateFocus = ref<SidebarFocusedSession | null>(null)
   const directoryPageRows = ref<DirectoryEntry[]>([])
   const directoryPageTotal = ref(0)
-  const directoryPageLoading = ref(false)
   const uiPrefs = ref<ChatSidebarUiPrefs>(loadChatSidebarUiPrefs())
 
   const loading = ref(false)
@@ -244,10 +215,6 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
   let uiPrefsRemotePersistTimer: number | null = null
   let uiPrefsRemotePersistInFlight = false
   let uiPrefsRemotePersistQueued = false
-  let recentIndexLoadInFlight: Promise<void> | null = null
-  let runningIndexLoadInFlight: Promise<void> | null = null
-  const summariesLoadInFlight = new Map<string, Promise<void>>()
-  let directoryPageLoadSeq = 0
   let uiPrefsLocalRevision = 0
   let uiPrefsAckedRevision = 0
   let uiPrefsAckedBaseline = normalizeUiPrefs(uiPrefs.value)
@@ -286,7 +253,6 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
   let lastUiPrefsPatchGapAt = 0
   let uiPrefsPatchOutOfSync = false
   let uiPrefsPatchResyncInFlight = false
-  let syncedAttentionSessionIds = new Set<string>()
   const sidebarPatchRefreshQueue = createStringRefreshQueue({
     maxItems: SIDEBAR_PATCH_REFRESH_QUEUE_MAX,
   })
@@ -296,23 +262,6 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
   let sidebarFooterRefreshInFlight = false
   let sidebarFooterRefreshPendingRecent = false
   let sidebarFooterRefreshPendingRunning = false
-
-  const pinnedSummariesByDirectoryId = computed<Record<string, SessionSummarySnapshot[]>>(() => {
-    const out: Record<string, SessionSummarySnapshot[]> = {}
-    for (const [directoryId, ids] of Object.entries(pinnedSessionIdsByDirectoryId.value)) {
-      const list: SessionSummarySnapshot[] = []
-      for (const sid of ids || []) {
-        const id = String(sid || '').trim()
-        if (!id) continue
-        const session = sessionSummariesById.value[id]
-        if (session) list.push(session)
-      }
-      if (list.length > 0) {
-        out[directoryId] = list
-      }
-    }
-    return out
-  })
 
   function parseSseSeq(evt: SseEvent): number | null {
     const props = readEventProperties(evt)
@@ -332,21 +281,6 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     const parsed = Number.parseInt(id, 10)
     if (!Number.isFinite(parsed) || parsed <= 0) return null
     return Math.max(1, Math.floor(parsed))
-  }
-
-  function normalizeWireTimestamp(raw: JsonValue): number | undefined {
-    const value = Number(raw)
-    if (!Number.isFinite(value) || value <= 0) return undefined
-    // Some upstream emitters use ns/us; normalize to milliseconds.
-    if (value > 100_000_000_000_000_000) return Math.floor(value / 1_000_000)
-    if (value > 100_000_000_000_000) return Math.floor(value / 1000)
-    return Math.floor(value)
-  }
-
-  function readEventUpdatedAt(evt: SseEvent): number | undefined {
-    const fromRoot = normalizeWireTimestamp(asRecord(evt)?.timestamp)
-    if (fromRoot !== undefined) return fromRoot
-    return normalizeWireTimestamp(readEventProperties(evt).ts)
   }
 
   function getSidebarPatchCursor(): string {
@@ -393,50 +327,6 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
         if (!session) continue
         out[sid] = { session, directory }
       }
-    }
-
-    return out
-  })
-
-  const runningSidebarRows = computed<RunningSidebarRow[]>(() => {
-    const out: RunningSidebarRow[] = []
-    for (const item of runningIndex.value) {
-      const sid = String(item.sessionId || '').trim()
-      if (!sid) continue
-      const runtime = mergeRuntimeState(runtimeBySessionId.value[sid], item.runtime)
-      if (!runtimeIsActive(runtime, { includeCooldown: true })) continue
-      const session = sessionSummariesById.value[sid] || null
-      const directory =
-        (item.directoryId ? directoriesById.value[item.directoryId] || null : null) ||
-        (item.directoryPath ? directoryEntryByPath(item.directoryPath) : null) ||
-        (readSessionDirectory(session) ? directoryEntryByPath(readSessionDirectory(session)) : null)
-      out.push({
-        id: sid,
-        session,
-        directory,
-        updatedAt: Math.max(item.updatedAt || 0, readUpdatedAt(session)),
-        statusType: runtime.statusType,
-        attention: runtime.attention,
-      })
-    }
-    return out
-  })
-
-  const recentSidebarRows = computed<RecentSidebarRow[]>(() => {
-    const out: RecentSidebarRow[] = []
-
-    for (const item of recentIndex.value) {
-      const sid = String(item.sessionId || '').trim()
-      if (!sid) continue
-      const session = sessionSummariesById.value[sid]
-      const directory = directoriesById.value[item.directoryId] || directoryEntryByPath(item.directoryPath)
-      if (!session || !directory) continue
-      out.push({
-        id: sid,
-        session,
-        directory,
-        updatedAt: Math.max(item.updatedAt || 0, readUpdatedAt(session)),
-      })
     }
 
     return out
@@ -795,6 +685,153 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     return matchDirectoryEntryForPath(visibleDirectories.value, path)
   }
 
+  function toDirectoryEntry(value: JsonValue | null | undefined): DirectoryEntry | null {
+    const record = asRecord((value as JsonValue) || undefined)
+    if (!record) return null
+    const id = typeof record.id === 'string' ? record.id.trim() : ''
+    const path = typeof record.path === 'string' ? record.path.trim() : ''
+    if (!id || !path) return null
+    const label = typeof record.label === 'string' && record.label.trim() ? record.label.trim() : undefined
+    return { id, path, ...(label ? { label } : {}) }
+  }
+
+  function normalizeSidebarSessionRow(raw: JsonValue): SidebarSessionRow | null {
+    const record = asRecord(raw)
+    if (!record) return null
+    const id = typeof record.id === 'string' ? record.id.trim() : ''
+    if (!id) return null
+
+    const wireSession = toSessionSummarySnapshot(record.session as JsonValue)
+    const session = wireSession || sessionSummariesById.value[id] || null
+    const wireDirectory = toDirectoryEntry(record.directory as JsonValue)
+    const sessionDirectory = readSessionDirectory(session)
+    const directory =
+      wireDirectory ||
+      (sessionDirectory ? directoryEntryByPath(sessionDirectory) : null) ||
+      (sessionDirectory
+        ? (() => {
+            const did = directoryIdForPath(sessionDirectory)
+            return did ? directoriesById.value[did] || null : null
+          })()
+        : null)
+
+    const depthRaw = Number(record.depth)
+    const depth = Number.isFinite(depthRaw) ? Math.max(0, Math.floor(depthRaw)) : 0
+    const renderKey = typeof record.renderKey === 'string' && record.renderKey.trim() ? record.renderKey.trim() : id
+    const parentId = typeof record.parentId === 'string' && record.parentId.trim() ? record.parentId.trim() : null
+    const rootId = typeof record.rootId === 'string' && record.rootId.trim() ? record.rootId.trim() : id
+
+    return {
+      id,
+      session,
+      directory,
+      renderKey,
+      depth,
+      parentId,
+      rootId,
+      isParent: record.isParent === true,
+      isExpanded: record.isExpanded === true,
+    }
+  }
+
+  function normalizeSidebarFooterView(raw: JsonValue | null | undefined): SidebarFooterView {
+    const record = asRecord((raw as JsonValue) || undefined)
+    const rowsRaw = Array.isArray(record?.rows) ? record.rows : []
+    const rows: SidebarSessionRow[] = []
+    for (const item of rowsRaw) {
+      const row = normalizeSidebarSessionRow(item)
+      if (row) rows.push(row)
+    }
+    const totalRaw = Number(record?.total)
+    const pageRaw = Number(record?.page)
+    const pageCountRaw = Number(record?.pageCount)
+    const total = Number.isFinite(totalRaw) ? Math.max(0, Math.floor(totalRaw)) : rows.length
+    const pageCount = Number.isFinite(pageCountRaw) ? Math.max(1, Math.floor(pageCountRaw)) : 1
+    const page = Number.isFinite(pageRaw) ? Math.max(0, Math.min(pageCount - 1, Math.floor(pageRaw))) : 0
+    return {
+      total,
+      page,
+      pageCount,
+      rows,
+    }
+  }
+
+  function normalizeDirectorySidebarSection(raw: JsonValue, directoryId: string): DirectorySidebarView | null {
+    const section = asRecord(raw)
+    if (!section) return null
+    const did = String(directoryId || '').trim()
+    if (!did) return null
+
+    const pinnedRowsRaw = Array.isArray(section.pinnedRows) ? section.pinnedRows : []
+    const recentRowsRaw = Array.isArray(section.recentRows) ? section.recentRows : []
+
+    const pinnedRows: SidebarSessionRow[] = []
+    for (const item of pinnedRowsRaw) {
+      const row = normalizeSidebarSessionRow(item)
+      if (row) pinnedRows.push(row)
+    }
+    const recentRows: SidebarSessionRow[] = []
+    for (const item of recentRowsRaw) {
+      const row = normalizeSidebarSessionRow(item)
+      if (row) recentRows.push(row)
+    }
+
+    const sessionCountRaw = Number(section.sessionCount)
+    const rootPageRaw = Number(section.rootPage)
+    const rootPageCountRaw = Number(section.rootPageCount)
+    const sessionCount = Number.isFinite(sessionCountRaw) ? Math.max(0, Math.floor(sessionCountRaw)) : recentRows.length
+    const rootPageCount = Number.isFinite(rootPageCountRaw) ? Math.max(1, Math.floor(rootPageCountRaw)) : 1
+    const rootPage = Number.isFinite(rootPageRaw)
+      ? Math.max(0, Math.min(rootPageCount - 1, Math.floor(rootPageRaw)))
+      : 0
+
+    const recentParentByIdRaw = asRecord(section.recentParentById as JsonValue) || {}
+    const recentParentById: Record<string, string | null> = {}
+    for (const [sessionIdRaw, parentRaw] of Object.entries(recentParentByIdRaw)) {
+      const sessionId = String(sessionIdRaw || '').trim()
+      if (!sessionId) continue
+      if (typeof parentRaw === 'string' && parentRaw.trim()) {
+        recentParentById[sessionId] = parentRaw.trim()
+        continue
+      }
+      recentParentById[sessionId] = null
+    }
+
+    const recentRootIds = Array.isArray(section.recentRootIds)
+      ? section.recentRootIds.map((value) => String(value || '').trim()).filter(Boolean)
+      : []
+
+    return {
+      sessionCount,
+      rootPage,
+      rootPageCount,
+      hasActiveOrBlocked: section.hasActiveOrBlocked === true,
+      pinnedRows,
+      recentRows,
+      recentParentById,
+      recentRootIds,
+    }
+  }
+
+  function applySidebarView(raw: JsonValue | null | undefined) {
+    const view = asRecord((raw as JsonValue) || undefined)
+    const directoryRowsById = asRecord(view?.directoryRowsById as JsonValue) || {}
+
+    const nextDirectorySidebarById: Record<string, DirectorySidebarView> = {}
+    for (const [directoryIdRaw, sectionRaw] of Object.entries(directoryRowsById)) {
+      const directoryId = String(directoryIdRaw || '').trim()
+      if (!directoryId) continue
+      const normalized = normalizeDirectorySidebarSection(sectionRaw, directoryId)
+      if (!normalized) continue
+      nextDirectorySidebarById[directoryId] = normalized
+    }
+
+    directorySidebarById.value = nextDirectorySidebarById
+    pinnedFooterView.value = normalizeSidebarFooterView(view?.pinnedFooter as JsonValue)
+    recentFooterView.value = normalizeSidebarFooterView(view?.recentFooter as JsonValue)
+    runningFooterView.value = normalizeSidebarFooterView(view?.runningFooter as JsonValue)
+  }
+
   function upsertRecentIndexEntry(entry: RecentIndexEntry) {
     const sid = (entry.sessionId || '').trim()
     if (!sid) return
@@ -890,184 +927,6 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     runningIndex.value = next
   }
 
-  async function hydrateSessionSummariesByIds(sessionIds: string[]) {
-    const unique = Array.from(new Set((sessionIds || []).map((id) => String(id || '').trim()).filter(Boolean)))
-    if (unique.length === 0) return
-
-    const missing = unique.filter((id) => !sessionSummariesById.value[id])
-    if (missing.length === 0) return
-    const key = missing.slice().sort().join('|')
-    if (!key) return
-    const existing = summariesLoadInFlight.get(key)
-    if (existing) {
-      await existing
-      return
-    }
-
-    const task = (async () => {
-      const chunkSize = 60
-      for (let i = 0; i < missing.length; i += chunkSize) {
-        const chunk = missing.slice(i, i + chunkSize)
-        if (chunk.length === 0) continue
-        const payload = await apiJson<SessionSummariesWire>(
-          `/api/sessions/summaries?ids=${encodeURIComponent(chunk.join(','))}`,
-        ).catch(() => null)
-        const list = toSessionSummarySnapshotList(payload?.summaries)
-        for (const summary of list) {
-          upsertSessionSummaryPatch(summary)
-        }
-
-        const missingIds = Array.isArray(payload?.missingIds)
-          ? payload.missingIds.map((id) => String(id || '').trim()).filter(Boolean)
-          : []
-        for (const sid of missingIds) {
-          removeSessionFromAggregates(sid, { preserveRuntime: true })
-        }
-      }
-    })().finally(() => {
-      summariesLoadInFlight.delete(key)
-    })
-
-    summariesLoadInFlight.set(key, task)
-    await task
-  }
-
-  async function loadRecentIndexSlice(opts?: { offset?: number; limit?: number; append?: boolean }) {
-    if (recentIndexLoadInFlight) {
-      await recentIndexLoadInFlight
-      return
-    }
-
-    const offset = Math.max(0, Math.floor(opts?.offset || 0))
-    const limit = Math.max(1, Math.min(RECENT_INDEX_MAX_ITEMS, Math.floor(opts?.limit || RECENT_INDEX_DEFAULT_LIMIT)))
-    const append = Boolean(opts?.append)
-
-    const task = (async () => {
-      const payload = await apiJson<PagedIndexWire<RecentIndexWireItem>>(
-        `/api/chat-sidebar/recent-index?offset=${encodeURIComponent(String(offset))}&limit=${encodeURIComponent(String(limit))}`,
-      ).catch(() => null)
-      const list = Array.isArray(payload?.items) ? payload.items : []
-      const incoming = list
-        .map((item) => normalizeRecentIndexItem(item))
-        .filter((item): item is RecentIndexEntry => Boolean(item))
-
-      const base = append ? recentIndex.value.slice() : []
-      const byId = new Map(base.map((item) => [item.sessionId, item]))
-      for (const item of incoming) {
-        byId.set(item.sessionId, item)
-      }
-      const merged = Array.from(byId.values())
-      merged.sort((a, b) => {
-        const diff = b.updatedAt - a.updatedAt
-        if (diff !== 0) return diff
-        return a.sessionId.localeCompare(b.sessionId)
-      })
-      const capped = merged.slice(0, RECENT_INDEX_MAX_ITEMS)
-      recentIndex.value = capped
-      const payloadTotal =
-        typeof payload?.total === 'number' && Number.isFinite(payload.total)
-          ? Math.max(0, Math.floor(payload.total))
-          : capped.length
-      recentIndexTotal.value = Math.min(RECENT_INDEX_MAX_ITEMS, Math.max(payloadTotal, capped.length))
-    })().finally(() => {
-      recentIndexLoadInFlight = null
-    })
-
-    recentIndexLoadInFlight = task
-    await task
-  }
-
-  async function loadRunningIndexSlice(opts?: { offset?: number; limit?: number; append?: boolean }) {
-    if (runningIndexLoadInFlight) {
-      await runningIndexLoadInFlight
-      return
-    }
-
-    const offset = Math.max(0, Math.floor(opts?.offset || 0))
-    const limit = Math.max(1, Math.min(RUNNING_INDEX_MAX_ITEMS, Math.floor(opts?.limit || RUNNING_INDEX_DEFAULT_LIMIT)))
-    const append = Boolean(opts?.append)
-
-    const task = (async () => {
-      const payload = await apiJson<PagedIndexWire<RunningIndexWireItem>>(
-        `/api/chat-sidebar/running-index?offset=${encodeURIComponent(String(offset))}&limit=${encodeURIComponent(String(limit))}`,
-      ).catch(() => null)
-      const list = Array.isArray(payload?.items) ? payload.items : []
-      const incoming = list
-        .map((item) => normalizeRunningIndexItem(item))
-        .filter((item): item is RunningIndexEntry => Boolean(item))
-
-      const base = append ? runningIndex.value.slice() : []
-      const byId = new Map(base.map((item) => [item.sessionId, item]))
-      const nextRuntime = { ...runtimeBySessionId.value }
-      for (const item of incoming) {
-        byId.set(item.sessionId, item)
-        nextRuntime[item.sessionId] = mergeRuntimeState(nextRuntime[item.sessionId], item.runtime)
-      }
-
-      const merged = Array.from(byId.values())
-      merged.sort((a, b) => {
-        const diff = b.updatedAt - a.updatedAt
-        if (diff !== 0) return diff
-        return a.sessionId.localeCompare(b.sessionId)
-      })
-
-      runningIndex.value = merged
-      runningIndexTotal.value =
-        typeof payload?.total === 'number' && Number.isFinite(payload.total)
-          ? Math.max(0, Math.floor(payload.total))
-          : merged.length
-      runtimeBySessionId.value = nextRuntime
-    })().finally(() => {
-      runningIndexLoadInFlight = null
-    })
-
-    runningIndexLoadInFlight = task
-    await task
-  }
-
-  async function ensureRecentSessionRowsLoaded(opts?: { page?: number; pageSize?: number }) {
-    const page = Math.max(0, Math.floor(opts?.page || 0))
-    const pageSize = Math.max(1, Math.min(FOOTER_PAGE_SIZE_DEFAULT, Math.floor(opts?.pageSize || 10)))
-    const end = (page + 1) * pageSize
-
-    for (let step = 0; step < page + 1 && recentIndex.value.length < end; step += 1) {
-      const before = recentIndex.value.length
-      const remaining = Math.max(0, recentIndexTotal.value - before)
-      const requestLimit = recentIndexTotal.value > 0 ? Math.min(pageSize, remaining) : pageSize
-      if (requestLimit <= 0) break
-      await loadRecentIndexSlice({ offset: before, limit: requestLimit, append: before > 0 })
-      if (recentIndex.value.length <= before) break
-    }
-
-    const ids = recentIndex.value.slice(0, end).map((item) => item.sessionId)
-    await hydrateSessionSummariesByIds(ids)
-  }
-
-  async function ensureRunningSessionRowsLoaded(opts?: { page?: number; pageSize?: number }) {
-    const page = Math.max(0, Math.floor(opts?.page || 0))
-    const pageSize = Math.max(
-      1,
-      Math.min(FOOTER_PAGE_SIZE_DEFAULT, Math.floor(opts?.pageSize || FOOTER_PAGE_SIZE_DEFAULT)),
-    )
-    const end = (page + 1) * pageSize
-
-    for (let step = 0; step < page + 1 && runningIndex.value.length < end; step += 1) {
-      const before = runningIndex.value.length
-      const remaining = Math.max(0, runningIndexTotal.value - before)
-      const requestLimit = runningIndexTotal.value > 0 ? Math.min(pageSize, remaining) : pageSize
-      if (requestLimit <= 0) break
-      await loadRunningIndexSlice({ offset: before, limit: requestLimit, append: before > 0 })
-      if (runningIndex.value.length <= before) break
-    }
-
-    const ids = runningIndex.value.slice(0, end).map((item) => item.sessionId)
-    await hydrateSessionSummariesByIds(ids)
-  }
-
-  async function ensurePinnedSessionRowsLoaded(sessionIds: string[]) {
-    await hydrateSessionSummariesByIds(sessionIds)
-  }
-
   function setDirectoryEntries(entries: DirectoryEntry[]) {
     const previousById = directoriesById.value
     const nextById: Record<string, DirectoryEntry> = {}
@@ -1096,9 +955,6 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
   let sidebarPatchRetryDelayMs = 0
   let uiPrefsPatchRetryTimer: number | null = null
   let uiPrefsPatchRetryDelayMs = 0
-  const aggregateReloadRetryTimerByDirectoryId = new Map<string, number>()
-  const aggregateLoadTaskByDirectoryId = new Map<string, { seq: number; promise: Promise<void> }>()
-  let aggregateLoadSeq = 0
 
   function stopSidebarPatchRetry() {
     if (sidebarPatchRetryTimer !== null) {
@@ -1166,102 +1022,6 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
           scheduleUiPrefsPatchRetry()
         })
     }, delay)
-  }
-
-  function clearAggregateReloadRetry(directoryId: string) {
-    const did = (directoryId || '').trim()
-    if (!did) return
-    const timer = aggregateReloadRetryTimerByDirectoryId.get(did)
-    if (typeof timer === 'number') {
-      window.clearTimeout(timer)
-      aggregateReloadRetryTimerByDirectoryId.delete(did)
-    }
-  }
-
-  function clearAllAggregateReloadRetries() {
-    for (const timer of aggregateReloadRetryTimerByDirectoryId.values()) {
-      window.clearTimeout(timer)
-    }
-    aggregateReloadRetryTimerByDirectoryId.clear()
-  }
-
-  function scheduleAggregateReloadRetry(
-    directoryId: string,
-    directoryPath: string,
-    opts: EnsureDirectoryAggregateOpts,
-    delayMs: number,
-  ) {
-    const did = (directoryId || '').trim()
-    const root = (directoryPath || '').trim()
-    if (!did || !root) return
-    if (aggregateReloadRetryTimerByDirectoryId.has(did)) return
-
-    const timer = window.setTimeout(
-      () => {
-        aggregateReloadRetryTimerByDirectoryId.delete(did)
-        void ensureDirectoryAggregateLoaded(did, root, {
-          ...opts,
-          force: true,
-        }).catch(() => {})
-      },
-      Math.max(50, Math.min(10_000, Math.floor(delayMs || 200))),
-    )
-
-    aggregateReloadRetryTimerByDirectoryId.set(did, timer)
-  }
-
-  async function loadDirectoryPage(opts?: { page?: number; pageSize?: number; query?: string }) {
-    const page = Math.max(0, Math.floor(opts?.page || 0))
-    const pageSize = Math.max(1, Math.floor(opts?.pageSize || DIRECTORIES_PAGE_SIZE_DEFAULT))
-    const query = String(opts?.query || '').trim()
-    const offset = page * pageSize
-
-    const seq = ++directoryPageLoadSeq
-    directoryPageLoading.value = true
-    try {
-      const params = new URLSearchParams()
-      params.set('offset', String(offset))
-      params.set('limit', String(pageSize))
-      if (query) params.set('query', query)
-
-      const payload = await apiJson<DirectoriesPageWire>(`/api/directories?${params.toString()}`).catch(() => null)
-      if (seq !== directoryPageLoadSeq) {
-        return {
-          page,
-          total: directoryPageTotal.value,
-          pageCount: Math.max(1, Math.ceil(Math.max(0, directoryPageTotal.value) / pageSize)),
-        }
-      }
-
-      const items = normalizeDirectories(payload?.items || [])
-      const totalRaw =
-        typeof payload?.total === 'number' && Number.isFinite(payload.total)
-          ? Math.max(0, Math.floor(payload.total))
-          : items.length
-      const offsetRaw =
-        typeof payload?.offset === 'number' && Number.isFinite(payload.offset)
-          ? Math.max(0, Math.floor(payload.offset))
-          : offset
-      const limitRaw =
-        typeof payload?.limit === 'number' && Number.isFinite(payload.limit) && payload.limit > 0
-          ? Math.max(1, Math.floor(payload.limit))
-          : pageSize
-
-      directoryPageRows.value = items
-      directoryPageTotal.value = totalRaw
-
-      const resolvedPage = Math.floor(offsetRaw / limitRaw)
-      const pageCount = Math.max(1, Math.ceil(totalRaw / limitRaw))
-      return {
-        page: Math.max(0, Math.min(Math.max(0, pageCount - 1), resolvedPage)),
-        total: totalRaw,
-        pageCount,
-      }
-    } finally {
-      if (seq === directoryPageLoadSeq) {
-        directoryPageLoading.value = false
-      }
-    }
   }
 
   function rebuildDirectoryTreeIndexesMany(directoryIds: Iterable<string>) {
@@ -1589,7 +1349,7 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     return true
   }
 
-  function removeSessionFromAggregates(
+  function removeSessionFromSidebarState(
     sessionId: string,
     opts?: {
       preserveRuntime?: boolean
@@ -1673,40 +1433,6 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     scheduleSnapshotPersist()
   }
 
-  function hasCachedSessionsForDirectory(directoryId: string): boolean {
-    const did = (directoryId || '').trim()
-    if (!did) return false
-    const page = sessionPageByDirectoryId.value[did]
-    if (!page) return false
-    const pinnedIds = pinnedSessionIdsByDirectoryId.value[did] || []
-    if (pinnedIds.length > 0) return true
-    if (Array.isArray(page.sessions) && page.sessions.length > 0) return true
-    return Number.isFinite(page.totalRoots) && page.totalRoots === 0
-  }
-
-  function aggregatedSessionsForDirectory(directoryId: string, directoryPath: string): SessionSummarySnapshot[] {
-    const did = (directoryId || '').trim()
-    const root = (directoryPath || '').trim()
-    if (!did || !root) return []
-
-    const pinnedIds = pinnedSessionIdsByDirectoryId.value[did] || []
-    const pageSessions = sessionPageByDirectoryId.value[did]?.sessions || []
-    const pageIds = pageSessions.map((item) => readObjectId(item)).filter(Boolean)
-
-    const merged: SessionSummarySnapshot[] = []
-    const seen = new Set<string>()
-    for (const rawId of [...pinnedIds, ...pageIds]) {
-      const sid = String(rawId || '').trim()
-      if (!sid || seen.has(sid)) continue
-      seen.add(sid)
-
-      const session = sessionSummariesById.value[sid]
-      if (!session) continue
-      merged.push(session)
-    }
-    return merged
-  }
-
   function sessionRootPageCount(directoryId: string, pageSize: number): number {
     const did = (directoryId || '').trim()
     if (!did || pageSize <= 0) return 1
@@ -1714,15 +1440,6 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     const fallback = rootsByDirectoryId.value[did]?.length || 0
     const value = typeof total === 'number' && Number.isFinite(total) ? total : fallback
     return Math.max(1, Math.ceil(Math.max(0, value) / pageSize))
-  }
-
-  function sessionRootPage(directoryId: string, pageSize: number): number {
-    const did = (directoryId || '').trim()
-    if (!did) return 0
-    const raw = uiPrefs.value.sessionRootPageByDirectoryId[did]
-    const parsed = typeof raw === 'number' && Number.isFinite(raw) ? Math.max(0, Math.floor(raw)) : 0
-    const max = Math.max(0, sessionRootPageCount(did, pageSize) - 1)
-    return Math.max(0, Math.min(max, parsed))
   }
 
   function setSessionRootPage(directoryId: string, page: number, pageSize: number): number {
@@ -1739,243 +1456,65 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     return next
   }
 
-  async function ensurePinnedSummariesLoaded(
-    directoryId: string,
-    directoryPath: string,
-    pinnedSessionIds: string[],
-    opts?: { force?: boolean },
-  ) {
-    const did = (directoryId || '').trim()
-    const root = (directoryPath || '').trim()
-    if (!did || !root) return
-
-    const ids = pinnedSessionIds.map((id) => id.trim()).filter(Boolean)
-    const key = ids.join('|')
-    if (!opts?.force && pinnedSummaryKeyByDirectoryId.value[did] === key) return
-
-    if (ids.length === 0) {
-      pinnedSessionIdsByDirectoryId.value = { ...pinnedSessionIdsByDirectoryId.value, [did]: [] }
-      pinnedSummaryKeyByDirectoryId.value = { ...pinnedSummaryKeyByDirectoryId.value, [did]: key }
-      return
-    }
-
-    await hydrateSessionSummariesByIds(ids)
-    const rootNorm = normalizeDirForCompare(root)
-    const idsInDirectory: string[] = []
-    for (const rawId of ids) {
-      const id = String(rawId || '').trim()
-      if (!id) continue
-      const session = sessionSummariesById.value[id] || null
-      if (!session) continue
-      const sid = readObjectId(session)
-      const mappedDirectoryId = sid ? String(directoryIdBySessionId.value[sid] || '').trim() : ''
-      if (mappedDirectoryId) {
-        if (mappedDirectoryId === did) idsInDirectory.push(id)
-        continue
-      }
-      const path = readSessionDirectory(session)
-      if (normalizeDirForCompare(path) === rootNorm) {
-        idsInDirectory.push(id)
-      }
-    }
-
-    pinnedSessionIdsByDirectoryId.value = { ...pinnedSessionIdsByDirectoryId.value, [did]: idsInDirectory }
-    pinnedSummaryKeyByDirectoryId.value = { ...pinnedSummaryKeyByDirectoryId.value, [did]: key }
-  }
-
-  async function ensureDirectoryWorktreesLoaded(
-    directoryId: string,
-    directoryPath: string,
-    opts?: { force?: boolean },
-  ) {
-    const did = (directoryId || '').trim()
-    const root = (directoryPath || '').trim()
-    if (!did || !root) return
-
-    if (worktreeLoadingByDirectoryId.value[did]) return
-
-    if (!opts?.force && Array.isArray(worktreePathsByDirectoryId.value[did])) return
-
-    worktreeLoadingByDirectoryId.value = { ...worktreeLoadingByDirectoryId.value, [did]: true }
-    try {
-      const target = `/api/git/worktrees?directory=${encodeURIComponent(root)}`
-      const payload = await apiJson<unknown>(target)
-      const list = Array.isArray(payload) ? payload : []
-      const paths = list
-        .map((row) => {
-          const worktree = asRecord(row)?.worktree
-          return typeof worktree === 'string' ? worktree.trim() : ''
-        })
-        .filter(Boolean)
-        .filter((p) => p !== root)
-      worktreePathsByDirectoryId.value = { ...worktreePathsByDirectoryId.value, [did]: paths }
-    } catch {
-      worktreePathsByDirectoryId.value = { ...worktreePathsByDirectoryId.value, [did]: [] }
-    } finally {
-      worktreeLoadingByDirectoryId.value = { ...worktreeLoadingByDirectoryId.value, [did]: false }
-    }
-  }
-
-  function scheduleDirectorySupplementalHydration(
-    directoryId: string,
-    directoryPath: string,
-    opts: {
-      pinnedSessionIds: string[]
-      forcePinned: boolean
-      includeWorktrees: boolean
-      forceWorktrees: boolean
-    },
-  ) {
-    const did = (directoryId || '').trim()
-    const root = (directoryPath || '').trim()
-    if (!did || !root) return
-
-    runNonCriticalSidebarHydration(
-      [() => ensurePinnedSummariesLoaded(did, root, opts.pinnedSessionIds, { force: opts.forcePinned })],
-      opts.includeWorktrees ? [() => ensureDirectoryWorktreesLoaded(did, root, { force: opts.forceWorktrees })] : [],
-    )
-  }
-
-  async function ensureDirectoryAggregateLoaded(
-    directoryId: string,
-    directoryPath: string,
-    opts: EnsureDirectoryAggregateOpts,
-  ) {
-    const did = (directoryId || '').trim()
-    const root = (directoryPath || '').trim()
-    if (!did || !root) return
-
-    const force = Boolean(opts?.force)
-
-    const focusId = typeof opts?.focusSessionId === 'string' ? opts.focusSessionId.trim() : ''
-    const wantsFocus = Boolean(focusId)
-    const pageSize = Math.max(1, Math.floor(opts?.pageSize || 10))
-    const targetPage = normalizePage(opts?.page)
-    const cached = sessionPageByDirectoryId.value[did]
-    const includeWorktrees = Boolean(opts?.includeWorktrees)
-    const inFlight = aggregateLoadTaskByDirectoryId.get(did)
-
-    if (!force && !wantsFocus && isDirectoryAggregatePageSatisfied(cached?.page, targetPage)) {
-      scheduleDirectorySupplementalHydration(did, root, {
-        pinnedSessionIds: opts.pinnedSessionIds,
-        forcePinned: false,
-        includeWorktrees,
-        forceWorktrees: false,
-      })
-      if (inFlight) {
-        await inFlight.promise.catch(() => {})
-      }
-      return
-    }
-
-    if (!force && inFlight) {
-      await inFlight.promise
-      return
-    }
-
-    const seq = ++aggregateLoadSeq
-    aggregateLoadingByDirectoryId.value = { ...aggregateLoadingByDirectoryId.value, [did]: true }
-
-    const task = (async () => {
-      try {
-        const params = new URLSearchParams()
-        params.set('scope', 'directory')
-        params.set('roots', 'true')
-        params.set('includeChildren', 'true')
-        params.set('includeTotal', 'true')
-        params.set('limit', String(pageSize))
-        if (wantsFocus) {
-          params.set('focusSessionId', focusId)
-        } else {
-          params.set('offset', String(targetPage * pageSize))
-        }
-
-        const payload = await apiJson<unknown>(
-          `/api/directories/${encodeURIComponent(did)}/sessions?${params.toString()}`,
-        )
-
-        if (aggregateLoadTaskByDirectoryId.get(did)?.seq !== seq) return
-
-        const pageState = parseSessionPagePayload(payload, pageSize)
-        const degraded = isDegradedConsistency(pageState.consistency)
-        if (degraded) {
-          scheduleAggregateReloadRetry(did, root, opts, retryDelayFromConsistency(pageState.consistency, 200))
-        } else {
-          clearAggregateReloadRetry(did)
-        }
-
-        const cachedSessions = Array.isArray(cached?.sessions) ? cached.sessions : []
-        const preserveCached =
-          degraded && pageState.sessions.length === 0 && cachedSessions.length > 0 && Boolean(cached)
-        const effectivePage = preserveCached && cached ? cached : pageState
-        const sessions = Array.isArray(effectivePage.sessions) ? effectivePage.sessions : []
-        const totalRoots =
-          typeof effectivePage.totalRoots === 'number' && Number.isFinite(effectivePage.totalRoots)
-            ? effectivePage.totalRoots
-            : sessions.length
-        const resolvedPage =
-          typeof effectivePage.page === 'number' && Number.isFinite(effectivePage.page)
-            ? effectivePage.page
-            : targetPage
-
-        sessionPageByDirectoryId.value = {
-          ...sessionPageByDirectoryId.value,
-          [did]: {
-            ...effectivePage,
-            page: resolvedPage,
-            totalRoots,
-            sessions,
-          },
-        }
-        setSessionRootPage(did, resolvedPage, pageSize)
-        upsertDirectorySessionSummaries(did, sessions, {
-          treeHint: effectivePage.treeHint,
-        })
-
-        aggregateAttemptedByDirectoryId.value = {
-          ...aggregateAttemptedByDirectoryId.value,
-          [did]: true,
-        }
-
-        scheduleDirectorySupplementalHydration(did, root, {
-          pinnedSessionIds: opts.pinnedSessionIds,
-          forcePinned: force || wantsFocus,
-          includeWorktrees,
-          forceWorktrees: force,
-        })
-      } catch (err) {
-        if (aggregateLoadTaskByDirectoryId.get(did)?.seq !== seq) return
-        if (Array.isArray(cached?.sessions) && cached.sessions.length > 0) {
-          scheduleAggregateReloadRetry(did, root, opts, 300)
-        }
-        aggregateAttemptedByDirectoryId.value = {
-          ...aggregateAttemptedByDirectoryId.value,
-          [did]: true,
-        }
-        throw err
-      } finally {
-        const active = aggregateLoadTaskByDirectoryId.get(did)
-        if (!active || active.seq !== seq) return
-        aggregateLoadTaskByDirectoryId.delete(did)
-        aggregateLoadingByDirectoryId.value = { ...aggregateLoadingByDirectoryId.value, [did]: false }
-      }
-    })()
-
-    aggregateLoadTaskByDirectoryId.set(did, { seq, promise: task })
-    await task
-  }
-
   async function resolveDirectoryForSession(
     sessionId: string,
-    hint?: { directoryId?: string; directoryPath?: string; locateResult?: JsonValue },
+    hint?: { directoryId?: string; directoryPath?: string; locateResult?: JsonValue; skipRemote?: boolean },
   ): Promise<{ directoryId: string; directoryPath: string; locatedDir: string } | null> {
     const sid = (sessionId || '').trim()
     if (!sid) return null
 
     const hintId = (hint?.directoryId || '').trim()
     const hintPath = (hint?.directoryPath || '').trim()
-    if (hintId && hintPath && visibleDirectories.value.some((entry) => entry.id === hintId)) {
+    if (hintId && hintPath) {
       return { directoryId: hintId, directoryPath: hintPath, locatedDir: '' }
+    }
+
+    const focused = sidebarStateFocus.value
+    if (focused && focused.sessionId === sid) {
+      return {
+        directoryId: focused.directoryId,
+        directoryPath: focused.directoryPath,
+        locatedDir: focused.directoryPath,
+      }
+    }
+
+    const mappedDirectoryId = String(directoryIdBySessionId.value[sid] || '').trim()
+    const summary = sessionSummariesById.value[sid] || null
+    const summaryDirectoryPath = readSessionDirectory(summary)
+    if (mappedDirectoryId) {
+      const mapped = visibleDirectories.value.find((entry) => (entry.id || '').trim() === mappedDirectoryId)
+      if (mapped?.path) {
+        return {
+          directoryId: mappedDirectoryId,
+          directoryPath: mapped.path,
+          locatedDir: summaryDirectoryPath || mapped.path,
+        }
+      }
+      if (summaryDirectoryPath) {
+        return {
+          directoryId: mappedDirectoryId,
+          directoryPath: summaryDirectoryPath,
+          locatedDir: summaryDirectoryPath,
+        }
+      }
+    }
+
+    if (summaryDirectoryPath) {
+      const summaryNorm = normalizeDirForCompare(summaryDirectoryPath)
+      const matchedByPath = summaryNorm
+        ? visibleDirectories.value.find((entry) => normalizeDirForCompare(entry.path) === summaryNorm)
+        : null
+      if (matchedByPath) {
+        return {
+          directoryId: matchedByPath.id,
+          directoryPath: matchedByPath.path,
+          locatedDir: summaryDirectoryPath,
+        }
+      }
+    }
+
+    if (hint?.skipRemote) {
+      return null
     }
 
     const locateResult = hint?.locateResult ?? (await chatApi.locateSession(sid).catch(() => null))
@@ -1999,7 +1538,16 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
         ? visibleDirectories.value.find((entry) => normalizeDirForCompare(entry.path) === normalizeDirForCompare(ppath))
         : null)
 
-    if (!matched) return null
+    if (!matched) {
+      if (pid && ppath) {
+        return {
+          directoryId: pid,
+          directoryPath: ppath,
+          locatedDir,
+        }
+      }
+      return null
+    }
     return {
       directoryId: matched.id,
       directoryPath: matched.path,
@@ -2011,35 +1559,30 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     const sid = (sessionId || '').trim()
     const runtime = runtimeBySessionId.value[sid]
     if (!runtime) return { label: String(i18n.global.t('chat.sidebar.sessionRow.status.idle')), dotClass: '' }
-    if (runtime.attention === 'permission') {
+    const displayState = runtime.displayState
+    if (displayState === 'needsPermission') {
       return {
         label: String(i18n.global.t('chat.sidebar.sessionRow.status.needsPermission')),
         dotClass: 'bg-amber-500',
       }
     }
-    if (runtime.attention === 'question') {
+    if (displayState === 'needsReply') {
       return { label: String(i18n.global.t('chat.sidebar.sessionRow.status.needsReply')), dotClass: 'bg-sky-500' }
     }
-    if (runtime.statusType === 'retry') {
+    if (displayState === 'retrying') {
       return {
         label: String(i18n.global.t('chat.sidebar.sessionRow.status.retrying')),
         dotClass: 'bg-primary animate-pulse',
       }
     }
-    if (runtime.statusType === 'busy') {
+    if (displayState === 'running') {
       return {
         label: String(i18n.global.t('chat.sidebar.sessionRow.status.running')),
         dotClass: 'bg-primary animate-pulse',
       }
     }
-    if (runtime.phase === 'cooldown') {
+    if (displayState === 'coolingDown') {
       return { label: String(i18n.global.t('chat.sidebar.sessionRow.status.coolingDown')), dotClass: 'bg-primary/70' }
-    }
-    if (runtime.phase === 'busy') {
-      return {
-        label: String(i18n.global.t('chat.sidebar.sessionRow.status.running')),
-        dotClass: 'bg-primary animate-pulse',
-      }
     }
     return { label: String(i18n.global.t('chat.sidebar.sessionRow.status.idle')), dotClass: '' }
   }
@@ -2050,217 +1593,19 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     return runtimeIsActive(runtimeBySessionId.value[sid], opts)
   }
 
-  function hasActiveRuntimeInDirectory(
-    directoryId: string,
-    directoryPath: string,
-    opts?: { includeCooldown?: boolean },
-  ) {
-    return hasActiveRuntimeInDirectoryScope({
-      directoryId,
-      directoryPath,
-      runtimeBySessionId: runtimeBySessionId.value,
-      directoryIdBySessionId: directoryIdBySessionId.value,
-      sessionSummariesById: sessionSummariesById.value,
-      runningIndex: runningIndex.value,
-      includeCooldown: opts?.includeCooldown,
-    })
-  }
-
-  function syncRuntimeFromStores(input: {
-    sessionStatusBySession: Record<string, JsonValue>
-    attentionBySession: Record<string, JsonValue>
-    activitySnapshot: Record<string, JsonValue>
-  }) {
-    const baseRuntime = runtimeBySessionId.value
-    let nextRuntime = baseRuntime
-    let runtimeChanged = false
-    const touchedRunningSessionIds = new Set<string>()
-
-    const ensureRuntime = () => {
-      if (runtimeChanged) return
-      nextRuntime = { ...baseRuntime }
-      runtimeChanged = true
-    }
-
-    const readAt = (value: JsonValue): number => {
-      const raw = asRecord(value)?.at
-      const at = typeof raw === 'number' && Number.isFinite(raw) ? Math.max(0, Math.floor(raw)) : 0
-      return at
-    }
-
-    const applyRuntimePatch = (sessionId: string, patch: Partial<SessionRuntimeState>) => {
-      const sid = String(sessionId || '').trim()
-      if (!sid) return
-
-      const current = nextRuntime[sid]
-      const candidate = mergeRuntimeState(current, patch)
-
-      if (!current) {
-        if (candidate.statusType === 'unknown' && candidate.phase === 'unknown' && !candidate.attention) {
-          return
-        }
-      } else {
-        const normalized = normalizeRuntime(current)
-        if (runtimeStateEquivalent(normalized, candidate) && candidate.updatedAt <= normalized.updatedAt) {
-          return
-        }
-      }
-
-      ensureRuntime()
-      nextRuntime[sid] = candidate
-      touchedRunningSessionIds.add(sid)
-    }
-
-    for (const [sid, evt] of Object.entries(input.sessionStatusBySession || {})) {
-      const sessionId = String(sid || '').trim()
-      if (!sessionId) continue
-      const status = readRuntimeStatusType(asRecord(asRecord(evt)?.status)?.type)
-      if (status) {
-        const updatedAt = readAt(evt) || Date.now()
-        applyRuntimePatch(sessionId, { statusType: status, updatedAt })
-      }
-    }
-
-    const nextAttentionIds = new Set<string>()
-    for (const [sid, evt] of Object.entries(input.attentionBySession || {})) {
-      const sessionId = String(sid || '').trim()
-      if (!sessionId) continue
-      nextAttentionIds.add(sessionId)
-      const kind = asRecord(evt)?.kind
-      const attention = kind === 'permission' || kind === 'question' ? kind : null
-      const updatedAt = readAt(evt) || Date.now()
-      applyRuntimePatch(sessionId, { attention, updatedAt })
-    }
-
-    // Clear attention only for sessions that previously had one.
-    for (const sid of syncedAttentionSessionIds) {
-      if (nextAttentionIds.has(sid)) continue
-      applyRuntimePatch(sid, { attention: null, updatedAt: Date.now() })
-    }
-    syncedAttentionSessionIds = nextAttentionIds
-
-    for (const [sid, activity] of Object.entries(input.activitySnapshot || {})) {
-      const sessionId = String(sid || '').trim()
-      if (!sessionId) continue
-      const phase = readRuntimePhase(asRecord(activity)?.type)
-      if (phase) {
-        applyRuntimePatch(sessionId, { phase, updatedAt: Date.now() })
-      }
-    }
-
-    if (!runtimeChanged) return
-
-    runtimeBySessionId.value = nextRuntime
-    for (const sid of touchedRunningSessionIds) {
-      const runtime = nextRuntime[sid]
-      if (runtime) {
-        syncRunningIndexFromRuntime(sid, runtime)
-        continue
-      }
-      const hadRunning = runningIndex.value.some((item) => item.sessionId === sid)
-      if (hadRunning) {
-        runningIndex.value = runningIndex.value.filter((item) => item.sessionId !== sid)
-        runningIndexTotal.value = Math.max(0, runningIndexTotal.value - 1)
-      }
-    }
-  }
-
   function applyGlobalEvent(evt: SseEvent) {
     const type = readEventType(evt)
     if (!type) return
 
-    // When using a single global SSE connection, sidebar patch + prefs events
-    // can arrive through /api/global/event. Reuse the existing handlers.
+    // Sidebar state is backend-authoritative. Consume only dedicated sidebar
+    // patch/preference streams and avoid deriving sidebar runtime from generic
+    // session events on the frontend.
     if (type === 'chat-sidebar.patch') {
       applyChatSidebarPatchEvent(evt)
       return
     }
     if (type === 'chat-sidebar-preferences.patch') {
       applyChatSidebarPreferencesEvent(evt)
-      return
-    }
-    const sessionId = extractSessionId(evt)
-    const eventUpdatedAt = readEventUpdatedAt(evt)
-    const runtimePatch = (patch: Partial<SessionRuntimeState>): Partial<SessionRuntimeState> =>
-      runtimePatchWithEventTimestamp(patch, eventUpdatedAt)
-
-    if (type === 'session.created' || type === 'session.updated') {
-      const props = readEventProperties(evt)
-      const sessionPayload = props.session ?? props.value ?? props.data ?? null
-      if (asRecord(sessionPayload)) {
-        upsertSessionSummaryPatch(sessionPayload, { trustAsNewRoot: type === 'session.created' })
-      } else {
-        const sid = sessionId
-        if (sid) {
-          const title = typeof props?.title === 'string' ? props.title.trim() : ''
-          const slug = typeof props?.slug === 'string' ? props.slug.trim() : ''
-          if (title || slug) {
-            upsertSessionSummaryPatch(
-              {
-                id: sid,
-                ...(title ? { title } : {}),
-                ...(slug ? { slug } : {}),
-              },
-              { trustAsNewRoot: type === 'session.created' },
-            )
-          }
-          if (type === 'session.updated') {
-            void hydrateSessionSummariesByIds([sid]).catch(() => {})
-          }
-        }
-      }
-
-      if (type === 'session.created' && sessionId) {
-        void hydrateSessionSummariesByIds([sessionId]).catch(() => {})
-      }
-    }
-
-    const activity = extractSessionActivityUpdate(evt)
-    if (activity?.sessionID) {
-      const phase =
-        activity.phase === 'idle' || activity.phase === 'busy' || activity.phase === 'cooldown'
-          ? activity.phase
-          : 'unknown'
-      upsertRuntime(activity.sessionID, runtimePatch({ phase }))
-    }
-
-    if (!sessionId) return
-
-    if (type === 'session.deleted') {
-      removeSessionFromAggregates(sessionId)
-      return
-    }
-
-    if (type === 'session.status') {
-      const statusType = readRuntimeStatusType(asRecord(readEventProperties(evt).status)?.type)
-      if (statusType) {
-        upsertRuntime(sessionId, runtimePatch({ statusType }))
-      }
-      return
-    }
-
-    if (type === 'session.idle') {
-      upsertRuntime(sessionId, runtimePatch({ statusType: 'idle', phase: 'idle', attention: null }))
-      return
-    }
-
-    if (type === 'session.error') {
-      upsertRuntime(sessionId, runtimePatch({ statusType: 'idle', phase: 'idle', attention: null }))
-      return
-    }
-
-    if (type === 'permission.asked') {
-      upsertRuntime(sessionId, runtimePatch({ attention: 'permission' }))
-      return
-    }
-
-    if (type === 'question.asked') {
-      upsertRuntime(sessionId, runtimePatch({ attention: 'question' }))
-      return
-    }
-
-    if (type === 'permission.replied' || type === 'question.replied' || type === 'question.rejected') {
-      upsertRuntime(sessionId, runtimePatch({ attention: null }))
     }
   }
 
@@ -2356,33 +1701,23 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     if (sidebarPatchRefreshInFlight) return
     sidebarPatchRefreshInFlight = true
     try {
+      let shouldRefreshState = false
       while (true) {
         const target = sidebarPatchRefreshQueue.shift()
         if (!target) break
 
         if (target === SIDEBAR_PATCH_REFRESH_ALL_KEY) {
-          await revalidateFromApi().catch(() => false)
+          shouldRefreshState = true
           continue
         }
 
-        const directory = directoriesById.value[target]
-        if (!directory?.path) {
-          const enqueued = sidebarPatchRefreshQueue.enqueue(SIDEBAR_PATCH_REFRESH_ALL_KEY)
-          if (enqueued.accepted) {
-            scheduleSidebarPatchProjectionRefresh()
-          }
-          continue
-        }
+        const directoryId = String(target || '').trim()
+        if (!directoryId) continue
+        shouldRefreshState = true
+      }
 
-        const cachedPage = sessionPageByDirectoryId.value[target]
-        const pageSize = Math.max(1, cachedPage?.sessions?.length || 10)
-        await ensureDirectoryAggregateLoaded(target, directory.path, {
-          force: true,
-          pinnedSessionIds: uiPrefs.value.pinnedSessionIds || [],
-          page: normalizePage(cachedPage?.page),
-          pageSize,
-          includeWorktrees: false,
-        }).catch(() => {})
+      if (shouldRefreshState) {
+        await revalidateFromApi().catch(() => false)
       }
     } finally {
       sidebarPatchRefreshInFlight = false
@@ -2441,16 +1776,8 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
         sidebarFooterRefreshPendingRecent = false
         sidebarFooterRefreshPendingRunning = false
 
-        if (refreshRecent) {
-          await loadRecentIndexSlice({ offset: 0, limit: RECENT_INDEX_DEFAULT_LIMIT, append: false }).catch(() => {})
-          const page = Math.max(0, Math.floor(uiPrefs.value.recentSessionsPage || 0))
-          await ensureRecentSessionRowsLoaded({ page, pageSize: FOOTER_PAGE_SIZE_DEFAULT }).catch(() => {})
-        }
-
-        if (refreshRunning) {
-          await loadRunningIndexSlice({ offset: 0, limit: RUNNING_INDEX_DEFAULT_LIMIT, append: false }).catch(() => {})
-          const page = Math.max(0, Math.floor(uiPrefs.value.runningSessionsPage || 0))
-          await ensureRunningSessionRowsLoaded({ page, pageSize: FOOTER_PAGE_SIZE_DEFAULT }).catch(() => {})
+        if (refreshRecent || refreshRunning) {
+          await revalidateFromApi().catch(() => false)
         }
       }
     } finally {
@@ -2517,21 +1844,56 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     }
   }
 
-  function directoryTreeRows(directoryId: string): FlatTreeRow[] {
-    const dirId = (directoryId || '').trim()
-    if (!dirId) return []
-    const list = sessionSummariesByDirectoryId.value[dirId] || []
-    const expanded = new Set(uiPrefs.value.expandedParentSessionIds)
-    return buildFlattenedTree(list, expanded).rows
-  }
-
-  async function revalidateFromStateApi(opts?: { limitPerDirectory?: number }): Promise<void> {
-    const state = await apiJson<ChatSidebarStateWire>(SIDEBAR_STATE_ENDPOINT)
+  async function revalidateFromStateApi(opts?: {
+    limitPerDirectory?: number
+    directoriesPage?: number
+    directoryQuery?: string
+    focusSessionId?: string
+    pinnedPage?: number
+    recentPage?: number
+    runningPage?: number
+  }): Promise<void> {
+    const params = new URLSearchParams()
+    if (typeof opts?.directoriesPage === 'number' && Number.isFinite(opts.directoriesPage)) {
+      params.set('directoriesPage', String(Math.max(0, Math.floor(opts.directoriesPage))))
+    }
+    if (typeof opts?.directoryQuery === 'string') {
+      const q = opts.directoryQuery.trim()
+      if (q) params.set('directoryQuery', q)
+    }
+    if (typeof opts?.focusSessionId === 'string') {
+      const sid = opts.focusSessionId.trim()
+      if (sid) params.set('focusSessionId', sid)
+    }
+    if (typeof opts?.pinnedPage === 'number' && Number.isFinite(opts.pinnedPage)) {
+      params.set('pinnedPage', String(Math.max(0, Math.floor(opts.pinnedPage))))
+    }
+    if (typeof opts?.recentPage === 'number' && Number.isFinite(opts.recentPage)) {
+      params.set('recentPage', String(Math.max(0, Math.floor(opts.recentPage))))
+    }
+    if (typeof opts?.runningPage === 'number' && Number.isFinite(opts.runningPage)) {
+      params.set('runningPage', String(Math.max(0, Math.floor(opts.runningPage))))
+    }
+    const stateUrl = params.size > 0 ? `${SIDEBAR_STATE_ENDPOINT}?${params.toString()}` : SIDEBAR_STATE_ENDPOINT
+    const state = await apiJson<ChatSidebarStateWire>(stateUrl)
     const stateRecord = asRecord((state as JsonValue) || undefined) || {}
     if (!Object.prototype.hasOwnProperty.call(stateRecord, 'preferences')) {
       throw new Error('chat sidebar state payload is missing preferences')
     }
     adoptAuthoritativeUiPrefs((stateRecord.preferences as Partial<ChatSidebarUiPrefs>) || undefined)
+
+    const focusRecord = asRecord(stateRecord.focus as JsonValue)
+    const focusSessionId = typeof focusRecord?.sessionId === 'string' ? focusRecord.sessionId.trim() : ''
+    const focusDirectoryId = typeof focusRecord?.directoryId === 'string' ? focusRecord.directoryId.trim() : ''
+    const focusDirectoryPath = typeof focusRecord?.directoryPath === 'string' ? focusRecord.directoryPath.trim() : ''
+    sidebarStateFocus.value =
+      focusSessionId && focusDirectoryId && focusDirectoryPath
+        ? {
+            sessionId: focusSessionId,
+            directoryId: focusDirectoryId,
+            directoryPath: focusDirectoryPath,
+          }
+        : null
 
     const limit =
       typeof opts?.limitPerDirectory === 'number' && Number.isFinite(opts.limitPerDirectory)
@@ -2559,28 +1921,11 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     const nextPageByDirectoryId: Record<string, DirectorySessionPageState> = {}
     const nextSessionSummariesById: Record<string, SessionSummarySnapshot> = {}
     const nextDirectoryIdBySessionId: Record<string, string> = {}
-    const nextAggregateAttemptedByDirectoryId: Record<string, boolean> = {}
 
     for (const entry of entries) {
       if (!Object.prototype.hasOwnProperty.call(pagesByDirectoryId, entry.id)) continue
       const page = parseSessionPagePayload(pagesByDirectoryId[entry.id], sessionPageLimit)
       const degraded = isDegradedConsistency(page.consistency)
-      if (degraded) {
-        scheduleAggregateReloadRetry(
-          entry.id,
-          entry.path,
-          {
-            pinnedSessionIds: uiPrefs.value.pinnedSessionIds || [],
-            page: 0,
-            pageSize: sessionPageLimit,
-            includeWorktrees: false,
-            force: true,
-          },
-          retryDelayFromConsistency(page.consistency, 220),
-        )
-      } else {
-        clearAggregateReloadRetry(entry.id)
-      }
 
       const existingPage = sessionPageByDirectoryId.value[entry.id]
       const preserveExisting =
@@ -2591,7 +1936,6 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
       const effectivePage = preserveExisting && existingPage ? existingPage : page
 
       nextPageByDirectoryId[entry.id] = effectivePage
-      nextAggregateAttemptedByDirectoryId[entry.id] = true
       for (const session of effectivePage.sessions) {
         const sid = readObjectId(session)
         if (!sid) continue
@@ -2604,13 +1948,9 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     sessionPageByDirectoryId.value = nextPageByDirectoryId
     sessionSummariesById.value = nextSessionSummariesById
     directoryIdBySessionId.value = nextDirectoryIdBySessionId
-    aggregateAttemptedByDirectoryId.value = nextAggregateAttemptedByDirectoryId
 
     pinnedSessionIdsByDirectoryId.value = Object.fromEntries(
       Object.entries(pinnedSessionIdsByDirectoryId.value).filter(([directoryId]) => directoryIdSet.has(directoryId)),
-    )
-    pinnedSummaryKeyByDirectoryId.value = Object.fromEntries(
-      Object.entries(pinnedSummaryKeyByDirectoryId.value).filter(([directoryId]) => directoryIdSet.has(directoryId)),
     )
     worktreePathsByDirectoryId.value = Object.fromEntries(
       Object.entries(worktreePathsByDirectoryId.value).filter(([directoryId]) => directoryIdSet.has(directoryId)),
@@ -2632,6 +1972,7 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
 
     applyRecentIndexPageWire(stateRecord.recentPage as JsonValue)
     applyRunningIndexPageWire(stateRecord.runningPage as JsonValue)
+    applySidebarView(stateRecord.view as JsonValue)
 
     scheduleSnapshotPersist()
 
@@ -2644,24 +1985,17 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     sidebarPatchOutOfSync = false
     sidebarPatchSawSeqReset = false
     stopSidebarPatchRetry()
-
-    runNonCriticalSidebarHydration(
-      [],
-      [
-        () => {
-          const recentPage = Math.max(0, Math.floor(uiPrefs.value.recentSessionsPage || 0))
-          return ensureRecentSessionRowsLoaded({ page: recentPage, pageSize: FOOTER_PAGE_SIZE_DEFAULT })
-        },
-        () => {
-          const runningPage = Math.max(0, Math.floor(uiPrefs.value.runningSessionsPage || 0))
-          return ensureRunningSessionRowsLoaded({ page: runningPage, pageSize: FOOTER_PAGE_SIZE_DEFAULT })
-        },
-        () => ensurePinnedSessionRowsLoaded(uiPrefs.value.pinnedSessionIds || []),
-      ],
-    )
   }
 
-  async function revalidateFromApi(opts?: { limitPerDirectory?: number }): Promise<boolean> {
+  async function revalidateFromApi(opts?: {
+    limitPerDirectory?: number
+    directoriesPage?: number
+    directoryQuery?: string
+    focusSessionId?: string
+    pinnedPage?: number
+    recentPage?: number
+    runningPage?: number
+  }): Promise<boolean> {
     loading.value = true
     error.value = null
     try {
@@ -2690,9 +2024,6 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     }
     uiPrefsRemotePersistInFlight = false
     uiPrefsRemotePersistQueued = false
-    directoryPageLoadSeq = 0
-    aggregateLoadSeq = 0
-    aggregateLoadTaskByDirectoryId.clear()
     uiPrefsLocalRevision = 0
     uiPrefsAckedRevision = 0
     lastSidebarPatchSeq = 0
@@ -2706,7 +2037,6 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     uiPrefsPatchResyncInFlight = false
     stopSidebarPatchRetry()
     stopUiPrefsPatchRetry()
-    clearAllAggregateReloadRetries()
     if (sidebarPatchRefreshTimer !== null) {
       window.clearTimeout(sidebarPatchRefreshTimer)
       sidebarPatchRefreshTimer = null
@@ -2720,7 +2050,6 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     sidebarFooterRefreshInFlight = false
     sidebarFooterRefreshPendingRecent = false
     sidebarFooterRefreshPendingRunning = false
-    syncedAttentionSessionIds = new Set<string>()
 
     directoriesById.value = {}
     directoryOrder.value = []
@@ -2731,18 +2060,18 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     runtimeBySessionId.value = {}
     sessionPageByDirectoryId.value = {}
     pinnedSessionIdsByDirectoryId.value = {}
-    pinnedSummaryKeyByDirectoryId.value = {}
     worktreePathsByDirectoryId.value = {}
-    worktreeLoadingByDirectoryId.value = {}
-    aggregateLoadingByDirectoryId.value = {}
-    aggregateAttemptedByDirectoryId.value = {}
     recentIndex.value = []
     recentIndexTotal.value = 0
     runningIndex.value = []
     runningIndexTotal.value = 0
+    directorySidebarById.value = {}
+    pinnedFooterView.value = { total: 0, page: 0, pageCount: 1, rows: [] }
+    recentFooterView.value = { total: 0, page: 0, pageCount: 1, rows: [] }
+    runningFooterView.value = { total: 0, page: 0, pageCount: 1, rows: [] }
+    sidebarStateFocus.value = null
     directoryPageRows.value = []
     directoryPageTotal.value = 0
-    directoryPageLoading.value = false
     uiPrefs.value = defaultChatSidebarUiPrefs()
     persistUiPrefs()
     await clearDirectorySessionSnapshot()
@@ -2755,49 +2084,34 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     childrenByParentSessionId,
     runtimeBySessionId,
     sessionPageByDirectoryId,
-    pinnedSummariesByDirectoryId,
-    pinnedSummaryKeyByDirectoryId,
     worktreePathsByDirectoryId,
-    worktreeLoadingByDirectoryId,
-    aggregateLoadingByDirectoryId,
-    aggregateAttemptedByDirectoryId,
     recentIndex,
     recentIndexTotal,
     runningIndex,
     runningIndexTotal,
+    directorySidebarById,
+    pinnedFooterView,
+    recentFooterView,
+    runningFooterView,
+    sidebarStateFocus,
     directoryPageRows,
     directoryPageTotal,
-    directoryPageLoading,
     uiPrefs,
     loading,
     error,
     visibleDirectories,
-    runningSidebarRows,
-    recentSidebarRows,
     sessionSummariesByDirectoryId,
     allSessionIndexById,
-    directoryTreeRows,
-    hasCachedSessionsForDirectory,
-    aggregatedSessionsForDirectory,
-    sessionRootPageCount,
-    sessionRootPage,
     setSessionRootPage,
     patchUiPrefs,
     setDirectoryEntries,
-    loadDirectoryPage,
     upsertDirectorySessionSummaries,
     upsertRuntime,
     upsertSessionSummaryPatch,
-    removeSessionFromAggregates,
-    ensureDirectoryAggregateLoaded,
+    removeSessionFromSidebarState,
     resolveDirectoryForSession,
-    ensureRunningSessionRowsLoaded,
-    ensureRecentSessionRowsLoaded,
-    ensurePinnedSessionRowsLoaded,
     statusLabelForSessionId,
     isSessionRuntimeActive,
-    hasActiveRuntimeInDirectory,
-    syncRuntimeFromStores,
     applyGlobalEvent,
     applyChatSidebarPatchEvent,
     applyChatSidebarPreferencesEvent,

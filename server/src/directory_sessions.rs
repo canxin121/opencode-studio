@@ -82,6 +82,32 @@ struct PatchRefreshHints {
     refresh_running_index: bool,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "type")]
+enum SidebarPatchOp {
+    #[serde(rename = "directoryEntry.upsert")]
+    DirectoryEntryUpsert { entry: Value },
+    #[serde(rename = "directoryEntry.remove")]
+    DirectoryEntryRemove {
+        #[serde(rename = "directoryId")]
+        directory_id: String,
+    },
+    #[serde(rename = "sessionSummary.upsert")]
+    SessionSummaryUpsert { session: Value },
+    #[serde(rename = "sessionSummary.remove")]
+    SessionSummaryRemove {
+        #[serde(rename = "sessionId")]
+        session_id: String,
+    },
+    #[serde(rename = "sessionRuntime.upsert")]
+    SessionRuntimeUpsert { runtime: Value },
+    #[serde(rename = "sessionRuntime.remove")]
+    SessionRuntimeRemove {
+        #[serde(rename = "sessionId")]
+        session_id: String,
+    },
+}
+
 #[derive(Debug, Default)]
 struct PatchReplayBuffer {
     items: VecDeque<SequencedPatchEvent>,
@@ -164,11 +190,11 @@ impl DirectorySessionsEventHub {
     }
 
     #[cfg(test)]
-    fn publish_ops(&self, ops: Vec<Value>) {
+    fn publish_ops(&self, ops: Vec<SidebarPatchOp>) {
         self.publish_ops_with_hints(ops, None);
     }
 
-    fn publish_ops_with_hints(&self, ops: Vec<Value>, hints: Option<PatchRefreshHints>) {
+    fn publish_ops_with_hints(&self, ops: Vec<SidebarPatchOp>, hints: Option<PatchRefreshHints>) {
         if ops.is_empty() {
             return;
         }
@@ -455,6 +481,14 @@ fn session_summary_parent_id(value: &Value) -> Option<String> {
         .get("parentID")
         .or_else(|| value.get("parentId"))
         .or_else(|| value.get("parent_id"))
+        .and_then(|v| v.as_str())
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+}
+
+fn session_summary_directory(value: &Value) -> Option<String> {
+    value
+        .get("directory")
         .and_then(|v| v.as_str())
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty())
@@ -910,96 +944,83 @@ async fn build_snapshot_bundle_from_entries(
     }
 }
 
-fn upsert_remove_ops(
+fn upsert_remove_ops<FUpsert, FRemove>(
     prev: &BTreeMap<String, Value>,
     next: &BTreeMap<String, Value>,
-    upsert_type: &str,
-    remove_type: &str,
-    upsert_key: &str,
-    remove_key: &str,
-) -> Vec<Value> {
-    let mut ops = Vec::<Value>::new();
+    mut upsert_op: FUpsert,
+    mut remove_op: FRemove,
+) -> Vec<SidebarPatchOp>
+where
+    FUpsert: FnMut(Value) -> SidebarPatchOp,
+    FRemove: FnMut(String) -> SidebarPatchOp,
+{
+    let mut ops = Vec::<SidebarPatchOp>::new();
 
     for (id, value) in next {
         let changed = prev.get(id).map(|old| old != value).unwrap_or(true);
         if changed {
-            ops.push(json!({
-                "type": upsert_type,
-                upsert_key: value,
-            }));
+            ops.push(upsert_op(value.clone()));
         }
     }
 
     for id in prev.keys() {
         if !next.contains_key(id) {
-            ops.push(json!({
-                "type": remove_type,
-                remove_key: id,
-            }));
+            ops.push(remove_op(id.clone()));
         }
     }
 
     ops
 }
 
-fn snapshot_to_full_upserts(snapshot: &SidebarSnapshot) -> Vec<Value> {
-    let mut ops = Vec::<Value>::new();
+fn snapshot_to_full_upserts(snapshot: &SidebarSnapshot) -> Vec<SidebarPatchOp> {
+    let mut ops = Vec::<SidebarPatchOp>::new();
     for value in snapshot.directories.values() {
-        ops.push(json!({
-            "type": "directoryEntry.upsert",
-            "entry": value,
-        }));
+        ops.push(SidebarPatchOp::DirectoryEntryUpsert {
+            entry: value.clone(),
+        });
     }
     for value in snapshot.sessions.values() {
-        ops.push(json!({
-            "type": "sessionSummary.upsert",
-            "session": value,
-        }));
+        ops.push(SidebarPatchOp::SessionSummaryUpsert {
+            session: value.clone(),
+        });
     }
     for value in snapshot.runtime.values() {
-        ops.push(json!({
-            "type": "sessionRuntime.upsert",
-            "runtime": value,
-        }));
+        ops.push(SidebarPatchOp::SessionRuntimeUpsert {
+            runtime: value.clone(),
+        });
     }
     ops
 }
 
-fn diff_snapshots(prev: &SidebarSnapshot, next: &SidebarSnapshot) -> Vec<Value> {
-    let mut ops = Vec::<Value>::new();
+fn diff_snapshots(prev: &SidebarSnapshot, next: &SidebarSnapshot) -> Vec<SidebarPatchOp> {
+    let mut ops = Vec::<SidebarPatchOp>::new();
 
     ops.extend(upsert_remove_ops(
         &prev.directories,
         &next.directories,
-        "directoryEntry.upsert",
-        "directoryEntry.remove",
-        "entry",
-        "directoryId",
+        |entry| SidebarPatchOp::DirectoryEntryUpsert { entry },
+        |directory_id| SidebarPatchOp::DirectoryEntryRemove { directory_id },
     ));
 
     ops.extend(upsert_remove_ops(
         &prev.sessions,
         &next.sessions,
-        "sessionSummary.upsert",
-        "sessionSummary.remove",
-        "session",
-        "sessionId",
+        |session| SidebarPatchOp::SessionSummaryUpsert { session },
+        |session_id| SidebarPatchOp::SessionSummaryRemove { session_id },
     ));
 
     ops.extend(upsert_remove_ops(
         &prev.runtime,
         &next.runtime,
-        "sessionRuntime.upsert",
-        "sessionRuntime.remove",
-        "runtime",
-        "sessionId",
+        |runtime| SidebarPatchOp::SessionRuntimeUpsert { runtime },
+        |session_id| SidebarPatchOp::SessionRuntimeRemove { session_id },
     ));
 
     ops
 }
 
 fn derive_patch_refresh_hints<FSession, FPath>(
-    ops: &[Value],
+    ops: &[SidebarPatchOp],
     mut directory_id_for_session_id: FSession,
     mut directory_id_for_path: FPath,
 ) -> PatchRefreshHints
@@ -1013,40 +1034,28 @@ where
     let mut refresh_directory_ids = std::collections::BTreeSet::<String>::new();
 
     for op in ops {
-        let kind = op
-            .get("type")
-            .and_then(|value| value.as_str())
-            .unwrap_or("");
-        match kind {
-            "sessionRuntime.upsert" | "sessionRuntime.remove" => {
+        match op {
+            SidebarPatchOp::SessionRuntimeUpsert { .. }
+            | SidebarPatchOp::SessionRuntimeRemove { .. } => {
                 refresh_running_index = true;
             }
-            "directoryEntry.upsert" | "directoryEntry.remove" => {
+            SidebarPatchOp::DirectoryEntryUpsert { .. }
+            | SidebarPatchOp::DirectoryEntryRemove { .. } => {
                 refresh_all = true;
                 refresh_recent_index = true;
                 refresh_running_index = true;
             }
-            "sessionSummary.upsert" => {
+            SidebarPatchOp::SessionSummaryUpsert { session } => {
                 refresh_recent_index = true;
                 refresh_running_index = true;
-                let sid = op
-                    .get("session")
-                    .and_then(|value| value.get("id"))
-                    .and_then(|value| value.as_str())
-                    .map(|value| value.trim())
-                    .unwrap_or("");
+                let sid = session_summary_id(session).unwrap_or_default();
                 if !sid.is_empty() {
-                    if let Some(did) = directory_id_for_session_id(sid) {
+                    if let Some(did) = directory_id_for_session_id(&sid) {
                         refresh_directory_ids.insert(did);
                     }
-                    let path = op
-                        .get("session")
-                        .and_then(|value| value.get("directory"))
-                        .and_then(|value| value.as_str())
-                        .map(|value| value.trim())
-                        .unwrap_or("");
+                    let path = session_summary_directory(session).unwrap_or_default();
                     if !path.is_empty() {
-                        if let Some(did) = directory_id_for_path(path) {
+                        if let Some(did) = directory_id_for_path(&path) {
                             refresh_directory_ids.insert(did);
                         } else {
                             refresh_all = true;
@@ -1056,14 +1065,10 @@ where
                     refresh_all = true;
                 }
             }
-            "sessionSummary.remove" => {
+            SidebarPatchOp::SessionSummaryRemove { session_id } => {
                 refresh_recent_index = true;
                 refresh_running_index = true;
-                let sid = op
-                    .get("sessionId")
-                    .and_then(|value| value.as_str())
-                    .map(|value| value.trim())
-                    .unwrap_or("");
+                let sid = session_id.trim();
                 if sid.is_empty() {
                     refresh_all = true;
                 } else if let Some(did) = directory_id_for_session_id(sid) {
@@ -1072,7 +1077,6 @@ where
                     refresh_all = true;
                 }
             }
-            _ => {}
         }
     }
 
@@ -1207,14 +1211,7 @@ fn start_directory_sessions_poller_if_needed(state: Arc<crate::AppState>) {
             prev = next_snapshot;
 
             for op in &ops {
-                let kind = op
-                    .get("type")
-                    .and_then(|value| value.as_str())
-                    .unwrap_or("");
-                if kind != "sessionSummary.remove" {
-                    continue;
-                }
-                if let Some(session_id) = op.get("sessionId").and_then(|value| value.as_str()) {
+                if let SidebarPatchOp::SessionSummaryRemove { session_id } = op {
                     state
                         .directory_session_index
                         .remove_recent_session_entry(session_id);
@@ -1417,6 +1414,10 @@ mod tests {
     use super::*;
     use axum::http::HeaderValue;
 
+    fn session_summary_upsert(session: Value) -> SidebarPatchOp {
+        SidebarPatchOp::SessionSummaryUpsert { session }
+    }
+
     #[test]
     fn parse_last_event_id_handles_valid_and_invalid_values() {
         let mut headers = HeaderMap::new();
@@ -1432,14 +1433,8 @@ mod tests {
     #[test]
     fn event_hub_replay_since_returns_only_newer_events() {
         let hub = DirectorySessionsEventHub::new();
-        hub.publish_ops(vec![json!({
-            "type": "sessionSummary.upsert",
-            "session": { "id": "s_1" }
-        })]);
-        hub.publish_ops(vec![json!({
-            "type": "sessionSummary.upsert",
-            "session": { "id": "s_2" }
-        })]);
+        hub.publish_ops(vec![session_summary_upsert(json!({ "id": "s_1" }))]);
+        hub.publish_ops(vec![session_summary_upsert(json!({ "id": "s_2" }))]);
 
         let replay = hub.replay_since_until(1, hub.latest_seq());
         assert_eq!(replay.len(), 1);
@@ -1450,10 +1445,7 @@ mod tests {
     #[test]
     fn event_hub_replay_since_stale_seq_is_empty() {
         let hub = DirectorySessionsEventHub::new();
-        hub.publish_ops(vec![json!({
-            "type": "sessionSummary.upsert",
-            "session": { "id": "s_1" }
-        })]);
+        hub.publish_ops(vec![session_summary_upsert(json!({ "id": "s_1" }))]);
 
         let replay = hub.replay_since_until(999, hub.latest_seq());
         assert!(replay.is_empty());
@@ -1462,18 +1454,12 @@ mod tests {
     #[test]
     fn event_hub_replay_since_until_caps_at_subscribe_seq() {
         let hub = DirectorySessionsEventHub::new();
-        hub.publish_ops(vec![json!({
-            "type": "sessionSummary.upsert",
-            "session": { "id": "s_1" }
-        })]);
+        hub.publish_ops(vec![session_summary_upsert(json!({ "id": "s_1" }))]);
 
         let seq_at_subscribe = hub.latest_seq();
 
         // Simulate events that arrive after downstream subscription.
-        hub.publish_ops(vec![json!({
-            "type": "sessionSummary.upsert",
-            "session": { "id": "s_2" }
-        })]);
+        hub.publish_ops(vec![session_summary_upsert(json!({ "id": "s_2" }))]);
 
         let replay = hub.replay_since_until(0, seq_at_subscribe);
         assert_eq!(replay.len(), 1);
@@ -1484,10 +1470,7 @@ mod tests {
     #[test]
     fn force_snapshot_replay_when_last_event_id_is_ahead() {
         let hub = DirectorySessionsEventHub::new();
-        hub.publish_ops(vec![json!({
-            "type": "sessionSummary.upsert",
-            "session": { "id": "s_1" }
-        })]);
+        hub.publish_ops(vec![session_summary_upsert(json!({ "id": "s_1" }))]);
 
         assert!(should_force_snapshot_replay(&hub, 999, hub.latest_seq()));
     }
@@ -1496,10 +1479,9 @@ mod tests {
     fn force_snapshot_replay_when_last_event_id_falls_behind_buffer() {
         let hub = DirectorySessionsEventHub::new();
         for i in 0..2050 {
-            hub.publish_ops(vec![json!({
-                "type": "sessionSummary.upsert",
-                "session": { "id": format!("s_{i}") }
-            })]);
+            hub.publish_ops(vec![session_summary_upsert(
+                json!({ "id": format!("s_{i}") }),
+            )]);
         }
 
         // Buffer keeps newest 2048 events; last_event_id=1 is now too old.
@@ -1509,10 +1491,7 @@ mod tests {
     #[test]
     fn no_forced_snapshot_replay_when_client_is_at_latest_seq() {
         let hub = DirectorySessionsEventHub::new();
-        hub.publish_ops(vec![json!({
-            "type": "sessionSummary.upsert",
-            "session": { "id": "s_1" }
-        })]);
+        hub.publish_ops(vec![session_summary_upsert(json!({ "id": "s_1" }))]);
 
         assert!(!should_force_snapshot_replay(
             &hub,
@@ -1524,17 +1503,11 @@ mod tests {
     #[test]
     fn force_snapshot_replay_when_oversized_event_cannot_be_replayed() {
         let hub = DirectorySessionsEventHub::new();
-        hub.publish_ops(vec![json!({
-            "type": "sessionSummary.upsert",
-            "session": { "id": "s_small" }
-        })]);
-        hub.publish_ops(vec![json!({
-            "type": "sessionSummary.upsert",
-            "session": {
-                "id": "s_big",
-                "title": "x".repeat(EVENT_HUB_REPLAY_MAX_BYTES + 1024),
-            }
-        })]);
+        hub.publish_ops(vec![session_summary_upsert(json!({ "id": "s_small" }))]);
+        hub.publish_ops(vec![session_summary_upsert(json!({
+            "id": "s_big",
+            "title": "x".repeat(EVENT_HUB_REPLAY_MAX_BYTES + 1024),
+        }))]);
 
         assert!(should_force_snapshot_replay(&hub, 1, hub.latest_seq()));
         assert!(!should_force_snapshot_replay(
@@ -1549,20 +1522,14 @@ mod tests {
         let hub = DirectorySessionsEventHub::new();
         let large = "x".repeat(EVENT_HUB_REPLAY_MAX_BYTES / 2 + 1024);
 
-        hub.publish_ops(vec![json!({
-            "type": "sessionSummary.upsert",
-            "session": {
-                "id": "s_1",
-                "title": large,
-            }
-        })]);
-        hub.publish_ops(vec![json!({
-            "type": "sessionSummary.upsert",
-            "session": {
-                "id": "s_2",
-                "title": "y".repeat(EVENT_HUB_REPLAY_MAX_BYTES / 2 + 1024),
-            }
-        })]);
+        hub.publish_ops(vec![session_summary_upsert(json!({
+            "id": "s_1",
+            "title": large,
+        }))]);
+        hub.publish_ops(vec![session_summary_upsert(json!({
+            "id": "s_2",
+            "title": "y".repeat(EVENT_HUB_REPLAY_MAX_BYTES / 2 + 1024),
+        }))]);
 
         let replay = hub.replay_since_until(0, hub.latest_seq());
         assert_eq!(hub.oldest_seq(), Some(2));
@@ -1574,13 +1541,10 @@ mod tests {
     #[test]
     fn event_hub_does_not_buffer_single_oversized_event() {
         let hub = DirectorySessionsEventHub::new();
-        hub.publish_ops(vec![json!({
-            "type": "sessionSummary.upsert",
-            "session": {
-                "id": "s_big",
-                "title": "x".repeat(EVENT_HUB_REPLAY_MAX_BYTES + 1024),
-            }
-        })]);
+        hub.publish_ops(vec![session_summary_upsert(json!({
+            "id": "s_big",
+            "title": "x".repeat(EVENT_HUB_REPLAY_MAX_BYTES + 1024),
+        }))]);
 
         assert_eq!(hub.replay_since_until(0, hub.latest_seq()).len(), 0);
         assert_eq!(hub.replay_bytes(), 0);
@@ -1797,24 +1761,24 @@ mod tests {
             .insert("s_new".to_string(), json!({ "id": "s_new" }));
 
         let ops = diff_snapshots(&prev, &next);
-        let kinds = ops
-            .iter()
-            .filter_map(|op| op.get("type").and_then(|v| v.as_str()).map(str::to_string))
-            .collect::<Vec<String>>();
-
-        assert!(kinds.iter().any(|k| k == "sessionSummary.remove"));
-        assert!(kinds.iter().any(|k| k == "sessionSummary.upsert"));
+        assert!(
+            ops.iter()
+                .any(|op| matches!(op, SidebarPatchOp::SessionSummaryRemove { .. }))
+        );
+        assert!(
+            ops.iter()
+                .any(|op| matches!(op, SidebarPatchOp::SessionSummaryUpsert { .. }))
+        );
     }
 
     #[test]
     fn derive_patch_refresh_hints_prefers_directory_targets_when_known() {
-        let ops = vec![json!({
-            "type": "sessionSummary.upsert",
-            "session": {
+        let ops = vec![SidebarPatchOp::SessionSummaryUpsert {
+            session: json!({
                 "id": "s_1",
                 "directory": "/tmp/a"
-            }
-        })];
+            }),
+        }];
 
         let hints = derive_patch_refresh_hints(
             &ops,
@@ -1830,10 +1794,9 @@ mod tests {
 
     #[test]
     fn derive_patch_refresh_hints_marks_full_refresh_when_directory_unknown() {
-        let ops = vec![json!({
-            "type": "sessionSummary.remove",
-            "sessionId": "s_missing"
-        })];
+        let ops = vec![SidebarPatchOp::SessionSummaryRemove {
+            session_id: "s_missing".to_string(),
+        }];
 
         let hints = derive_patch_refresh_hints(&ops, |_| None, |_| None);
         assert!(hints.refresh_all);

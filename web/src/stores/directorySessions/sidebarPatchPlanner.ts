@@ -142,7 +142,7 @@ export function parseSidebarPatchRefreshHint(raw: JsonValue | undefined): Sideba
 
 export function resolveSidebarPatchPlan(
   ops: ChatSidebarPatchOp[],
-  context: SidebarPatchPlannerContext,
+  _context: SidebarPatchPlannerContext,
   hint: SidebarPatchRefreshHint | null,
 ): SidebarPatchPlannerResult {
   const runtimeOnlyOps = ops.filter((op) => op.type === 'sessionRuntime.upsert' || op.type === 'sessionRuntime.remove')
@@ -156,5 +156,12 @@ export function resolveSidebarPatchPlan(
       usedBackendHint: true,
     }
   }
-  return planSidebarPatchOps(ops, context)
+  return {
+    runtimeOnlyOps,
+    refreshDirectoryIds: [],
+    refreshAll: true,
+    refreshRecentIndex: true,
+    refreshRunningIndex: true,
+    usedBackendHint: false,
+  }
 }

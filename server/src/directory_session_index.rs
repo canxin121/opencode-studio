@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use dashmap::{DashMap, mapref::entry::Entry};
+use serde::Serialize;
 use serde_json::{Map, Value, json};
 
 #[derive(Debug, Clone)]
@@ -22,7 +23,24 @@ pub struct RuntimeRecord {
     pub phase: String,
     pub attention: Option<String>,
     pub effective_type: String,
+    pub display_state: RuntimeDisplayState,
     pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub(crate) enum RuntimeDisplayState {
+    #[serde(rename = "idle")]
+    Idle,
+    #[serde(rename = "running")]
+    Running,
+    #[serde(rename = "retrying")]
+    Retrying,
+    #[serde(rename = "coolingDown")]
+    CoolingDown,
+    #[serde(rename = "needsPermission")]
+    NeedsPermission,
+    #[serde(rename = "needsReply")]
+    NeedsReply,
 }
 
 #[derive(Debug, Clone)]
@@ -129,6 +147,32 @@ fn normalize_effective_type(status: &str, phase: &str, attention: Option<&str>) 
         return "cooldown";
     }
     "idle"
+}
+
+fn derive_runtime_display_state(
+    status: &str,
+    phase: &str,
+    attention: Option<&str>,
+) -> RuntimeDisplayState {
+    match attention {
+        Some("permission") => return RuntimeDisplayState::NeedsPermission,
+        Some("question") => return RuntimeDisplayState::NeedsReply,
+        _ => {}
+    }
+
+    if status == "retry" {
+        return RuntimeDisplayState::Retrying;
+    }
+    if status == "busy" {
+        return RuntimeDisplayState::Running;
+    }
+    if phase == "busy" {
+        return RuntimeDisplayState::Running;
+    }
+    if phase == "cooldown" {
+        return RuntimeDisplayState::CoolingDown;
+    }
+    RuntimeDisplayState::Idle
 }
 
 fn parse_runtime_status(value: &Value) -> String {
@@ -474,12 +518,14 @@ impl DirectorySessionIndexManager {
             .unwrap_or_else(|| "idle".to_string());
         let attention = current.as_ref().and_then(|v| v.attention.clone());
         let effective = normalize_effective_type(status, &phase, attention.as_deref()).to_string();
+        let display_state = derive_runtime_display_state(status, &phase, attention.as_deref());
 
         if let Some(existing) = current.as_ref()
             && existing.status_type == status
             && existing.phase == phase
             && existing.attention == attention
             && existing.effective_type == effective
+            && existing.display_state == display_state
         {
             return;
         }
@@ -491,6 +537,7 @@ impl DirectorySessionIndexManager {
                 phase,
                 attention,
                 effective_type: effective,
+                display_state,
                 updated_at: now_millis(),
             },
         );
@@ -513,12 +560,14 @@ impl DirectorySessionIndexManager {
             .unwrap_or_else(|| "idle".to_string());
         let attention = current.as_ref().and_then(|v| v.attention.clone());
         let effective = normalize_effective_type(&status, phase, attention.as_deref()).to_string();
+        let display_state = derive_runtime_display_state(&status, phase, attention.as_deref());
 
         if let Some(existing) = current.as_ref()
             && existing.status_type == status
             && existing.phase == phase
             && existing.attention == attention
             && existing.effective_type == effective
+            && existing.display_state == display_state
         {
             return;
         }
@@ -530,6 +579,7 @@ impl DirectorySessionIndexManager {
                 phase: phase.to_string(),
                 attention,
                 effective_type: effective,
+                display_state,
                 updated_at: now_millis(),
             },
         );
@@ -561,12 +611,14 @@ impl DirectorySessionIndexManager {
             .map(|v| v.phase.clone())
             .unwrap_or_else(|| "idle".to_string());
         let effective = normalize_effective_type(&status, &phase, attention.as_deref()).to_string();
+        let display_state = derive_runtime_display_state(&status, &phase, attention.as_deref());
 
         if let Some(existing) = current.as_ref()
             && existing.status_type == status
             && existing.phase == phase
             && existing.attention == attention
             && existing.effective_type == effective
+            && existing.display_state == display_state
         {
             return;
         }
@@ -578,6 +630,7 @@ impl DirectorySessionIndexManager {
                 phase,
                 attention,
                 effective_type: effective,
+                display_state,
                 updated_at: now_millis(),
             },
         );
@@ -658,6 +711,7 @@ impl DirectorySessionIndexManager {
                     "statusType": entry.value().status_type,
                     "phase": entry.value().phase,
                     "attention": entry.value().attention,
+                    "displayState": entry.value().display_state,
                     "updatedAt": entry.value().updated_at,
                 }),
             );
@@ -808,6 +862,33 @@ mod tests {
                 .and_then(|v| v.get("type"))
                 .and_then(|v| v.as_str()),
             Some("busy")
+        );
+    }
+
+    #[test]
+    fn runtime_display_state_prefers_attention_then_retry_then_phase() {
+        let idx = DirectorySessionIndexManager::new();
+
+        idx.upsert_runtime_phase("s_1", "cooldown");
+        idx.upsert_runtime_status("s_1", "retry");
+
+        let snapshot = idx.runtime_snapshot_json();
+        assert_eq!(
+            snapshot
+                .get("s_1")
+                .and_then(|v| v.get("displayState"))
+                .and_then(|v| v.as_str()),
+            Some("retrying")
+        );
+
+        idx.upsert_runtime_attention("s_1", Some("permission"));
+        let snapshot = idx.runtime_snapshot_json();
+        assert_eq!(
+            snapshot
+                .get("s_1")
+                .and_then(|v| v.get("displayState"))
+                .and_then(|v| v.as_str()),
+            Some("needsPermission")
         );
     }
 
@@ -1143,6 +1224,7 @@ mod tests {
                 phase: "idle".to_string(),
                 attention: None,
                 effective_type: "idle".to_string(),
+                display_state: RuntimeDisplayState::Idle,
                 updated_at: now.saturating_sub(120_000),
             },
         );
@@ -1153,6 +1235,7 @@ mod tests {
                 phase: "busy".to_string(),
                 attention: None,
                 effective_type: "busy".to_string(),
+                display_state: RuntimeDisplayState::Running,
                 updated_at: now.saturating_sub(120_000),
             },
         );
@@ -1163,6 +1246,7 @@ mod tests {
                 phase: "idle".to_string(),
                 attention: None,
                 effective_type: "idle".to_string(),
+                display_state: RuntimeDisplayState::Idle,
                 updated_at: now,
             },
         );

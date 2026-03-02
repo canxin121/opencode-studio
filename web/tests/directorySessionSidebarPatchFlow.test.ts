@@ -113,7 +113,8 @@ test('sidebar patch planner falls back when backend hint missing', () => {
   )
 
   assert.equal(result.usedBackendHint, false)
-  assert.deepEqual(result.refreshDirectoryIds, ['dir_a'])
+  assert.deepEqual(result.refreshDirectoryIds, [])
+  assert.equal(result.refreshAll, true)
   assert.equal(result.refreshRecentIndex, true)
   assert.equal(result.refreshRunningIndex, true)
 })

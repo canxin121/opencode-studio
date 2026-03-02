@@ -4,6 +4,7 @@ export type SessionRuntimeState = {
   statusType: 'idle' | 'busy' | 'retry' | 'unknown'
   phase: 'idle' | 'busy' | 'cooldown' | 'unknown'
   attention: 'permission' | 'question' | null
+  displayState: 'idle' | 'running' | 'retrying' | 'coolingDown' | 'needsPermission' | 'needsReply' | 'unknown'
   updatedAt: number
 }
 
@@ -17,8 +18,17 @@ export function normalizeRuntime(input?: RuntimeInput): SessionRuntimeState {
   const phase =
     input?.phase === 'idle' || input?.phase === 'busy' || input?.phase === 'cooldown' ? input.phase : 'unknown'
   const attention = input?.attention === 'permission' || input?.attention === 'question' ? input.attention : null
+  const displayState =
+    input?.displayState === 'idle' ||
+    input?.displayState === 'running' ||
+    input?.displayState === 'retrying' ||
+    input?.displayState === 'coolingDown' ||
+    input?.displayState === 'needsPermission' ||
+    input?.displayState === 'needsReply'
+      ? input.displayState
+      : 'unknown'
   const updatedAt = typeof input?.updatedAt === 'number' && Number.isFinite(input.updatedAt) ? input.updatedAt : 0
-  return { statusType, phase, attention, updatedAt }
+  return { statusType, phase, attention, displayState, updatedAt }
 }
 
 function readIncomingUpdatedAt(input: RuntimeInput): { provided: boolean; value: number } {
@@ -85,17 +95,28 @@ export function mergeRuntimeState(
 
   const incomingAttention = readIncomingAttention(incomingRaw)
   const attention = incomingAttention.provided && preferIncoming ? incomingAttention.value : existing.attention
+  const displayState = preferIncoming
+    ? incoming.displayState !== 'unknown'
+      ? incoming.displayState
+      : existing.displayState
+    : existing.displayState !== 'unknown'
+      ? existing.displayState
+      : incoming.displayState
 
   return normalizeRuntime({
     statusType,
     phase,
     attention,
+    displayState,
     updatedAt: incomingUpdatedAt.provided ? Math.max(existing.updatedAt, incomingUpdatedAt.value) : existing.updatedAt,
   })
 }
 
 export function runtimeIsActive(runtime?: SessionRuntimeState | null, opts?: { includeCooldown?: boolean }): boolean {
   if (!runtime) return false
+  if (runtime.displayState === 'needsPermission' || runtime.displayState === 'needsReply') return true
+  if (runtime.displayState === 'running' || runtime.displayState === 'retrying') return true
+  if (opts?.includeCooldown && runtime.displayState === 'coolingDown') return true
   if (runtime.attention) return true
   if (runtime.statusType === 'busy' || runtime.statusType === 'retry') return true
   if (runtime.phase === 'busy') return true
@@ -104,5 +125,10 @@ export function runtimeIsActive(runtime?: SessionRuntimeState | null, opts?: { i
 }
 
 export function runtimeStateEquivalent(left: SessionRuntimeState, right: SessionRuntimeState): boolean {
-  return left.statusType === right.statusType && left.phase === right.phase && left.attention === right.attention
+  return (
+    left.statusType === right.statusType &&
+    left.phase === right.phase &&
+    left.attention === right.attention &&
+    left.displayState === right.displayState
+  )
 }

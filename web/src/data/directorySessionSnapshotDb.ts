@@ -15,6 +15,7 @@ export type SessionRuntimeSnapshot = {
   statusType?: string
   phase?: string
   attention?: 'permission' | 'question' | null
+  displayState?: string
   updatedAt?: number
 }
 
@@ -144,6 +145,7 @@ function normalizeSnapshot(raw: StrictJsonValue): DirectorySessionSnapshot | nul
           runtime.attention === 'permission' || runtime.attention === 'question' || runtime.attention === null
             ? (runtime.attention as 'permission' | 'question' | null)
             : undefined,
+        displayState: typeof runtime.displayState === 'string' ? runtime.displayState : undefined,
         updatedAt:
           typeof runtime.updatedAt === 'number' && Number.isFinite(runtime.updatedAt) ? runtime.updatedAt : undefined,
       }

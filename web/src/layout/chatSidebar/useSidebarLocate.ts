@@ -1,6 +1,5 @@
 import { nextTick, onBeforeUnmount, ref, watch, type ComponentPublicInstance, type ComputedRef, type Ref } from 'vue'
 
-import { includesQuery, sessionLabel } from '@/features/sessions/model/labels'
 import type { DirectoryEntry } from '@/features/sessions/model/types'
 
 type SessionLike = { id?: string | number | null; title?: string | null; slug?: string | null }
@@ -34,21 +33,15 @@ export function useSidebarLocate(opts: {
   pinnedSessionIds: Ref<string[]>
   sidebarQuery: Ref<string>
   sidebarQueryNorm: ComputedRef<string>
-  searchSessions?: (
-    directory: DirectoryEntry,
-    query: string,
-    limit: number,
-    signal?: AbortSignal,
-  ) => Promise<SessionLike[]>
-  aggregatedSessionsForDirectory: (directoryId: string, directoryPath: string) => SessionLike[]
-  ensureDirectoryAggregateLoaded: (
+  searchSessionHits: (query: string, limit: number, signal?: AbortSignal) => Promise<SessionSearchHit[]>
+  ensureDirectorySidebarLoaded: (
     directoryId: string,
     directoryPath: string,
     opts?: { force?: boolean; focusSessionId?: string },
-  ) => Promise<void>
+  ) => Promise<{ directoryId: string; directoryPath: string } | null>
   resolveDirectoryForSession: (
     sessionId: string,
-    hint?: { directoryId?: string; directoryPath?: string; locateResult?: object | null },
+    hint?: { directoryId?: string; directoryPath?: string; locateResult?: object | null; skipRemote?: boolean },
   ) => Promise<{ directoryId: string; directoryPath: string; locatedDir: string } | null>
   getFlattenedTreeForDirectory: (directoryId: string, directoryPath: string) => FlattenedTree | null
   ensureAncestorsExpanded: (parentById: Record<string, string | null>, sessionId: string) => void
@@ -74,11 +67,6 @@ export function useSidebarLocate(opts: {
       locateFlashTimer = null
       if (locatedSessionId.value === sid) locatedSessionId.value = ''
     }, 1800)
-  }
-
-  function sessionMatchesQuery(s: SessionLike, q: string): boolean {
-    if (!q) return false
-    return includesQuery(sessionLabel(s), q) || includesQuery(String(s?.id || ''), q)
   }
 
   const sessionSearchHits = ref<SessionSearchHit[]>([])
@@ -125,31 +113,11 @@ export function useSidebarLocate(opts: {
         void (async () => {
           try {
             const out: SessionSearchHit[] = []
-            if (opts.searchSessions) {
-              for (const p of opts.directories.value) {
-                if (token !== searchWarmSeq || controller.signal.aborted) return
-                if (!p?.path) continue
-                const remaining = Math.max(0, 60 - out.length)
-                if (!remaining) break
-                const list = await opts.searchSessions(p, q, remaining, controller.signal)
-                for (const s of list) {
-                  if (!s?.id) continue
-                  out.push({ directory: p, session: s })
-                  if (out.length >= 60) break
-                }
-              }
-            } else {
-              for (const p of opts.directories.value) {
-                if (token !== searchWarmSeq || controller.signal.aborted) return
-                const list = opts.aggregatedSessionsForDirectory(p.id, p.path)
-                for (const s of list) {
-                  if (!s?.id) continue
-                  if (!sessionMatchesQuery(s, q)) continue
-                  out.push({ directory: p, session: s })
-                  if (out.length >= 60) break
-                }
-                if (out.length >= 60) break
-              }
+            const list = await opts.searchSessionHits(q, 60, controller.signal)
+            for (const hit of list || []) {
+              if (!hit?.session?.id || !hit?.directory?.id || !hit?.directory?.path) continue
+              out.push(hit)
+              if (out.length >= 60) break
             }
             if (token === searchWarmSeq && !controller.signal.aborted) {
               sessionSearchHits.value = out
@@ -178,17 +146,32 @@ export function useSidebarLocate(opts: {
   ) {
     const sid = (sessionId || '').trim()
     if (!sid) return false
-    if (opts.directories.value.length === 0) return false
 
     if (opts2?.clearSearch !== false) {
       // Locating should show the session in the real list, not a filtered view.
       opts.sidebarQuery.value = ''
     }
 
-    const resolved = await opts.resolveDirectoryForSession(sid, {
-      directoryId: opts2?.hintDirectoryId,
-      directoryPath: opts2?.hintDirectoryPath,
+    const hintDirectoryId = (opts2?.hintDirectoryId || '').trim()
+    const hintDirectoryPath = (opts2?.hintDirectoryPath || '').trim()
+
+    const focused = await opts.ensureDirectorySidebarLoaded(hintDirectoryId, hintDirectoryPath, {
+      focusSessionId: sid,
     })
+    let resolved = focused
+    if (!resolved) {
+      resolved = await opts.resolveDirectoryForSession(sid, {
+        directoryId: hintDirectoryId,
+        directoryPath: hintDirectoryPath,
+        skipRemote: true,
+      })
+    }
+    if (!resolved) {
+      resolved = await opts.resolveDirectoryForSession(sid, {
+        directoryId: hintDirectoryId,
+        directoryPath: hintDirectoryPath,
+      })
+    }
     if (!resolved) return false
 
     const focusId = resolved.directoryId
@@ -207,7 +190,9 @@ export function useSidebarLocate(opts: {
       opts.collapsedDirectoryIds.value = next
     }
 
-    await opts.ensureDirectoryAggregateLoaded(focusId, focusPath, { focusSessionId: sid })
+    if (!focused) {
+      await opts.ensureDirectorySidebarLoaded(focusId, focusPath, { focusSessionId: sid })
+    }
     await nextTick()
 
     const isPinned = opts.pinnedSessionIds.value.includes(sid)

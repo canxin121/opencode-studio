@@ -33,6 +33,45 @@ export type ChatSidebarStateWire = {
   runtimeBySessionId?: JsonValue
   recentPage?: JsonValue
   runningPage?: JsonValue
+  focus?: JsonValue
+  view?: JsonValue
+}
+
+export type SidebarSessionRowWire = {
+  id?: string
+  session?: JsonValue | null
+  directory?: JsonValue | null
+  renderKey?: string
+  depth?: number
+  parentId?: string | null
+  rootId?: string
+  isParent?: boolean
+  isExpanded?: boolean
+}
+
+export type DirectorySidebarViewWire = {
+  sessionCount?: number
+  rootPage?: number
+  rootPageCount?: number
+  hasActiveOrBlocked?: boolean
+  pinnedRows?: SidebarSessionRowWire[]
+  recentRows?: SidebarSessionRowWire[]
+  recentParentById?: Record<string, string | null>
+  recentRootIds?: string[]
+}
+
+export type SidebarFooterViewWire = {
+  total?: number
+  page?: number
+  pageCount?: number
+  rows?: SidebarSessionRowWire[]
+}
+
+export type ChatSidebarViewWire = {
+  directoryRowsById?: Record<string, DirectorySidebarViewWire>
+  pinnedFooter?: SidebarFooterViewWire
+  recentFooter?: SidebarFooterViewWire
+  runningFooter?: SidebarFooterViewWire
 }
 
 export type PagedIndexWire<T> = {
