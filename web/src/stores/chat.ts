@@ -61,13 +61,11 @@ export type {
 } from '../types/chat'
 import { useSettingsStore } from './settings'
 import { useDirectoryStore } from './directory'
-import { useDirectorySessionStore } from './directorySessionStore'
 import { useToastsStore } from './toasts'
 
 export const useChatStore = defineStore('chat', () => {
   const settings = useSettingsStore()
   const directoryStore = useDirectoryStore()
-  const directorySessions = useDirectorySessionStore()
   const toasts = useToastsStore()
 
   // Keep session list fetches bounded; sidebar has its own paging.
@@ -577,7 +575,6 @@ export const useChatStore = defineStore('chat', () => {
         nextDirMap[s.id] = dir
       }
       nextById[s.id] = s
-      directorySessions.upsertSessionSummaryPatch(s)
     }
 
     sessionDirectoryById.value = nextDirMap
@@ -1357,7 +1354,6 @@ export const useChatStore = defineStore('chat', () => {
     if (dir && (directoryStore.currentDirectory || '').trim() !== String(dir || '').trim()) {
       void refreshSessionsForDirectory(String(dir)).catch(() => {})
     }
-    directorySessions.removeSessionFromSidebarState(sid)
     scheduleSessionsRefresh(1200)
   }
 
@@ -1412,9 +1408,6 @@ export const useChatStore = defineStore('chat', () => {
       }
     }
     sessionsByDirectory.value = nextByDir
-
-    // Keep sidebar/session index in sync for immediate title/share updates.
-    directorySessions.upsertSessionSummaryPatch(merged)
   }
 
   function clearSessionRevertBoundaryForMessage(sessionId: string, messageId: string) {
@@ -1589,8 +1582,6 @@ export const useChatStore = defineStore('chat', () => {
       delete nextRunConfig[sid]
       sessionRunConfigBySession.value = nextRunConfig
       runConfigPersister.persistSoon()
-
-      directorySessions.removeSessionFromSidebarState(sid)
     }
 
     if (t === 'session.created') {

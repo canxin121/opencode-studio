@@ -29,7 +29,6 @@ import {
 import type { DirectoryEntry } from '@/features/sessions/model/types'
 import type { FlatTreeRow } from '@/features/sessions/model/tree'
 import { useSidebarLocate } from '@/layout/chatSidebar/useSidebarLocate'
-import { normalizeDirectories } from '@/features/sessions/model/projects'
 import { normalizeSidebarUiPrefsForUi } from '@/features/sessions/model/sidebarUiPrefs'
 import { DIRECTORIES_PAGE_SIZE_DEFAULT } from '@/stores/directorySessions/index'
 import { apiJson } from '@/lib/api'
@@ -108,39 +107,7 @@ const directoryPaging = ref(false)
 
 // Directory entry type lives in '@/features/sessions/model/types'.
 
-const settingsDirectories = computed<DirectoryEntry[]>(() => {
-  return normalizeDirectories(settings.data?.directories ?? settings.data?.projects)
-})
-
-const directories = computed<DirectoryEntry[]>(() => {
-  const base = directorySessions.visibleDirectories
-  const overlays = settings.data ? settingsDirectories.value : []
-  if (!settings.data || overlays.length === 0) return base
-
-  const labelById = new Map<string, string>()
-  for (const entry of overlays) {
-    const id = String(entry?.id || '').trim()
-    const label = typeof entry?.label === 'string' ? entry.label.trim() : ''
-    if (id && label) labelById.set(id, label)
-  }
-
-  return base.map((entry) => {
-    const id = String(entry?.id || '').trim()
-    const label = id ? labelById.get(id) : undefined
-    if (!label) return entry
-    if (entry.label === label) return entry
-    return { ...entry, label }
-  })
-})
-watch(
-  () => ({ loaded: Boolean(settings.data), list: settingsDirectories.value }),
-  (state) => {
-    if (state.loaded) {
-      directorySessions.setDirectoryEntries(state.list)
-    }
-  },
-  { immediate: true },
-)
+const directories = computed<DirectoryEntry[]>(() => directorySessions.visibleDirectories)
 
 // Paging (sidebar can contain many directories/sessions).
 const DIRECTORIES_PAGE_SIZE = DIRECTORIES_PAGE_SIZE_DEFAULT
@@ -216,11 +183,6 @@ function readSessionId(value: SessionValue): string {
   return typeof raw === 'string' ? raw.trim() : ''
 }
 
-function readSessionDirectory(value: SessionValue): string {
-  const raw = asRecord(value)?.directory
-  return typeof raw === 'string' ? raw.trim() : ''
-}
-
 function isAbortError(err: SessionValue): boolean {
   if (err instanceof DOMException) return err.name === 'AbortError'
   const name = asRecord(err)?.name
@@ -258,6 +220,16 @@ const directoryPageLoading = computed<boolean>(() => {
 let sidebarStateFetchTimer: number | null = null
 let skipDirectoryPageWatchOnce = false
 
+watch(
+  () => directorySessions.directoriesPageIndex,
+  (next) => {
+    const resolved = Number.isFinite(Number(next)) ? Math.max(0, Math.floor(Number(next))) : 0
+    if (directoryPage.value === resolved) return
+    skipDirectoryPageWatchOnce = true
+    directoryPage.value = resolved
+  },
+)
+
 async function revalidateSidebarState(
   opts?: {
     directoriesPage?: number
@@ -269,9 +241,13 @@ async function revalidateSidebarState(
   },
   runtimeOpts?: { silent?: boolean },
 ) {
-  const directoriesPage =
-    typeof opts?.directoriesPage === 'number' && Number.isFinite(opts.directoriesPage)
+  const hasDirectoriesPageOverride = Boolean(opts && Object.prototype.hasOwnProperty.call(opts, 'directoriesPage'))
+  const directoriesPage = hasDirectoriesPageOverride
+    ? typeof opts?.directoriesPage === 'number' && Number.isFinite(opts.directoriesPage)
       ? Math.max(0, Math.floor(opts.directoriesPage))
+      : undefined
+    : opts?.focusSessionId
+      ? undefined
       : Math.max(0, Math.floor(directoryPage.value || 0))
   const directoryQuery = typeof opts?.query === 'string' ? opts.query.trim() : sidebarQueryNorm.value
 
@@ -718,9 +694,6 @@ function togglePin(id: string) {
   else pinnedSessionIds.value.unshift(id)
 }
 
-const worktreesByDirectoryId = computed<Record<string, string[]>>(() => {
-  return directorySessions.worktreePathsByDirectoryId || {}
-})
 const sessionsLoading = computed(() => {
   return chat.sessionsLoading || directoryPageLoading.value
 })
@@ -889,12 +862,33 @@ async function requestRunningSessionsPage(nextPage: number) {
   }
 }
 
+async function resolveDirectoryForOpenSession(
+  sessionId: string,
+  row: ThreadSessionRow | null,
+): Promise<DirectoryEntry | null> {
+  const rowDirectory = row?.directory
+  if (rowDirectory?.id && rowDirectory.path) {
+    return rowDirectory
+  }
+
+  const resolved = await directorySessions
+    .resolveDirectoryForSession(sessionId, {
+      directoryId: rowDirectory?.id,
+      directoryPath: rowDirectory?.path,
+    })
+    .catch(() => null)
+  if (!resolved?.directoryId || !resolved.directoryPath) return null
+  return {
+    id: resolved.directoryId,
+    path: resolved.directoryPath,
+  }
+}
+
 async function openRunningSession(sessionId: string) {
   const sid = (sessionId || '').trim()
   if (!sid) return
   const row = pagedRunningSessionRows.value.find((item) => item.id === sid) || null
-  const indexed = directorySessions.allSessionIndexById?.[sid] || null
-  const directory = row?.directory || indexed?.directory || null
+  const directory = await resolveDirectoryForOpenSession(sid, row)
   if (directory?.id && directory?.path) {
     await selectDirectory(directory.id, directory.path)
   }
@@ -905,8 +899,7 @@ async function openPinnedSession(sessionId: string) {
   const sid = (sessionId || '').trim()
   if (!sid) return
   const row = pagedPinnedSessionRows.value.find((item) => item.id === sid) || null
-  const indexed = directorySessions.allSessionIndexById?.[sid] || null
-  const directory = row?.directory || indexed?.directory || null
+  const directory = await resolveDirectoryForOpenSession(sid, row)
   if (directory?.id && directory?.path) {
     await selectDirectory(directory.id, directory.path)
   }
@@ -917,8 +910,7 @@ async function openRecentSession(sessionId: string) {
   const sid = (sessionId || '').trim()
   if (!sid) return
   const row = pagedRecentSessionRows.value.find((item) => item.id === sid) || null
-  const indexed = directorySessions.allSessionIndexById?.[sid] || null
-  const directory = row?.directory || indexed?.directory || null
+  const directory = await resolveDirectoryForOpenSession(sid, row)
   if (directory?.id && directory?.path) {
     await selectDirectory(directory.id, directory.path)
   }
@@ -1071,37 +1063,17 @@ async function deleteSession(sessionId: string) {
   const sid = (sessionId || '').trim()
   if (!sid) return
 
-  // Resolve best-effort directory + directory entry so we can refresh the right sidebar page.
-  const idx = directorySessions.allSessionIndexById?.[sid] || null
-  const cached = chat.getSessionById(sid)
+  const resolved = await directorySessions.resolveDirectoryForSession(sid).catch(() => null)
+  const directory = resolved?.locatedDir || resolved?.directoryPath || null
 
-  const cachedDir = readSessionDirectory(cached)
-  const idxDir = readSessionDirectory(idx?.session)
-
-  let directory = idxDir || cachedDir || (idx?.directory?.path || '').trim() || ''
-  let directoryEntry: DirectoryEntry | null = idx?.directory ?? null
-
-  if (!directory || !directoryEntry) {
-    const resolved = await directorySessions.resolveDirectoryForSession(sid).catch(() => null)
-    if (resolved) {
-      if (!directory) directory = resolved.locatedDir || resolved.directoryPath
-      if (!directoryEntry) {
-        directoryEntry = directories.value.find((entry) => entry.id === resolved.directoryId) || null
-      }
-    }
-  }
-
-  await chat.deleteSession(sid, { directory: directory || null })
+  await chat.deleteSession(sid, { directory })
 
   // If the deleted session was pinned, drop it from the pin list immediately.
   if (pinnedSessionIds.value.includes(sid)) {
     pinnedSessionIds.value = pinnedSessionIds.value.filter((id) => String(id || '').trim() !== sid)
   }
 
-  // Reconcile the specific directory page so paging/children counts stay correct.
-  if (directoryEntry) {
-    void revalidateSidebarState(undefined, { silent: true })
-  }
+  void revalidateSidebarState(undefined, { silent: true })
 }
 
 async function addDirectoryEntry() {
@@ -1110,18 +1082,18 @@ async function addDirectoryEntry() {
   await settings.addProject(p)
   newDirectoryPath.value = ''
   isAddDirectoryOpen.value = false
+  await revalidateSidebarState(undefined, { silent: true })
 }
 
 async function removeDirectoryEntry(directoryId: string) {
   await settings.removeProject(directoryId)
+  await revalidateSidebarState(undefined, { silent: true })
 }
 
 const isDirectoryFocused = (directory: DirectoryEntry) => {
   const dir = (directoryStore.currentDirectory || '').trim()
   if (!dir || !directory?.path) return false
-  if (dir === directory.path) return true
-  const wts = worktreesByDirectoryId.value[(directory.id || '').trim()] || []
-  return wts.includes(dir)
+  return dir === directory.path
 }
 
 type FlattenedDirectoryTree = {
@@ -1291,8 +1263,6 @@ function pagedRowsForDirectory(directoryId: string): FlatTreeRow[] {
 const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, setSessionEl } = useSidebarLocate({
   ui,
   directories,
-  directoryPage,
-  directoriesPageSize: DIRECTORIES_PAGE_SIZE,
   collapsedDirectoryIds: collapsedDirectories,
   pinnedSessionIds,
   sidebarQuery,

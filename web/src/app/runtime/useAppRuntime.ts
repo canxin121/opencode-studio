@@ -18,7 +18,6 @@ import { applyDeviceClasses, getDeviceInfo } from '@/lib/device'
 import { installKeyboardInsets } from '@/lib/keyboardInsets'
 import { installKeyboardTapFix } from '@/lib/keyboardTapFix'
 import { installKeyboardShortcuts } from '@/app/runtime/installKeyboardShortcuts'
-import { normalizeDirectories } from '@/features/sessions/model/projects'
 import { readSessionIdFromFullPath, readSessionIdFromQuery } from '@/app/navigation/sessionQuery'
 
 export function useAppRuntime() {
@@ -47,7 +46,6 @@ export function useAppRuntime() {
   let cleanupShortcuts: (() => void) | null = null
   let cleanupKeyboardTapFix: (() => void) | null = null
   let cleanupBroadcast: (() => void) | null = null
-  let stopSettingsDirectorySync: (() => void) | null = null
   let updateTimer: number | null = null
   let sseDebugTimer: number | null = null
   let lastSseDebugAt = 0
@@ -301,18 +299,6 @@ export function useAppRuntime() {
   // against the correct layout branch during refresh.
   applyDevice()
 
-  // Keep the directory session store in sync even if the sidebar component
-  // isn't mounted (mobile layout, route changes) so other UI pieces stay up to date.
-  stopSettingsDirectorySync = watch(
-    () => settings.data,
-    (next) => {
-      if (!next) return
-      const list = normalizeDirectories(next?.directories ?? next?.projects)
-      directorySessions.setDirectoryEntries(list)
-    },
-    { immediate: true, deep: true },
-  )
-
   async function ensureSelectedSessionFromQuery() {
     const sid = readSessionIdFromQuery(route.query) || readSessionIdFromFullPath(route.fullPath)
 
@@ -545,7 +531,5 @@ export function useAppRuntime() {
 
     cleanupBroadcast?.()
     cleanupBroadcast = null
-    stopSettingsDirectorySync?.()
-    stopSettingsDirectorySync = null
   })
 }

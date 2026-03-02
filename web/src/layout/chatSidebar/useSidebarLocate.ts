@@ -27,8 +27,6 @@ export function useSidebarLocate(opts: {
     clearSidebarLocateRequest: () => void
   }
   directories: ComputedRef<DirectoryEntry[]>
-  directoryPage: Ref<number>
-  directoriesPageSize: number
   collapsedDirectoryIds: Ref<Set<string>>
   pinnedSessionIds: Ref<string[]>
   sidebarQuery: Ref<string>
@@ -176,12 +174,6 @@ export function useSidebarLocate(opts: {
 
     const focusId = resolved.directoryId
     const focusPath = resolved.directoryPath
-
-    // Jump to the directory page that contains the focused entry.
-    const projIndex = opts.directories.value.findIndex((p) => p.id === focusId)
-    if (projIndex >= 0) {
-      opts.directoryPage.value = Math.floor(projIndex / opts.directoriesPageSize)
-    }
 
     // Ensure the directory entry is expanded.
     if (opts.collapsedDirectoryIds.value.has(focusId)) {

@@ -231,6 +231,9 @@ export function connectSse(opts: SseClientOptions): SseClient {
       const sessionKey = sid ? `:${String(sid)}` : ''
       return `message.part.updated:${dir}${sessionKey}:${String(mid)}:${String(pid)}`
     }
+    if (evt.type === 'chat-sidebar.state') {
+      return `chat-sidebar.state:${dir}`
+    }
     return null
   }
 
@@ -319,30 +322,15 @@ export function connectSse(opts: SseClientOptions): SseClient {
 
     let evt: UnknownRecord = raw
     if (typeof raw.type !== 'string') {
-      if (Array.isArray(raw.ops)) {
-        const seq = typeof raw.seq === 'number' && Number.isFinite(raw.seq) ? Number(raw.seq) : null
-        const ts = typeof raw.ts === 'number' && Number.isFinite(raw.ts) ? Number(raw.ts) : null
-        const hints = raw.hints
-        evt = {
-          type: 'chat-sidebar.patch',
-          properties: {
-            ops: raw.ops,
-            ...(seq !== null ? { seq } : {}),
-            ...(ts !== null ? { ts } : {}),
-            ...(hints !== undefined ? { hints } : {}),
-          },
+      const payload = raw.payload
+      if (isRecord(payload) && typeof payload.type === 'string') {
+        evt = payload
+        const wrapperDir = getString(raw, 'directory').trim()
+        if (wrapperDir && !('directory' in evt)) {
+          evt.directory = wrapperDir
         }
       } else {
-        const payload = raw.payload
-        if (isRecord(payload) && typeof payload.type === 'string') {
-          evt = payload
-          const wrapperDir = getString(raw, 'directory').trim()
-          if (wrapperDir && !('directory' in evt)) {
-            evt.directory = wrapperDir
-          }
-        } else {
-          return
-        }
+        return
       }
     }
 

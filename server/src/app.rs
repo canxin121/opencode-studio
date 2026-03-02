@@ -617,22 +617,6 @@ pub(crate) async fn run(args: crate::Args) {
             get(crate::global_sse_hub::global_event_sse),
         )
         .route(
-            "/chat-sidebar/bootstrap",
-            get(crate::chat_sidebar::chat_sidebar_bootstrap),
-        )
-        .route(
-            "/chat-sidebar/events",
-            get(crate::chat_sidebar::chat_sidebar_events),
-        )
-        .route(
-            "/chat-sidebar/recent-index",
-            get(crate::chat_sidebar::chat_sidebar_recent_index),
-        )
-        .route(
-            "/chat-sidebar/running-index",
-            get(crate::chat_sidebar::chat_sidebar_running_index),
-        )
-        .route(
             "/chat-sidebar/state",
             get(crate::chat_sidebar::chat_sidebar_state),
         )

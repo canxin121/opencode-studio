@@ -1582,21 +1582,6 @@ fn build_chat_sidebar_view(input: ChatSidebarViewBuildInput<'_>) -> ChatSidebarV
     }
 }
 
-pub(crate) async fn chat_sidebar_bootstrap(
-    State(state): State<Arc<crate::AppState>>,
-    Query(query): Query<crate::directory_sessions::DirectorySessionsBootstrapQuery>,
-) -> Response {
-    crate::directory_sessions::directory_sessions_bootstrap(State(state), Query(query)).await
-}
-
-pub(crate) async fn chat_sidebar_events(
-    State(state): State<Arc<crate::AppState>>,
-    headers: HeaderMap,
-    Query(query): Query<crate::directory_sessions::DirectorySessionsEventsQuery>,
-) -> Response {
-    crate::directory_sessions::directory_sessions_events(State(state), headers, Query(query)).await
-}
-
 pub(crate) async fn directories_get(
     State(state): State<Arc<crate::AppState>>,
     Query(query): Query<DirectoriesQuery>,
@@ -1737,7 +1722,7 @@ pub(crate) async fn directory_sessions_by_id_get(
     Ok(Json(payload).into_response())
 }
 
-pub(crate) async fn chat_sidebar_recent_index(
+async fn chat_sidebar_recent_index_page(
     State(state): State<Arc<crate::AppState>>,
     Query(query): Query<ChatSidebarIndexQuery>,
 ) -> Response {
@@ -1775,7 +1760,7 @@ pub(crate) async fn chat_sidebar_recent_index(
     Json(page(items, offset, limit)).into_response()
 }
 
-pub(crate) async fn chat_sidebar_running_index(
+async fn chat_sidebar_running_index_page(
     State(state): State<Arc<crate::AppState>>,
     Query(query): Query<ChatSidebarIndexQuery>,
 ) -> Response {
@@ -1904,6 +1889,8 @@ pub(crate) async fn chat_sidebar_state(
     State(state): State<Arc<crate::AppState>>,
     Query(query): Query<ChatSidebarStateQuery>,
 ) -> crate::ApiResult<Response> {
+    crate::directory_sessions::ensure_directory_sessions_poller_started(state.clone());
+
     let preferences = crate::chat_sidebar_preferences::chat_sidebar_preferences_snapshot().await;
     let seq = crate::directory_sessions::directory_sessions_latest_seq();
     let runtime_by_session_id = state.directory_session_index.runtime_snapshot_json();
@@ -2136,7 +2123,7 @@ pub(crate) async fn chat_sidebar_state(
         }
     }
 
-    let recent_page_response = chat_sidebar_recent_index(
+    let recent_page_response = chat_sidebar_recent_index_page(
         State(state.clone()),
         Query(ChatSidebarIndexQuery {
             offset: Some(page_to_offset(recent_page, recent_page_size)),
@@ -2152,7 +2139,7 @@ pub(crate) async fn chat_sidebar_state(
             .into_response());
     };
 
-    let running_page_response = chat_sidebar_running_index(
+    let running_page_response = chat_sidebar_running_index_page(
         State(state.clone()),
         Query(ChatSidebarIndexQuery {
             offset: Some(page_to_offset(running_page, running_page_size)),
@@ -2195,6 +2182,38 @@ pub(crate) async fn chat_sidebar_state(
         view,
     })
     .into_response())
+}
+
+pub(crate) async fn chat_sidebar_state_snapshot(
+    state: Arc<crate::AppState>,
+    query: ChatSidebarStateQuery,
+) -> Option<Value> {
+    let response = chat_sidebar_state(State(state), Query(query)).await.ok()?;
+    decode_json_response(response).await
+}
+
+pub(crate) async fn publish_chat_sidebar_state_event(
+    state: Arc<crate::AppState>,
+    query: ChatSidebarStateQuery,
+) -> bool {
+    if crate::global_sse_hub::downstream_client_count() == 0 {
+        return false;
+    }
+
+    let Some(sidebar_state) = chat_sidebar_state_snapshot(state, query).await else {
+        return false;
+    };
+
+    let payload = serde_json::to_string(&json!({
+        "type": "chat-sidebar.state",
+        "properties": {
+            "state": sidebar_state,
+        }
+    }))
+    .unwrap_or_else(|_| "{}".to_string());
+
+    crate::global_sse_hub::publish_downstream_json(&payload);
+    true
 }
 
 pub(crate) async fn sessions_summaries_get(

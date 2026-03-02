@@ -2,12 +2,13 @@ use std::collections::{BTreeMap, HashSet, VecDeque};
 use std::fs::OpenOptions;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{LazyLock, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use async_stream::stream;
 use axum::{
     Json,
+    extract::State,
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response, sse::Event},
 };
@@ -412,6 +413,7 @@ pub(crate) async fn chat_sidebar_preferences_get() -> Response {
 }
 
 pub(crate) async fn chat_sidebar_preferences_put(
+    State(state): State<Arc<crate::AppState>>,
     headers: HeaderMap,
     Json(body): Json<SessionsSidebarPreferences>,
 ) -> Response {
@@ -472,6 +474,15 @@ pub(crate) async fn chat_sidebar_preferences_put(
 
     write_cached_preferences(preferences.clone()).await;
     PREFS_EVENT_HUB.publish_preferences_replace(&preferences);
+
+    if crate::global_sse_hub::downstream_client_count() > 0 {
+        let _ = crate::chat_sidebar::publish_chat_sidebar_state_event(
+            state,
+            crate::chat_sidebar::ChatSidebarStateQuery::default(),
+        )
+        .await;
+    }
+
     Json(preferences).into_response()
 }
 
