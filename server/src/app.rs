@@ -607,6 +607,7 @@ pub(crate) async fn run(args: crate::Args) {
             "/global/event",
             get(crate::global_sse_hub::global_event_sse),
         )
+        .route("/global/ws", get(crate::global_sse_hub::global_event_ws))
         .route(
             "/chat-sidebar/state",
             get(crate::chat_sidebar::chat_sidebar_state)
@@ -617,9 +618,17 @@ pub(crate) async fn run(args: crate::Args) {
             get(crate::chat_sidebar::chat_sidebar_directories_page_get),
         )
         .route(
+            "/chat-sidebar/patches",
+            get(crate::chat_sidebar::chat_sidebar_patches_get),
+        )
+        .route(
             "/chat-sidebar/preferences",
             get(crate::chat_sidebar::chat_sidebar_preferences_get)
                 .put(crate::chat_sidebar::chat_sidebar_preferences_put),
+        )
+        .route(
+            "/chat-sidebar/command",
+            post(crate::chat_sidebar::chat_sidebar_command_post),
         )
         .route(
             "/chat-sidebar/session-search",

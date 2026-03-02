@@ -16,6 +16,7 @@ import type { JsonObject as UnknownRecord, JsonValue } from '@/types/json'
 type ChatSidebarStateWire = {
   preferences?: JsonValue
   seq?: number
+  patchSeq?: JsonValue
   directoriesPage?: JsonValue
   sessionPagesByDirectoryId?: JsonValue
   runtimeBySessionId?: JsonValue
@@ -28,6 +29,7 @@ type ChatSidebarStateWire = {
 type ChatSidebarPreferencesWire = {
   preferences?: JsonValue
   seq?: number
+  patchSeq?: JsonValue
 }
 
 type DirectorySessionsByIdWire = {
@@ -37,22 +39,36 @@ type DirectorySessionsByIdWire = {
 type ChatSidebarFooterWire = {
   kind?: JsonValue
   seq?: JsonValue
+  patchSeq?: JsonValue
   view?: JsonValue
 }
 
 type ChatSidebarDirectoriesPageWire = {
   preferences?: JsonValue
   seq?: JsonValue
+  patchSeq?: JsonValue
   directoriesPage?: JsonValue
   view?: JsonValue
+}
+
+type ChatSidebarPatchesWire = {
+  since?: JsonValue
+  oldestSeq?: JsonValue
+  latestSeq?: JsonValue
+  needResync?: JsonValue
+  patches?: JsonValue
 }
 
 type SidebarFooterKind = 'pinned' | 'recent' | 'running'
 
 const SIDEBAR_STATE_ENDPOINT = '/api/chat-sidebar/state'
 const SIDEBAR_DIRECTORIES_PAGE_ENDPOINT = '/api/chat-sidebar/directories-page'
+const SIDEBAR_PATCHES_ENDPOINT = '/api/chat-sidebar/patches'
 const SIDEBAR_PREFERENCES_ENDPOINT = '/api/chat-sidebar/preferences'
-const UI_PREFS_REMOTE_SAVE_DEBOUNCE_MS = 300
+const SIDEBAR_COMMAND_ENDPOINT = '/api/chat-sidebar/command'
+const SIDEBAR_DIRECTORIES_PAGE_SIZE_DEFAULT = 15
+const SIDEBAR_FOOTER_PAGE_SIZE_DEFAULT = 10
+const SIDEBAR_PATCH_PULL_LIMIT_DEFAULT = 80
 
 type SidebarSessionSummary = UnknownRecord & {
   id: string
@@ -110,6 +126,15 @@ type RevalidateRuntimeOpts = {
   silent?: boolean
 }
 
+type SidebarCommandRequest =
+  | { type: 'setDirectoriesPage'; page: number }
+  | { type: 'setDirectoryCollapsed'; directoryId: string; collapsed: boolean }
+  | { type: 'setDirectoryRootPage'; directoryId: string; page: number }
+  | { type: 'setSessionPinned'; sessionId: string; pinned: boolean }
+  | { type: 'setSessionExpanded'; sessionId: string; expanded: boolean }
+  | { type: 'setFooterOpen'; kind: SidebarFooterKind; open: boolean }
+  | { type: 'setFooterPage'; kind: SidebarFooterKind; page: number }
+
 type NormalizedSidebarView = {
   directorySidebarById: Record<string, DirectorySidebarView>
   pinnedFooterView: SidebarFooterView
@@ -147,6 +172,18 @@ function readEventType(evt: SseEvent): string {
   return typeof evt.type === 'string' ? evt.type.trim() : ''
 }
 
+function parseNonNegativeInt(raw: JsonValue, fallback = 0): number {
+  const num = Number(raw)
+  if (!Number.isFinite(num)) return Math.max(0, Math.floor(fallback))
+  return Math.max(0, Math.floor(num))
+}
+
+function normalizeFooterKind(raw: JsonValue): SidebarFooterKind | null {
+  const kind = typeof raw === 'string' ? raw.trim().toLowerCase() : ''
+  if (kind === 'pinned' || kind === 'recent' || kind === 'running') return kind
+  return null
+}
+
 function normalizeUiPrefs(input: Partial<ChatSidebarUiPrefs> | null | undefined): ChatSidebarUiPrefs {
   return patchChatSidebarUiPrefs(defaultChatSidebarUiPrefs(), (input || {}) as Partial<ChatSidebarUiPrefs>)
 }
@@ -159,41 +196,6 @@ function isStaleAuthoritativePrefs(
   const local = normalizeUiPrefs(localRaw)
   if (incoming.version !== local.version) return false
   return incoming.updatedAt < local.updatedAt
-}
-
-function sameStringArray(left: string[], right: string[]): boolean {
-  if (left.length !== right.length) return false
-  for (let i = 0; i < left.length; i += 1) {
-    if (left[i] !== right[i]) return false
-  }
-  return true
-}
-
-function samePageMap(left: Record<string, number>, right: Record<string, number>): boolean {
-  const leftKeys = Object.keys(left)
-  const rightKeys = Object.keys(right)
-  if (leftKeys.length !== rightKeys.length) return false
-  for (const key of leftKeys) {
-    if (!Object.prototype.hasOwnProperty.call(right, key)) return false
-    if (left[key] !== right[key]) return false
-  }
-  return true
-}
-
-function uiPrefsBodyEquals(left: ChatSidebarUiPrefs, right: ChatSidebarUiPrefs): boolean {
-  return (
-    sameStringArray(left.collapsedDirectoryIds, right.collapsedDirectoryIds) &&
-    sameStringArray(left.expandedParentSessionIds, right.expandedParentSessionIds) &&
-    sameStringArray(left.pinnedSessionIds, right.pinnedSessionIds) &&
-    left.directoriesPage === right.directoriesPage &&
-    samePageMap(left.sessionRootPageByDirectoryId, right.sessionRootPageByDirectoryId) &&
-    left.pinnedSessionsOpen === right.pinnedSessionsOpen &&
-    left.pinnedSessionsPage === right.pinnedSessionsPage &&
-    left.recentSessionsOpen === right.recentSessionsOpen &&
-    left.recentSessionsPage === right.recentSessionsPage &&
-    left.runningSessionsOpen === right.runningSessionsOpen &&
-    left.runningSessionsPage === right.runningSessionsPage
-  )
 }
 
 function normalizePath(path: string): string {
@@ -453,6 +455,13 @@ function buildSidebarDirectoriesPageUrl(page: number, pageSize: number, query?: 
   return `${SIDEBAR_DIRECTORIES_PAGE_ENDPOINT}?${params.toString()}`
 }
 
+function buildSidebarPatchesUrl(since: number, limit: number): string {
+  const params = new URLSearchParams()
+  params.set('since', String(Math.max(0, Math.floor(Number(since || 0) || 0))))
+  params.set('limit', String(Math.max(1, Math.floor(Number(limit || 0) || 1))))
+  return `${SIDEBAR_PATCHES_ENDPOINT}?${params.toString()}`
+}
+
 function buildDirectorySessionsUrl(directoryId: string, page: number, pageSize: number): string {
   const did = String(directoryId || '').trim()
   if (!did) return ''
@@ -489,6 +498,7 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
   const recentFooterView = ref<SidebarFooterView>({ total: 0, page: 0, pageCount: 1, rows: [] })
   const runningFooterView = ref<SidebarFooterView>({ total: 0, page: 0, pageCount: 1, rows: [] })
   const sidebarStateFocus = ref<SidebarFocusedSession | null>(null)
+  const appliedPatchSeq = ref(0)
   const directoriesPageIndex = ref(0)
   const directoryPageRows = ref<DirectoryEntry[]>([])
   const directoryPageTotal = ref(0)
@@ -499,12 +509,12 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
 
   let persistedStateQuery: PersistedSidebarStateQuery = {}
 
-  let uiPrefsRemotePersistTimer: number | null = null
-  let uiPrefsRemotePersistInFlight = false
-  let uiPrefsRemotePersistQueued = false
   let sidebarStateSyncTimer: number | null = null
   let sidebarStateSyncInFlight = false
   let sidebarStateSyncQueued = false
+  let sidebarPatchSyncTimer: number | null = null
+  let sidebarPatchSyncInFlight = false
+  let sidebarPatchSyncQueued = false
 
   const visibleDirectories = computed<DirectoryEntry[]>(() => {
     return directoryOrder.value
@@ -538,55 +548,102 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     return true
   }
 
-  function scheduleUiPrefsRemotePersist() {
-    if (uiPrefsRemotePersistTimer !== null) return
-    uiPrefsRemotePersistTimer = window.setTimeout(() => {
-      uiPrefsRemotePersistTimer = null
-      void persistUiPrefsToApi()
-    }, UI_PREFS_REMOTE_SAVE_DEBOUNCE_MS)
+  function advancePatchCursor(raw: JsonValue | undefined) {
+    const seq = parseNonNegativeInt(raw as JsonValue, appliedPatchSeq.value)
+    if (seq > appliedPatchSeq.value) {
+      appliedPatchSeq.value = seq
+    }
   }
 
-  async function persistUiPrefsToApi() {
-    if (uiPrefsRemotePersistInFlight) {
-      uiPrefsRemotePersistQueued = true
-      return
+  async function executeSidebarCommand(command: SidebarCommandRequest, opts?: { silent?: boolean }): Promise<boolean> {
+    if (!opts?.silent) {
+      loading.value = true
+      error.value = null
     }
 
-    uiPrefsRemotePersistInFlight = true
-    const payload = normalizeUiPrefs(uiPrefs.value)
     try {
-      const response = await apiJson<ChatSidebarPreferencesWire>(SIDEBAR_PREFERENCES_ENDPOINT, {
-        method: 'PUT',
+      await apiJson<ChatSidebarPreferencesWire>(SIDEBAR_COMMAND_ENDPOINT, {
+        method: 'POST',
         headers: {
           'content-type': 'application/json',
-          'if-match': String(Math.max(0, Math.floor(payload.version || 0))),
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(command),
       })
-      const responseRecord = asRecord(response as JsonValue)
-      const preferencesRaw = (responseRecord?.preferences as Partial<ChatSidebarUiPrefs>) || payload
-      applyAuthoritativeUiPrefs(preferencesRaw)
-    } catch {
-      // Backend remains the single source of truth.
-      // Next successful state sync will reconcile local UI state.
+      await syncSidebarByPatchLog()
+      return true
+    } catch (err) {
+      if (!opts?.silent) {
+        error.value = err instanceof Error ? err.message : String(err)
+      }
+      return false
     } finally {
-      uiPrefsRemotePersistInFlight = false
-      if (uiPrefsRemotePersistQueued) {
-        uiPrefsRemotePersistQueued = false
-        scheduleUiPrefsRemotePersist()
+      if (!opts?.silent) {
+        loading.value = false
       }
     }
   }
 
-  function patchUiPrefs(patch: Partial<ChatSidebarUiPrefs>) {
-    const nextBody = normalizeUiPrefs(patchChatSidebarUiPrefs(uiPrefs.value, patch))
-    if (uiPrefsBodyEquals(nextBody, uiPrefs.value)) return
+  async function commandSetDirectoriesPage(page: number, opts?: { silent?: boolean }): Promise<boolean> {
+    const target = Math.max(0, Math.floor(Number(page || 0)))
+    return executeSidebarCommand({ type: 'setDirectoriesPage', page: target }, opts)
+  }
 
-    uiPrefs.value = normalizeUiPrefs({
-      ...nextBody,
-      updatedAt: Date.now(),
-    })
-    scheduleUiPrefsRemotePersist()
+  async function commandSetDirectoryCollapsed(
+    directoryId: string,
+    collapsed: boolean,
+    opts?: { silent?: boolean },
+  ): Promise<boolean> {
+    const did = String(directoryId || '').trim()
+    if (!did) return false
+    return executeSidebarCommand({ type: 'setDirectoryCollapsed', directoryId: did, collapsed }, opts)
+  }
+
+  async function commandSetDirectoryRootPage(
+    directoryId: string,
+    page: number,
+    opts?: { silent?: boolean },
+  ): Promise<boolean> {
+    const did = String(directoryId || '').trim()
+    if (!did) return false
+    const target = Math.max(0, Math.floor(Number(page || 0)))
+    return executeSidebarCommand({ type: 'setDirectoryRootPage', directoryId: did, page: target }, opts)
+  }
+
+  async function commandSetSessionPinned(
+    sessionId: string,
+    pinned: boolean,
+    opts?: { silent?: boolean },
+  ): Promise<boolean> {
+    const sid = String(sessionId || '').trim()
+    if (!sid) return false
+    return executeSidebarCommand({ type: 'setSessionPinned', sessionId: sid, pinned }, opts)
+  }
+
+  async function commandSetSessionExpanded(
+    sessionId: string,
+    expanded: boolean,
+    opts?: { silent?: boolean },
+  ): Promise<boolean> {
+    const sid = String(sessionId || '').trim()
+    if (!sid) return false
+    return executeSidebarCommand({ type: 'setSessionExpanded', sessionId: sid, expanded }, opts)
+  }
+
+  async function commandSetFooterOpen(
+    kind: SidebarFooterKind,
+    open: boolean,
+    opts?: { silent?: boolean },
+  ): Promise<boolean> {
+    return executeSidebarCommand({ type: 'setFooterOpen', kind, open }, opts)
+  }
+
+  async function commandSetFooterPage(
+    kind: SidebarFooterKind,
+    page: number,
+    opts?: { silent?: boolean },
+  ): Promise<boolean> {
+    const target = Math.max(0, Math.floor(Number(page || 0)))
+    return executeSidebarCommand({ type: 'setFooterPage', kind, page: target }, opts)
   }
 
   function parseRuntimeMap(raw: JsonValue): Record<string, SessionRuntimeState> {
@@ -625,6 +682,7 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     if (!hasOwn(stateRecord, 'preferences')) {
       throw new Error('chat sidebar state payload is missing preferences')
     }
+    advancePatchCursor(stateRecord.patchSeq as JsonValue)
     applyAuthoritativeUiPrefs((stateRecord.preferences as Partial<ChatSidebarUiPrefs>) || undefined)
 
     applyDirectoriesPagePayload(stateRecord.directoriesPage as JsonValue)
@@ -659,6 +717,32 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     applySidebarStatePayload(state as JsonValue)
   }
 
+  async function revalidatePreferencesFromApi(opts?: { silent?: boolean }): Promise<boolean> {
+    if (!opts?.silent) {
+      loading.value = true
+      error.value = null
+    }
+
+    try {
+      const payload = await apiJson<ChatSidebarPreferencesWire>(SIDEBAR_PREFERENCES_ENDPOINT)
+      const payloadRecord = asRecord(payload as JsonValue) || {}
+      advancePatchCursor(payloadRecord.patchSeq as JsonValue)
+      if (hasOwn(payloadRecord, 'preferences')) {
+        applyAuthoritativeUiPrefs(payloadRecord.preferences as Partial<ChatSidebarUiPrefs>)
+      }
+      return true
+    } catch (err) {
+      if (!opts?.silent) {
+        error.value = err instanceof Error ? err.message : String(err)
+      }
+      return false
+    } finally {
+      if (!opts?.silent) {
+        loading.value = false
+      }
+    }
+  }
+
   function scheduleSidebarStateSync(delayMs = 0) {
     if (sidebarStateSyncTimer !== null) {
       window.clearTimeout(sidebarStateSyncTimer)
@@ -690,6 +774,166 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
       if (sidebarStateSyncQueued) {
         sidebarStateSyncQueued = false
         scheduleSidebarStateSync(120)
+      }
+    }
+  }
+
+  function scheduleSidebarPatchSync(delayMs = 0) {
+    if (sidebarPatchSyncTimer !== null) {
+      window.clearTimeout(sidebarPatchSyncTimer)
+      sidebarPatchSyncTimer = null
+    }
+
+    sidebarPatchSyncTimer = window.setTimeout(
+      () => {
+        sidebarPatchSyncTimer = null
+        void syncSidebarByPatchLog()
+      },
+      Math.max(0, Math.floor(delayMs)),
+    )
+  }
+
+  async function applySidebarPatchOps(opsRaw: JsonValue): Promise<boolean> {
+    const opsList = Array.isArray(opsRaw) ? opsRaw : []
+    if (opsList.length === 0) return true
+
+    let invalidateState = false
+    let invalidateDirectoriesPage = false
+    let invalidatePreferences = false
+    const directoryIds = new Set<string>()
+    const footerKinds = new Set<SidebarFooterKind>()
+
+    for (const opRaw of opsList) {
+      const op = asRecord(opRaw)
+      if (!op) continue
+      const type = typeof op?.type === 'string' ? op.type.trim() : ''
+      if (!type) continue
+
+      if (type === 'invalidateState') {
+        invalidateState = true
+        continue
+      }
+      if (type === 'invalidateDirectoriesPage') {
+        invalidateDirectoriesPage = true
+        continue
+      }
+      if (type === 'invalidatePreferences') {
+        invalidatePreferences = true
+        continue
+      }
+      if (type === 'invalidateDirectory') {
+        const did = typeof op.directoryId === 'string' ? op.directoryId.trim() : ''
+        if (did) directoryIds.add(did)
+        continue
+      }
+      if (type === 'invalidateFooter') {
+        const kind = normalizeFooterKind(op.kind as JsonValue)
+        if (kind) footerKinds.add(kind)
+        continue
+      }
+
+      // Unknown op -> safest fallback.
+      invalidateState = true
+    }
+
+    if (invalidateState) {
+      await revalidateFromStateApi()
+      return true
+    }
+
+    const tasks: Array<Promise<boolean>> = []
+    if (invalidatePreferences) {
+      tasks.push(revalidatePreferencesFromApi({ silent: true }))
+    }
+    if (invalidateDirectoriesPage) {
+      const queryNorm =
+        typeof persistedStateQuery.directoryQuery === 'string' ? persistedStateQuery.directoryQuery.trim() : ''
+      tasks.push(
+        revalidateDirectoriesPageFromApi({
+          page: directoriesPageIndex.value,
+          pageSize: SIDEBAR_DIRECTORIES_PAGE_SIZE_DEFAULT,
+          query: queryNorm,
+          silent: true,
+        }),
+      )
+    }
+    for (const directoryId of directoryIds) {
+      tasks.push(revalidateDirectorySessionPageFromApi(directoryId, { silent: true }))
+    }
+    for (const kind of footerKinds) {
+      tasks.push(revalidateFooterFromApi(kind, { pageSize: SIDEBAR_FOOTER_PAGE_SIZE_DEFAULT, silent: true }))
+    }
+
+    if (tasks.length === 0) return true
+    const results = await Promise.all(tasks)
+    return results.every((ok) => ok)
+  }
+
+  async function pullAndApplySidebarPatches(
+    limit = SIDEBAR_PATCH_PULL_LIMIT_DEFAULT,
+  ): Promise<{ ok: boolean; latestSeq: number }> {
+    const response = await apiJson<ChatSidebarPatchesWire>(
+      buildSidebarPatchesUrl(appliedPatchSeq.value, Math.max(1, Math.floor(limit))),
+    )
+    const payload = asRecord(response as JsonValue) || {}
+
+    const needResync = Boolean(payload.needResync)
+    const latestSeq = parseNonNegativeInt(payload.latestSeq as JsonValue, appliedPatchSeq.value)
+    if (needResync) {
+      await revalidateFromStateApi()
+      return { ok: true, latestSeq }
+    }
+
+    const patches = Array.isArray(payload.patches) ? payload.patches : []
+    for (const patchRaw of patches) {
+      const patch = asRecord(patchRaw)
+      const patchSeq = parseNonNegativeInt(patch?.seq as JsonValue, appliedPatchSeq.value)
+      const ok = await applySidebarPatchOps(patch?.ops as JsonValue)
+      if (!ok) return { ok: false, latestSeq }
+      if (patchSeq > appliedPatchSeq.value) {
+        appliedPatchSeq.value = patchSeq
+      }
+    }
+
+    if (latestSeq > appliedPatchSeq.value && patches.length === 0) {
+      appliedPatchSeq.value = latestSeq
+    }
+
+    return { ok: true, latestSeq }
+  }
+
+  async function syncSidebarByPatchLog() {
+    if (sidebarPatchSyncInFlight) {
+      sidebarPatchSyncQueued = true
+      return
+    }
+
+    sidebarPatchSyncInFlight = true
+    try {
+      let guard = 0
+      while (guard < 4) {
+        guard += 1
+        const result = await pullAndApplySidebarPatches()
+        if (!result.ok) {
+          await revalidateFromStateApi()
+          break
+        }
+        if (result.latestSeq <= appliedPatchSeq.value) {
+          break
+        }
+      }
+    } catch {
+      // Fallback to authoritative full state if patch sync fails.
+      try {
+        await revalidateFromStateApi()
+      } catch {
+        // ignore
+      }
+    } finally {
+      sidebarPatchSyncInFlight = false
+      if (sidebarPatchSyncQueued) {
+        sidebarPatchSyncQueued = false
+        scheduleSidebarPatchSync(80)
       }
     }
   }
@@ -746,6 +990,7 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
         throw new Error('chat sidebar directories page payload is missing directoriesPage')
       }
 
+      advancePatchCursor(payloadRecord.patchSeq as JsonValue)
       applyAuthoritativeUiPrefs((payloadRecord.preferences as Partial<ChatSidebarUiPrefs>) || undefined)
       const entries = applyDirectoriesPagePayload(payloadRecord.directoriesPage as JsonValue)
 
@@ -793,14 +1038,23 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     const type = readEventType(evt)
     if (type !== 'chat-sidebar.state') return
 
-    // Backend owns sidebar derivation. Treat SSE as an invalidation signal and
-    // re-fetch authoritative state from /api/chat-sidebar/state.
-    scheduleSidebarStateSync(120)
+    // Legacy invalidation event; prefer incremental patch pull first.
+    scheduleSidebarPatchSync(80)
+  }
+
+  function applyChatSidebarPatchEvent(evt: SseEvent) {
+    const type = readEventType(evt)
+    if (type !== 'chat-sidebar.patch') return
+    scheduleSidebarPatchSync(30)
   }
 
   function applyGlobalEvent(evt: SseEvent) {
     const type = readEventType(evt)
     if (!type) return
+    if (type === 'chat-sidebar.patch') {
+      applyChatSidebarPatchEvent(evt)
+      return
+    }
     if (type === 'chat-sidebar.state') {
       applyChatSidebarStateEvent(evt)
     }
@@ -814,14 +1068,7 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     const section = directorySidebarById.value[did]
     const fallbackMaxPage = Math.max(0, Math.ceil(Math.max(0, Number(section?.sessionCount || 0)) / pageSize) - 1)
     const maxPage = Math.max(0, Math.floor(Number(section?.rootPageCount || fallbackMaxPage + 1)) - 1)
-    const next = Math.max(0, Math.min(maxPage, Math.floor(Number(page || 0))))
-    patchUiPrefs({
-      sessionRootPageByDirectoryId: {
-        ...uiPrefs.value.sessionRootPageByDirectoryId,
-        [did]: next,
-      },
-    })
-    return next
+    return Math.max(0, Math.min(maxPage, Math.floor(Number(page || 0))))
   }
 
   async function revalidateDirectorySessionPageFromApi(
@@ -923,6 +1170,7 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     try {
       const payload = await apiJson<ChatSidebarFooterWire>(buildSidebarFooterUrl(kind, page, pageSize))
       const payloadRecord = asRecord(payload as JsonValue) || {}
+      advancePatchCursor(payloadRecord.patchSeq as JsonValue)
       const responseKind = typeof payloadRecord.kind === 'string' ? payloadRecord.kind.trim().toLowerCase() : ''
       if (responseKind && responseKind !== kind) {
         throw new Error(`chat sidebar footer kind mismatch: expected ${kind}, got ${responseKind}`)
@@ -1110,12 +1358,12 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     sidebarStateSyncInFlight = false
     sidebarStateSyncQueued = false
 
-    if (uiPrefsRemotePersistTimer !== null) {
-      window.clearTimeout(uiPrefsRemotePersistTimer)
-      uiPrefsRemotePersistTimer = null
+    if (sidebarPatchSyncTimer !== null) {
+      window.clearTimeout(sidebarPatchSyncTimer)
+      sidebarPatchSyncTimer = null
     }
-    uiPrefsRemotePersistInFlight = false
-    uiPrefsRemotePersistQueued = false
+    sidebarPatchSyncInFlight = false
+    sidebarPatchSyncQueued = false
 
     persistedStateQuery = {}
 
@@ -1128,6 +1376,7 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     recentFooterView.value = { total: 0, page: 0, pageCount: 1, rows: [] }
     runningFooterView.value = { total: 0, page: 0, pageCount: 1, rows: [] }
     sidebarStateFocus.value = null
+    appliedPatchSeq.value = 0
     directoriesPageIndex.value = 0
     directoryPageRows.value = []
     directoryPageTotal.value = 0
@@ -1155,7 +1404,13 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     revalidateDirectoriesPageFromApi,
     revalidateDirectorySessionPageFromApi,
     revalidateFooterFromApi,
-    patchUiPrefs,
+    commandSetDirectoriesPage,
+    commandSetDirectoryCollapsed,
+    commandSetDirectoryRootPage,
+    commandSetSessionPinned,
+    commandSetSessionExpanded,
+    commandSetFooterOpen,
+    commandSetFooterPage,
     resolveDirectoryForSession,
     statusLabelForSessionId,
     isSessionRuntimeActive,

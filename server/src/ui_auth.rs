@@ -312,6 +312,26 @@ fn get_token_from_authorization(headers: &HeaderMap) -> Option<String> {
     Some(token.to_string())
 }
 
+fn get_token_from_query(req: &axum::http::Request<axum::body::Body>) -> Option<String> {
+    let query = req.uri().query()?;
+    for (k, v) in url::form_urlencoded::parse(query.as_bytes()) {
+        let key = k.trim();
+        if key != "uiAuthToken" && key != "ui_auth_token" {
+            continue;
+        }
+        let token = v.trim();
+        if token.is_empty() {
+            continue;
+        }
+        return Some(token.to_string());
+    }
+    None
+}
+
+fn is_global_ws_path(method: &Method, path: &str) -> bool {
+    method == Method::GET && path == "/api/global/ws"
+}
+
 fn is_session_valid(inner: &UiAuthInner, token: &str) -> bool {
     let now = OffsetDateTime::now_utc();
     let Some(mut entry) = inner.sessions.get_mut(token) else {
@@ -631,6 +651,15 @@ pub(crate) async fn require_ui_auth(
             // Header token (preferred): avoids third-party cookie issues and doesn't
             // require CSRF origin enforcement because the token isn't sent automatically.
             if let Some(token) = get_token_from_authorization(&headers)
+                && is_session_valid(inner, &token)
+            {
+                return next.run(req).await;
+            }
+
+            // WebSocket API in browsers cannot set custom Authorization headers.
+            // Allow a query-token fallback only for the global WS endpoint.
+            if is_global_ws_path(&req_method, &req_path)
+                && let Some(token) = get_token_from_query(&req)
                 && is_session_valid(inner, &token)
             {
                 return next.run(req).await;

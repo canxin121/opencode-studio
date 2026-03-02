@@ -5,7 +5,7 @@ edition = "2024"
 license = "MIT"
 
 [dependencies]
-axum = { version = "0.8.8", features = ["macros"] }
+axum = { version = "0.8.8", features = ["macros", "ws"] }
 axum-extra = { version = "0.12.5", features = ["cookie"] }
 clap = { version = "4.5.54", features = ["derive", "env"] }
 dashmap = "6.1.0"

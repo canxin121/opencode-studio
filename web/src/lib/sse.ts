@@ -234,6 +234,9 @@ export function connectSse(opts: SseClientOptions): SseClient {
     if (evt.type === 'chat-sidebar.state') {
       return `chat-sidebar.state:${dir}`
     }
+    if (evt.type === 'chat-sidebar.patch') {
+      return `chat-sidebar.patch:${dir}`
+    }
     return null
   }
 

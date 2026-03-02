@@ -71,8 +71,6 @@ function toIdSet(input: string[]): Set<string> {
   return new Set(input.map((v) => String(v || '').trim()).filter(Boolean))
 }
 
-let suppressUiPrefsPatch = false
-
 function applyUiPrefsToLocal(prefsRaw: Parameters<typeof normalizeSidebarUiPrefsForUi>[0]) {
   const prefs = normalizeSidebarUiPrefsForUi(prefsRaw)
   pinnedSessionIds.value = prefs.pinnedSessionIds.slice()
@@ -84,7 +82,11 @@ function applyUiPrefsToLocal(prefsRaw: Parameters<typeof normalizeSidebarUiPrefs
   recentSessionsPage.value = prefs.recentSessionsPage
   pinnedSessionsOpen.value = prefs.pinnedSessionsOpen
   pinnedSessionsPage.value = prefs.pinnedSessionsPage
-  directoryPage.value = prefs.directoriesPage
+  const nextPage = Math.max(0, Math.floor(Number(prefs.directoriesPage || 0)))
+  if (directoryPage.value !== nextPage) {
+    skipDirectoryPageWatchOnce = true
+    directoryPage.value = nextPage
+  }
 }
 
 const initialPrefs = normalizeSidebarUiPrefsForUi(directorySessions.uiPrefs)
@@ -95,14 +97,20 @@ const expandedParents = ref<Set<string>>(toIdSet(initialPrefs.expandedParentSess
 const runningSessionsOpen = ref(Boolean(initialPrefs.runningSessionsOpen))
 const runningSessionsPage = ref(initialPrefs.runningSessionsPage)
 const runningSessionsPaging = ref(false)
+const runningSessionsOpenUpdating = ref(false)
 const recentSessionsOpen = ref(Boolean(initialPrefs.recentSessionsOpen))
 const recentSessionsPage = ref(initialPrefs.recentSessionsPage)
 const recentSessionsPaging = ref(false)
+const recentSessionsOpenUpdating = ref(false)
 const pinnedSessionsOpen = ref(Boolean(initialPrefs.pinnedSessionsOpen))
 const pinnedSessionsPage = ref(initialPrefs.pinnedSessionsPage)
 const pinnedSessionsPaging = ref(false)
+const pinnedSessionsOpenUpdating = ref(false)
 const directoryPage = ref(initialPrefs.directoriesPage)
 const directoryPaging = ref(false)
+const pinCommandPendingIds = ref<Set<string>>(new Set())
+const collapseCommandPendingIds = ref<Set<string>>(new Set())
+const expandCommandPendingIds = ref<Set<string>>(new Set())
 
 // Directory entry type lives in '@/features/sessions/model/types'.
 
@@ -111,41 +119,15 @@ const directories = computed<DirectoryEntry[]>(() => directorySessions.visibleDi
 // Paging (sidebar can contain many directories/sessions).
 const DIRECTORIES_PAGE_SIZE = 15
 const SESSION_ROOTS_PAGE_SIZE = 10
-const SIDEBAR_FOOTER_PAGE_SIZE = 10
 
 // Search/filter (user-driven only).
 const sidebarQuery = ref('')
 const sidebarQueryNorm = computed(() => sidebarQuery.value.trim().toLowerCase())
 
 watch(
-  () => ({
-    collapsedDirectoryIds: Array.from(collapsedDirectories.value),
-    expandedParentSessionIds: Array.from(expandedParents.value),
-    pinnedSessionIds: pinnedSessionIds.value.slice(),
-    directoriesPage: directoryPage.value,
-    pinnedSessionsOpen: pinnedSessionsOpen.value,
-    pinnedSessionsPage: pinnedSessionsPage.value,
-    recentSessionsOpen: recentSessionsOpen.value,
-    recentSessionsPage: recentSessionsPage.value,
-    runningSessionsOpen: runningSessionsOpen.value,
-    runningSessionsPage: runningSessionsPage.value,
-  }),
-  (next) => {
-    if (suppressUiPrefsPatch) return
-    directorySessions.patchUiPrefs(next)
-  },
-  { deep: true, immediate: true },
-)
-
-watch(
   () => directorySessions.uiPrefs,
   (next) => {
-    suppressUiPrefsPatch = true
-    try {
-      applyUiPrefsToLocal(next)
-    } finally {
-      suppressUiPrefsPatch = false
-    }
+    applyUiPrefsToLocal(next)
   },
   { deep: true },
 )
@@ -288,15 +270,8 @@ async function requestDirectoryPage(nextPage: number) {
 
   directoryPaging.value = true
   try {
-    skipDirectoryPageWatchOnce = true
-    directoryPage.value = target
-    const partialOk = await directorySessions.revalidateDirectoriesPageFromApi({
-      page: target,
-      pageSize: DIRECTORIES_PAGE_SIZE,
-      query: sidebarQueryNorm.value,
-      silent: true,
-    })
-    if (!partialOk) {
+    const ok = await directorySessions.commandSetDirectoriesPage(target, { silent: true })
+    if (!ok) {
       await revalidateSidebarState({ directoriesPage: target, query: sidebarQueryNorm.value }, { silent: true })
     }
   } finally {
@@ -697,24 +672,52 @@ watch(
 
 // Persisted UI state is owned by directorySessionStore.uiPrefs.
 
-function togglePin(id: string) {
-  const idx = pinnedSessionIds.value.indexOf(id)
-  if (idx >= 0) pinnedSessionIds.value.splice(idx, 1)
-  else pinnedSessionIds.value.unshift(id)
+async function togglePin(id: string) {
+  const sid = String(id || '').trim()
+  if (!sid) return
+  if (pinCommandPendingIds.value.has(sid)) return
+
+  const nextPinned = !pinnedSessionIds.value.includes(sid)
+  const pending = new Set(pinCommandPendingIds.value)
+  pending.add(sid)
+  pinCommandPendingIds.value = pending
+  try {
+    const ok = await directorySessions.commandSetSessionPinned(sid, nextPinned, { silent: true })
+    if (!ok) {
+      await revalidateSidebarState(undefined, { silent: true })
+    }
+  } finally {
+    const next = new Set(pinCommandPendingIds.value)
+    next.delete(sid)
+    pinCommandPendingIds.value = next
+  }
 }
 
 const sessionsLoading = computed(() => {
   return chat.sessionsLoading || directoryPageLoading.value
 })
 
-function toggleDirectoryCollapse(directoryId: string, _directoryPath: string) {
+async function toggleDirectoryCollapse(directoryId: string, _directoryPath: string) {
   void _directoryPath
   dismissDeepLinkFocus()
   const pid = (directoryId || '').trim()
-  const next = new Set(collapsedDirectories.value)
-  if (next.has(pid)) next.delete(pid)
-  else next.add(pid)
-  collapsedDirectories.value = next
+  if (!pid) return
+  if (collapseCommandPendingIds.value.has(pid)) return
+
+  const nextCollapsed = !collapsedDirectories.value.has(pid)
+  const pending = new Set(collapseCommandPendingIds.value)
+  pending.add(pid)
+  collapseCommandPendingIds.value = pending
+  try {
+    const ok = await directorySessions.commandSetDirectoryCollapsed(pid, nextCollapsed, { silent: true })
+    if (!ok) {
+      await revalidateSidebarState(undefined, { silent: true })
+    }
+  } finally {
+    const next = new Set(collapseCommandPendingIds.value)
+    next.delete(pid)
+    collapseCommandPendingIds.value = next
+  }
 }
 
 function hasAttention(sessionId: string): 'permission' | 'question' | null {
@@ -805,6 +808,54 @@ watch(
   },
 )
 
+async function requestPinnedSessionsOpen(nextOpen: boolean) {
+  if (pinnedSessionsOpenUpdating.value) return
+  const target = Boolean(nextOpen)
+  if (target === pinnedSessionsOpen.value) return
+
+  pinnedSessionsOpenUpdating.value = true
+  try {
+    const ok = await directorySessions.commandSetFooterOpen('pinned', target, { silent: true })
+    if (!ok) {
+      await revalidateSidebarState(undefined, { silent: true })
+    }
+  } finally {
+    pinnedSessionsOpenUpdating.value = false
+  }
+}
+
+async function requestRecentSessionsOpen(nextOpen: boolean) {
+  if (recentSessionsOpenUpdating.value) return
+  const target = Boolean(nextOpen)
+  if (target === recentSessionsOpen.value) return
+
+  recentSessionsOpenUpdating.value = true
+  try {
+    const ok = await directorySessions.commandSetFooterOpen('recent', target, { silent: true })
+    if (!ok) {
+      await revalidateSidebarState(undefined, { silent: true })
+    }
+  } finally {
+    recentSessionsOpenUpdating.value = false
+  }
+}
+
+async function requestRunningSessionsOpen(nextOpen: boolean) {
+  if (runningSessionsOpenUpdating.value) return
+  const target = Boolean(nextOpen)
+  if (target === runningSessionsOpen.value) return
+
+  runningSessionsOpenUpdating.value = true
+  try {
+    const ok = await directorySessions.commandSetFooterOpen('running', target, { silent: true })
+    if (!ok) {
+      await revalidateSidebarState(undefined, { silent: true })
+    }
+  } finally {
+    runningSessionsOpenUpdating.value = false
+  }
+}
+
 async function requestPinnedSessionsPage(nextPage: number) {
   if (pinnedSessionsPaging.value) return
   const maxPage = Math.max(0, pinnedSessionsPageCount.value - 1)
@@ -813,13 +864,8 @@ async function requestPinnedSessionsPage(nextPage: number) {
 
   pinnedSessionsPaging.value = true
   try {
-    pinnedSessionsPage.value = target
-    const partialOk = await directorySessions.revalidateFooterFromApi('pinned', {
-      page: target,
-      pageSize: SIDEBAR_FOOTER_PAGE_SIZE,
-      silent: true,
-    })
-    if (!partialOk) {
+    const ok = await directorySessions.commandSetFooterPage('pinned', target, { silent: true })
+    if (!ok) {
       await revalidateSidebarState(
         {
           directoriesPage: directoryPage.value,
@@ -842,13 +888,8 @@ async function requestRecentSessionsPage(nextPage: number) {
 
   recentSessionsPaging.value = true
   try {
-    recentSessionsPage.value = target
-    const partialOk = await directorySessions.revalidateFooterFromApi('recent', {
-      page: target,
-      pageSize: SIDEBAR_FOOTER_PAGE_SIZE,
-      silent: true,
-    })
-    if (!partialOk) {
+    const ok = await directorySessions.commandSetFooterPage('recent', target, { silent: true })
+    if (!ok) {
       await revalidateSidebarState(
         {
           directoriesPage: directoryPage.value,
@@ -871,13 +912,8 @@ async function requestRunningSessionsPage(nextPage: number) {
 
   runningSessionsPaging.value = true
   try {
-    runningSessionsPage.value = target
-    const partialOk = await directorySessions.revalidateFooterFromApi('running', {
-      page: target,
-      pageSize: SIDEBAR_FOOTER_PAGE_SIZE,
-      silent: true,
-    })
-    if (!partialOk) {
+    const ok = await directorySessions.commandSetFooterPage('running', target, { silent: true })
+    if (!ok) {
       await revalidateSidebarState(
         {
           directoriesPage: directoryPage.value,
@@ -1003,13 +1039,9 @@ async function ensureDirectorySidebarLoaded(
     typeof opts?.page === 'number' && Number.isFinite(opts.page)
       ? Math.max(0, Math.floor(opts.page))
       : sessionRootPage(pid)
-  directorySessions.setSessionRootPage(pid, targetPage, SESSION_ROOTS_PAGE_SIZE)
-  const partialOk = await directorySessions.revalidateDirectorySessionPageFromApi(pid, {
-    page: targetPage,
-    pageSize: SESSION_ROOTS_PAGE_SIZE,
-    silent: true,
-  })
-  if (!partialOk) {
+  const boundedTargetPage = directorySessions.setSessionRootPage(pid, targetPage, SESSION_ROOTS_PAGE_SIZE)
+  const commandOk = await directorySessions.commandSetDirectoryRootPage(pid, boundedTargetPage, { silent: true })
+  if (!commandOk) {
     const ok = await revalidateSidebarState(undefined, { silent: true })
     if (!ok) return null
   }
@@ -1018,13 +1050,6 @@ async function ensureDirectorySidebarLoaded(
     directoryPath: root,
   }
 }
-
-watch(
-  () => pinnedSessionIds.value.join('|'),
-  () => {
-    scheduleSidebarStateFetch(120)
-  },
-)
 
 onBeforeUnmount(() => {
   if (sidebarStateFetchTimer !== null) {
@@ -1105,11 +1130,6 @@ async function deleteSession(sessionId: string) {
 
   await chat.deleteSession(sid, { directory })
 
-  // If the deleted session was pinned, drop it from the pin list immediately.
-  if (pinnedSessionIds.value.includes(sid)) {
-    pinnedSessionIds.value = pinnedSessionIds.value.filter((id) => String(id || '').trim() !== sid)
-  }
-
   void revalidateSidebarState(undefined, { silent: true })
 }
 
@@ -1181,30 +1201,46 @@ async function searchSessionHits(query: string, limit: number, signal?: AbortSig
 
 // Tree helpers extracted to '@/features/sessions/model/tree'.
 
-function toggleExpandedParent(sessionId: string) {
+async function toggleExpandedParent(sessionId: string) {
   const id = (sessionId || '').trim()
   if (!id) return
-  const next = new Set(expandedParents.value)
-  if (next.has(id)) next.delete(id)
-  else next.add(id)
-  expandedParents.value = next
+  if (expandCommandPendingIds.value.has(id)) return
+
+  const nextExpanded = !expandedParents.value.has(id)
+  const pending = new Set(expandCommandPendingIds.value)
+  pending.add(id)
+  expandCommandPendingIds.value = pending
+  try {
+    const ok = await directorySessions.commandSetSessionExpanded(id, nextExpanded, { silent: true })
+    if (!ok) {
+      await revalidateSidebarState(undefined, { silent: true })
+    }
+  } finally {
+    const next = new Set(expandCommandPendingIds.value)
+    next.delete(id)
+    expandCommandPendingIds.value = next
+  }
 }
 
 function ensureAncestorsExpanded(parentById: Record<string, string | null>, sessionId: string) {
   const sid = (sessionId || '').trim()
   if (!sid) return
 
-  const next = new Set(expandedParents.value)
+  const toExpand: string[] = []
   const seen = new Set<string>()
   let cur: string | null = sid
   while (cur && !seen.has(cur)) {
     seen.add(cur)
     const parent: string | null = parentById[cur] || null
     if (!parent) break
-    next.add(parent)
+    if (!expandedParents.value.has(parent)) {
+      toExpand.push(parent)
+    }
     cur = parent
   }
-  expandedParents.value = next
+  for (const parentId of toExpand) {
+    void directorySessions.commandSetSessionExpanded(parentId, true, { silent: true })
+  }
 }
 
 function buildBackendFlattenedTree(section: DirectorySidebarView | null | undefined): FlattenedDirectoryTree | null {
@@ -1282,17 +1318,11 @@ async function setSessionRootPage(directoryId: string, page: number) {
   const pid = (directoryId || '').trim()
   if (!pid) return
   const current = sessionRootPage(pid)
-  const maxPage = Math.max(0, sessionRootPageCount(pid) - 1)
-  const next = Math.max(0, Math.min(maxPage, Math.floor(page || 0)))
+  const next = directorySessions.setSessionRootPage(pid, page, SESSION_ROOTS_PAGE_SIZE)
   if (current === next) return
 
-  directorySessions.setSessionRootPage(pid, next, SESSION_ROOTS_PAGE_SIZE)
-  const partialOk = await directorySessions.revalidateDirectorySessionPageFromApi(pid, {
-    page: next,
-    pageSize: SESSION_ROOTS_PAGE_SIZE,
-    silent: true,
-  })
-  if (!partialOk) {
+  const ok = await directorySessions.commandSetDirectoryRootPage(pid, next, { silent: true })
+  if (!ok) {
     await revalidateSidebarState(undefined, { silent: true })
   }
 }
@@ -1461,7 +1491,7 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
         />
 
         <PinnedSessionsFooter
-          v-model:open="pinnedSessionsOpen"
+          :open="pinnedSessionsOpen"
           :page="pinnedSessionsPage"
           :paging="pinnedSessionsPaging"
           :pinnedSessionRows="pagedPinnedSessionRows"
@@ -1489,13 +1519,14 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
           :updateRenameDraft="updateRenameDraft"
           :saveRename="saveRenameFromSidebar"
           :cancelRename="cancelRenameFromSidebar"
+          @update:open="(v) => void requestPinnedSessionsOpen(v)"
           @update:page="(v) => void requestPinnedSessionsPage(v)"
           @open-session="openPinnedSession"
           @toggle-thread="toggleExpandedParent"
         />
 
         <RecentSessionsFooter
-          v-model:open="recentSessionsOpen"
+          :open="recentSessionsOpen"
           :page="recentSessionsPage"
           :paging="recentSessionsPaging"
           :recentSessionRows="pagedRecentSessionRows"
@@ -1523,13 +1554,14 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
           :updateRenameDraft="updateRenameDraft"
           :saveRename="saveRenameFromSidebar"
           :cancelRename="cancelRenameFromSidebar"
+          @update:open="(v) => void requestRecentSessionsOpen(v)"
           @update:page="(v) => void requestRecentSessionsPage(v)"
           @open-session="openRecentSession"
           @toggle-thread="toggleExpandedParent"
         />
 
         <RunningSessionsFooter
-          v-model:open="runningSessionsOpen"
+          :open="runningSessionsOpen"
           :page="runningSessionsPage"
           :paging="runningSessionsPaging"
           :runningSessionRows="pagedRunningSessionRows"
@@ -1558,6 +1590,7 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
           :updateRenameDraft="updateRenameDraft"
           :saveRename="saveRenameFromSidebar"
           :cancelRename="cancelRenameFromSidebar"
+          @update:open="(v) => void requestRunningSessionsOpen(v)"
           @update:page="(v) => void requestRunningSessionsPage(v)"
           @toggle-thread="toggleExpandedParent"
         />

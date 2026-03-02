@@ -58,6 +58,9 @@ struct SnapshotBundle {
 struct SnapshotDelta {
     changed_count: usize,
     removed_session_ids: Vec<String>,
+    changed_directory_ids: Vec<String>,
+    changed_session_ids: Vec<String>,
+    changed_runtime_session_ids: Vec<String>,
 }
 
 struct DirectorySessionsEventHub {
@@ -458,23 +461,25 @@ async fn build_snapshot_bundle_from_entries(
     }
 }
 
-fn map_change_count(prev: &BTreeMap<String, Value>, next: &BTreeMap<String, Value>) -> usize {
-    let mut changed_count = 0usize;
+fn changed_map_keys(prev: &BTreeMap<String, Value>, next: &BTreeMap<String, Value>) -> Vec<String> {
+    let mut changed = HashSet::<String>::new();
 
     for (id, value) in next {
         let entry_changed = prev.get(id).map(|old| old != value).unwrap_or(true);
         if entry_changed {
-            changed_count += 1;
+            changed.insert(id.clone());
         }
     }
 
     for id in prev.keys() {
         if !next.contains_key(id) {
-            changed_count += 1;
+            changed.insert(id.clone());
         }
     }
 
-    changed_count
+    let mut out = changed.into_iter().collect::<Vec<_>>();
+    out.sort();
+    out
 }
 
 fn snapshot_full_entry_count(snapshot: &SidebarSnapshot) -> usize {
@@ -482,9 +487,11 @@ fn snapshot_full_entry_count(snapshot: &SidebarSnapshot) -> usize {
 }
 
 fn diff_snapshots(prev: &SidebarSnapshot, next: &SidebarSnapshot) -> SnapshotDelta {
-    let changed_count = map_change_count(&prev.directories, &next.directories)
-        + map_change_count(&prev.sessions, &next.sessions)
-        + map_change_count(&prev.runtime, &next.runtime);
+    let changed_directory_ids = changed_map_keys(&prev.directories, &next.directories);
+    let changed_session_ids = changed_map_keys(&prev.sessions, &next.sessions);
+    let changed_runtime_session_ids = changed_map_keys(&prev.runtime, &next.runtime);
+    let changed_count =
+        changed_directory_ids.len() + changed_session_ids.len() + changed_runtime_session_ids.len();
     let removed_session_ids = prev
         .sessions
         .keys()
@@ -495,7 +502,120 @@ fn diff_snapshots(prev: &SidebarSnapshot, next: &SidebarSnapshot) -> SnapshotDel
     SnapshotDelta {
         changed_count,
         removed_session_ids,
+        changed_directory_ids,
+        changed_session_ids,
+        changed_runtime_session_ids,
     }
+}
+
+fn directory_id_by_path_from_snapshot(snapshot: &SidebarSnapshot) -> BTreeMap<String, String> {
+    let mut out = BTreeMap::<String, String>::new();
+    for value in snapshot.directories.values() {
+        let Some(id) = value
+            .get("id")
+            .and_then(|v| v.as_str())
+            .map(|v| v.trim().to_string())
+            .filter(|v| !v.is_empty())
+        else {
+            continue;
+        };
+        let Some(path_key) = value
+            .get("path")
+            .and_then(|v| v.as_str())
+            .and_then(crate::path_utils::normalize_directory_for_match)
+        else {
+            continue;
+        };
+        out.insert(path_key, id);
+    }
+    out
+}
+
+fn session_directory_id(
+    session: &Value,
+    directory_id_by_path: &BTreeMap<String, String>,
+) -> Option<String> {
+    let path_key = session
+        .get("directory")
+        .and_then(|v| v.as_str())
+        .and_then(crate::path_utils::normalize_directory_for_match)?;
+    directory_id_by_path.get(&path_key).cloned()
+}
+
+fn chat_sidebar_patch_ops_for_delta(
+    prev: &SidebarSnapshot,
+    next: &SidebarSnapshot,
+    delta: &SnapshotDelta,
+) -> Vec<crate::chat_sidebar::ChatSidebarPatchOp> {
+    let mut ops = Vec::<crate::chat_sidebar::ChatSidebarPatchOp>::new();
+
+    if !delta.changed_directory_ids.is_empty() {
+        ops.push(crate::chat_sidebar::ChatSidebarPatchOp::DirectoriesPage);
+    }
+
+    let mut directory_id_by_path = directory_id_by_path_from_snapshot(next);
+    if directory_id_by_path.is_empty() {
+        directory_id_by_path = directory_id_by_path_from_snapshot(prev);
+    }
+
+    let mut affected_directory_ids = delta
+        .changed_directory_ids
+        .iter()
+        .map(|id| id.trim().to_string())
+        .filter(|id| !id.is_empty())
+        .collect::<HashSet<_>>();
+
+    for session_id in delta
+        .changed_session_ids
+        .iter()
+        .chain(delta.removed_session_ids.iter())
+    {
+        let sid = session_id.trim();
+        if sid.is_empty() {
+            continue;
+        }
+        let session = next.sessions.get(sid).or_else(|| prev.sessions.get(sid));
+        let Some(session) = session else {
+            continue;
+        };
+        if let Some(directory_id) = session_directory_id(session, &directory_id_by_path) {
+            affected_directory_ids.insert(directory_id);
+        }
+    }
+
+    for session_id in &delta.changed_runtime_session_ids {
+        let sid = session_id.trim();
+        if sid.is_empty() {
+            continue;
+        }
+        let session = next.sessions.get(sid).or_else(|| prev.sessions.get(sid));
+        let Some(session) = session else {
+            continue;
+        };
+        if let Some(directory_id) = session_directory_id(session, &directory_id_by_path) {
+            affected_directory_ids.insert(directory_id);
+        }
+    }
+
+    let mut sorted_directory_ids = affected_directory_ids.into_iter().collect::<Vec<_>>();
+    sorted_directory_ids.sort();
+    for directory_id in sorted_directory_ids {
+        ops.push(crate::chat_sidebar::ChatSidebarPatchOp::Directory { directory_id });
+    }
+
+    if !delta.changed_session_ids.is_empty() || !delta.changed_runtime_session_ids.is_empty() {
+        ops.push(crate::chat_sidebar::ChatSidebarPatchOp::Footer {
+            kind: "pinned".to_string(),
+        });
+        ops.push(crate::chat_sidebar::ChatSidebarPatchOp::Footer {
+            kind: "recent".to_string(),
+        });
+        ops.push(crate::chat_sidebar::ChatSidebarPatchOp::Footer {
+            kind: "running".to_string(),
+        });
+    }
+
+    ops
 }
 
 fn start_directory_sessions_poller_if_needed(state: Arc<crate::AppState>) {
@@ -614,9 +734,18 @@ fn start_directory_sessions_poller_if_needed(state: Arc<crate::AppState>) {
                 SnapshotDelta {
                     changed_count: snapshot_full_entry_count(&next_snapshot),
                     removed_session_ids: Vec::new(),
+                    changed_directory_ids: next_snapshot.directories.keys().cloned().collect(),
+                    changed_session_ids: next_snapshot.sessions.keys().cloned().collect(),
+                    changed_runtime_session_ids: next_snapshot.runtime.keys().cloned().collect(),
                 }
             } else {
                 diff_snapshots(&prev, &next_snapshot)
+            };
+
+            let patch_ops = if delta.changed_count > 0 {
+                chat_sidebar_patch_ops_for_delta(&prev, &next_snapshot, &delta)
+            } else {
+                Vec::new()
             };
             prev = next_snapshot;
 
@@ -629,6 +758,7 @@ fn start_directory_sessions_poller_if_needed(state: Arc<crate::AppState>) {
             let changed_count = delta.changed_count;
             if changed_count > 0 {
                 EVENT_HUB.bump_seq();
+                let _ = crate::chat_sidebar::publish_chat_sidebar_patch_event(patch_ops);
             }
 
             if changed_count > 0 && crate::global_sse_hub::downstream_client_count() > 0 {

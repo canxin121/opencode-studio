@@ -5,12 +5,13 @@ use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration;
 
 use axum::{
-    extract::State,
+    extract::{Query, State, ws::Message, ws::WebSocket, ws::WebSocketUpgrade},
     http::{HeaderMap, StatusCode},
-    response::Response,
+    response::{IntoResponse, Response},
 };
 use bytes::{BufMut as _, Bytes, BytesMut};
 use futures_util::StreamExt;
+use serde::Deserialize;
 use tokio::sync::broadcast;
 
 use crate::ApiResult;
@@ -22,6 +23,7 @@ const HUB_CHANNEL_CAPACITY: usize = 4096;
 
 const DOWNSTREAM_RECV_TIMEOUT: Duration = Duration::from_secs(25);
 const DOWNSTREAM_HEARTBEAT_FRAME: &[u8] = b"event: heartbeat\ndata: {}\n\n";
+const DOWNSTREAM_WS_PING_INTERVAL: Duration = Duration::from_secs(25);
 
 const UPSTREAM_RETRY_BASE_DELAY: Duration = Duration::from_millis(900);
 const UPSTREAM_RETRY_MAX_DELAY: Duration = Duration::from_secs(30);
@@ -31,8 +33,15 @@ const UPSTREAM_SETTINGS_REFRESH: Duration = Duration::from_millis(900);
 struct HubFrame {
     seq: u64,
     bytes: Bytes,
+    payload_json: Arc<str>,
     /// When true, downstream SSE handlers should close the connection after yielding.
     close_after: bool,
+}
+
+impl HubFrame {
+    fn storage_bytes(&self) -> usize {
+        self.bytes.len().saturating_add(self.payload_json.len())
+    }
 }
 
 #[derive(Debug)]
@@ -133,9 +142,10 @@ impl GlobalSseHub {
         let frame = HubFrame {
             seq,
             bytes,
+            payload_json: Arc::<str>::from(payload_json),
             close_after,
         };
-        let frame_len = frame.bytes.len();
+        let frame_len = frame.storage_bytes();
 
         if store {
             if frame_len <= HUB_REPLAY_MAX_BYTES {
@@ -146,7 +156,7 @@ impl GlobalSseHub {
                 // Evict from the front to stay within the byte budget.
                 while buf.bytes > HUB_REPLAY_MAX_BYTES && !buf.items.is_empty() {
                     if let Some(front) = buf.items.pop_front() {
-                        buf.bytes = buf.bytes.saturating_sub(front.bytes.len());
+                        buf.bytes = buf.bytes.saturating_sub(front.storage_bytes());
                     }
                 }
             } else {
@@ -219,8 +229,12 @@ fn heartbeat_frame() -> Bytes {
     Bytes::from_static(DOWNSTREAM_HEARTBEAT_FRAME)
 }
 
-fn replay_gap_frame(seq: u64, requested_last_event_id: u64, seq_at_subscribe: u64) -> Bytes {
-    let payload = serde_json::json!({
+fn replay_gap_payload(
+    seq: u64,
+    requested_last_event_id: u64,
+    seq_at_subscribe: u64,
+) -> serde_json::Value {
+    serde_json::json!({
         "type": "opencode-studio:replay-gap",
         "timestamp": time::OffsetDateTime::now_utc().unix_timestamp_nanos() / 1_000_000,
         "properties": {
@@ -229,8 +243,24 @@ fn replay_gap_frame(seq: u64, requested_last_event_id: u64, seq_at_subscribe: u6
             "seqAtSubscribe": seq_at_subscribe,
             "gapSeq": seq,
         }
-    });
-    let encoded = serde_json::to_string(&payload).unwrap_or_else(|_| "{}".to_string());
+    })
+}
+
+fn replay_gap_payload_json(
+    seq: u64,
+    requested_last_event_id: u64,
+    seq_at_subscribe: u64,
+) -> String {
+    serde_json::to_string(&replay_gap_payload(
+        seq,
+        requested_last_event_id,
+        seq_at_subscribe,
+    ))
+    .unwrap_or_else(|_| "{}".to_string())
+}
+
+fn replay_gap_frame(seq: u64, requested_last_event_id: u64, seq_at_subscribe: u64) -> Bytes {
+    let encoded = replay_gap_payload_json(seq, requested_last_event_id, seq_at_subscribe);
     // Intentionally emit replay-gap without an SSE id.
     // If we reused an old/new id here, the client-side cursor dedupe path might
     // drop this control frame before app-level reconciliation handlers run.
@@ -240,6 +270,30 @@ fn replay_gap_frame(seq: u64, requested_last_event_id: u64, seq_at_subscribe: u6
     out.put_slice(encoded.as_bytes());
     out.put_slice(b"\n\n");
     out.freeze()
+}
+
+fn ws_envelope_text(seq: u64, payload_json: &str) -> String {
+    let mut out = String::with_capacity(32 + payload_json.len());
+    out.push_str("{\"seq\":");
+    out.push_str(&seq.to_string());
+    out.push_str(",\"payload\":");
+    out.push_str(payload_json);
+    out.push('}');
+    out
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct GlobalEventWsQuery {
+    pub cursor: Option<u64>,
+    pub last_event_id: Option<u64>,
+}
+
+fn parse_ws_last_event_id(query: &GlobalEventWsQuery, headers: &HeaderMap) -> Option<u64> {
+    query
+        .cursor
+        .or(query.last_event_id)
+        .or_else(|| parse_last_event_id(headers))
 }
 
 fn parse_last_event_id(headers: &HeaderMap) -> Option<u64> {
@@ -796,6 +850,192 @@ pub(crate) async fn global_event_sse(
     );
     out_headers.insert("X-Accel-Buffering", "no".parse().unwrap());
     Ok(out)
+}
+
+async fn run_global_event_ws_client(
+    mut socket: WebSocket,
+    client_id: u64,
+    last_event_id: u64,
+    replay: Vec<HubFrame>,
+    forced_replay_gap_json: Option<(u64, String)>,
+    mut rx: broadcast::Receiver<HubFrame>,
+) {
+    let mut last_emitted_seq = last_event_id;
+
+    if let Some((gap_seq, gap_json)) = forced_replay_gap_json {
+        if gap_seq > last_emitted_seq {
+            last_emitted_seq = gap_seq;
+        }
+        let envelope = ws_envelope_text(gap_seq, &gap_json);
+        if socket.send(Message::Text(envelope.into())).await.is_err() {
+            return;
+        }
+    }
+
+    for evt in replay {
+        if evt.seq <= last_emitted_seq {
+            continue;
+        }
+        last_emitted_seq = evt.seq;
+        let envelope = ws_envelope_text(evt.seq, &evt.payload_json);
+        if socket.send(Message::Text(envelope.into())).await.is_err() {
+            return;
+        }
+    }
+
+    let mut ping_ticker = tokio::time::interval(DOWNSTREAM_WS_PING_INTERVAL);
+    loop {
+        tokio::select! {
+            _ = ping_ticker.tick() => {
+                if socket.send(Message::Ping(Bytes::new())).await.is_err() {
+                    break;
+                }
+            }
+            incoming = socket.next() => {
+                match incoming {
+                    Some(Ok(Message::Close(_))) | None => {
+                        tracing::debug!(
+                            target: "opencode_studio.global_sse_hub.downstream",
+                            client_id,
+                            last_emitted_seq,
+                            disconnect_reason = "ws_client_closed",
+                            "Global WS client disconnected"
+                        );
+                        break;
+                    }
+                    Some(Ok(Message::Ping(payload))) => {
+                        if socket.send(Message::Pong(payload)).await.is_err() {
+                            break;
+                        }
+                    }
+                    Some(Ok(Message::Pong(_))) => {}
+                    Some(Ok(Message::Text(_))) | Some(Ok(Message::Binary(_))) => {}
+                    Some(Err(_)) => {
+                        tracing::debug!(
+                            target: "opencode_studio.global_sse_hub.downstream",
+                            client_id,
+                            last_emitted_seq,
+                            disconnect_reason = "ws_receive_error",
+                            "Global WS client disconnected"
+                        );
+                        break;
+                    }
+                }
+            }
+            recv = rx.recv() => {
+                match recv {
+                    Ok(evt) => {
+                        if evt.seq <= last_emitted_seq {
+                            continue;
+                        }
+                        last_emitted_seq = evt.seq;
+                        let envelope = ws_envelope_text(evt.seq, &evt.payload_json);
+                        if socket.send(Message::Text(envelope.into())).await.is_err() {
+                            break;
+                        }
+                        if evt.close_after {
+                            tracing::debug!(
+                                target: "opencode_studio.global_sse_hub.downstream",
+                                client_id,
+                                disconnect_reason = "close_after",
+                                last_emitted_seq,
+                                "Global WS client disconnected"
+                            );
+                            break;
+                        }
+                    }
+                    Err(broadcast::error::RecvError::Lagged(_)) => {
+                        let seq_now = GLOBAL_HUB.latest_seq();
+                        let gap_seq = seq_now.max(last_emitted_seq.saturating_add(1));
+                        let gap_json = replay_gap_payload_json(gap_seq, last_emitted_seq, seq_now);
+                        let envelope = ws_envelope_text(gap_seq, &gap_json);
+                        let _ = socket.send(Message::Text(envelope.into())).await;
+                        tracing::warn!(
+                            target: "opencode_studio.global_sse_hub.downstream",
+                            client_id,
+                            last_emitted_seq,
+                            gap_seq,
+                            "Global WS client lagged; closing socket"
+                        );
+                        break;
+                    }
+                    Err(broadcast::error::RecvError::Closed) => {
+                        tracing::debug!(
+                            target: "opencode_studio.global_sse_hub.downstream",
+                            client_id,
+                            last_emitted_seq,
+                            disconnect_reason = "closed",
+                            "Global WS client disconnected"
+                        );
+                        break;
+                    }
+                }
+            }
+        }
+    }
+}
+
+pub(crate) async fn global_event_ws(
+    State(state): State<Arc<crate::AppState>>,
+    headers: HeaderMap,
+    Query(query): Query<GlobalEventWsQuery>,
+    ws: WebSocketUpgrade,
+) -> ApiResult<Response> {
+    start_global_sse_hub_if_needed(state.clone());
+
+    let client_id = GLOBAL_HUB.allocate_client_id();
+    let requested_last_event_id = parse_ws_last_event_id(&query, &headers).unwrap_or(0);
+    let rx = GLOBAL_HUB.tx.subscribe();
+    let seq_at_subscribe = GLOBAL_HUB.latest_seq();
+    let last_event_id = requested_last_event_id.min(seq_at_subscribe);
+    let cursor_ahead = requested_last_event_id > seq_at_subscribe;
+    let replay_gap_seq = replay_gap_seq_for_subscriber(
+        &GLOBAL_HUB,
+        requested_last_event_id,
+        last_event_id,
+        seq_at_subscribe,
+    );
+
+    let forced_replay_gap_json = replay_gap_seq.map(|seq| {
+        (
+            seq,
+            replay_gap_payload_json(seq, requested_last_event_id, seq_at_subscribe),
+        )
+    });
+    let replay = if forced_replay_gap_json.is_some() {
+        Vec::new()
+    } else {
+        GLOBAL_HUB.replay_since_until(last_event_id, seq_at_subscribe)
+    };
+
+    tracing::debug!(
+        target: "opencode_studio.global_sse_hub.downstream",
+        client_id,
+        requested_last_event_id,
+        last_event_id,
+        seq_at_subscribe,
+        replay_len = replay.len(),
+        replay_gap_forced = forced_replay_gap_json.is_some(),
+        replay_gap_seq = replay_gap_seq.unwrap_or(0),
+        cursor_ahead,
+        latest_seq = GLOBAL_HUB.latest_seq(),
+        upstream_connected = GLOBAL_HUB.is_upstream_connected(),
+        downstream_clients = GLOBAL_HUB.downstream_client_count(),
+        "Global WS client connected"
+    );
+
+    let response = ws.on_upgrade(move |socket| async move {
+        run_global_event_ws_client(
+            socket,
+            client_id,
+            last_event_id,
+            replay,
+            forced_replay_gap_json,
+            rx,
+        )
+        .await;
+    });
+    Ok(response.into_response())
 }
 
 #[cfg(test)]

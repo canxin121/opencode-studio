@@ -11,7 +11,7 @@ import { useDirectoryStore } from '@/stores/directory'
 import { useDirectorySessionStore } from '@/stores/directorySessionStore'
 import { usePluginHostStore } from '@/stores/pluginHost'
 
-import { connectSse } from '@/lib/sse'
+import { connectGlobalWs } from '@/lib/globalWs'
 import type { SseClientStats } from '@/lib/sse'
 import { subscribeAppBroadcast } from '@/lib/appBroadcast'
 import { applyDeviceClasses, getDeviceInfo } from '@/lib/device'
@@ -33,7 +33,7 @@ export function useAppRuntime() {
   const directorySessions = useDirectorySessionStore()
   const pluginHost = usePluginHostStore()
 
-  let sse: ReturnType<typeof connectSse> | null = null
+  let sse: ReturnType<typeof connectGlobalWs> | null = null
   let visibilityHandler: (() => void) | null = null
   let onlineHandler: (() => void) | null = null
   let focusHandler: (() => void) | null = null
@@ -201,10 +201,10 @@ export function useAppRuntime() {
     sse = null
 
     try {
-      sse = connectSse({
-        endpoint: '/api/global/event',
+      sse = connectGlobalWs({
+        endpoint: '/api/global/ws',
         initialLastEventId: globalSseCursor,
-        debugLabel: 'sse:global',
+        debugLabel: 'ws:global',
         onCursor: (lastEventId) => {
           globalSseCursor = lastEventId
         },
