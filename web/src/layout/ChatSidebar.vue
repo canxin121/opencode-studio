@@ -748,19 +748,14 @@ function hasCachedSessionsForDirectory(directoryId: string): boolean {
   return directorySessions.hasCachedSessionsForDirectory(directoryId)
 }
 
-function toggleDirectoryCollapse(directoryId: string, directoryPath: string) {
+function toggleDirectoryCollapse(directoryId: string, _directoryPath: string) {
+  void _directoryPath
   dismissDeepLinkFocus()
   const pid = (directoryId || '').trim()
   const next = new Set(collapsedDirectories.value)
-  const wasCollapsed = next.has(pid)
-  if (wasCollapsed) next.delete(pid)
+  if (next.has(pid)) next.delete(pid)
   else next.add(pid)
   collapsedDirectories.value = next
-
-  // Auto-load sessions when expanding a directory.
-  if (wasCollapsed) {
-    void ensureDirectoryAggregateLoaded(directoryId, directoryPath)
-  }
 }
 
 function hasAttention(sessionId: string): 'permission' | 'question' | null {
@@ -768,10 +763,6 @@ function hasAttention(sessionId: string): 'permission' | 'question' | null {
   const runtime = directorySessions.runtimeBySessionId?.[sid]
   const value = runtime?.attention
   return value === 'permission' || value === 'question' ? value : null
-}
-
-function isSessionActiveOrBlocked(sessionId: string): boolean {
-  return directorySessions.isSessionRuntimeActive(sessionId, { includeCooldown: true })
 }
 
 type RunningSessionItem = {
@@ -1195,23 +1186,13 @@ async function openRecentSession(sessionId: string) {
 }
 
 function directoryHasActiveOrBlocked(p: DirectoryEntry): boolean {
-  if (directorySessions.hasActiveRuntimeInDirectory(p.id, p.path, { includeCooldown: true })) {
-    return true
-  }
-
-  const list = aggregatedSessionsForDirectory(p.id, p.path)
-  for (const s of list) {
-    const id = readSessionId(s)
-    if (!id) continue
-    if (isSessionActiveOrBlocked(id)) return true
-  }
-  return false
+  return directorySessions.hasActiveRuntimeInDirectory(p.id, p.path, { includeCooldown: true })
 }
 
 async function ensureDirectoryAggregateLoaded(
   directoryId: string,
   directoryPath: string,
-  opts?: { force?: boolean; focusSessionId?: string; page?: number; pageSize?: number },
+  opts?: { force?: boolean; focusSessionId?: string; page?: number; pageSize?: number; includeWorktrees?: boolean },
 ) {
   const pid = (directoryId || '').trim()
   const root = (directoryPath || '').trim()
@@ -1230,7 +1211,7 @@ async function ensureDirectoryAggregateLoaded(
       pinnedSessionIds: pinnedSessionIds.value,
       page: targetPage,
       pageSize,
-      includeWorktrees: true,
+      includeWorktrees: opts?.includeWorktrees ?? true,
     })
   } catch (err) {
     // Don't render errors inside the sidebar; use toasts instead.
@@ -1252,31 +1233,134 @@ watch(
   },
 )
 
+function autoLoadExpandedDirectoryIfNeeded(directory: DirectoryEntry) {
+  const pid = (directory.id || '').trim()
+  if (!pid) return
+  if (isDirectoryCollapsed(pid)) return
+  const attempted = Boolean(aggregateAttemptedByDirectoryId.value[pid])
+  const hasCache = hasCachedSessionsForDirectory(pid)
+  const cachedPage = directorySessions.sessionPageByDirectoryId?.[pid]?.page
+  const targetPage = sessionRootPage(pid)
+  const shouldReload = shouldReloadExpandedDirectoryAggregate({
+    attempted,
+    hasCache,
+    cachedPage,
+    targetPage,
+  })
+  if (!shouldReload) return
+  void ensureDirectoryAggregateLoaded(pid, directory.path, { force: attempted && !hasCache })
+}
+
 function autoLoadExpandedDirectoriesOnce() {
-  for (const p of directories.value) {
-    const pid = (p.id || '').trim()
-    if (!pid) continue
-    if (isDirectoryCollapsed(pid)) continue
-    const attempted = Boolean(aggregateAttemptedByDirectoryId.value[pid])
-    const hasCache = hasCachedSessionsForDirectory(pid)
-    const cachedPage = directorySessions.sessionPageByDirectoryId?.[pid]?.page
-    const targetPage = sessionRootPage(pid)
-    const shouldReload = shouldReloadExpandedDirectoryAggregate({
-      attempted,
-      hasCache,
-      cachedPage,
-      targetPage,
-    })
-    if (!shouldReload) continue
-    void ensureDirectoryAggregateLoaded(pid, p.path, { force: attempted && !hasCache })
+  for (const directory of directories.value) {
+    autoLoadExpandedDirectoryIfNeeded(directory)
   }
 }
 
+let collapsedDirectoryWarmupTimer: number | null = null
+let collapsedDirectoryWarmupTask: Promise<void> | null = null
+
+function collapsedDirectoryWarmupCandidates(): DirectoryEntry[] {
+  if (sidebarQueryNorm.value) return []
+  return pagedDirectories.value.filter((directory) => {
+    const pid = String(directory?.id || '').trim()
+    if (!pid) return false
+    if (!isDirectoryCollapsed(pid)) return false
+    if (aggregateLoadingByDirectoryId.value[pid]) return false
+    if (aggregateAttemptedByDirectoryId.value[pid]) return false
+    if (hasCachedSessionsForDirectory(pid)) return false
+    return true
+  })
+}
+
+async function warmCollapsedDirectoriesInBackground() {
+  if (collapsedDirectoryWarmupTask) {
+    await collapsedDirectoryWarmupTask
+    return
+  }
+  const candidates = collapsedDirectoryWarmupCandidates()
+  if (candidates.length === 0) return
+
+  collapsedDirectoryWarmupTask = (async () => {
+    for (const directory of candidates) {
+      const pid = String(directory?.id || '').trim()
+      if (!pid) continue
+      if (!isDirectoryCollapsed(pid)) continue
+      if (aggregateLoadingByDirectoryId.value[pid]) continue
+      if (aggregateAttemptedByDirectoryId.value[pid]) continue
+      if (hasCachedSessionsForDirectory(pid)) continue
+      await ensureDirectoryAggregateLoaded(pid, directory.path, {
+        force: false,
+        page: sessionRootPage(pid),
+        pageSize: SESSION_ROOTS_PAGE_SIZE,
+        includeWorktrees: false,
+      }).catch(() => {})
+    }
+  })().finally(() => {
+    collapsedDirectoryWarmupTask = null
+    if (collapsedDirectoryWarmupCandidates().length > 0) {
+      scheduleCollapsedDirectoryWarmup(480)
+    }
+  })
+
+  await collapsedDirectoryWarmupTask
+}
+
+function scheduleCollapsedDirectoryWarmup(delayMs = 220) {
+  if (collapsedDirectoryWarmupTimer !== null) {
+    window.clearTimeout(collapsedDirectoryWarmupTimer)
+    collapsedDirectoryWarmupTimer = null
+  }
+  collapsedDirectoryWarmupTimer = window.setTimeout(
+    () => {
+      collapsedDirectoryWarmupTimer = null
+      void warmCollapsedDirectoriesInBackground().catch(() => {})
+    },
+    Math.max(0, Math.floor(delayMs)),
+  )
+}
+
 watch(
-  () => [directories.value.map((p) => `${p.id}:${p.path}`).join('|'), Array.from(collapsedDirectories.value).join('|')],
+  () => directories.value.map((p) => `${p.id}:${p.path}`).join('|'),
   () => {
-    // Auto-load sessions for currently-expanded directories (once).
+    // Auto-load sessions for currently-expanded directories when directory list changes.
     autoLoadExpandedDirectoriesOnce()
+  },
+  { immediate: true },
+)
+
+watch(
+  () =>
+    Array.from(collapsedDirectories.value)
+      .map((id) => String(id || '').trim())
+      .filter(Boolean)
+      .sort(),
+  (next, prev = []) => {
+    const nextSet = new Set(next)
+    const prevSet = new Set(prev)
+    for (const directory of directories.value) {
+      const pid = (directory.id || '').trim()
+      if (!pid) continue
+      // Load only directories that just transitioned from collapsed -> expanded.
+      if (!prevSet.has(pid) || nextSet.has(pid)) continue
+      autoLoadExpandedDirectoryIfNeeded(directory)
+    }
+  },
+)
+
+watch(
+  () => [
+    sidebarQueryNorm.value,
+    pagedDirectories.value.map((entry) => `${entry.id}:${entry.path}`).join('|'),
+    Array.from(collapsedDirectories.value)
+      .map((id) => String(id || '').trim())
+      .filter(Boolean)
+      .sort()
+      .join('|'),
+  ],
+  () => {
+    if (collapsedDirectoryWarmupCandidates().length === 0) return
+    scheduleCollapsedDirectoryWarmup(220)
   },
   { immediate: true },
 )
@@ -1293,6 +1377,10 @@ onBeforeUnmount(() => {
   if (directoryPageFetchTimer !== null) {
     window.clearTimeout(directoryPageFetchTimer)
     directoryPageFetchTimer = null
+  }
+  if (collapsedDirectoryWarmupTimer !== null) {
+    window.clearTimeout(collapsedDirectoryWarmupTimer)
+    collapsedDirectoryWarmupTimer = null
   }
 })
 
@@ -1420,24 +1508,97 @@ const isDirectoryFocused = (directory: DirectoryEntry) => {
   return wts.includes(dir)
 }
 
-function aggregatedSessionsForDirectory(directoryId: string, directoryPath: string) {
-  const list = directorySessions.aggregatedSessionsForDirectory(directoryId, directoryPath)
+const directoryById = computed<Record<string, DirectoryEntry>>(() => {
+  const out: Record<string, DirectoryEntry> = {}
+  for (const entry of directories.value) {
+    const id = String(entry?.id || '').trim()
+    if (!id) continue
+    out[id] = entry
+  }
+  return out
+})
 
-  return list.map((session) => {
-    const sid = readSessionId(session)
-    if (!sid) return session
-    const fresh = chat.getSessionById(sid)
-    if (!fresh) return session
+const pinnedSessionIdSet = computed<Set<string>>(() => {
+  return new Set(pinnedSessionIds.value.map((id) => String(id || '').trim()).filter(Boolean))
+})
 
-    const freshUpdatedAt = readSessionUpdatedAt(fresh)
-    const summaryUpdatedAt = readSessionUpdatedAt(session)
+type FlattenedDirectoryTree = {
+  rows: FlatTreeRow[]
+  parentById: Record<string, string | null>
+  rootIds: string[]
+}
 
-    // Avoid stale chat cache overriding fresher sidebar summary data.
-    if (freshUpdatedAt > summaryUpdatedAt) {
-      return { ...session, ...fresh }
-    }
-    return { ...fresh, ...session }
-  })
+const aggregateSessionsCacheByDirectoryId = new Map<string, SessionLike[]>()
+const flattenedTreeCacheByDirectoryId = new Map<string, FlattenedDirectoryTree>()
+const pinnedRowsCacheByDirectoryId = new Map<string, ThreadSessionRow[]>()
+
+function clearDirectorySessionProjectionCaches() {
+  aggregateSessionsCacheByDirectoryId.clear()
+  flattenedTreeCacheByDirectoryId.clear()
+  pinnedRowsCacheByDirectoryId.clear()
+}
+
+function clearDirectoryTreeProjectionCaches() {
+  flattenedTreeCacheByDirectoryId.clear()
+  pinnedRowsCacheByDirectoryId.clear()
+}
+
+watch(
+  () => directorySessions.sessionPageByDirectoryId,
+  () => {
+    clearDirectorySessionProjectionCaches()
+  },
+  { deep: false },
+)
+
+watch(
+  () => directorySessions.sessionSummariesById,
+  () => {
+    clearDirectorySessionProjectionCaches()
+  },
+  { deep: false },
+)
+
+watch(
+  () => directorySessions.childrenByParentSessionId,
+  () => {
+    pinnedRowsCacheByDirectoryId.clear()
+  },
+  { deep: false },
+)
+
+watch(
+  () => directories.value.map((entry) => `${entry.id}:${entry.path}`).join('|'),
+  () => {
+    clearDirectorySessionProjectionCaches()
+  },
+)
+
+watch(
+  () => pinnedSessionIds.value.join('|'),
+  () => {
+    clearDirectorySessionProjectionCaches()
+  },
+)
+
+watch(
+  () => Array.from(expandedParents.value).join('|'),
+  () => {
+    clearDirectoryTreeProjectionCaches()
+  },
+)
+
+function aggregatedSessionsForDirectory(directoryId: string, directoryPath: string): SessionLike[] {
+  const pid = (directoryId || '').trim()
+  const root = (directoryPath || '').trim()
+  if (!pid || !root) return []
+
+  const cached = aggregateSessionsCacheByDirectoryId.get(pid)
+  if (cached) return cached
+
+  const list = directorySessions.aggregatedSessionsForDirectory(pid, root) as SessionLike[]
+  aggregateSessionsCacheByDirectoryId.set(pid, list)
+  return list
 }
 
 async function searchSessionsForDirectory(
@@ -1465,8 +1626,12 @@ async function searchSessionsForDirectory(
 }
 
 function recentSessionsForList(list: SessionLike[]) {
-  const set = new Set(pinnedSessionIds.value)
-  return list.filter((s) => !set.has(s.id))
+  const pinnedSet = pinnedSessionIdSet.value
+  return list.filter((session) => {
+    const sid = readSessionId(session)
+    if (!sid) return true
+    return !pinnedSet.has(sid)
+  })
 }
 
 // Tree helpers extracted to '@/features/sessions/model/tree'.
@@ -1497,42 +1662,58 @@ function ensureAncestorsExpanded(parentById: Record<string, string | null>, sess
   expandedParents.value = next
 }
 
-const flattenedByDirectoryId = computed(() => {
-  const out: Record<string, { rows: FlatTreeRow[]; parentById: Record<string, string | null>; rootIds: string[] }> = {}
-  for (const directory of pagedDirectories.value) {
-    // Show pinned separately; tree renders non-pinned sessions.
-    const list = recentSessionsForList(aggregatedSessionsForDirectory(directory.id, directory.path))
-    out[directory.id] = buildFlattenedTree(list, expandedParents.value)
-  }
-  return out
-})
+function flattenedTreeForDirectory(directoryId: string, directoryPath?: string): FlattenedDirectoryTree | null {
+  const pid = (directoryId || '').trim()
+  if (!pid) return null
 
-const pinnedThreadRowsByDirectoryId = computed<Record<string, ThreadSessionRow[]>>(() => {
-  const out: Record<string, ThreadSessionRow[]> = {}
-  const pinnedSet = new Set(pinnedSessionIds.value.map((id) => String(id || '').trim()).filter(Boolean))
+  const cached = flattenedTreeCacheByDirectoryId.get(pid)
+  if (cached) return cached
 
-  for (const directory of pagedDirectories.value) {
-    const roots: ThreadRootItem[] = []
-    const list = aggregatedSessionsForDirectory(directory.id, directory.path)
-    for (const session of list) {
-      const sid = readSessionId(session)
-      if (!sid || !pinnedSet.has(sid)) continue
-      roots.push({
-        id: sid,
-        session,
-        directory,
-      })
-    }
-    out[directory.id] = buildThreadRowsFromRoots(roots)
-  }
+  const root = (directoryPath || directoryById.value[pid]?.path || '').trim()
+  if (!root) return null
 
-  return out
-})
+  // Show pinned separately; tree renders non-pinned sessions.
+  const list = recentSessionsForList(aggregatedSessionsForDirectory(pid, root))
+  const tree = buildFlattenedTree(list, expandedParents.value)
+  flattenedTreeCacheByDirectoryId.set(pid, tree)
+  return tree
+}
+
+function sessionCountForDirectory(directoryId: string, directoryPath: string): number {
+  return aggregatedSessionsForDirectory(directoryId, directoryPath).length
+}
 
 function pinnedRowsForDirectory(directoryId: string): ThreadSessionRow[] {
   const pid = (directoryId || '').trim()
   if (!pid) return []
-  return pinnedThreadRowsByDirectoryId.value[pid] || []
+
+  const cached = pinnedRowsCacheByDirectoryId.get(pid)
+  if (cached) return cached
+
+  const directory = directoryById.value[pid] || null
+  const root = (directory?.path || '').trim()
+  if (!root) return []
+
+  const pinnedSet = pinnedSessionIdSet.value
+  if (pinnedSet.size === 0) {
+    pinnedRowsCacheByDirectoryId.set(pid, [])
+    return []
+  }
+
+  const roots: ThreadRootItem[] = []
+  const list = aggregatedSessionsForDirectory(pid, root)
+  for (const session of list) {
+    const sid = readSessionId(session)
+    if (!sid || !pinnedSet.has(sid)) continue
+    roots.push({
+      id: sid,
+      session,
+      directory,
+    })
+  }
+  const rows = buildThreadRowsFromRoots(roots)
+  pinnedRowsCacheByDirectoryId.set(pid, rows)
+  return rows
 }
 
 function sessionRootPage(directoryId: string): number {
@@ -1563,7 +1744,7 @@ async function setSessionRootPage(directoryId: string, page: number) {
 
 function pagedRowsForDirectory(directoryId: string): FlatTreeRow[] {
   const pid = (directoryId || '').trim()
-  const tree = flattenedByDirectoryId.value[pid]
+  const tree = flattenedTreeForDirectory(pid)
   if (!tree) return []
   return tree.rows || []
 }
@@ -1581,7 +1762,7 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
   searchSessions: searchSessionsForDirectory,
   ensureDirectoryAggregateLoaded,
   resolveDirectoryForSession: directorySessions.resolveDirectoryForSession,
-  flattenedByDirectoryId,
+  getFlattenedTreeForDirectory: flattenedTreeForDirectory,
   ensureAncestorsExpanded,
 })
 
@@ -1694,7 +1875,7 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
           :refreshDirectoryInline="refreshDirectoryInline"
           :newSessionInline="newSessionInline"
           :removeDirectoryInline="removeDirectoryInline"
-          :aggregatedSessionsForDirectory="aggregatedSessionsForDirectory"
+          :sessionCountForDirectory="sessionCountForDirectory"
           :selectDirectory="selectDirectory"
           :selectSession="selectSession"
           :openSessionActions="openSessionActions"

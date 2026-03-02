@@ -76,7 +76,7 @@ const props = defineProps<{
   newSessionInline: (directory: DirectoryEntry) => Promise<void>
   removeDirectoryInline: (directory: DirectoryEntry) => Promise<void>
 
-  aggregatedSessionsForDirectory: (directoryId: string, directoryPath: string) => SessionLike[]
+  sessionCountForDirectory: (directoryId: string, directoryPath: string) => number
   selectDirectory: (directoryId: string, directoryPath: string) => Promise<void>
   selectSession: (sessionId: string) => Promise<void>
 
@@ -116,10 +116,6 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
-
-function sessionsForDirectory(directory: DirectoryEntry) {
-  return props.aggregatedSessionsForDirectory(directory.id, directory.path)
-}
 
 function pinnedRows(directoryId: string) {
   return props.pinnedRowsForDirectory(directoryId)
@@ -224,7 +220,7 @@ function statusMeta(sessionId: string) {
                 </div>
 
                 <div
-                  v-else-if="sessionsForDirectory(directory).length === 0"
+                  v-else-if="props.sessionCountForDirectory(directory.id, directory.path) === 0"
                   class="px-1.5 py-0.5 text-xs text-muted-foreground"
                 >
                   {{ t('chat.sidebar.directoriesList.noSessionsYet') }}

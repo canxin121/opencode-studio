@@ -63,6 +63,7 @@ import {
   upsertRuntimeOnlyRunningIndexEntry,
   upsertSessionInPageState,
 } from '@/stores/directorySessions/pageState'
+import { applyRootTotalDelta, computeRootTotalDeltas } from '@/stores/directorySessions/rootTotals'
 import { hasActiveRuntimeInDirectoryScope } from '@/stores/directorySessions/runtimeDirectoryActivity'
 import { runtimePatchWithEventTimestamp } from '@/stores/directorySessions/runtimeEvent'
 import { isDirectoryAggregatePageSatisfied, normalizePage } from '@/stores/directorySessions/pagination'
@@ -1096,6 +1097,8 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
   let uiPrefsPatchRetryTimer: number | null = null
   let uiPrefsPatchRetryDelayMs = 0
   const aggregateReloadRetryTimerByDirectoryId = new Map<string, number>()
+  const aggregateLoadTaskByDirectoryId = new Map<string, { seq: number; promise: Promise<void> }>()
+  let aggregateLoadSeq = 0
 
   function stopSidebarPatchRetry() {
     if (sidebarPatchRetryTimer !== null) {
@@ -1431,7 +1434,7 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     return matched ? matched.id : null
   }
 
-  function upsertSessionSummaryPatch(sessionPatch: JsonValue): boolean {
+  function upsertSessionSummaryPatch(sessionPatch: JsonValue, opts?: { trustAsNewRoot?: boolean }): boolean {
     const sid = readObjectId(sessionPatch)
     if (!sid) return false
 
@@ -1488,6 +1491,15 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
       }
     }
 
+    const rootTotalDeltas = computeRootTotalDeltas({
+      previousDirectoryId,
+      nextDirectoryId: mappedDirectoryId,
+      previousParentId: previous ? readParentId(previous) : null,
+      nextParentId: readParentId(merged),
+      hadPrevious: Boolean(previous),
+      trustAsNewRoot: Boolean(opts?.trustAsNewRoot),
+    })
+
     const nextPagesByDirectoryId = { ...sessionPageByDirectoryId.value }
     let pagesChanged = false
     const applyPagePatch = (directoryId: string, page: DirectorySessionPageState | null) => {
@@ -1499,10 +1511,9 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
 
     if (previousDirectoryId && previousDirectoryId !== mappedDirectoryId) {
       const prevPage = nextPagesByDirectoryId[previousDirectoryId]
-      const decrementRootTotal = Boolean(previous && !readParentId(previous))
       const patched = prevPage
         ? removeSessionFromPageState(prevPage, sid, {
-            decrementRootTotal,
+            decrementRootTotal: false,
             readSessionId: readObjectId,
           })
         : null
@@ -1511,11 +1522,9 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
 
     if (mappedDirectoryId) {
       const currentPage = nextPagesByDirectoryId[mappedDirectoryId]
-      const isNewInDirectory = !previous || previousDirectoryId !== mappedDirectoryId
-      const incrementRootTotal = isNewInDirectory && !readParentId(merged)
       const patched = currentPage
         ? upsertSessionInPageState(currentPage, merged, {
-            incrementRootTotal,
+            incrementRootTotal: false,
             maxRootCount: 10,
             readSessionId: readObjectId,
             readParentId,
@@ -1523,6 +1532,22 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
           })
         : null
       applyPagePatch(mappedDirectoryId, patched)
+    }
+
+    for (const [directoryId, deltaRaw] of Object.entries(rootTotalDeltas)) {
+      const did = (directoryId || '').trim()
+      if (!did) continue
+      const page = nextPagesByDirectoryId[did]
+      if (!page) continue
+      const delta = Number(deltaRaw)
+      if (!Number.isFinite(delta) || delta === 0) continue
+      const nextTotalRoots = applyRootTotalDelta(page.totalRoots, delta)
+      if (nextTotalRoots === page.totalRoots) continue
+      nextPagesByDirectoryId[did] = {
+        ...page,
+        totalRoots: nextTotalRoots,
+      }
+      pagesChanged = true
     }
 
     if (pagesChanged) {
@@ -1767,6 +1792,8 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     const root = (directoryPath || '').trim()
     if (!did || !root) return
 
+    if (worktreeLoadingByDirectoryId.value[did]) return
+
     if (!opts?.force && Array.isArray(worktreePathsByDirectoryId.value[did])) return
 
     worktreeLoadingByDirectoryId.value = { ...worktreeLoadingByDirectoryId.value, [did]: true }
@@ -1789,6 +1816,26 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     }
   }
 
+  function scheduleDirectorySupplementalHydration(
+    directoryId: string,
+    directoryPath: string,
+    opts: {
+      pinnedSessionIds: string[]
+      forcePinned: boolean
+      includeWorktrees: boolean
+      forceWorktrees: boolean
+    },
+  ) {
+    const did = (directoryId || '').trim()
+    const root = (directoryPath || '').trim()
+    if (!did || !root) return
+
+    runNonCriticalSidebarHydration(
+      [() => ensurePinnedSummariesLoaded(did, root, opts.pinnedSessionIds, { force: opts.forcePinned })],
+      opts.includeWorktrees ? [() => ensureDirectoryWorktreesLoaded(did, root, { force: opts.forceWorktrees })] : [],
+    )
+  }
+
   async function ensureDirectoryAggregateLoaded(
     directoryId: string,
     directoryPath: string,
@@ -1799,93 +1846,123 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     if (!did || !root) return
 
     const force = Boolean(opts?.force)
-    if (!force && aggregateLoadingByDirectoryId.value[did]) return
 
     const focusId = typeof opts?.focusSessionId === 'string' ? opts.focusSessionId.trim() : ''
     const wantsFocus = Boolean(focusId)
     const pageSize = Math.max(1, Math.floor(opts?.pageSize || 10))
     const targetPage = normalizePage(opts?.page)
     const cached = sessionPageByDirectoryId.value[did]
+    const includeWorktrees = Boolean(opts?.includeWorktrees)
+    const inFlight = aggregateLoadTaskByDirectoryId.get(did)
 
     if (!force && !wantsFocus && isDirectoryAggregatePageSatisfied(cached?.page, targetPage)) {
-      await ensurePinnedSummariesLoaded(did, root, opts.pinnedSessionIds, { force: false })
-      if (opts.includeWorktrees) {
-        await ensureDirectoryWorktreesLoaded(did, root, { force: false })
+      scheduleDirectorySupplementalHydration(did, root, {
+        pinnedSessionIds: opts.pinnedSessionIds,
+        forcePinned: false,
+        includeWorktrees,
+        forceWorktrees: false,
+      })
+      if (inFlight) {
+        await inFlight.promise.catch(() => {})
       }
       return
     }
 
-    aggregateLoadingByDirectoryId.value = { ...aggregateLoadingByDirectoryId.value, [did]: true }
-    try {
-      const params = new URLSearchParams()
-      params.set('scope', 'directory')
-      params.set('roots', 'true')
-      params.set('includeChildren', 'true')
-      params.set('includeTotal', 'true')
-      params.set('limit', String(pageSize))
-      if (wantsFocus) {
-        params.set('focusSessionId', focusId)
-      } else {
-        params.set('offset', String(targetPage * pageSize))
-      }
-
-      const payload = await apiJson<unknown>(
-        `/api/directories/${encodeURIComponent(did)}/sessions?${params.toString()}`,
-      )
-      const pageState = parseSessionPagePayload(payload, pageSize)
-      const degraded = isDegradedConsistency(pageState.consistency)
-      if (degraded) {
-        scheduleAggregateReloadRetry(did, root, opts, retryDelayFromConsistency(pageState.consistency, 200))
-      } else {
-        clearAggregateReloadRetry(did)
-      }
-
-      const cachedSessions = Array.isArray(cached?.sessions) ? cached.sessions : []
-      const preserveCached = degraded && pageState.sessions.length === 0 && cachedSessions.length > 0 && Boolean(cached)
-      const effectivePage = preserveCached && cached ? cached : pageState
-      const sessions = Array.isArray(effectivePage.sessions) ? effectivePage.sessions : []
-      const totalRoots =
-        typeof effectivePage.totalRoots === 'number' && Number.isFinite(effectivePage.totalRoots)
-          ? effectivePage.totalRoots
-          : sessions.length
-      const resolvedPage =
-        typeof effectivePage.page === 'number' && Number.isFinite(effectivePage.page) ? effectivePage.page : targetPage
-
-      sessionPageByDirectoryId.value = {
-        ...sessionPageByDirectoryId.value,
-        [did]: {
-          ...effectivePage,
-          page: resolvedPage,
-          totalRoots,
-          sessions,
-        },
-      }
-      setSessionRootPage(did, resolvedPage, pageSize)
-      upsertDirectorySessionSummaries(did, sessions, {
-        treeHint: effectivePage.treeHint,
-      })
-
-      await ensurePinnedSummariesLoaded(did, root, opts.pinnedSessionIds, { force: force || wantsFocus })
-      if (opts.includeWorktrees) {
-        await ensureDirectoryWorktreesLoaded(did, root, { force })
-      }
-
-      aggregateAttemptedByDirectoryId.value = {
-        ...aggregateAttemptedByDirectoryId.value,
-        [did]: true,
-      }
-    } catch (err) {
-      if (Array.isArray(cached?.sessions) && cached.sessions.length > 0) {
-        scheduleAggregateReloadRetry(did, root, opts, 300)
-      }
-      aggregateAttemptedByDirectoryId.value = {
-        ...aggregateAttemptedByDirectoryId.value,
-        [did]: true,
-      }
-      throw err
-    } finally {
-      aggregateLoadingByDirectoryId.value = { ...aggregateLoadingByDirectoryId.value, [did]: false }
+    if (!force && inFlight) {
+      await inFlight.promise
+      return
     }
+
+    const seq = ++aggregateLoadSeq
+    aggregateLoadingByDirectoryId.value = { ...aggregateLoadingByDirectoryId.value, [did]: true }
+
+    const task = (async () => {
+      try {
+        const params = new URLSearchParams()
+        params.set('scope', 'directory')
+        params.set('roots', 'true')
+        params.set('includeChildren', 'true')
+        params.set('includeTotal', 'true')
+        params.set('limit', String(pageSize))
+        if (wantsFocus) {
+          params.set('focusSessionId', focusId)
+        } else {
+          params.set('offset', String(targetPage * pageSize))
+        }
+
+        const payload = await apiJson<unknown>(
+          `/api/directories/${encodeURIComponent(did)}/sessions?${params.toString()}`,
+        )
+
+        if (aggregateLoadTaskByDirectoryId.get(did)?.seq !== seq) return
+
+        const pageState = parseSessionPagePayload(payload, pageSize)
+        const degraded = isDegradedConsistency(pageState.consistency)
+        if (degraded) {
+          scheduleAggregateReloadRetry(did, root, opts, retryDelayFromConsistency(pageState.consistency, 200))
+        } else {
+          clearAggregateReloadRetry(did)
+        }
+
+        const cachedSessions = Array.isArray(cached?.sessions) ? cached.sessions : []
+        const preserveCached =
+          degraded && pageState.sessions.length === 0 && cachedSessions.length > 0 && Boolean(cached)
+        const effectivePage = preserveCached && cached ? cached : pageState
+        const sessions = Array.isArray(effectivePage.sessions) ? effectivePage.sessions : []
+        const totalRoots =
+          typeof effectivePage.totalRoots === 'number' && Number.isFinite(effectivePage.totalRoots)
+            ? effectivePage.totalRoots
+            : sessions.length
+        const resolvedPage =
+          typeof effectivePage.page === 'number' && Number.isFinite(effectivePage.page)
+            ? effectivePage.page
+            : targetPage
+
+        sessionPageByDirectoryId.value = {
+          ...sessionPageByDirectoryId.value,
+          [did]: {
+            ...effectivePage,
+            page: resolvedPage,
+            totalRoots,
+            sessions,
+          },
+        }
+        setSessionRootPage(did, resolvedPage, pageSize)
+        upsertDirectorySessionSummaries(did, sessions, {
+          treeHint: effectivePage.treeHint,
+        })
+
+        aggregateAttemptedByDirectoryId.value = {
+          ...aggregateAttemptedByDirectoryId.value,
+          [did]: true,
+        }
+
+        scheduleDirectorySupplementalHydration(did, root, {
+          pinnedSessionIds: opts.pinnedSessionIds,
+          forcePinned: force || wantsFocus,
+          includeWorktrees,
+          forceWorktrees: force,
+        })
+      } catch (err) {
+        if (aggregateLoadTaskByDirectoryId.get(did)?.seq !== seq) return
+        if (Array.isArray(cached?.sessions) && cached.sessions.length > 0) {
+          scheduleAggregateReloadRetry(did, root, opts, 300)
+        }
+        aggregateAttemptedByDirectoryId.value = {
+          ...aggregateAttemptedByDirectoryId.value,
+          [did]: true,
+        }
+        throw err
+      } finally {
+        const active = aggregateLoadTaskByDirectoryId.get(did)
+        if (!active || active.seq !== seq) return
+        aggregateLoadTaskByDirectoryId.delete(did)
+        aggregateLoadingByDirectoryId.value = { ...aggregateLoadingByDirectoryId.value, [did]: false }
+      }
+    })()
+
+    aggregateLoadTaskByDirectoryId.set(did, { seq, promise: task })
+    await task
   }
 
   async function resolveDirectoryForSession(
@@ -2111,18 +2188,21 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
       const props = readEventProperties(evt)
       const sessionPayload = props.session ?? props.value ?? props.data ?? null
       if (asRecord(sessionPayload)) {
-        upsertSessionSummaryPatch(sessionPayload)
+        upsertSessionSummaryPatch(sessionPayload, { trustAsNewRoot: type === 'session.created' })
       } else {
         const sid = sessionId
         if (sid) {
           const title = typeof props?.title === 'string' ? props.title.trim() : ''
           const slug = typeof props?.slug === 'string' ? props.slug.trim() : ''
           if (title || slug) {
-            upsertSessionSummaryPatch({
-              id: sid,
-              ...(title ? { title } : {}),
-              ...(slug ? { slug } : {}),
-            })
+            upsertSessionSummaryPatch(
+              {
+                id: sid,
+                ...(title ? { title } : {}),
+                ...(slug ? { slug } : {}),
+              },
+              { trustAsNewRoot: type === 'session.created' },
+            )
           }
           if (type === 'session.updated') {
             void hydrateSessionSummariesByIds([sid]).catch(() => {})
@@ -2611,6 +2691,8 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     uiPrefsRemotePersistInFlight = false
     uiPrefsRemotePersistQueued = false
     directoryPageLoadSeq = 0
+    aggregateLoadSeq = 0
+    aggregateLoadTaskByDirectoryId.clear()
     uiPrefsLocalRevision = 0
     uiPrefsAckedRevision = 0
     lastSidebarPatchSeq = 0

@@ -50,7 +50,7 @@ export function useSidebarLocate(opts: {
     sessionId: string,
     hint?: { directoryId?: string; directoryPath?: string; locateResult?: object | null },
   ) => Promise<{ directoryId: string; directoryPath: string; locatedDir: string } | null>
-  flattenedByDirectoryId: ComputedRef<Record<string, FlattenedTree>>
+  getFlattenedTreeForDirectory: (directoryId: string, directoryPath: string) => FlattenedTree | null
   ensureAncestorsExpanded: (parentById: Record<string, string | null>, sessionId: string) => void
 }) {
   const locatedSessionId = ref<string>('')
@@ -212,7 +212,7 @@ export function useSidebarLocate(opts: {
 
     const isPinned = opts.pinnedSessionIds.value.includes(sid)
     if (!isPinned) {
-      const tree = opts.flattenedByDirectoryId.value[focusId]
+      const tree = opts.getFlattenedTreeForDirectory(focusId, focusPath)
       if (tree) {
         const row = (tree.rows || []).find((r) => r?.id === sid) || null
         if (row) {
