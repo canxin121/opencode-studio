@@ -609,13 +609,26 @@ pub(crate) async fn run(args: crate::Args) {
         )
         .route("/global/ws", get(crate::global_sse_hub::global_event_ws))
         .route(
+            "/chat-sidebar/snapshot",
+            get(crate::chat_sidebar::chat_sidebar_state)
+                .put(crate::chat_sidebar::chat_sidebar_state_put),
+        )
+        .route(
             "/chat-sidebar/state",
             get(crate::chat_sidebar::chat_sidebar_state)
                 .put(crate::chat_sidebar::chat_sidebar_state_put),
         )
         .route(
+            "/chat-sidebar/directories/page",
+            get(crate::chat_sidebar::chat_sidebar_directories_page_get),
+        )
+        .route(
             "/chat-sidebar/directories-page",
             get(crate::chat_sidebar::chat_sidebar_directories_page_get),
+        )
+        .route(
+            "/chat-sidebar/patch-log",
+            get(crate::chat_sidebar::chat_sidebar_patches_get),
         )
         .route(
             "/chat-sidebar/patches",
@@ -627,12 +640,24 @@ pub(crate) async fn run(args: crate::Args) {
                 .put(crate::chat_sidebar::chat_sidebar_preferences_put),
         )
         .route(
+            "/chat-sidebar/commands",
+            post(crate::chat_sidebar::chat_sidebar_command_post),
+        )
+        .route(
             "/chat-sidebar/command",
             post(crate::chat_sidebar::chat_sidebar_command_post),
         )
         .route(
+            "/chat-sidebar/sessions/search",
+            get(crate::chat_sidebar::chat_sidebar_session_search),
+        )
+        .route(
             "/chat-sidebar/session-search",
             get(crate::chat_sidebar::chat_sidebar_session_search),
+        )
+        .route(
+            "/chat-sidebar/sections/{kind}/page",
+            get(crate::chat_sidebar::chat_sidebar_footer_get),
         )
         .route(
             "/chat-sidebar/footer/{kind}",

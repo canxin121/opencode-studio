@@ -752,9 +752,26 @@ type DirectorySidebarView = {
   recentRootIds: string[]
 }
 
+const flattenedTreeCacheByDirectoryId = new Map<
+  string,
+  { section: DirectorySidebarView | null; tree: FlattenedDirectoryTree | null }
+>()
+
 const directorySidebarById = computed<Record<string, DirectorySidebarView>>(() => {
   return (directorySessions.directorySidebarById as Record<string, DirectorySidebarView>) || {}
 })
+
+watch(
+  () => Object.keys(directorySidebarById.value).join('|'),
+  () => {
+    const activeIds = new Set(Object.keys(directorySidebarById.value))
+    for (const directoryId of flattenedTreeCacheByDirectoryId.keys()) {
+      if (!activeIds.has(directoryId)) {
+        flattenedTreeCacheByDirectoryId.delete(directoryId)
+      }
+    }
+  },
+)
 
 const pinnedFooterView = computed(
   () => directorySessions.pinnedFooterView || { total: 0, page: 0, pageCount: 1, rows: [] },
@@ -1056,6 +1073,7 @@ onBeforeUnmount(() => {
     window.clearTimeout(sidebarStateFetchTimer)
     sidebarStateFetchTimer = null
   }
+  flattenedTreeCacheByDirectoryId.clear()
 })
 
 async function selectDirectory(directoryId: string, directoryPath: string) {
@@ -1166,7 +1184,7 @@ async function searchSessionHits(query: string, limit: number, signal?: AbortSig
   if (!q || limit <= 0) return []
   try {
     const payload = await apiJson<SessionValue>(
-      `/api/chat-sidebar/session-search?query=${encodeURIComponent(q)}&limit=${encodeURIComponent(String(Math.max(1, Math.floor(limit))))}`,
+      `/api/chat-sidebar/sessions/search?query=${encodeURIComponent(q)}&limit=${encodeURIComponent(String(Math.max(1, Math.floor(limit))))}`,
       signal ? { signal } : undefined,
     )
     const record = asRecord(payload)
@@ -1278,8 +1296,15 @@ function flattenedTreeForDirectory(directoryId: string, _directoryPath?: string)
   const pid = (directoryId || '').trim()
   if (!pid) return null
 
-  const section = directorySidebarById.value[pid]
-  return buildBackendFlattenedTree(section)
+  const section = directorySidebarById.value[pid] || null
+  const cached = flattenedTreeCacheByDirectoryId.get(pid)
+  if (cached && cached.section === section) {
+    return cached.tree
+  }
+
+  const tree = buildBackendFlattenedTree(section)
+  flattenedTreeCacheByDirectoryId.set(pid, { section, tree })
+  return tree
 }
 
 function sessionCountForDirectory(directoryId: string, directoryPath: string): number {
