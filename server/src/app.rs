@@ -590,15 +590,6 @@ pub(crate) async fn run(args: crate::Args) {
         )
         .route("/config/reload", post(crate::config::config_reload_post))
         .route(
-            "/ui/chat-sidebar/preferences",
-            get(crate::chat_sidebar_preferences::chat_sidebar_preferences_get)
-                .put(crate::chat_sidebar_preferences::chat_sidebar_preferences_put),
-        )
-        .route(
-            "/ui/chat-sidebar/preferences/events",
-            get(crate::chat_sidebar_preferences::chat_sidebar_preferences_events),
-        )
-        .route(
             "/ui/terminal/state",
             get(crate::terminal_ui_state::terminal_ui_state_get)
                 .put(crate::terminal_ui_state::terminal_ui_state_put),
@@ -618,7 +609,8 @@ pub(crate) async fn run(args: crate::Args) {
         )
         .route(
             "/chat-sidebar/state",
-            get(crate::chat_sidebar::chat_sidebar_state),
+            get(crate::chat_sidebar::chat_sidebar_state)
+                .put(crate::chat_sidebar::chat_sidebar_state_put),
         )
         .route(
             "/chat-sidebar/session-search",

@@ -123,7 +123,6 @@ export function useAppRuntime() {
     void directorySessions
       .revalidateFromApi({ limitPerDirectory: computeSidebarLimitPerDirectory({ reason, gapMs: opts?.gapMs }) })
       .catch(() => {})
-    void directorySessions.revalidateUiPrefsFromApi().catch(() => {})
 
     try {
       console.debug('[sse] resync after resume:', reason)
@@ -220,7 +219,6 @@ export function useAppRuntime() {
           }
           void settings.refresh().catch(() => {})
           void activity.refresh().catch(() => {})
-          void directorySessions.revalidateUiPrefsFromApi().catch(() => {})
           void directorySessions
             .revalidateFromApi({ limitPerDirectory: computeSidebarLimitPerDirectory({ reason: 'sse-gap' }) })
             .catch(() => {})
@@ -240,7 +238,6 @@ export function useAppRuntime() {
               }
               void settings.refresh().catch(() => {})
               void activity.refresh().catch(() => {})
-              void directorySessions.revalidateUiPrefsFromApi().catch(() => {})
               void directorySessions
                 .revalidateFromApi({ limitPerDirectory: computeSidebarLimitPerDirectory({ reason: 'replay-gap' }) })
                 .catch(() => {})
@@ -265,7 +262,6 @@ export function useAppRuntime() {
           }
           void settings.refresh().catch(() => {})
           void activity.refresh().catch(() => {})
-          void directorySessions.revalidateUiPrefsFromApi().catch(() => {})
           void directorySessions
             .revalidateFromApi({ limitPerDirectory: computeSidebarLimitPerDirectory({ reason: 'sse-error' }) })
             .catch(() => {})
@@ -366,9 +362,6 @@ export function useAppRuntime() {
       if (msg.type === 'opencodeConfig.updated') {
         void pluginHost.bootstrap().catch(() => {})
         return
-      }
-      if (msg.type === 'chatSidebarUiPrefs.updated') {
-        void directorySessions.revalidateUiPrefsFromApi().catch(() => {})
       }
     })
 

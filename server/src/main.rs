@@ -5,7 +5,6 @@ use tracing::Level;
 mod app;
 mod attachment_cache;
 mod chat_sidebar;
-mod chat_sidebar_preferences;
 mod config;
 mod directory_session_index;
 mod directory_sessions;

@@ -1,4 +1,6 @@
 use std::collections::{BTreeMap, HashSet};
+use std::fs::OpenOptions;
+use std::path::PathBuf;
 use std::sync::{Arc, LazyLock, Mutex};
 use std::time::{Duration, Instant};
 
@@ -6,11 +8,13 @@ use axum::{
     Json,
     body::to_bytes,
     extract::{Path as AxumPath, Query, State},
-    http::{HeaderMap, StatusCode},
+    http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
 };
+use fs2::FileExt as _;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use tokio::sync::{Mutex as AsyncMutex, RwLock};
 
 const BODY_READ_LIMIT: usize = 10 * 1024 * 1024;
 const SIDEBAR_INDEX_CACHE_TTL: Duration = Duration::from_millis(400);
@@ -61,6 +65,220 @@ static SIDEBAR_INDEX_CACHE: LazyLock<Mutex<SidebarIndexProjectionCache>> =
     LazyLock::new(|| Mutex::new(SidebarIndexProjectionCache::default()));
 static DIRECTORY_SESSIONS_PAGE_CACHE: LazyLock<Mutex<DirectorySessionsPageCache>> =
     LazyLock::new(|| Mutex::new(DirectorySessionsPageCache::default()));
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SessionsSidebarPreferences {
+    #[serde(default)]
+    pub version: u64,
+    #[serde(default)]
+    pub updated_at: u64,
+    #[serde(default)]
+    pub collapsed_directory_ids: Vec<String>,
+    #[serde(default)]
+    pub expanded_parent_session_ids: Vec<String>,
+    #[serde(default)]
+    pub pinned_session_ids: Vec<String>,
+    #[serde(default)]
+    pub directories_page: usize,
+    #[serde(default)]
+    pub session_root_page_by_directory_id: BTreeMap<String, usize>,
+    #[serde(default)]
+    pub pinned_sessions_open: bool,
+    #[serde(default)]
+    pub pinned_sessions_page: usize,
+    #[serde(default)]
+    pub recent_sessions_open: bool,
+    #[serde(default)]
+    pub recent_sessions_page: usize,
+    #[serde(default)]
+    pub running_sessions_open: bool,
+    #[serde(default)]
+    pub running_sessions_page: usize,
+}
+
+static SIDEBAR_PREFS_CACHE: LazyLock<RwLock<Option<SessionsSidebarPreferences>>> =
+    LazyLock::new(|| RwLock::new(None));
+static SIDEBAR_PREFS_PUT_LOCK: LazyLock<AsyncMutex<()>> = LazyLock::new(|| AsyncMutex::new(()));
+
+fn now_millis() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+fn sanitize_id_list(list: Vec<String>) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut seen = HashSet::<String>::new();
+    for value in list {
+        let id = value.trim();
+        if id.is_empty() {
+            continue;
+        }
+        if seen.insert(id.to_string()) {
+            out.push(id.to_string());
+        }
+    }
+    out
+}
+
+fn sanitize_page_map(map: BTreeMap<String, usize>) -> BTreeMap<String, usize> {
+    let mut out = BTreeMap::new();
+    for (key, page) in map {
+        let id = key.trim();
+        if id.is_empty() {
+            continue;
+        }
+        out.insert(id.to_string(), page);
+    }
+    out
+}
+
+fn sanitize_sidebar_preferences(input: SessionsSidebarPreferences) -> SessionsSidebarPreferences {
+    SessionsSidebarPreferences {
+        version: input.version,
+        updated_at: input.updated_at,
+        collapsed_directory_ids: sanitize_id_list(input.collapsed_directory_ids),
+        expanded_parent_session_ids: sanitize_id_list(input.expanded_parent_session_ids),
+        pinned_session_ids: sanitize_id_list(input.pinned_session_ids),
+        directories_page: input.directories_page,
+        session_root_page_by_directory_id: sanitize_page_map(
+            input.session_root_page_by_directory_id,
+        ),
+        pinned_sessions_open: input.pinned_sessions_open,
+        pinned_sessions_page: input.pinned_sessions_page,
+        recent_sessions_open: input.recent_sessions_open,
+        recent_sessions_page: input.recent_sessions_page,
+        running_sessions_open: input.running_sessions_open,
+        running_sessions_page: input.running_sessions_page,
+    }
+}
+
+fn sidebar_preferences_path() -> PathBuf {
+    crate::persistence_paths::sidebar_preferences_path()
+}
+
+async fn acquire_sidebar_preferences_disk_lock() -> Result<std::fs::File, String> {
+    let lock_path = sidebar_preferences_path().with_extension("json.lock");
+    tokio::task::spawn_blocking(move || {
+        if let Some(parent) = lock_path.parent() {
+            std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+        }
+
+        let file = OpenOptions::new()
+            .create(true)
+            .read(true)
+            .write(true)
+            .truncate(false)
+            .open(&lock_path)
+            .map_err(|error| error.to_string())?;
+
+        file.lock_exclusive().map_err(|error| error.to_string())?;
+        Ok(file)
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+async fn load_sidebar_preferences_from_disk() -> SessionsSidebarPreferences {
+    let path = sidebar_preferences_path();
+    let raw = match tokio::fs::read_to_string(path).await {
+        Ok(raw) => raw,
+        Err(_) => return SessionsSidebarPreferences::default(),
+    };
+    let parsed = serde_json::from_str::<SessionsSidebarPreferences>(&raw)
+        .unwrap_or_else(|_| SessionsSidebarPreferences::default());
+    sanitize_sidebar_preferences(parsed)
+}
+
+async fn persist_sidebar_preferences_to_disk(
+    preferences: &SessionsSidebarPreferences,
+) -> Result<(), String> {
+    let path = sidebar_preferences_path();
+    if let Some(parent) = path.parent() {
+        tokio::fs::create_dir_all(parent)
+            .await
+            .map_err(|error| error.to_string())?;
+    }
+
+    let payload = serde_json::to_string_pretty(preferences).map_err(|error| error.to_string())?;
+    let tmp_name = format!(
+        "{}.tmp.{}.{}",
+        path.file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("prefs"),
+        std::process::id(),
+        now_millis(),
+    );
+    let tmp = path.with_file_name(tmp_name);
+    tokio::fs::write(&tmp, payload)
+        .await
+        .map_err(|error| error.to_string())?;
+    tokio::fs::rename(&tmp, &path)
+        .await
+        .map_err(|error| error.to_string())?;
+
+    Ok(())
+}
+
+async fn read_sidebar_preferences_cached() -> SessionsSidebarPreferences {
+    {
+        let guard = SIDEBAR_PREFS_CACHE.read().await;
+        if let Some(preferences) = guard.as_ref() {
+            return preferences.clone();
+        }
+    }
+
+    let loaded = load_sidebar_preferences_from_disk().await;
+    let mut guard = SIDEBAR_PREFS_CACHE.write().await;
+    if let Some(existing) = guard.as_ref() {
+        return existing.clone();
+    }
+    *guard = Some(loaded.clone());
+    loaded
+}
+
+async fn write_sidebar_preferences_cached(preferences: SessionsSidebarPreferences) {
+    let mut guard = SIDEBAR_PREFS_CACHE.write().await;
+    *guard = Some(preferences);
+}
+
+pub(crate) async fn chat_sidebar_preferences_snapshot() -> SessionsSidebarPreferences {
+    read_sidebar_preferences_cached().await
+}
+
+fn parse_if_match_version(headers: &HeaderMap) -> Option<u64> {
+    let raw = headers.get(header::IF_MATCH)?.to_str().ok()?.trim();
+    if raw.is_empty() || raw == "*" {
+        return None;
+    }
+
+    let weak_trimmed = raw.strip_prefix("W/").unwrap_or(raw).trim();
+    let quoted_trimmed = weak_trimmed.trim_matches('"').trim();
+    if quoted_trimmed.is_empty() {
+        return None;
+    }
+
+    quoted_trimmed.parse::<u64>().ok()
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PutPrecondition {
+    Ok,
+    Missing,
+    Conflict,
+}
+
+fn validate_put_precondition(headers: &HeaderMap, current_version: u64) -> PutPrecondition {
+    let Some(expected_version) = parse_if_match_version(headers) else {
+        return PutPrecondition::Missing;
+    };
+    if expected_version != current_version {
+        return PutPrecondition::Conflict;
+    }
+    PutPrecondition::Ok
+}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -220,7 +438,7 @@ struct SessionSummariesByIdsResponse {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ChatSidebarStateResponse {
-    preferences: crate::chat_sidebar_preferences::SessionsSidebarPreferences,
+    preferences: SessionsSidebarPreferences,
     seq: u64,
     directories_page: Value,
     session_pages_by_directory_id: BTreeMap<String, Value>,
@@ -274,7 +492,7 @@ fn cache_key_part(raw: Option<&str>) -> String {
 fn directory_sessions_page_cache_key(
     directory_id: &str,
     query: &crate::opencode_session::SessionListQuery,
-    preferences: &crate::chat_sidebar_preferences::SessionsSidebarPreferences,
+    preferences: &SessionsSidebarPreferences,
 ) -> String {
     [
         format!("directoryId={}", directory_id.trim()),
@@ -1025,7 +1243,7 @@ fn parse_directory_sidebar_page(page_payload: &Value, fallback_page: usize) -> u
 
 struct DirectorySidebarBuildCtx<'a> {
     state: &'a Arc<crate::AppState>,
-    preferences: &'a crate::chat_sidebar_preferences::SessionsSidebarPreferences,
+    preferences: &'a SessionsSidebarPreferences,
     expanded_parent_ids: &'a HashSet<String>,
     directories_by_id: &'a BTreeMap<String, DirectoryWire>,
     directory_id_by_path: &'a BTreeMap<String, String>,
@@ -1328,7 +1546,7 @@ struct ChatSidebarViewBuildInput<'a> {
     runtime_by_session_id: &'a Value,
     recent_page: &'a Value,
     running_page: &'a Value,
-    preferences: &'a crate::chat_sidebar_preferences::SessionsSidebarPreferences,
+    preferences: &'a SessionsSidebarPreferences,
     directory_sessions_page_size: usize,
     pinned_page_size: usize,
     recent_page_size: usize,
@@ -1638,7 +1856,7 @@ pub(crate) async fn directory_sessions_by_id_get(
         .as_deref()
         .and_then(|value| value.trim().parse::<usize>().ok())
         .unwrap_or(SIDEBAR_STATE_DIRECTORY_SESSIONS_PAGE_SIZE_DEFAULT);
-    let preferences = crate::chat_sidebar_preferences::chat_sidebar_preferences_snapshot().await;
+    let preferences = chat_sidebar_preferences_snapshot().await;
 
     let cacheable = is_cacheable_directory_sessions_query(&query);
     let patch_seq = crate::directory_sessions::directory_sessions_latest_seq();
@@ -1891,7 +2109,7 @@ pub(crate) async fn chat_sidebar_state(
 ) -> crate::ApiResult<Response> {
     crate::directory_sessions::ensure_directory_sessions_poller_started(state.clone());
 
-    let preferences = crate::chat_sidebar_preferences::chat_sidebar_preferences_snapshot().await;
+    let preferences = chat_sidebar_preferences_snapshot().await;
     let seq = crate::directory_sessions::directory_sessions_latest_seq();
     let runtime_by_session_id = state.directory_session_index.runtime_snapshot_json();
 
@@ -2184,6 +2402,73 @@ pub(crate) async fn chat_sidebar_state(
     .into_response())
 }
 
+pub(crate) async fn chat_sidebar_state_put(
+    State(state): State<Arc<crate::AppState>>,
+    Query(query): Query<ChatSidebarStateQuery>,
+    headers: HeaderMap,
+    Json(body): Json<SessionsSidebarPreferences>,
+) -> crate::ApiResult<Response> {
+    let _put_guard = SIDEBAR_PREFS_PUT_LOCK.lock().await;
+    let _disk_lock = match acquire_sidebar_preferences_disk_lock().await {
+        Ok(lock) => lock,
+        Err(error) => {
+            return Ok((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": error })),
+            )
+                .into_response());
+        }
+    };
+
+    let current = load_sidebar_preferences_from_disk().await;
+    write_sidebar_preferences_cached(current.clone()).await;
+
+    match validate_put_precondition(&headers, current.version) {
+        PutPrecondition::Ok => {}
+        PutPrecondition::Missing => {
+            return Ok((
+                StatusCode::PRECONDITION_REQUIRED,
+                Json(json!({
+                    "error": "Missing If-Match version precondition",
+                    "code": "missing_precondition",
+                    "current": current,
+                })),
+            )
+                .into_response());
+        }
+        PutPrecondition::Conflict => {
+            return Ok((
+                StatusCode::CONFLICT,
+                Json(json!({
+                    "error": "Sessions sidebar preferences version conflict",
+                    "code": "version_conflict",
+                    "current": current,
+                })),
+            )
+                .into_response());
+        }
+    }
+
+    let mut preferences = sanitize_sidebar_preferences(body);
+    preferences.version = current.version.saturating_add(1);
+    preferences.updated_at = now_millis();
+    if let Err(error) = persist_sidebar_preferences_to_disk(&preferences).await {
+        return Ok((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": error })),
+        )
+            .into_response());
+    }
+
+    write_sidebar_preferences_cached(preferences).await;
+
+    if crate::global_sse_hub::downstream_client_count() > 0 {
+        let _ = publish_chat_sidebar_state_event(state.clone(), ChatSidebarStateQuery::default());
+    }
+
+    chat_sidebar_state(State(state), Query(query)).await
+}
+
 pub(crate) fn publish_chat_sidebar_state_event(
     _state: Arc<crate::AppState>,
     _query: ChatSidebarStateQuery,
@@ -2379,7 +2664,7 @@ mod tests {
             ids: None,
             focus_session_id: Some("ses_focus".to_string()),
         };
-        let preferences = crate::chat_sidebar_preferences::SessionsSidebarPreferences {
+        let preferences = SessionsSidebarPreferences {
             version: 7,
             updated_at: 42,
             ..Default::default()

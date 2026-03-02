@@ -4,7 +4,6 @@ import { i18n } from '@/i18n'
 
 import * as chatApi from '@/stores/chat/api'
 import { apiJson } from '@/lib/api'
-import { postAppBroadcast } from '@/lib/appBroadcast'
 import { normalizeDirectories } from '@/features/sessions/model/projects'
 import type { DirectoryEntry } from '@/features/sessions/model/types'
 import { normalizeDirForCompare } from '@/features/sessions/model/labels'
@@ -27,7 +26,6 @@ type ChatSidebarStateWire = {
 }
 
 const SIDEBAR_STATE_ENDPOINT = '/api/chat-sidebar/state'
-const UI_PREFS_ENDPOINT = '/api/ui/chat-sidebar/preferences'
 const UI_PREFS_REMOTE_SAVE_DEBOUNCE_MS = 300
 
 type SidebarSessionSummary = UnknownRecord & {
@@ -86,11 +84,6 @@ type RevalidateRuntimeOpts = {
   silent?: boolean
 }
 
-type ChatSidebarPreferencesPatchOp = {
-  type: 'preferences.replace'
-  preferences: Partial<ChatSidebarUiPrefs>
-}
-
 type NormalizedSidebarView = {
   directorySidebarById: Record<string, DirectorySidebarView>
   pinnedFooterView: SidebarFooterView
@@ -126,35 +119,6 @@ function toDirectoryEntry(value: JsonValue | null | undefined): DirectoryEntry |
 
 function readEventType(evt: SseEvent): string {
   return typeof evt.type === 'string' ? evt.type.trim() : ''
-}
-
-function readEventProperties(evt: SseEvent): UnknownRecord {
-  return asRecord(evt.properties) || {}
-}
-
-function readEventOps(evt: SseEvent): JsonValue[] {
-  const props = readEventProperties(evt)
-  if (Array.isArray(props.ops)) return props.ops
-  const root = asRecord(evt)
-  return Array.isArray(root?.ops) ? root.ops : []
-}
-
-function parseChatSidebarPreferencesPatchOps(raw: JsonValue): ChatSidebarPreferencesPatchOp[] {
-  if (!Array.isArray(raw)) return []
-  const out: ChatSidebarPreferencesPatchOp[] = []
-  for (const item of raw) {
-    const op = asRecord(item)
-    if (!op) continue
-    const ty = typeof op?.type === 'string' ? op.type.trim() : ''
-    if (ty !== 'preferences.replace') continue
-    const preferences = asRecord(op?.preferences)
-    if (!preferences) continue
-    out.push({
-      type: 'preferences.replace',
-      preferences: preferences as Partial<ChatSidebarUiPrefs>,
-    })
-  }
-  return out
 }
 
 function normalizeUiPrefs(input: Partial<ChatSidebarUiPrefs> | null | undefined): ChatSidebarUiPrefs {
@@ -509,8 +473,9 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
 
     uiPrefsRemotePersistInFlight = true
     const payload = normalizeUiPrefs(uiPrefs.value)
+    const stateUrl = buildSidebarStateUrl(persistedStateQuery)
     try {
-      const persisted = await apiJson<ChatSidebarUiPrefs>(UI_PREFS_ENDPOINT, {
+      const state = await apiJson<ChatSidebarStateWire>(stateUrl, {
         method: 'PUT',
         headers: {
           'content-type': 'application/json',
@@ -518,10 +483,10 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
         },
         body: JSON.stringify(payload),
       })
-      applyAuthoritativeUiPrefs(persisted)
+      applySidebarStatePayload(state as JsonValue)
     } catch {
       // Backend remains the single source of truth.
-      // Next successful state or preferences sync will reconcile local UI state.
+      // Next successful state sync will reconcile local UI state.
     } finally {
       uiPrefsRemotePersistInFlight = false
       if (uiPrefsRemotePersistQueued) {
@@ -540,30 +505,6 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
       updatedAt: Date.now(),
     })
     scheduleUiPrefsRemotePersist()
-
-    postAppBroadcast('chatSidebarUiPrefs.updated', { updatedAt: Date.now() })
-  }
-
-  async function revalidateUiPrefsFromApi(): Promise<boolean> {
-    try {
-      const remote = await apiJson<ChatSidebarUiPrefs>(UI_PREFS_ENDPOINT)
-      applyAuthoritativeUiPrefs(remote)
-      return true
-    } catch {
-      return false
-    }
-  }
-
-  function applyChatSidebarPreferencesEvent(evt: SseEvent) {
-    const type = readEventType(evt)
-    if (type !== 'chat-sidebar-preferences.patch') return
-
-    const ops = parseChatSidebarPreferencesPatchOps(readEventOps(evt))
-    if (ops.length === 0) return
-
-    const latest = ops[ops.length - 1]
-    if (!latest) return
-    applyAuthoritativeUiPrefs(latest.preferences)
   }
 
   function parseRuntimeMap(raw: JsonValue): Record<string, SessionRuntimeState> {
@@ -697,10 +638,6 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     if (!type) return
     if (type === 'chat-sidebar.state') {
       applyChatSidebarStateEvent(evt)
-      return
-    }
-    if (type === 'chat-sidebar-preferences.patch') {
-      applyChatSidebarPreferencesEvent(evt)
     }
   }
 
@@ -911,8 +848,6 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     statusLabelForSessionId,
     isSessionRuntimeActive,
     applyGlobalEvent,
-    applyChatSidebarPreferencesEvent,
-    revalidateUiPrefsFromApi,
     revalidateFromApi,
     bootstrapWithStaleWhileRevalidate,
     resetAllPersistedState,
