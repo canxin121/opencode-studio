@@ -81,6 +81,8 @@ import { useUiStore } from '@/stores/ui'
 const STORAGE_FILES_SHOW_HIDDEN = localStorageKeys.files.showHidden
 const STORAGE_FILES_RESPECT_GITIGNORE = localStorageKeys.files.respectGitignore
 const STORAGE_FILES_AUTOSAVE = localStorageKeys.files.autosave
+const STORAGE_FILES_VIEWER_BLAME_VISIBLE = localStorageKeys.files.viewerBlameVisible
+const STORAGE_FILES_VIEWER_TIMELINE_VISIBLE = localStorageKeys.files.viewerTimelineVisible
 const STORAGE_FILES_SIDEBAR_MODE = localStorageKeys.files.sidebarMode
 const STORAGE_FILES_SEARCH_MODE = localStorageKeys.files.searchMode
 const STORAGE_FILES_CONTENT_SCOPE_MODE = localStorageKeys.files.contentScopeMode
@@ -340,7 +342,8 @@ const uploading = ref(false)
 const showMobileViewer = ref(false)
 const showFilesSidebar = computed(() => (isMobile.value ? ui.isSessionSwitcherOpen : ui.isSidebarOpen))
 
-const blameEnabled = ref(false)
+const blameEnabled = ref(localStorage.getItem(STORAGE_FILES_VIEWER_BLAME_VISIBLE) === 'true')
+const timelineVisibilityPreference = ref(localStorage.getItem(STORAGE_FILES_VIEWER_TIMELINE_VISIBLE) === 'true')
 const blameLoading = ref(false)
 const blameError = ref<string | null>(null)
 const blameLines = ref<GitBlameLine[]>([])
@@ -430,6 +433,10 @@ watch(autoSaveEnabled, (v) => {
     clearAutoSaveTimer()
   }
 })
+watch(blameEnabled, (v) => localStorage.setItem(STORAGE_FILES_VIEWER_BLAME_VISIBLE, v ? 'true' : 'false'))
+watch(timelineVisibilityPreference, (v) =>
+  localStorage.setItem(STORAGE_FILES_VIEWER_TIMELINE_VISIBLE, v ? 'true' : 'false'),
+)
 watch(explorerSidebarMode, (v) => localStorage.setItem(STORAGE_FILES_SIDEBAR_MODE, v))
 watch(explorerSearchMode, (v) => localStorage.setItem(STORAGE_FILES_SEARCH_MODE, v))
 watch(contentSearchScopeMode, (v) => localStorage.setItem(STORAGE_FILES_CONTENT_SCOPE_MODE, v))
@@ -1057,6 +1064,7 @@ function openFileTimeline() {
   }
 
   if (fileTimelineEnabled.value && fileTimelinePath.value === relPath) {
+    timelineVisibilityPreference.value = false
     closeFileTimeline()
     return
   }
@@ -1071,6 +1079,8 @@ function openFileTimeline() {
     clearBlame()
     blameEnabled.value = false
   }
+
+  timelineVisibilityPreference.value = true
 
   if (gitInlineEnabled.value) {
     gitInlineEnabled.value = false
@@ -1291,10 +1301,14 @@ async function ensureDirectoryExpanded(dirPath: string) {
 
 function toggleBlame() {
   if (!blameEnabled.value && fileTimelineEnabled.value) {
+    timelineVisibilityPreference.value = false
     closeFileTimeline()
   }
 
   blameEnabled.value = !blameEnabled.value
+  if (blameEnabled.value) {
+    timelineVisibilityPreference.value = false
+  }
   if (blameEnabled.value) {
     invalidateCurrentBlameCache()
     void loadBlame({ force: true })
@@ -1813,6 +1827,7 @@ async function openFile(node: FileNode) {
     return
   }
 
+  const shouldRestoreTimeline = timelineVisibilityPreference.value
   viewerMode.value = previewMode === 'markdown' ? 'markdown' : 'text'
   try {
     const content = await readFileText({ directory: rootPath, path: node.path })
@@ -1828,6 +1843,9 @@ async function openFile(node: FileNode) {
   } finally {
     if (seq === openFileSeq && root.value === rootPath && selectedFile.value?.path === node.path) {
       fileLoading.value = false
+      if (shouldRestoreTimeline && viewerMode.value === 'text') {
+        openFileTimeline()
+      }
     }
   }
 }

@@ -34,6 +34,8 @@ export const localStorageKeys = {
     showHidden: namespacedKey('files.show-hidden'),
     respectGitignore: namespacedKey('files.respect-gitignore'),
     autosave: namespacedKey('files.autosave'),
+    viewerBlameVisible: namespacedKey('files.viewer.blame-visible'),
+    viewerTimelineVisible: namespacedKey('files.viewer.timeline-visible'),
     sidebarMode: namespacedKey('files.sidebar-mode'),
     searchMode: namespacedKey('files.search-mode'),
     contentScopeMode: namespacedKey('files.content-scope-mode'),
