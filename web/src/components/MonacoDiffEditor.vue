@@ -110,10 +110,20 @@ function updateDiffEditorOptions() {
   if (disposed) return
   const editor = diffEditorRef.value
   if (!editor) return
+  const wrapMode = props.wrap ? 'on' : 'off'
   editor.updateOptions({
     readOnly: Boolean(props.readOnly),
-    wordWrap: props.wrap ? 'on' : 'off',
-    diffWordWrap: props.wrap ? 'on' : 'off',
+    wordWrap: wrapMode,
+    diffWordWrap: wrapMode,
+  })
+
+  // Monaco's diff-level wrapping can diverge between panes in some cases.
+  // Apply wrap mode directly to both sub-editors to keep behavior consistent.
+  editor.getOriginalEditor().updateOptions({
+    wordWrap: wrapMode,
+  })
+  editor.getModifiedEditor().updateOptions({
+    wordWrap: wrapMode,
   })
 }
 
@@ -422,6 +432,7 @@ onMounted(async () => {
     readOnly: Boolean(props.readOnly),
     renderSideBySide: true,
     renderSideBySideInlineBreakpoint: 860,
+    renderOverviewRuler: false,
     scrollBeyondLastLine: false,
     smoothScrolling: true,
     wordWrap: props.wrap ? 'on' : 'off',
