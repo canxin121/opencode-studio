@@ -547,6 +547,10 @@ fn chat_sidebar_patch_ops_for_delta(
     next: &SidebarSnapshot,
     delta: &SnapshotDelta,
 ) -> Vec<crate::chat_sidebar::ChatSidebarPatchOp> {
+    if !delta.changed_runtime_session_ids.is_empty() {
+        return vec![crate::chat_sidebar::ChatSidebarPatchOp::State];
+    }
+
     let mut ops = Vec::<crate::chat_sidebar::ChatSidebarPatchOp>::new();
 
     if !delta.changed_directory_ids.is_empty() {
@@ -583,27 +587,13 @@ fn chat_sidebar_patch_ops_for_delta(
         }
     }
 
-    for session_id in &delta.changed_runtime_session_ids {
-        let sid = session_id.trim();
-        if sid.is_empty() {
-            continue;
-        }
-        let session = next.sessions.get(sid).or_else(|| prev.sessions.get(sid));
-        let Some(session) = session else {
-            continue;
-        };
-        if let Some(directory_id) = session_directory_id(session, &directory_id_by_path) {
-            affected_directory_ids.insert(directory_id);
-        }
-    }
-
     let mut sorted_directory_ids = affected_directory_ids.into_iter().collect::<Vec<_>>();
     sorted_directory_ids.sort();
     for directory_id in sorted_directory_ids {
         ops.push(crate::chat_sidebar::ChatSidebarPatchOp::Directory { directory_id });
     }
 
-    if !delta.changed_session_ids.is_empty() || !delta.changed_runtime_session_ids.is_empty() {
+    if !delta.changed_session_ids.is_empty() {
         ops.push(crate::chat_sidebar::ChatSidebarPatchOp::Footer {
             kind: "pinned".to_string(),
         });
@@ -910,5 +900,28 @@ mod tests {
         let delta = diff_snapshots(&prev, &next);
         assert_eq!(delta.changed_count, 2);
         assert_eq!(delta.removed_session_ids, vec!["s_old".to_string()]);
+    }
+
+    #[test]
+    fn runtime_delta_requests_authoritative_sidebar_state_resync() {
+        let delta = SnapshotDelta {
+            changed_count: 1,
+            removed_session_ids: Vec::new(),
+            changed_directory_ids: vec!["dir_1".to_string()],
+            changed_session_ids: vec!["ses_1".to_string()],
+            changed_runtime_session_ids: vec!["ses_1".to_string()],
+        };
+
+        let ops = chat_sidebar_patch_ops_for_delta(
+            &SidebarSnapshot::default(),
+            &SidebarSnapshot::default(),
+            &delta,
+        );
+
+        assert_eq!(ops.len(), 1);
+        assert!(matches!(
+            ops[0],
+            crate::chat_sidebar::ChatSidebarPatchOp::State
+        ));
     }
 }

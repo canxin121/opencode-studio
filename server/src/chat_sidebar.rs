@@ -20,7 +20,6 @@ use tokio::sync::{Mutex as AsyncMutex, RwLock};
 const BODY_READ_LIMIT: usize = 10 * 1024 * 1024;
 const SIDEBAR_INDEX_CACHE_TTL: Duration = Duration::from_millis(400);
 const SIDEBAR_INDEX_CACHE_MAX_RECENT_VARIANTS: usize = 1;
-const SIDEBAR_INDEX_CACHE_MAX_RUNNING_VARIANTS: usize = 1;
 const DIRECTORY_SESSIONS_PAGE_CACHE_TTL: Duration = Duration::from_millis(1200);
 const DIRECTORY_SESSIONS_PAGE_CACHE_MAX_ENTRIES: usize = 256;
 const SIDEBAR_STATE_DIRECTORIES_PAGE_SIZE_DEFAULT: usize = 15;
@@ -41,17 +40,9 @@ struct RecentIndexCacheEntry {
     items: Vec<RecentIndexItem>,
 }
 
-#[derive(Debug, Clone)]
-struct RunningIndexCacheEntry {
-    built_at: Instant,
-    patch_seq: u64,
-    items: Vec<RunningIndexItem>,
-}
-
 #[derive(Debug, Default)]
 struct SidebarIndexProjectionCache {
     recent: Option<RecentIndexCacheEntry>,
-    running: Option<RunningIndexCacheEntry>,
 }
 
 #[derive(Debug, Clone)]
@@ -660,6 +651,8 @@ struct ChatSidebarPreferencesResponse {
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub(crate) enum ChatSidebarPatchOp {
+    #[serde(rename = "invalidateState")]
+    State,
     #[serde(rename = "invalidatePreferences")]
     Preferences,
     #[serde(rename = "invalidateDirectoriesPage")]
@@ -2013,10 +2006,10 @@ fn cache_entry_is_fresh(entry_patch_seq: u64, now_patch_seq: u64, built_at: Inst
 }
 
 fn bounded_variant_len(kind: &str) -> usize {
-    match kind {
-        "recent" => SIDEBAR_INDEX_CACHE_MAX_RECENT_VARIANTS,
-        "running" => SIDEBAR_INDEX_CACHE_MAX_RUNNING_VARIANTS,
-        _ => 0,
+    if kind == "recent" {
+        SIDEBAR_INDEX_CACHE_MAX_RECENT_VARIANTS
+    } else {
+        0
     }
 }
 
@@ -2034,22 +2027,28 @@ fn build_recent_index_items(state: &Arc<crate::AppState>) -> Vec<RecentIndexItem
 }
 
 async fn build_running_index_items(state: &Arc<crate::AppState>) -> Vec<RunningIndexItem> {
+    let runtime_by_session_id = state.directory_session_index.runtime_snapshot_json();
     let directories = {
         let settings = state.settings.read().await;
         configured_directories(&settings)
     };
+    let directory_id_by_normalized_path = normalize_directory_id_by_path(&directories);
 
-    let mut directory_id_by_normalized_path = BTreeMap::<String, String>::new();
-    for directory in directories {
-        if let Some(path_key) = normalize_path_for_match(&directory.path) {
-            directory_id_by_normalized_path.insert(path_key, directory.id);
-        }
-    }
+    build_running_index_items_from_runtime(
+        state,
+        &runtime_by_session_id,
+        &directory_id_by_normalized_path,
+    )
+}
 
-    let runtime = state.directory_session_index.runtime_snapshot_json();
+fn build_running_index_items_from_runtime(
+    state: &Arc<crate::AppState>,
+    runtime_by_session_id: &Value,
+    directory_id_by_normalized_path: &BTreeMap<String, String>,
+) -> Vec<RunningIndexItem> {
     let mut items = Vec::<RunningIndexItem>::new();
 
-    if let Some(map) = runtime.as_object() {
+    if let Some(map) = runtime_by_session_id.as_object() {
         for (session_id, runtime) in map {
             let sid = session_id.trim();
             if sid.is_empty() {
@@ -2592,44 +2591,6 @@ async fn chat_sidebar_recent_index_page(
     Json(page(items, offset, limit)).into_response()
 }
 
-async fn chat_sidebar_running_index_page(
-    State(state): State<Arc<crate::AppState>>,
-    Query(query): Query<ChatSidebarIndexQuery>,
-) -> Response {
-    let limit = parse_limit(query.limit, 40, 400);
-    let offset = parse_offset(query.offset);
-
-    let patch_seq = crate::directory_sessions::directory_sessions_latest_seq();
-    let mut items = if let Ok(cache) = SIDEBAR_INDEX_CACHE.lock() {
-        if let Some(entry) = cache.running.as_ref() {
-            if cache_entry_is_fresh(entry.patch_seq, patch_seq, entry.built_at) {
-                entry.items.clone()
-            } else {
-                Vec::new()
-            }
-        } else {
-            Vec::new()
-        }
-    } else {
-        Vec::new()
-    };
-
-    if items.is_empty() {
-        items = build_running_index_items(&state).await;
-        if let Ok(mut cache) = SIDEBAR_INDEX_CACHE.lock()
-            && bounded_variant_len("running") > 0
-        {
-            cache.running = Some(RunningIndexCacheEntry {
-                built_at: Instant::now(),
-                patch_seq,
-                items: items.clone(),
-            });
-        }
-    }
-
-    Json(page(items, offset, limit)).into_response()
-}
-
 pub(crate) async fn chat_sidebar_session_search(
     State(state): State<Arc<crate::AppState>>,
     Query(query): Query<ChatSidebarSessionSearchQuery>,
@@ -2756,7 +2717,7 @@ pub(crate) async fn chat_sidebar_state(
     let recent_page = query
         .recent_page
         .unwrap_or(preferences.recent_sessions_page);
-    let running_page = query
+    let running_page_no = query
         .running_page
         .unwrap_or(preferences.running_sessions_page);
     let running_page_size = parse_limit(
@@ -2962,21 +2923,26 @@ pub(crate) async fn chat_sidebar_state(
             .into_response());
     };
 
-    let running_page_response = chat_sidebar_running_index_page(
-        State(state.clone()),
-        Query(ChatSidebarIndexQuery {
-            offset: Some(page_to_offset(running_page, running_page_size)),
-            limit: Some(running_page_size),
-        }),
-    )
-    .await;
-    let Some(running_page) = decode_json_response(running_page_response).await else {
-        return Ok((
-            StatusCode::BAD_GATEWAY,
-            Json(json!({"error": "invalid running index response"})),
-        )
-            .into_response());
-    };
+    let running_items = build_running_index_items_from_runtime(
+        &state,
+        &runtime_by_session_id,
+        &configured_directory_id_by_path,
+    );
+    let running_page = serde_json::to_value(page(
+        running_items,
+        page_to_offset(running_page_no, running_page_size),
+        running_page_size,
+    ))
+    .unwrap_or_else(|_| {
+        json!({
+            "items": [],
+            "total": 0,
+            "offset": 0,
+            "limit": running_page_size,
+            "hasMore": false,
+            "nextOffset": Value::Null,
+        })
+    });
 
     let view = build_chat_sidebar_view(ChatSidebarViewBuildInput {
         state: &state,
@@ -4010,13 +3976,8 @@ mod tests {
             bounded_variant_len("recent"),
             SIDEBAR_INDEX_CACHE_MAX_RECENT_VARIANTS
         );
-        assert_eq!(
-            bounded_variant_len("running"),
-            SIDEBAR_INDEX_CACHE_MAX_RUNNING_VARIANTS
-        );
         assert_eq!(bounded_variant_len("unknown"), 0);
         assert_eq!(SIDEBAR_INDEX_CACHE_MAX_RECENT_VARIANTS, 1);
-        assert_eq!(SIDEBAR_INDEX_CACHE_MAX_RUNNING_VARIANTS, 1);
     }
 
     #[test]
@@ -4238,5 +4199,18 @@ mod tests {
             "dir_1"
         );
         assert!(value.get("directory_id").is_none());
+    }
+
+    #[test]
+    fn chat_sidebar_patch_state_op_serializes_type() {
+        let value =
+            serde_json::to_value(ChatSidebarPatchOp::State).expect("patch op should serialize");
+        assert_eq!(
+            value
+                .get("type")
+                .and_then(|raw| raw.as_str())
+                .expect("type string"),
+            "invalidateState"
+        );
     }
 }

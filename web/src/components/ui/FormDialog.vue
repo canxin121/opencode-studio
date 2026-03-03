@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch, type CSSProperties, type ComponentPublicInstance } from 'vue'
+import { computed, onBeforeUnmount, ref, watch, type CSSProperties } from 'vue'
 import { DialogContent, DialogDescription, DialogOverlay, DialogPortal, DialogRoot, DialogTitle } from 'radix-vue'
 import { RiCloseLine } from '@remixicon/vue'
 import { useI18n } from 'vue-i18n'
@@ -34,11 +34,8 @@ const { t } = useI18n()
 const MOBILE_SHEET_MARGIN_PX = 8
 const MOBILE_SHEET_MIN_MAX_HEIGHT_PX = 180
 
-const panelEl = ref<HTMLElement | ComponentPublicInstance | null>(null)
-
 const mobileSheetStyle = ref<CSSProperties>({
   top: `${MOBILE_SHEET_MARGIN_PX}px`,
-  height: 'auto',
   maxHeight: `calc(100dvh - ${MOBILE_SHEET_MARGIN_PX * 2}px)`,
 })
 
@@ -90,19 +87,9 @@ function resolveViewportHeight(): number {
   return window.innerHeight
 }
 
-function resolvePanelElement(): HTMLElement | null {
-  const panel = panelEl.value
-  if (!panel) return null
-  if (panel instanceof HTMLElement) return panel
-  const root = panel.$el
-  return root instanceof HTMLElement ? root : null
-}
-
-async function syncMobileSheetPosition() {
+function syncMobileSheetPosition() {
   if (!props.open || !isMobileSheet.value) return
   if (typeof window === 'undefined' || typeof document === 'undefined') return
-
-  await nextTick()
 
   const viewportHeight = resolveViewportHeight()
   if (!viewportHeight) return
@@ -115,31 +102,14 @@ async function syncMobileSheetPosition() {
   const bottomInset = safeBottom + bottomNav + MOBILE_SHEET_MARGIN_PX
   const maxHeight = Math.max(MOBILE_SHEET_MIN_MAX_HEIGHT_PX, viewportHeight - topInset - bottomInset)
 
-  // Measure with auto height first so compact forms don't inherit stale large heights.
   mobileSheetStyle.value = {
-    top: `${topInset}px`,
-    height: 'auto',
-    maxHeight: `${Math.round(maxHeight)}px`,
-  }
-
-  await nextTick()
-
-  const panel = resolvePanelElement()
-  const naturalHeight = panel && panel.scrollHeight > 0 ? panel.scrollHeight : maxHeight
-  const clampedHeight = Math.min(maxHeight, naturalHeight)
-
-  const centeredOffset = Math.max(0, Math.round((maxHeight - clampedHeight) / 2))
-  const top = topInset + centeredOffset
-
-  mobileSheetStyle.value = {
-    top: `${top}px`,
-    height: naturalHeight > maxHeight ? `${Math.round(maxHeight)}px` : 'auto',
+    top: `${Math.round(topInset)}px`,
     maxHeight: `${Math.round(maxHeight)}px`,
   }
 }
 
 function onMobileViewportChange() {
-  void syncMobileSheetPosition()
+  syncMobileSheetPosition()
 }
 
 function bindMobileViewportEvents() {
@@ -165,7 +135,7 @@ watch(
   (open) => {
     if (open && isMobileSheet.value) {
       bindMobileViewportEvents()
-      void syncMobileSheetPosition()
+      syncMobileSheetPosition()
       return
     }
 
@@ -180,7 +150,7 @@ watch(
     if (!props.open) return
     if (mobile) {
       bindMobileViewportEvents()
-      void syncMobileSheetPosition()
+      syncMobileSheetPosition()
       return
     }
 
@@ -199,7 +169,7 @@ onBeforeUnmount(() => {
       <DialogOverlay
         class="fixed inset-0 z-[70] pointer-events-auto bg-black/55 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
       />
-      <DialogContent ref="panelEl" :class="contentClass" :style="contentStyle">
+      <DialogContent :class="contentClass" :style="contentStyle">
         <div class="flex items-start justify-between gap-3 border-b border-border/40 px-4 py-3 sm:px-5 sm:py-3">
           <div class="min-w-0">
             <DialogTitle v-if="sheetTitle" class="text-sm font-semibold text-foreground sm:text-base break-words">
