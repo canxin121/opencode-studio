@@ -1611,6 +1611,15 @@ export default {
         pageDown: 'PgDn',
       },
     },
+    shortcuts: {
+      openHelp: 'Show terminal shortcuts',
+      title: 'Terminal shortcuts',
+      description: 'Linux-style clipboard and interrupt shortcuts while terminal is focused.',
+      copyOrInterrupt: 'Copy selected text, or send interrupt (^C) when no selection',
+      copySelection: 'Copy selected terminal text',
+      pasteInput: 'Paste clipboard text into terminal input',
+      macMetaCompat: 'macOS compatibility for copy and paste',
+    },
     emptyState: {
       title: 'Select a terminal session',
       description: 'Use the terminals panel to pick an existing session or create a new one.',

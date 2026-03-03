@@ -37,3 +37,21 @@ export async function copyTextToClipboard(text: string): Promise<boolean> {
     return false
   }
 }
+
+export async function readTextFromClipboard(): Promise<string> {
+  try {
+    if (
+      typeof navigator !== 'undefined' &&
+      typeof window !== 'undefined' &&
+      window.isSecureContext &&
+      navigator.clipboard?.readText
+    ) {
+      const text = await navigator.clipboard.readText()
+      return String(text || '')
+    }
+  } catch {
+    // Fall back.
+  }
+
+  return ''
+}
