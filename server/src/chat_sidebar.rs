@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, HashSet, VecDeque};
 use std::fs::OpenOptions;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
 use std::time::{Duration, Instant};
 
@@ -8,7 +9,7 @@ use axum::{
     Json,
     body::to_bytes,
     extract::{Path as AxumPath, Query, State},
-    http::{HeaderMap, HeaderValue, StatusCode, header},
+    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
 };
 use fs2::FileExt as _;
@@ -27,7 +28,6 @@ const SIDEBAR_STATE_DIRECTORY_SESSIONS_PAGE_SIZE_DEFAULT: usize = 10;
 const SIDEBAR_STATE_FOOTER_PAGE_SIZE_DEFAULT: usize = 10;
 const SIDEBAR_DIRECTORY_PAGE_FETCH_CONCURRENCY: usize = 6;
 const SIDEBAR_RECENT_INDEX_SEED_LIMIT: usize = 40;
-const CHAT_SIDEBAR_PATCH_LOG_MAX_ENTRIES: usize = 512;
 const SIDEBAR_RESPONSE_CACHE_TTL: Duration = Duration::from_millis(450);
 const SIDEBAR_RESPONSE_CACHE_MAX_ENTRIES: usize = 64;
 const SIDEBAR_PREFS_FLUSH_DEBOUNCE: Duration = Duration::from_millis(180);
@@ -36,7 +36,7 @@ const SIDEBAR_PREFS_FLUSH_RETRY_DELAY: Duration = Duration::from_millis(1200);
 #[derive(Debug, Clone)]
 struct RecentIndexCacheEntry {
     built_at: Instant,
-    patch_seq: u64,
+    delta_seq: u64,
     items: Vec<RecentIndexItem>,
 }
 
@@ -49,7 +49,7 @@ struct SidebarIndexProjectionCache {
 struct DirectorySessionsPageCacheEntry {
     key: String,
     built_at: Instant,
-    patch_seq: u64,
+    delta_seq: u64,
     payload: Value,
 }
 
@@ -63,7 +63,7 @@ struct DirectorySessionsPageCache {
 struct SidebarResponseCacheEntry {
     key: String,
     built_at: Instant,
-    patch_seq: u64,
+    delta_seq: u64,
     payload: Value,
 }
 
@@ -85,10 +85,7 @@ static DIRECTORY_SESSIONS_PAGE_CACHE: LazyLock<Mutex<DirectorySessionsPageCache>
     LazyLock::new(|| Mutex::new(DirectorySessionsPageCache::default()));
 static SIDEBAR_STATE_RESPONSE_CACHE: LazyLock<Mutex<SidebarResponseCache>> =
     LazyLock::new(|| Mutex::new(SidebarResponseCache::default()));
-static SIDEBAR_DIRECTORIES_PAGE_RESPONSE_CACHE: LazyLock<Mutex<SidebarResponseCache>> =
-    LazyLock::new(|| Mutex::new(SidebarResponseCache::default()));
-static CHAT_SIDEBAR_PATCH_LOG: LazyLock<Mutex<ChatSidebarPatchLog>> =
-    LazyLock::new(|| Mutex::new(ChatSidebarPatchLog::default()));
+static CHAT_SIDEBAR_DELTA_SEQ: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -350,38 +347,6 @@ pub(crate) async fn chat_sidebar_preferences_snapshot() -> SessionsSidebarPrefer
     read_sidebar_preferences_cached().await
 }
 
-fn parse_if_match_version(headers: &HeaderMap) -> Option<u64> {
-    let raw = headers.get(header::IF_MATCH)?.to_str().ok()?.trim();
-    if raw.is_empty() || raw == "*" {
-        return None;
-    }
-
-    let weak_trimmed = raw.strip_prefix("W/").unwrap_or(raw).trim();
-    let quoted_trimmed = weak_trimmed.trim_matches('"').trim();
-    if quoted_trimmed.is_empty() {
-        return None;
-    }
-
-    quoted_trimmed.parse::<u64>().ok()
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PutPrecondition {
-    Ok,
-    Missing,
-    Conflict,
-}
-
-fn validate_put_precondition(headers: &HeaderMap, current_version: u64) -> PutPrecondition {
-    let Some(expected_version) = parse_if_match_version(headers) else {
-        return PutPrecondition::Missing;
-    };
-    if expected_version != current_version {
-        return PutPrecondition::Conflict;
-    }
-    PutPrecondition::Ok
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct DirectoryWire {
@@ -411,34 +376,6 @@ pub(crate) struct ChatSidebarStateQuery {
     pub running_page: Option<usize>,
     pub recent_page_size: Option<usize>,
     pub running_page_size: Option<usize>,
-}
-
-#[derive(Debug, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct ChatSidebarDirectoriesPageQuery {
-    pub page: Option<usize>,
-    pub page_size: Option<usize>,
-    pub query: Option<String>,
-    pub directory_sessions_page_size: Option<usize>,
-}
-
-#[derive(Debug, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct ChatSidebarFooterQuery {
-    pub page: Option<usize>,
-    pub page_size: Option<usize>,
-}
-
-#[derive(Debug, Deserialize)]
-pub(crate) struct ChatSidebarFooterPath {
-    pub kind: String,
-}
-
-#[derive(Debug, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct ChatSidebarPatchesQuery {
-    pub since: Option<u64>,
-    pub limit: Option<usize>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -474,6 +411,25 @@ pub(crate) enum ChatSidebarCommandRequest {
     FooterOpen { kind: String, open: bool },
     #[serde(rename = "setFooterPage")]
     FooterPage { kind: String, page: usize },
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub(crate) enum ChatSidebarCommandsRequest {
+    Single(ChatSidebarCommandRequest),
+    List(Vec<ChatSidebarCommandRequest>),
+    Wrapped {
+        commands: Vec<ChatSidebarCommandRequest>,
+    },
+}
+
+impl ChatSidebarCommandsRequest {
+    fn into_commands(self) -> Vec<ChatSidebarCommandRequest> {
+        match self {
+            Self::Single(command) => vec![command],
+            Self::List(commands) | Self::Wrapped { commands } => commands,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -605,7 +561,6 @@ struct SessionSummariesByIdsResponse {
 struct ChatSidebarStateResponse {
     preferences: SessionsSidebarPreferences,
     seq: u64,
-    patch_seq: u64,
     directories_page: Value,
     session_pages_by_directory_id: BTreeMap<String, Value>,
     runtime_by_session_id: Value,
@@ -615,40 +570,20 @@ struct ChatSidebarStateResponse {
     view: ChatSidebarViewWire,
 }
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct ChatSidebarFooterResponse {
-    kind: String,
-    seq: u64,
-    patch_seq: u64,
-    view: SidebarFooterViewWire,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct ChatSidebarDirectoriesPageViewWire {
-    directory_rows_by_id: BTreeMap<String, DirectorySidebarViewWire>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct ChatSidebarDirectoriesPageResponse {
-    preferences: SessionsSidebarPreferences,
-    seq: u64,
-    patch_seq: u64,
-    directories_page: Value,
-    view: ChatSidebarDirectoriesPageViewWire,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct ChatSidebarPreferencesResponse {
-    preferences: SessionsSidebarPreferences,
-    seq: u64,
-    patch_seq: u64,
-}
-
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ChatSidebarDeltaWire {
+    ops: Vec<ChatSidebarPatchOp>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ChatSidebarCommandsResponse {
+    preferences: SessionsSidebarPreferences,
+    seq: u64,
+    delta: ChatSidebarDeltaWire,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub(crate) enum ChatSidebarPatchOp {
     #[serde(rename = "invalidateState")]
@@ -672,91 +607,14 @@ pub(crate) enum ChatSidebarPatchOp {
     Footer { kind: String },
 }
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct ChatSidebarPatchWire {
-    seq: u64,
-    timestamp: u64,
-    ops: Vec<ChatSidebarPatchOp>,
+fn chat_sidebar_delta_latest_seq() -> u64 {
+    CHAT_SIDEBAR_DELTA_SEQ
+        .load(Ordering::Relaxed)
+        .saturating_sub(1)
 }
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct ChatSidebarPatchesResponse {
-    since: u64,
-    oldest_seq: u64,
-    latest_seq: u64,
-    need_resync: bool,
-    patches: Vec<ChatSidebarPatchWire>,
-}
-
-#[derive(Debug)]
-struct ChatSidebarPatchLog {
-    next_seq: u64,
-    entries: VecDeque<ChatSidebarPatchWire>,
-}
-
-impl Default for ChatSidebarPatchLog {
-    fn default() -> Self {
-        Self {
-            next_seq: 1,
-            entries: VecDeque::new(),
-        }
-    }
-}
-
-impl ChatSidebarPatchLog {
-    fn latest_seq(&self) -> u64 {
-        self.next_seq.saturating_sub(1)
-    }
-
-    fn oldest_seq(&self) -> u64 {
-        self.entries
-            .front()
-            .map(|entry| entry.seq)
-            .unwrap_or_else(|| self.latest_seq())
-    }
-
-    fn insert(&mut self, ops: Vec<ChatSidebarPatchOp>) -> u64 {
-        let seq = self.next_seq;
-        self.next_seq = self.next_seq.saturating_add(1);
-        self.entries.push_back(ChatSidebarPatchWire {
-            seq,
-            timestamp: now_millis(),
-            ops,
-        });
-        while self.entries.len() > CHAT_SIDEBAR_PATCH_LOG_MAX_ENTRIES {
-            let _ = self.entries.pop_front();
-        }
-        seq
-    }
-
-    fn collect_since(&self, since: u64, limit: usize) -> (bool, Vec<ChatSidebarPatchWire>) {
-        if since > 0
-            && let Some(oldest) = self.entries.front().map(|entry| entry.seq)
-            && since.saturating_add(1) < oldest
-        {
-            return (true, Vec::new());
-        }
-
-        let patches = self
-            .entries
-            .iter()
-            .filter(|entry| entry.seq > since)
-            .take(limit.max(1))
-            .cloned()
-            .collect::<Vec<_>>();
-
-        (false, patches)
-    }
-}
-
-fn chat_sidebar_patch_latest_seq() -> u64 {
-    if let Ok(log) = CHAT_SIDEBAR_PATCH_LOG.lock() {
-        log.latest_seq()
-    } else {
-        0
-    }
+fn chat_sidebar_delta_next_seq() -> u64 {
+    CHAT_SIDEBAR_DELTA_SEQ.fetch_add(1, Ordering::SeqCst)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -904,41 +762,6 @@ fn sidebar_state_cache_key(query: &ChatSidebarStateQuery) -> String {
     .join("|")
 }
 
-fn sidebar_directories_page_cache_key(query: &ChatSidebarDirectoriesPageQuery) -> String {
-    [
-        format!(
-            "page={}",
-            query
-                .page
-                .map(|value| value.to_string())
-                .unwrap_or_default()
-        ),
-        format!(
-            "pageSize={}",
-            query
-                .page_size
-                .map(|value| value.to_string())
-                .unwrap_or_default()
-        ),
-        format!(
-            "query={}",
-            query
-                .query
-                .as_deref()
-                .map(|value| value.trim().to_string())
-                .unwrap_or_default()
-        ),
-        format!(
-            "directorySessionsPageSize={}",
-            query
-                .directory_sessions_page_size
-                .map(|value| value.to_string())
-                .unwrap_or_default()
-        ),
-    ]
-    .join("|")
-}
-
 fn directory_sessions_page_cache_key(
     directory_id: &str,
     query: &crate::opencode_session::SessionListQuery,
@@ -993,12 +816,12 @@ fn is_cacheable_directory_sessions_query(
 }
 
 impl DirectorySessionsPageCache {
-    fn get_fresh(&mut self, key: &str, patch_seq: u64) -> Option<Value> {
+    fn get_fresh(&mut self, key: &str, delta_seq: u64) -> Option<Value> {
         let stale_keys = self
             .entries
             .iter()
             .filter_map(|(entry_key, entry)| {
-                if entry.patch_seq != patch_seq
+                if entry.delta_seq != delta_seq
                     || entry.built_at.elapsed() > DIRECTORY_SESSIONS_PAGE_CACHE_TTL
                 {
                     Some(entry_key.clone())
@@ -1039,12 +862,12 @@ impl DirectorySessionsPageCache {
 }
 
 impl SidebarResponseCache {
-    fn get_fresh(&mut self, key: &str, patch_seq: u64) -> Option<Value> {
+    fn get_fresh(&mut self, key: &str, delta_seq: u64) -> Option<Value> {
         let stale_keys = self
             .entries
             .iter()
             .filter_map(|(entry_key, entry)| {
-                if entry.patch_seq != patch_seq
+                if entry.delta_seq != delta_seq
                     || entry.built_at.elapsed() > SIDEBAR_RESPONSE_CACHE_TTL
                 {
                     Some(entry_key.clone())
@@ -2001,8 +1824,8 @@ fn build_sidebar_footer_view(
     }
 }
 
-fn cache_entry_is_fresh(entry_patch_seq: u64, now_patch_seq: u64, built_at: Instant) -> bool {
-    entry_patch_seq == now_patch_seq && built_at.elapsed() <= SIDEBAR_INDEX_CACHE_TTL
+fn cache_entry_is_fresh(entry_delta_seq: u64, now_delta_seq: u64, built_at: Instant) -> bool {
+    entry_delta_seq == now_delta_seq && built_at.elapsed() <= SIDEBAR_INDEX_CACHE_TTL
 }
 
 fn bounded_variant_len(kind: &str) -> usize {
@@ -2024,21 +1847,6 @@ fn build_recent_index_items(state: &Arc<crate::AppState>) -> Vec<RecentIndexItem
         });
     }
     items
-}
-
-async fn build_running_index_items(state: &Arc<crate::AppState>) -> Vec<RunningIndexItem> {
-    let runtime_by_session_id = state.directory_session_index.runtime_snapshot_json();
-    let directories = {
-        let settings = state.settings.read().await;
-        configured_directories(&settings)
-    };
-    let directory_id_by_normalized_path = normalize_directory_id_by_path(&directories);
-
-    build_running_index_items_from_runtime(
-        state,
-        &runtime_by_session_id,
-        &directory_id_by_normalized_path,
-    )
 }
 
 fn build_running_index_items_from_runtime(
@@ -2472,12 +2280,12 @@ pub(crate) async fn directory_sessions_by_id_get(
     let preferences = chat_sidebar_preferences_snapshot().await;
 
     let cacheable = is_cacheable_directory_sessions_query(&query);
-    let patch_seq = crate::directory_sessions::directory_sessions_latest_seq();
+    let delta_seq = chat_sidebar_delta_latest_seq();
     let cache_key = directory_sessions_page_cache_key(&directory_id, &query, &preferences);
 
     if cacheable
         && let Ok(mut cache) = DIRECTORY_SESSIONS_PAGE_CACHE.lock()
-        && let Some(payload) = cache.get_fresh(&cache_key, patch_seq)
+        && let Some(payload) = cache.get_fresh(&cache_key, delta_seq)
     {
         return Ok(Json(payload).into_response());
     }
@@ -2545,7 +2353,7 @@ pub(crate) async fn directory_sessions_by_id_get(
         cache.insert(DirectorySessionsPageCacheEntry {
             key: cache_key,
             built_at: Instant::now(),
-            patch_seq,
+            delta_seq,
             payload: payload.clone(),
         });
     }
@@ -2560,10 +2368,10 @@ async fn chat_sidebar_recent_index_page(
     let limit = parse_limit(query.limit, 40, 40);
     let offset = parse_offset(query.offset);
 
-    let patch_seq = crate::directory_sessions::directory_sessions_latest_seq();
+    let delta_seq = chat_sidebar_delta_latest_seq();
     let mut items = if let Ok(cache) = SIDEBAR_INDEX_CACHE.lock() {
         if let Some(entry) = cache.recent.as_ref() {
-            if cache_entry_is_fresh(entry.patch_seq, patch_seq, entry.built_at) {
+            if cache_entry_is_fresh(entry.delta_seq, delta_seq, entry.built_at) {
                 entry.items.clone()
             } else {
                 Vec::new()
@@ -2582,7 +2390,7 @@ async fn chat_sidebar_recent_index_page(
         {
             cache.recent = Some(RecentIndexCacheEntry {
                 built_at: Instant::now(),
-                patch_seq,
+                delta_seq,
                 items: items.clone(),
             });
         }
@@ -2685,9 +2493,9 @@ pub(crate) async fn chat_sidebar_state(
     crate::directory_sessions::ensure_directory_sessions_poller_started(state.clone());
 
     let response_cache_key = sidebar_state_cache_key(&query);
-    let patch_seq_at_start = chat_sidebar_patch_latest_seq();
+    let delta_seq_at_start = chat_sidebar_delta_latest_seq();
     if let Ok(mut cache) = SIDEBAR_STATE_RESPONSE_CACHE.lock()
-        && let Some(payload) = cache.get_fresh(&response_cache_key, patch_seq_at_start)
+        && let Some(payload) = cache.get_fresh(&response_cache_key, delta_seq_at_start)
     {
         return Ok(Json(payload).into_response());
     }
@@ -2959,11 +2767,10 @@ pub(crate) async fn chat_sidebar_state(
         pinned_page,
     });
 
-    let patch_seq = chat_sidebar_patch_latest_seq();
+    let delta_seq = chat_sidebar_delta_latest_seq();
     let payload = serde_json::to_value(ChatSidebarStateResponse {
         preferences,
         seq,
-        patch_seq,
         directories_page,
         session_pages_by_directory_id,
         runtime_by_session_id,
@@ -2978,401 +2785,12 @@ pub(crate) async fn chat_sidebar_state(
         cache.insert(SidebarResponseCacheEntry {
             key: response_cache_key,
             built_at: Instant::now(),
-            patch_seq,
+            delta_seq,
             payload: payload.clone(),
         });
     }
 
     Ok(Json(payload).into_response())
-}
-
-pub(crate) async fn chat_sidebar_directories_page_get(
-    State(state): State<Arc<crate::AppState>>,
-    Query(query): Query<ChatSidebarDirectoriesPageQuery>,
-) -> crate::ApiResult<Response> {
-    crate::directory_sessions::ensure_directory_sessions_poller_started(state.clone());
-
-    let response_cache_key = sidebar_directories_page_cache_key(&query);
-    let patch_seq_at_start = chat_sidebar_patch_latest_seq();
-    if let Ok(mut cache) = SIDEBAR_DIRECTORIES_PAGE_RESPONSE_CACHE.lock()
-        && let Some(payload) = cache.get_fresh(&response_cache_key, patch_seq_at_start)
-    {
-        return Ok(Json(payload).into_response());
-    }
-
-    let preferences = chat_sidebar_preferences_snapshot().await;
-    let seq = crate::directory_sessions::directory_sessions_latest_seq();
-
-    let directories_page_size = parse_limit(
-        query.page_size,
-        SIDEBAR_STATE_DIRECTORIES_PAGE_SIZE_DEFAULT,
-        400,
-    );
-    let directory_sessions_page_size = parse_limit(
-        query.directory_sessions_page_size,
-        SIDEBAR_STATE_DIRECTORY_SESSIONS_PAGE_SIZE_DEFAULT,
-        200,
-    );
-    let directories_page = query.page.unwrap_or(preferences.directories_page);
-    let directory_query = query
-        .query
-        .as_deref()
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty());
-
-    let configured = {
-        let settings = state.settings.read().await;
-        configured_directories(&settings)
-    };
-    state.directory_session_index.replace_directory_mappings(
-        configured
-            .iter()
-            .map(|directory| (directory.id.clone(), directory.path.clone()))
-            .collect(),
-    );
-
-    let directories_offset = page_to_offset(directories_page, directories_page_size);
-    let directories_page_response = directories_get(
-        State(state.clone()),
-        Query(DirectoriesQuery {
-            offset: Some(directories_offset),
-            limit: Some(directories_page_size),
-            query: directory_query,
-        }),
-    )
-    .await;
-    let Some(directories_page) = decode_json_response(directories_page_response).await else {
-        return Ok((
-            StatusCode::BAD_GATEWAY,
-            Json(json!({"error": "invalid directories response"})),
-        )
-            .into_response());
-    };
-
-    let visible_directories = visible_directory_wires_from_page_payload(&directories_page);
-    let expanded_visible_ids =
-        expanded_directory_ids(&visible_directories, &preferences.collapsed_directory_ids);
-
-    let directory_page_requests = expanded_visible_ids
-        .into_iter()
-        .map(|directory_id| {
-            let root_page = preferences
-                .session_root_page_by_directory_id
-                .get(&directory_id)
-                .copied()
-                .unwrap_or(0);
-            SidebarDirectoryPageRequest {
-                directory_id,
-                root_page,
-                focus_session_id: None,
-            }
-        })
-        .collect::<Vec<_>>();
-    let session_pages_by_directory_id = match fetch_sidebar_directory_session_pages(
-        state.clone(),
-        directory_page_requests,
-        directory_sessions_page_size,
-    )
-    .await
-    {
-        Ok(session_pages_by_directory_id) => session_pages_by_directory_id,
-        Err(response) => return Ok(response),
-    };
-
-    let runtime_by_session_id = state.directory_session_index.runtime_snapshot_json();
-    let directory_rows_by_id = build_directory_rows_by_id_for_visible_directories(
-        &state,
-        &preferences,
-        &configured,
-        &visible_directories,
-        &session_pages_by_directory_id,
-        &runtime_by_session_id,
-        directory_sessions_page_size,
-    );
-
-    let patch_seq = chat_sidebar_patch_latest_seq();
-    let payload = serde_json::to_value(ChatSidebarDirectoriesPageResponse {
-        preferences,
-        seq,
-        patch_seq,
-        directories_page,
-        view: ChatSidebarDirectoriesPageViewWire {
-            directory_rows_by_id,
-        },
-    })
-    .unwrap_or(Value::Null);
-
-    if let Ok(mut cache) = SIDEBAR_DIRECTORIES_PAGE_RESPONSE_CACHE.lock() {
-        cache.insert(SidebarResponseCacheEntry {
-            key: response_cache_key,
-            built_at: Instant::now(),
-            patch_seq,
-            payload: payload.clone(),
-        });
-    }
-
-    Ok(Json(payload).into_response())
-}
-
-pub(crate) async fn chat_sidebar_footer_get(
-    State(state): State<Arc<crate::AppState>>,
-    AxumPath(path): AxumPath<ChatSidebarFooterPath>,
-    Query(query): Query<ChatSidebarFooterQuery>,
-) -> Response {
-    let Some(kind) = ChatSidebarFooterKind::parse(&path.kind) else {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(json!({
-                "error": "invalid footer kind",
-                "expected": ["pinned", "recent", "running"],
-            })),
-        )
-            .into_response();
-    };
-
-    let preferences = chat_sidebar_preferences_snapshot().await;
-    let page_size = match kind {
-        ChatSidebarFooterKind::Pinned => parse_limit(
-            query.page_size,
-            SIDEBAR_STATE_FOOTER_PAGE_SIZE_DEFAULT,
-            SIDEBAR_STATE_FOOTER_PAGE_SIZE_DEFAULT,
-        ),
-        ChatSidebarFooterKind::Recent => {
-            parse_limit(query.page_size, SIDEBAR_STATE_FOOTER_PAGE_SIZE_DEFAULT, 40)
-        }
-        ChatSidebarFooterKind::Running => {
-            parse_limit(query.page_size, SIDEBAR_STATE_FOOTER_PAGE_SIZE_DEFAULT, 400)
-        }
-    };
-    let page = query.page.unwrap_or(match kind {
-        ChatSidebarFooterKind::Pinned => preferences.pinned_sessions_page,
-        ChatSidebarFooterKind::Recent => preferences.recent_sessions_page,
-        ChatSidebarFooterKind::Running => preferences.running_sessions_page,
-    });
-
-    let configured = {
-        let settings = state.settings.read().await;
-        configured_directories(&settings)
-    };
-    state.directory_session_index.replace_directory_mappings(
-        configured
-            .iter()
-            .map(|directory| (directory.id.clone(), directory.path.clone()))
-            .collect(),
-    );
-
-    let all_directories = all_known_sidebar_directories(&state, &configured);
-    let directories_by_id = normalize_directory_wires_by_id(&all_directories);
-    let directory_id_by_path = normalize_directory_id_by_path(&all_directories);
-    let expanded_parent_ids = preferences
-        .expanded_parent_session_ids
-        .iter()
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
-        .collect::<HashSet<_>>();
-
-    let view = match kind {
-        ChatSidebarFooterKind::Pinned => {
-            let all_root_ids = preferences
-                .pinned_session_ids
-                .iter()
-                .map(|value| value.trim().to_string())
-                .filter(|value| !value.is_empty())
-                .collect::<Vec<_>>();
-            let mut root_directory_hint = BTreeMap::<String, DirectoryWire>::new();
-            for root_id in &all_root_ids {
-                let Some(summary) = state.directory_session_index.summary(root_id) else {
-                    continue;
-                };
-                if let Some(directory) = directory_wire_for_path(
-                    &summary.directory_path,
-                    &directory_id_by_path,
-                    &directories_by_id,
-                ) {
-                    root_directory_hint.insert(root_id.clone(), directory);
-                }
-            }
-
-            let ctx = SidebarFooterBuildCtx {
-                state: &state,
-                expanded_parent_ids: &expanded_parent_ids,
-                directories_by_id: &directories_by_id,
-                directory_id_by_path: &directory_id_by_path,
-                root_directory_hint: &root_directory_hint,
-            };
-            build_sidebar_footer_view(&ctx, &all_root_ids, page, page_size)
-        }
-        ChatSidebarFooterKind::Recent => {
-            let mut all_root_ids = Vec::<String>::new();
-            let mut root_directory_hint = BTreeMap::<String, DirectoryWire>::new();
-            for item in build_recent_index_items(&state) {
-                let sid = item.session_id.trim();
-                if sid.is_empty() {
-                    continue;
-                }
-                let sid = sid.to_string();
-                all_root_ids.push(sid.clone());
-
-                let directory = directories_by_id
-                    .get(item.directory_id.trim())
-                    .cloned()
-                    .or_else(|| {
-                        directory_wire_for_path(
-                            &item.directory_path,
-                            &directory_id_by_path,
-                            &directories_by_id,
-                        )
-                    });
-                if let Some(directory) = directory {
-                    root_directory_hint.insert(sid, directory);
-                }
-            }
-
-            let ctx = SidebarFooterBuildCtx {
-                state: &state,
-                expanded_parent_ids: &expanded_parent_ids,
-                directories_by_id: &directories_by_id,
-                directory_id_by_path: &directory_id_by_path,
-                root_directory_hint: &root_directory_hint,
-            };
-            build_sidebar_footer_view(&ctx, &all_root_ids, page, page_size)
-        }
-        ChatSidebarFooterKind::Running => {
-            let mut all_root_ids = Vec::<String>::new();
-            let mut root_directory_hint = BTreeMap::<String, DirectoryWire>::new();
-            for item in build_running_index_items(&state).await {
-                let sid = item.session_id.trim();
-                if sid.is_empty() {
-                    continue;
-                }
-                let sid = sid.to_string();
-                all_root_ids.push(sid.clone());
-
-                let directory = item
-                    .directory_id
-                    .as_deref()
-                    .and_then(|directory_id| directories_by_id.get(directory_id.trim()).cloned())
-                    .or_else(|| {
-                        item.directory_path.as_deref().and_then(|directory_path| {
-                            directory_wire_for_path(
-                                directory_path,
-                                &directory_id_by_path,
-                                &directories_by_id,
-                            )
-                        })
-                    });
-                if let Some(directory) = directory {
-                    root_directory_hint.insert(sid, directory);
-                }
-            }
-
-            let ctx = SidebarFooterBuildCtx {
-                state: &state,
-                expanded_parent_ids: &expanded_parent_ids,
-                directories_by_id: &directories_by_id,
-                directory_id_by_path: &directory_id_by_path,
-                root_directory_hint: &root_directory_hint,
-            };
-            build_sidebar_footer_view(&ctx, &all_root_ids, page, page_size)
-        }
-    };
-
-    let seq = crate::directory_sessions::directory_sessions_latest_seq();
-    Json(ChatSidebarFooterResponse {
-        kind: kind.as_str().to_string(),
-        seq,
-        patch_seq: chat_sidebar_patch_latest_seq(),
-        view,
-    })
-    .into_response()
-}
-
-pub(crate) async fn chat_sidebar_state_put(
-    State(state): State<Arc<crate::AppState>>,
-    Query(query): Query<ChatSidebarStateQuery>,
-    headers: HeaderMap,
-    Json(body): Json<SessionsSidebarPreferences>,
-) -> crate::ApiResult<Response> {
-    match persist_sidebar_preferences_with_precondition(&headers, body).await {
-        Ok(_) => {}
-        Err(response) => return Ok(response),
-    }
-
-    let _ = publish_chat_sidebar_patch_event(sidebar_patch_ops_for_preferences_write());
-
-    if crate::global_sse_hub::downstream_client_count() > 0 {
-        let _ = publish_chat_sidebar_state_event(state.clone(), ChatSidebarStateQuery::default());
-    }
-
-    let mut response = chat_sidebar_state(State(state), Query(query)).await?;
-    response
-        .headers_mut()
-        .insert("deprecation", HeaderValue::from_static("true"));
-    response.headers_mut().insert(
-        "link",
-        HeaderValue::from_static("</api/chat-sidebar/commands>; rel=\"successor-version\""),
-    );
-    Ok(response)
-}
-
-async fn persist_sidebar_preferences_with_precondition(
-    headers: &HeaderMap,
-    body: SessionsSidebarPreferences,
-) -> Result<SessionsSidebarPreferences, Response> {
-    let _put_guard = SIDEBAR_PREFS_PUT_LOCK.lock().await;
-    let _disk_lock = match acquire_sidebar_preferences_disk_lock().await {
-        Ok(lock) => lock,
-        Err(error) => {
-            return Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "error": error })),
-            )
-                .into_response());
-        }
-    };
-
-    let current = read_sidebar_preferences_cached().await;
-
-    match validate_put_precondition(headers, current.version) {
-        PutPrecondition::Ok => {}
-        PutPrecondition::Missing => {
-            return Err((
-                StatusCode::PRECONDITION_REQUIRED,
-                Json(json!({
-                    "error": "Missing If-Match version precondition",
-                    "code": "missing_precondition",
-                    "current": current,
-                })),
-            )
-                .into_response());
-        }
-        PutPrecondition::Conflict => {
-            return Err((
-                StatusCode::CONFLICT,
-                Json(json!({
-                    "error": "Sessions sidebar preferences version conflict",
-                    "code": "version_conflict",
-                    "current": current,
-                })),
-            )
-                .into_response());
-        }
-    }
-
-    let mut preferences = sanitize_sidebar_preferences(body);
-    preferences.version = current.version.saturating_add(1);
-    preferences.updated_at = now_millis();
-    if let Err(error) = persist_sidebar_preferences_to_disk(&preferences).await {
-        return Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "error": error })),
-        )
-            .into_response());
-    }
-
-    write_sidebar_preferences_cached(preferences.clone()).await;
-
-    Ok(preferences)
 }
 
 async fn mutate_sidebar_preferences(
@@ -3509,9 +2927,9 @@ fn build_patch_directory_view_op_from_cache(
         focus_session_id: None,
     };
     let cache_key = directory_sessions_page_cache_key(did, &query, preferences);
-    let patch_seq = crate::directory_sessions::directory_sessions_latest_seq();
+    let delta_seq = chat_sidebar_delta_latest_seq();
     let payload = if let Ok(mut cache) = DIRECTORY_SESSIONS_PAGE_CACHE.lock() {
-        cache.get_fresh(&cache_key, patch_seq)
+        cache.get_fresh(&cache_key, delta_seq)
     } else {
         None
     }?;
@@ -3563,41 +2981,24 @@ fn sidebar_patch_data_ops_for_command(
     }
 }
 
-fn sidebar_patch_ops_for_preferences_write() -> Vec<ChatSidebarPatchOp> {
-    vec![
-        ChatSidebarPatchOp::Preferences,
-        ChatSidebarPatchOp::DirectoriesPage,
-        ChatSidebarPatchOp::Footer {
-            kind: "pinned".to_string(),
-        },
-        ChatSidebarPatchOp::Footer {
-            kind: "recent".to_string(),
-        },
-        ChatSidebarPatchOp::Footer {
-            kind: "running".to_string(),
-        },
-    ]
-}
-
-pub(crate) fn publish_chat_sidebar_patch_event(ops: Vec<ChatSidebarPatchOp>) -> bool {
+pub(crate) fn publish_chat_sidebar_delta_event(ops: Vec<ChatSidebarPatchOp>) -> bool {
     if ops.is_empty() {
         return false;
     }
 
-    let seq = if let Ok(mut log) = CHAT_SIDEBAR_PATCH_LOG.lock() {
-        log.insert(ops)
-    } else {
-        return false;
-    };
+    let seq = chat_sidebar_delta_next_seq();
 
     if crate::global_sse_hub::downstream_client_count() == 0 {
         return false;
     }
 
     let payload = serde_json::to_string(&json!({
-        "type": "chat-sidebar.patch",
+        "type": "chat-sidebar.delta",
         "properties": {
             "seq": seq,
+            "delta": {
+                "ops": ops,
+            }
         }
     }))
     .unwrap_or_else(|_| "{}".to_string());
@@ -3606,142 +3007,137 @@ pub(crate) fn publish_chat_sidebar_patch_event(ops: Vec<ChatSidebarPatchOp>) -> 
     true
 }
 
-pub(crate) async fn chat_sidebar_patches_get(
-    Query(query): Query<ChatSidebarPatchesQuery>,
-) -> Response {
-    let since = query.since.unwrap_or(0);
-    let limit = parse_limit(query.limit, 80, 400);
-
-    let (oldest_seq, latest_seq, need_resync, patches) =
-        if let Ok(log) = CHAT_SIDEBAR_PATCH_LOG.lock() {
-            let oldest_seq = log.oldest_seq();
-            let latest_seq = log.latest_seq();
-            let (need_resync, patches) = log.collect_since(since, limit);
-            (oldest_seq, latest_seq, need_resync, patches)
-        } else {
-            (0, 0, true, Vec::new())
-        };
-
-    Json(ChatSidebarPatchesResponse {
-        since,
-        oldest_seq,
-        latest_seq,
-        need_resync,
-        patches,
-    })
-    .into_response()
-}
-
-pub(crate) async fn chat_sidebar_command_post(
-    State(state): State<Arc<crate::AppState>>,
-    Json(command): Json<ChatSidebarCommandRequest>,
+pub(crate) async fn chat_sidebar_commands_post(
+    Json(request): Json<ChatSidebarCommandsRequest>,
 ) -> crate::ApiResult<Response> {
-    let normalized = match &command {
-        ChatSidebarCommandRequest::DirectoryCollapsed { directory_id, .. }
-        | ChatSidebarCommandRequest::DirectoryRootPage { directory_id, .. } => {
-            if trim_non_empty(directory_id).is_none() {
-                return Ok((
-                    StatusCode::BAD_REQUEST,
-                    Json(json!({ "error": "directory_id is required" })),
-                )
-                    .into_response());
-            }
-            None
-        }
-        ChatSidebarCommandRequest::SessionPinned { session_id, .. }
-        | ChatSidebarCommandRequest::SessionExpanded { session_id, .. } => {
-            if trim_non_empty(session_id).is_none() {
-                return Ok((
-                    StatusCode::BAD_REQUEST,
-                    Json(json!({ "error": "session_id is required" })),
-                )
-                    .into_response());
-            }
-            None
-        }
-        ChatSidebarCommandRequest::FooterOpen { kind, .. }
-        | ChatSidebarCommandRequest::FooterPage { kind, .. } => match normalize_footer_kind(kind) {
-            Some(kind) => Some(kind.to_string()),
-            None => {
-                return Ok((
-                    StatusCode::BAD_REQUEST,
-                    Json(json!({
-                        "error": "invalid footer kind",
-                        "expected": ["pinned", "recent", "running"],
-                    })),
-                )
-                    .into_response());
-            }
-        },
-        _ => None,
-    };
+    let commands = request.into_commands();
+    if commands.is_empty() {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "error": "commands must not be empty" })),
+        )
+            .into_response());
+    }
 
-    let preferences = match mutate_sidebar_preferences(|preferences| match &command {
-        ChatSidebarCommandRequest::DirectoriesPage { page } => {
-            preferences.directories_page = *page;
-        }
-        ChatSidebarCommandRequest::DirectoryCollapsed {
-            directory_id,
-            collapsed,
-        } => {
-            let Some(directory_id) = trim_non_empty(directory_id) else {
-                return;
-            };
-            set_toggle_membership(
-                &mut preferences.collapsed_directory_ids,
-                &directory_id,
-                *collapsed,
-            );
-        }
-        ChatSidebarCommandRequest::DirectoryRootPage { directory_id, page } => {
-            let Some(directory_id) = trim_non_empty(directory_id) else {
-                return;
-            };
-            preferences
-                .session_root_page_by_directory_id
-                .insert(directory_id, *page);
-        }
-        ChatSidebarCommandRequest::SessionPinned { session_id, pinned } => {
-            let Some(session_id) = trim_non_empty(session_id) else {
-                return;
-            };
-            set_toggle_membership(&mut preferences.pinned_session_ids, &session_id, *pinned);
-        }
-        ChatSidebarCommandRequest::SessionExpanded {
-            session_id,
-            expanded,
-        } => {
-            let Some(session_id) = trim_non_empty(session_id) else {
-                return;
-            };
-            set_toggle_membership(
-                &mut preferences.expanded_parent_session_ids,
-                &session_id,
-                *expanded,
-            );
-        }
-        ChatSidebarCommandRequest::FooterOpen { kind, open } => {
-            let kind = normalized
-                .as_deref()
-                .or_else(|| normalize_footer_kind(kind))
-                .unwrap_or("pinned");
-            match kind {
-                "pinned" => preferences.pinned_sessions_open = *open,
-                "recent" => preferences.recent_sessions_open = *open,
-                "running" => preferences.running_sessions_open = *open,
-                _ => {}
+    let mut normalized_kinds = Vec::<Option<String>>::with_capacity(commands.len());
+    for command in &commands {
+        let normalized = match command {
+            ChatSidebarCommandRequest::DirectoryCollapsed { directory_id, .. }
+            | ChatSidebarCommandRequest::DirectoryRootPage { directory_id, .. } => {
+                if trim_non_empty(directory_id).is_none() {
+                    return Ok((
+                        StatusCode::BAD_REQUEST,
+                        Json(json!({ "error": "directory_id is required" })),
+                    )
+                        .into_response());
+                }
+                None
             }
-        }
-        ChatSidebarCommandRequest::FooterPage { kind, page } => {
-            let kind = normalized
-                .as_deref()
-                .or_else(|| normalize_footer_kind(kind))
-                .unwrap_or("pinned");
-            match kind {
-                "pinned" => preferences.pinned_sessions_page = *page,
-                "recent" => preferences.recent_sessions_page = *page,
-                "running" => preferences.running_sessions_page = *page,
-                _ => {}
+            ChatSidebarCommandRequest::SessionPinned { session_id, .. }
+            | ChatSidebarCommandRequest::SessionExpanded { session_id, .. } => {
+                if trim_non_empty(session_id).is_none() {
+                    return Ok((
+                        StatusCode::BAD_REQUEST,
+                        Json(json!({ "error": "session_id is required" })),
+                    )
+                        .into_response());
+                }
+                None
+            }
+            ChatSidebarCommandRequest::FooterOpen { kind, .. }
+            | ChatSidebarCommandRequest::FooterPage { kind, .. } => {
+                match normalize_footer_kind(kind) {
+                    Some(kind) => Some(kind.to_string()),
+                    None => {
+                        return Ok((
+                            StatusCode::BAD_REQUEST,
+                            Json(json!({
+                                "error": "invalid footer kind",
+                                "expected": ["pinned", "recent", "running"],
+                            })),
+                        )
+                            .into_response());
+                    }
+                }
+            }
+            _ => None,
+        };
+        normalized_kinds.push(normalized);
+    }
+
+    let preferences = match mutate_sidebar_preferences(|preferences| {
+        for (idx, command) in commands.iter().enumerate() {
+            let normalized = normalized_kinds.get(idx).and_then(|value| value.as_deref());
+            match command {
+                ChatSidebarCommandRequest::DirectoriesPage { page } => {
+                    preferences.directories_page = *page;
+                }
+                ChatSidebarCommandRequest::DirectoryCollapsed {
+                    directory_id,
+                    collapsed,
+                } => {
+                    let Some(directory_id) = trim_non_empty(directory_id) else {
+                        continue;
+                    };
+                    set_toggle_membership(
+                        &mut preferences.collapsed_directory_ids,
+                        &directory_id,
+                        *collapsed,
+                    );
+                }
+                ChatSidebarCommandRequest::DirectoryRootPage { directory_id, page } => {
+                    let Some(directory_id) = trim_non_empty(directory_id) else {
+                        continue;
+                    };
+                    preferences
+                        .session_root_page_by_directory_id
+                        .insert(directory_id, *page);
+                }
+                ChatSidebarCommandRequest::SessionPinned { session_id, pinned } => {
+                    let Some(session_id) = trim_non_empty(session_id) else {
+                        continue;
+                    };
+                    set_toggle_membership(
+                        &mut preferences.pinned_session_ids,
+                        &session_id,
+                        *pinned,
+                    );
+                }
+                ChatSidebarCommandRequest::SessionExpanded {
+                    session_id,
+                    expanded,
+                } => {
+                    let Some(session_id) = trim_non_empty(session_id) else {
+                        continue;
+                    };
+                    set_toggle_membership(
+                        &mut preferences.expanded_parent_session_ids,
+                        &session_id,
+                        *expanded,
+                    );
+                }
+                ChatSidebarCommandRequest::FooterOpen { kind, open } => {
+                    let kind = normalized
+                        .or_else(|| normalize_footer_kind(kind))
+                        .unwrap_or("pinned");
+                    match kind {
+                        "pinned" => preferences.pinned_sessions_open = *open,
+                        "recent" => preferences.recent_sessions_open = *open,
+                        "running" => preferences.running_sessions_open = *open,
+                        _ => {}
+                    }
+                }
+                ChatSidebarCommandRequest::FooterPage { kind, page } => {
+                    let kind = normalized
+                        .or_else(|| normalize_footer_kind(kind))
+                        .unwrap_or("pinned");
+                    match kind {
+                        "pinned" => preferences.pinned_sessions_page = *page,
+                        "recent" => preferences.recent_sessions_page = *page,
+                        "running" => preferences.running_sessions_page = *page,
+                        _ => {}
+                    }
+                }
             }
         }
     })
@@ -3751,78 +3147,20 @@ pub(crate) async fn chat_sidebar_command_post(
         Err(response) => return Ok(response),
     };
 
-    let mut patch_ops = sidebar_patch_ops_for_command(&command);
-    let patch_data_ops = sidebar_patch_data_ops_for_command(&command, &preferences);
-    patch_ops.extend(patch_data_ops);
-    let _ = publish_chat_sidebar_patch_event(patch_ops);
-
-    if crate::global_sse_hub::downstream_client_count() > 0 {
-        let _ = publish_chat_sidebar_state_event(state.clone(), ChatSidebarStateQuery::default());
+    let mut ops = Vec::<ChatSidebarPatchOp>::new();
+    for command in &commands {
+        ops.extend(sidebar_patch_ops_for_command(command));
+        ops.extend(sidebar_patch_data_ops_for_command(command, &preferences));
     }
+    let _ = publish_chat_sidebar_delta_event(ops.clone());
 
     let seq = crate::directory_sessions::directory_sessions_latest_seq();
-    Ok(Json(ChatSidebarPreferencesResponse {
+    Ok(Json(ChatSidebarCommandsResponse {
         preferences,
         seq,
-        patch_seq: chat_sidebar_patch_latest_seq(),
+        delta: ChatSidebarDeltaWire { ops },
     })
     .into_response())
-}
-
-pub(crate) async fn chat_sidebar_preferences_get() -> Response {
-    let preferences = chat_sidebar_preferences_snapshot().await;
-    let seq = crate::directory_sessions::directory_sessions_latest_seq();
-    Json(ChatSidebarPreferencesResponse {
-        preferences,
-        seq,
-        patch_seq: chat_sidebar_patch_latest_seq(),
-    })
-    .into_response()
-}
-
-pub(crate) async fn chat_sidebar_preferences_put(
-    State(state): State<Arc<crate::AppState>>,
-    headers: HeaderMap,
-    Json(body): Json<SessionsSidebarPreferences>,
-) -> crate::ApiResult<Response> {
-    let preferences = match persist_sidebar_preferences_with_precondition(&headers, body).await {
-        Ok(preferences) => preferences,
-        Err(response) => return Ok(response),
-    };
-
-    let _ = publish_chat_sidebar_patch_event(sidebar_patch_ops_for_preferences_write());
-
-    if crate::global_sse_hub::downstream_client_count() > 0 {
-        let _ = publish_chat_sidebar_state_event(state.clone(), ChatSidebarStateQuery::default());
-    }
-
-    let seq = crate::directory_sessions::directory_sessions_latest_seq();
-    Ok(Json(ChatSidebarPreferencesResponse {
-        preferences,
-        seq,
-        patch_seq: chat_sidebar_patch_latest_seq(),
-    })
-    .into_response())
-}
-
-pub(crate) fn publish_chat_sidebar_state_event(
-    _state: Arc<crate::AppState>,
-    _query: ChatSidebarStateQuery,
-) -> bool {
-    if crate::global_sse_hub::downstream_client_count() == 0 {
-        return false;
-    }
-
-    let payload = serde_json::to_string(&json!({
-        "type": "chat-sidebar.state",
-        "properties": {
-            "seq": crate::directory_sessions::directory_sessions_latest_seq(),
-        }
-    }))
-    .unwrap_or_else(|_| "{}".to_string());
-
-    crate::global_sse_hub::publish_downstream_json(&payload);
-    true
 }
 
 pub(crate) async fn sessions_summaries_get(
@@ -3955,7 +3293,7 @@ mod tests {
     }
 
     #[test]
-    fn cache_entry_is_fresh_requires_matching_patch_seq_and_ttl() {
+    fn cache_entry_is_fresh_requires_matching_delta_seq_and_ttl() {
         let fresh = cache_entry_is_fresh(10, 10, Instant::now());
         assert!(fresh);
 
@@ -4021,7 +3359,7 @@ mod tests {
             cache.insert(DirectorySessionsPageCacheEntry {
                 key: format!("k_{i}"),
                 built_at: Instant::now(),
-                patch_seq: 10,
+                delta_seq: 10,
                 payload: json!({"i": i}),
             });
         }
@@ -4038,13 +3376,13 @@ mod tests {
         cache.insert(DirectorySessionsPageCacheEntry {
             key: "fresh".to_string(),
             built_at: Instant::now(),
-            patch_seq: 7,
+            delta_seq: 7,
             payload: json!({"ok": true}),
         });
         cache.insert(DirectorySessionsPageCacheEntry {
             key: "stale".to_string(),
             built_at: Instant::now() - DIRECTORY_SESSIONS_PAGE_CACHE_TTL - Duration::from_millis(5),
-            patch_seq: 7,
+            delta_seq: 7,
             payload: json!({"ok": false}),
         });
 

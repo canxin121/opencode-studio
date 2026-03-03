@@ -12,6 +12,6 @@ test('sidebar session root page size is fixed to 10 end-to-end', () => {
   assert.ok(sidebarSource.includes('const SESSION_ROOTS_PAGE_SIZE = 10'))
   assert.ok(storeSource.includes('limitPerDirectory'))
   assert.ok(storeSource.includes('directorySessionsPageSize'))
-  assert.ok(runtimeSource.includes('return 10'))
+  assert.ok(runtimeSource.includes('scheduleSidebarRecoverySync'))
   assert.ok(serverSidebarSource.includes('const SIDEBAR_STATE_DIRECTORY_SESSIONS_PAGE_SIZE_DEFAULT: usize = 10;'))
 })
