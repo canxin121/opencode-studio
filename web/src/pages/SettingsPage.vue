@@ -33,6 +33,7 @@ import {
 import { syncDesktopBackendTarget } from '@/lib/backend'
 import { localStorageKeys } from '@/lib/persistence/storageKeys'
 import {
+  CHAT_ACTIVITY_EXPAND_KEYS,
   DEFAULT_CHAT_ACTIVITY_EXPAND_KEYS,
   DEFAULT_CHAT_TOOL_ACTIVITY_FILTERS,
   DEFAULT_CHAT_ACTIVITY_SUMMARY_FILTERS,
@@ -604,7 +605,7 @@ function toggleActivityDefaultExpanded(id: ChatActivityExpandKey) {
   const next = new Set(chatActivityDefaultExpanded.value)
   if (next.has(id)) next.delete(id)
   else next.add(id)
-  const ordered = DEFAULT_CHAT_ACTIVITY_EXPAND_KEYS.filter((t) => next.has(t))
+  const ordered = CHAT_ACTIVITY_EXPAND_KEYS.filter((t) => next.has(t))
   chatActivityDefaultExpanded.value = ordered
 }
 
@@ -630,7 +631,7 @@ function setActivitySummaryEnabled(id: ChatActivityExpandKey, enabled: boolean) 
   if (!enabled) {
     const nextExpanded = new Set(chatActivityDefaultExpanded.value)
     if (nextExpanded.delete(id)) {
-      chatActivityDefaultExpanded.value = DEFAULT_CHAT_ACTIVITY_EXPAND_KEYS.filter((t) => nextExpanded.has(t))
+      chatActivityDefaultExpanded.value = CHAT_ACTIVITY_EXPAND_KEYS.filter((t) => nextExpanded.has(t))
     }
   }
 }
