@@ -8,7 +8,7 @@
       "script": "bun run dev",
       "cwd": "../../web"
     },
-    "devUrl": "http://127.0.0.1:3000",
+    "devUrl": "http://localhost:5173",
     "frontendDist": "../../web/dist"
   },
   "app": {
@@ -18,8 +18,7 @@
         "title": "OpenCode Studio",
         "width": 1200,
         "height": 820,
-        "resizable": true,
-        "url": "http://127.0.0.1:3000"
+        "resizable": true
       }
     ],
     "security": {

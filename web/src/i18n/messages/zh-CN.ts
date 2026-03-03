@@ -260,6 +260,9 @@ export default {
   login: {
     title: 'OpenCode Studio',
     subtitle: '选择后端。如果后端已锁定，输入密码继续。',
+    backendLoadingTitle: '后端加载中，请稍候',
+    backendLoadingDescription: '正在初始化桌面后端，页面会在就绪后自动恢复。',
+    backendLoadingRetry: '立即重试',
     backendLabel: '后端',
     selectBackendTitle: '后端',
     searchBackends: '搜索后端',
