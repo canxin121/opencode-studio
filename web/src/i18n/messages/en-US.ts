@@ -261,7 +261,8 @@ export default {
     title: 'OpenCode Studio',
     subtitle: "Choose a backend. If it's locked, enter your password to continue.",
     backendLoadingTitle: 'Backend is starting, please wait',
-    backendLoadingDescription: 'Desktop backend is still initializing. The page will recover automatically once it is ready.',
+    backendLoadingDescription:
+      'Desktop backend is still initializing. The page will recover automatically once it is ready.',
     backendLoadingRetry: 'Retry now',
     backendLabel: 'Backend',
     selectBackendTitle: 'Backend',
