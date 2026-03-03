@@ -18,6 +18,7 @@ function asRecord(value: PersistenceValue): PersistenceRecord {
 export function useOpenCodeConfigPanelPersistence(opts: {
   configStore: {
     data: PersistenceValue
+    exists: boolean | null
     refresh: (args?: RefreshArgs) => Promise<void>
     save: (data: PersistenceRecord, args?: RefreshArgs) => Promise<void>
   }
@@ -45,13 +46,31 @@ export function useOpenCodeConfigPanelPersistence(opts: {
   reloadOpenCodeConfig: () => Promise<PersistenceValue>
 }) {
   const reloading = ref(false)
+  const initialScopeResolved = ref(false)
 
   function requiresJsoncRewriteConfirm(): boolean {
     return opts.isJsoncActivePath.value && opts.jsoncWarnEnabled.value
   }
 
   async function refresh() {
+    if (!initialScopeResolved.value && opts.scope.value === 'project' && !opts.directory.value) {
+      initialScopeResolved.value = true
+      opts.scope.value = 'user'
+      return
+    }
+
     await opts.configStore.refresh({ scope: opts.scope.value, directory: opts.directory.value || null })
+
+    if (!initialScopeResolved.value && opts.scope.value === 'project' && opts.configStore.exists === false) {
+      initialScopeResolved.value = true
+      opts.scope.value = 'user'
+      return
+    }
+
+    if (!initialScopeResolved.value) {
+      initialScopeResolved.value = true
+    }
+
     opts.syncDraft()
   }
 

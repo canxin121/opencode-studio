@@ -95,7 +95,9 @@ const directoryStore = useDirectoryStore()
 const toasts = useToastsStore()
 const { t } = useI18n()
 
-const scope = ref<OpencodeConfigScope>(configStore.scope || 'user')
+const scope = ref<OpencodeConfigScope>(
+  configStore.scope === 'project' && configStore.exists === false ? 'user' : configStore.scope || 'user',
+)
 
 const scopePickerOptions = computed(() => [
   { value: 'user', label: t('settings.opencodeConfig.scope.user') },
