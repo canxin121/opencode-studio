@@ -15,9 +15,11 @@ const props = withDefaults(
     description?: string
     maxWidth?: string
     mobileTitle?: string
+    mobileFillViewport?: boolean
   }>(),
   {
     mobileTitle: '',
+    mobileFillViewport: false,
   },
 )
 
@@ -37,6 +39,7 @@ const MOBILE_SHEET_MIN_MAX_HEIGHT_PX = 180
 const mobileSheetStyle = ref<CSSProperties>({
   top: `${MOBILE_SHEET_MARGIN_PX}px`,
   maxHeight: `calc(100dvh - ${MOBILE_SHEET_MARGIN_PX * 2}px)`,
+  '--oc-form-dialog-mobile-max-height': `calc(100dvh - ${MOBILE_SHEET_MARGIN_PX * 2}px)`,
 })
 
 const desktopContentClass = computed(() =>
@@ -58,6 +61,12 @@ const contentStyle = computed<CSSProperties | undefined>(() =>
   isMobileSheet.value ? mobileSheetStyle.value : undefined,
 )
 const sheetTitle = computed(() => (isMobileSheet.value && props.mobileTitle ? props.mobileTitle : props.title || ''))
+const contentBodyClass = computed(() =>
+  cn(
+    'min-h-0 flex-1 p-4 sm:p-5',
+    isMobileSheet.value && props.mobileFillViewport ? 'overflow-hidden' : 'overflow-auto',
+  ),
+)
 
 let mobileViewportEventsBound = false
 
@@ -96,16 +105,22 @@ function syncMobileSheetPosition() {
 
   const safeTop = cssVarPx('--oc-safe-area-top', 0)
   const safeBottom = cssVarPx('--oc-safe-area-bottom', 0)
-  const bottomNav = cssVarPx('--oc-bottom-nav-height', 56)
 
   const topInset = safeTop + MOBILE_SHEET_MARGIN_PX
-  const bottomInset = safeBottom + bottomNav + MOBILE_SHEET_MARGIN_PX
+  const bottomInset = safeBottom + MOBILE_SHEET_MARGIN_PX
   const maxHeight = Math.max(MOBILE_SHEET_MIN_MAX_HEIGHT_PX, viewportHeight - topInset - bottomInset)
 
-  mobileSheetStyle.value = {
+  const nextStyle: CSSProperties = {
     top: `${Math.round(topInset)}px`,
     maxHeight: `${Math.round(maxHeight)}px`,
+    '--oc-form-dialog-mobile-max-height': `${Math.round(maxHeight)}px`,
   }
+
+  if (props.mobileFillViewport) {
+    nextStyle.height = `${Math.round(maxHeight)}px`
+  }
+
+  mobileSheetStyle.value = nextStyle
 }
 
 function onMobileViewportChange() {
@@ -191,7 +206,7 @@ onBeforeUnmount(() => {
           </IconButton>
         </div>
 
-        <div class="min-h-0 flex-1 overflow-auto p-4 sm:p-5">
+        <div :class="contentBodyClass">
           <slot />
         </div>
       </DialogContent>

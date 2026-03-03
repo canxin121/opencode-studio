@@ -358,6 +358,13 @@ watch(
 )
 
 const browserVisible = computed(() => props.view === 'browser' || browserOpen.value)
+const rootClass = computed(() => (props.view === 'browser' ? 'relative flex h-full min-h-0 flex-col' : 'relative'))
+const browserViewportWrapperClass = computed(() => (props.view === 'browser' ? 'min-h-0 flex-1' : 'mt-3'))
+const browserViewportClass = computed(() => {
+  if (props.browserClass) return props.browserClass
+  if (props.view === 'browser') return 'flex min-h-0 h-full flex-col'
+  return 'min-h-[50vh] max-h-[50vh]'
+})
 
 watch(
   () => [props.view, props.basePath],
@@ -371,7 +378,7 @@ watch(
 </script>
 
 <template>
-  <div class="relative">
+  <div :class="rootClass">
     <div v-if="props.view === 'compact'" class="flex items-center gap-2">
       <Input v-model="value" :placeholder="placeholder" :disabled="disabled" class="min-w-0" :class="inputClass" />
       <Button
@@ -386,13 +393,13 @@ watch(
       </Button>
     </div>
 
-    <div v-if="browserVisible" class="mt-3">
+    <div v-if="browserVisible" :class="browserViewportWrapperClass">
       <div v-if="browserTitle || browserDescription" class="mb-2">
         <div v-if="browserTitle" class="typography-ui-label font-semibold">{{ browserTitle }}</div>
         <div v-if="browserDescription" class="typography-micro text-muted-foreground">{{ browserDescription }}</div>
       </div>
 
-      <div class="flex flex-col gap-3" :class="browserClass || 'min-h-[50vh] max-h-[50vh]'">
+      <div class="flex min-h-0 flex-col gap-3" :class="browserViewportClass">
         <div class="flex items-center gap-2 flex-wrap">
           <Input
             v-model="value"

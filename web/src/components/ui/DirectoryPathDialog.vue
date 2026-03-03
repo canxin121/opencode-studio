@@ -42,22 +42,25 @@ const confirmButtonDisabled = computed(() => {
     :open="open"
     :title="title"
     :description="description"
+    mobile-fill-viewport
     @update:open="(value) => emit('update:open', value)"
   >
-    <div class="flex min-h-0 flex-col gap-3">
-      <PathPicker
-        v-model="pathModel"
-        :placeholder="placeholder"
-        view="browser"
-        mode="directory"
-        :resolve-to-absolute="true"
-        :base-path="basePath || ''"
-        :show-options="true"
-        :show-gitignored="true"
-        :allow-create-directory="allowCreateDirectory ?? true"
-        input-class="h-9 font-mono"
-        browser-class="flex h-[min(56vh,34rem)] min-h-[14rem] min-h-0 flex-col"
-      />
+    <div class="flex h-full min-h-0 flex-col gap-3">
+      <div class="min-h-0 flex-1">
+        <PathPicker
+          v-model="pathModel"
+          :placeholder="placeholder"
+          view="browser"
+          mode="directory"
+          :resolve-to-absolute="true"
+          :base-path="basePath || ''"
+          :show-options="true"
+          :show-gitignored="true"
+          :allow-create-directory="allowCreateDirectory ?? true"
+          input-class="h-9 font-mono"
+          browser-class="flex min-h-0 h-full flex-col sm:h-[min(56vh,34rem)] sm:min-h-[14rem]"
+        />
+      </div>
       <div class="flex flex-none items-center justify-end gap-2">
         <Button variant="ghost" @click="emit('update:open', false)">
           {{ t('common.cancel') }}
