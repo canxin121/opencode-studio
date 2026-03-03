@@ -1206,7 +1206,7 @@ async function searchSessionHits(query: string, limit: number, signal?: AbortSig
   if (!q || limit <= 0) return []
   try {
     const payload = await apiJson<SessionValue>(
-      `/api/chat-sidebar/sessions/search?query=${encodeURIComponent(q)}&limit=${encodeURIComponent(String(Math.max(1, Math.floor(limit))))}`,
+      `/api/chat-sidebar/search?query=${encodeURIComponent(q)}&limit=${encodeURIComponent(String(Math.max(1, Math.floor(limit))))}`,
       signal ? { signal } : undefined,
     )
     const record = asRecord(payload)

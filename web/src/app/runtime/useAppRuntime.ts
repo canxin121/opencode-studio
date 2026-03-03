@@ -95,11 +95,6 @@ export function useAppRuntime() {
     return false
   }
 
-  function computeSidebarLimitPerDirectory(opts?: { reason?: string; gapMs?: number }): number {
-    void opts
-    return 10
-  }
-
   function resyncAfterResume(reason: string, opts?: { gapMs?: number }) {
     const now = Date.now()
     if (now - lastResumeSyncAt < 1500) return
@@ -120,9 +115,7 @@ export function useAppRuntime() {
       void chat.refreshMessages(sid, { silent: true }).catch(() => {})
     }
     void activity.refresh().catch(() => {})
-    void directorySessions
-      .revalidateFromApi({ limitPerDirectory: computeSidebarLimitPerDirectory({ reason, gapMs: opts?.gapMs }) })
-      .catch(() => {})
+    directorySessions.scheduleSidebarRecoverySync(`resume:${reason}`, 160)
 
     try {
       console.debug('[sse] resync after resume:', reason)
@@ -219,9 +212,7 @@ export function useAppRuntime() {
           }
           void settings.refresh().catch(() => {})
           void activity.refresh().catch(() => {})
-          void directorySessions
-            .revalidateFromApi({ limitPerDirectory: computeSidebarLimitPerDirectory({ reason: 'sse-gap' }) })
-            .catch(() => {})
+          directorySessions.scheduleSidebarRecoverySync('sequence-gap', 160)
         },
         onEvent: (evt) => {
           if (evt.type === 'config.settings.replace') {
@@ -238,9 +229,7 @@ export function useAppRuntime() {
               }
               void settings.refresh().catch(() => {})
               void activity.refresh().catch(() => {})
-              void directorySessions
-                .revalidateFromApi({ limitPerDirectory: computeSidebarLimitPerDirectory({ reason: 'replay-gap' }) })
-                .catch(() => {})
+              directorySessions.scheduleSidebarRecoverySync('replay-gap', 180)
             }
             return
           }
@@ -262,9 +251,7 @@ export function useAppRuntime() {
           }
           void settings.refresh().catch(() => {})
           void activity.refresh().catch(() => {})
-          void directorySessions
-            .revalidateFromApi({ limitPerDirectory: computeSidebarLimitPerDirectory({ reason: 'sse-error' }) })
-            .catch(() => {})
+          directorySessions.scheduleSidebarRecoverySync('connection-error', 220)
 
           // Surface in devtools for debugging.
           try {

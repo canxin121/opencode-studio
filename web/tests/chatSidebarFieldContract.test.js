@@ -18,8 +18,9 @@ test('chat sidebar field contract keeps web/server naming aligned', () => {
 
   assert.ok(storeSource.includes("typeof op.directoryId === 'string'"))
   assert.ok(storeSource.includes("typeof op.directory_id === 'string'"))
-  assert.ok(storeSource.includes('payload.need_resync'))
-  assert.ok(storeSource.includes('payload.latest_seq'))
+  assert.ok(storeSource.includes("type === 'chat-sidebar.delta'"))
+  assert.ok(storeSource.includes('properties.delta ?? evtRecord.delta'))
+  assert.ok(storeSource.includes('delta?.ops'))
   assert.ok(storeSource.includes('stateRecord.directories_page'))
   assert.ok(storeSource.includes('stateRecord.runtime_by_session_id'))
 })

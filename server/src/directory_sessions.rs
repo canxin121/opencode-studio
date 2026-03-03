@@ -748,14 +748,7 @@ fn start_directory_sessions_poller_if_needed(state: Arc<crate::AppState>) {
             let changed_count = delta.changed_count;
             if changed_count > 0 {
                 EVENT_HUB.bump_seq();
-                let _ = crate::chat_sidebar::publish_chat_sidebar_patch_event(patch_ops);
-            }
-
-            if changed_count > 0 && crate::global_sse_hub::downstream_client_count() > 0 {
-                let _ = crate::chat_sidebar::publish_chat_sidebar_state_event(
-                    state.clone(),
-                    crate::chat_sidebar::ChatSidebarStateQuery::default(),
-                );
+                let _ = crate::chat_sidebar::publish_chat_sidebar_delta_event(patch_ops);
             }
 
             tracing::debug!(
