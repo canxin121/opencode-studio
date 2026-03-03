@@ -1609,6 +1609,15 @@ export default {
         pageDown: 'PgDn',
       },
     },
+    shortcuts: {
+      openHelp: '查看终端快捷键',
+      title: '终端快捷键',
+      description: '终端聚焦时使用更接近 Linux 终端的复制、粘贴与中断键位。',
+      copyOrInterrupt: '有选中文本时复制，无选中时发送中断（^C）',
+      copySelection: '复制终端中的已选中文本',
+      pasteInput: '将剪贴板内容粘贴到终端输入',
+      macMetaCompat: '兼容 macOS 的复制与粘贴组合键',
+    },
     emptyState: {
       title: '选择一个终端会话',
       description: '使用终端面板选择现有会话或创建新会话。',

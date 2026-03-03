@@ -20,6 +20,7 @@ import {
   RiStarLine,
   RiEditLine,
   RiMore2Line,
+  RiQuestionLine,
 } from '@remixicon/vue'
 import Button from '@/components/ui/Button.vue'
 import IconButton from '@/components/ui/IconButton.vue'
@@ -37,6 +38,7 @@ import { consumeTrustedTerminalHandoffPayload, type TerminalHandoffTarget } from
 import { getLocalString, removeLocalKey, setLocalString } from '@/lib/persist'
 import { localStorageKeys } from '@/lib/persistence/storageKeys'
 import { ApiError } from '@/lib/api'
+import { copyTextToClipboard, readTextFromClipboard } from '@/lib/clipboard'
 import { connectSse } from '@/lib/sse'
 import {
   createTerminalSession,
@@ -50,6 +52,7 @@ import {
   terminalUiStateEventsUrl,
   type TerminalUiState,
 } from '@/features/terminal/api/terminalApi'
+import { handleTerminalKeyboardShortcut } from '@/features/terminal/lib/terminalKeyboardShortcuts'
 import { useDesktopSidebarResize } from '@/composables/useDesktopSidebarResize'
 import { useDirectoryStore } from '@/stores/directory'
 import { useUiStore } from '@/stores/ui'
@@ -1410,6 +1413,26 @@ const connectionToggleLabel = computed(() =>
     : String(t('terminal.connection.connectLabel')),
 )
 
+const shortcutHelpOpen = ref(false)
+const terminalShortcutRows = computed(() => [
+  {
+    keys: 'Ctrl+C',
+    description: String(t('terminal.shortcuts.copyOrInterrupt')),
+  },
+  {
+    keys: 'Ctrl+Shift+C / Ctrl+Insert',
+    description: String(t('terminal.shortcuts.copySelection')),
+  },
+  {
+    keys: 'Ctrl+V / Ctrl+Shift+V / Shift+Insert',
+    description: String(t('terminal.shortcuts.pasteInput')),
+  },
+  {
+    keys: 'Cmd+C / Cmd+V',
+    description: String(t('terminal.shortcuts.macMetaCompat')),
+  },
+])
+
 function toggleConnection() {
   if (connectionToggleDisabled.value) return
   if (connectionToggleMode.value === 'disconnect') {
@@ -1890,6 +1913,18 @@ function ensureTerminalMounted() {
   }
 
   t.onData((d) => void sendInput(applyKeyMods(d)))
+  t.attachCustomKeyEventHandler((event) => {
+    if (event.type !== 'keydown') return true
+    const handled = handleTerminalKeyboardShortcut(event, {
+      terminal: t,
+      copyTextToClipboard,
+      readTextFromClipboard,
+      sendInterrupt: () => {
+        void sendInput('\x03')
+      },
+    })
+    return !handled
+  })
 
   term.value = t
   fit.value = f
@@ -2732,6 +2767,19 @@ watch(el, () => {
             </div>
           </div>
 
+          <IconButton
+            variant="ghost"
+            size="md"
+            class="h-8 w-8 shrink-0"
+            :tooltip="String(t('terminal.shortcuts.openHelp'))"
+            :is-mobile-pointer="ui.isMobilePointer"
+            :aria-label="String(t('terminal.shortcuts.openHelp'))"
+            :title="String(t('terminal.shortcuts.openHelp'))"
+            @click="shortcutHelpOpen = !shortcutHelpOpen"
+          >
+            <RiQuestionLine class="h-4 w-4" />
+          </IconButton>
+
           <ConfirmPopover
             v-if="connectionToggleMode === 'disconnect'"
             :title="String(t('terminal.actions.disconnectConfirmTitle'))"
@@ -2777,6 +2825,20 @@ watch(el, () => {
           class="px-4 py-2 text-xs text-destructive border-b border-border/60 bg-destructive/5 shrink-0"
         >
           {{ errorMsg }}
+        </div>
+
+        <div
+          v-if="shortcutHelpOpen"
+          class="border-b border-border/60 bg-muted/20 px-4 py-2.5 text-xs text-muted-foreground"
+        >
+          <p class="font-medium text-foreground/85">{{ t('terminal.shortcuts.title') }}</p>
+          <p class="mt-1">{{ t('terminal.shortcuts.description') }}</p>
+          <ul class="mt-2 space-y-1">
+            <li v-for="item in terminalShortcutRows" :key="item.keys" class="flex flex-wrap gap-1">
+              <span class="font-mono text-[11px] text-foreground/90">{{ item.keys }}</span>
+              <span>{{ item.description }}</span>
+            </li>
+          </ul>
         </div>
 
         <!-- Terminal Area -->
