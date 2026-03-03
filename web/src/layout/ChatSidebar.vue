@@ -719,6 +719,16 @@ const sessionsLoading = computed(() => {
   return chat.sessionsLoading || directoryPageLoading.value
 })
 
+const pinnedFooterLoading = computed(
+  () => sessionsLoading.value || pinnedSessionsOpenUpdating.value || pinnedSessionsPaging.value,
+)
+const recentFooterLoading = computed(
+  () => sessionsLoading.value || recentSessionsOpenUpdating.value || recentSessionsPaging.value,
+)
+const runningFooterLoading = computed(
+  () => sessionsLoading.value || runningSessionsOpenUpdating.value || runningSessionsPaging.value,
+)
+
 async function toggleDirectoryCollapse(directoryId: string, _directoryPath: string) {
   void _directoryPath
   dismissDeepLinkFocus()
@@ -1542,6 +1552,7 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
           :open="pinnedSessionsOpen"
           :page="pinnedSessionsPage"
           :paging="pinnedSessionsPaging"
+          :loading="pinnedFooterLoading"
           :pinnedSessionRows="pagedPinnedSessionRows"
           :pinnedSessionsTotal="pinnedSessionsTotal"
           :pinnedSessionsPageCount="pinnedSessionsPageCount"
@@ -1577,6 +1588,7 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
           :open="recentSessionsOpen"
           :page="recentSessionsPage"
           :paging="recentSessionsPaging"
+          :loading="recentFooterLoading"
           :recentSessionRows="pagedRecentSessionRows"
           :recentSessionsTotal="recentSessionsTotal"
           :recentSessionsPageCount="recentSessionsPageCount"
@@ -1612,6 +1624,7 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
           :open="runningSessionsOpen"
           :page="runningSessionsPage"
           :paging="runningSessionsPaging"
+          :loading="runningFooterLoading"
           :runningSessionRows="pagedRunningSessionRows"
           :runningSessionsTotal="runningSessionsTotal"
           :runningSessionsPageCount="runningSessionsPageCount"
