@@ -1529,7 +1529,7 @@ pub(crate) fn activity_detail_policy_from_settings(
         .into_iter()
         .collect::<HashSet<String>>()
     } else {
-        HashSet::new()
+        default_chat_activity_tool_filters().into_iter().collect()
     };
 
     ActivityDetailPolicy {
@@ -5076,6 +5076,19 @@ mod tests {
         assert!(detail.expanded_tools.contains("read"));
         assert!(detail.expanded_tools.contains("bash"));
         assert!(detail.expanded_tools.contains("unknown_tool"));
+        assert!(!detail.expanded_tools.contains("glob"));
+    }
+
+    #[test]
+    fn activity_detail_policy_defaults_to_all_expanded_tool_filters_when_unset() {
+        let settings = crate::settings::Settings::default();
+
+        let detail = activity_detail_policy_from_settings(&settings);
+        let default_tool_filters = default_chat_activity_tool_filters()
+            .into_iter()
+            .collect::<HashSet<String>>();
+
+        assert_eq!(detail.expanded_tools, default_tool_filters);
     }
 
     #[test]
