@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import {
   ACTIVITY_DEFAULT_EXPANDED_OPTIONS,
+  CHAT_ACTIVITY_EXPAND_KEYS,
   DEFAULT_CHAT_ACTIVITY_FILTERS,
   DEFAULT_CHAT_ACTIVITY_EXPANDED_TOOL_FILTERS,
   DEFAULT_CHAT_ACTIVITY_EXPAND_KEYS,
@@ -27,14 +28,30 @@ test('normalizers ignore removed step and agent keys', () => {
   assert.deepEqual(filters, ['tool', 'snapshot'])
 
   const expanded = normalizeChatActivityDefaultExpanded(['step-finish', 'agent', 'snapshot', 'thinking'])
-  assert.deepEqual(expanded, [])
+  assert.deepEqual(expanded, ['snapshot', 'thinking'])
 })
 
 test('default expansion only opens file-modifying details', () => {
-  assert.deepEqual(DEFAULT_CHAT_ACTIVITY_EXPAND_KEYS, ['patch'])
+  assert.deepEqual(DEFAULT_CHAT_ACTIVITY_EXPAND_KEYS, [])
 
   assert.deepEqual(DEFAULT_CHAT_ACTIVITY_EXPANDED_TOOL_FILTERS, ['edit', 'write', 'apply_patch', 'multiedit'])
   for (const tool of DEFAULT_CHAT_ACTIVITY_EXPANDED_TOOL_FILTERS) {
     assert.equal(DEFAULT_CHAT_TOOL_ACTIVITY_FILTERS.includes(tool), true)
   }
+})
+
+test('expand defaults stay configurable with stable normalization order', () => {
+  const expanded = normalizeChatActivityDefaultExpanded([
+    ' thinking ',
+    'patch',
+    'retry',
+    'snapshot',
+    'patch',
+    'JUSTIFICATION',
+    'compaction',
+    'unknown',
+  ])
+
+  assert.deepEqual(expanded, ['snapshot', 'patch', 'retry', 'compaction', 'thinking', 'justification'])
+  assert.deepEqual(CHAT_ACTIVITY_EXPAND_KEYS, ['snapshot', 'patch', 'retry', 'compaction', 'thinking', 'justification'])
 })

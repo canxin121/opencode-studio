@@ -1599,9 +1599,9 @@ export default {
         },
         toolDetailsHint: 'Tool expand defaults are configured per tool.',
         activitySummaryHelp:
-          'Summary controls whether activity content is included. Expand controls default open state, and with summary matching always on, whether full details are included in the initial payload.',
+          'Activity transport defaults to full details. Expand only controls the default open state; if transport strategy is not customized, transport still remains full.',
         activityTransportHelp:
-          'Summary controls whether activity content is included. Expand controls default open state, and with summary matching always on, whether full details are included in the initial payload.',
+          'Activity transport defaults to full details. Expand only controls the default open state; if transport strategy is not customized, transport still remains full.',
       },
     },
   },

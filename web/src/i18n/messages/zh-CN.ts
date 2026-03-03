@@ -1596,9 +1596,9 @@ export default {
         },
         toolDetailsHint: '工具展开默认值按工具分别配置。',
         activitySummaryHelp:
-          'Summary 控制是否包含活动内容。Expand 控制默认展开状态，并在 Summary 始终开启时决定初始数据是否包含完整详情。',
+          '活动传输默认是全量详情。Expand 仅控制默认展开状态；' + '若未自定义传输策略，仍保持全量传输。',
         activityTransportHelp:
-          'Summary 控制是否包含活动内容。Expand 控制默认展开状态，并在 Summary 始终开启时决定初始数据是否包含完整详情。',
+          '活动传输默认是全量详情。Expand 仅控制默认展开状态；' + '若未自定义传输策略，仍保持全量传输。',
       },
     },
   },

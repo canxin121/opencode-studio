@@ -44,7 +44,16 @@ export const DEFAULT_CHAT_ACTIVITY_FILTERS: ChatActivityType[] = ['tool', 'snaps
 
 export const DEFAULT_CHAT_ACTIVITY_SUMMARY_FILTERS: ChatActivityType[] = DEFAULT_CHAT_ACTIVITY_FILTERS
 
-export const DEFAULT_CHAT_ACTIVITY_EXPAND_KEYS: ChatActivityExpandKey[] = ['patch']
+export const CHAT_ACTIVITY_EXPAND_KEYS: ChatActivityExpandKey[] = [
+  'snapshot',
+  'patch',
+  'retry',
+  'compaction',
+  'thinking',
+  'justification',
+]
+
+export const DEFAULT_CHAT_ACTIVITY_EXPAND_KEYS: ChatActivityExpandKey[] = []
 
 export const DEFAULT_CHAT_TOOL_ACTIVITY_FILTERS: ChatToolActivityType[] = [
   'read',
@@ -82,7 +91,7 @@ export const DEFAULT_CHAT_ACTIVITY_EXPANDED_TOOL_FILTERS: ChatToolActivityType[]
 
 const CHAT_ACTIVITY_SET = new Set(DEFAULT_CHAT_ACTIVITY_FILTERS)
 const CHAT_TOOL_ACTIVITY_SET = new Set(DEFAULT_CHAT_TOOL_ACTIVITY_FILTERS)
-const CHAT_ACTIVITY_EXPAND_SET = new Set(DEFAULT_CHAT_ACTIVITY_EXPAND_KEYS)
+const CHAT_ACTIVITY_EXPAND_SET = new Set(CHAT_ACTIVITY_EXPAND_KEYS)
 
 export function isKnownChatToolActivityType(value: string): value is KnownChatToolActivityType {
   return CHAT_TOOL_ACTIVITY_SET.has(value as KnownChatToolActivityType)
@@ -140,7 +149,7 @@ export function normalizeChatActivityDefaultExpanded(value: JsonValue): ChatActi
   }
 
   const out: ChatActivityExpandKey[] = []
-  for (const key of DEFAULT_CHAT_ACTIVITY_EXPAND_KEYS) {
+  for (const key of CHAT_ACTIVITY_EXPAND_KEYS) {
     if (requested.has(key)) out.push(key)
   }
   return out
