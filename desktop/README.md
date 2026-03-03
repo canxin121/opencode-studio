@@ -10,9 +10,9 @@ CI tasks that only lint/test the server do not need to compile Tauri.
 Build mode:
 
 - `full`: packages the desktop app plus the `opencode-studio` server as a
-  bundled sidecar and starts it automatically.
+  bundled backend service and starts it automatically.
 - In `full`, Tauri opens the backend URL directly; frontend assets are served
-  by the bundled backend sidecar.
+  by the bundled backend service.
 
 Local quickstart (requires Rust, Bun, and platform-specific Tauri deps):
 
@@ -20,6 +20,6 @@ Local quickstart (requires Rust, Bun, and platform-specific Tauri deps):
 bun install --cwd web
 bun run --cwd web build
 
-# Full app (includes backend sidecar; requires building + placing the sidecar first)
+# Full app (includes bundled backend service; requires building + placing the backend binary first)
 # See docs/packaging.md for the full local build steps.
 ```

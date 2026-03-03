@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch, type CSSProperties } from 'vue'
+import { computed, isRef, nextTick, onBeforeUnmount, ref, watch, type CSSProperties } from 'vue'
 import { RiAttachmentLine, RiCloseLine, RiFileLine, RiFileUploadLine, RiLoader4Line } from '@remixicon/vue'
 import { useI18n } from 'vue-i18n'
 
@@ -16,6 +16,15 @@ type AttachedFile = {
   serverPath?: string
 }
 
+type DesktopAnchorLike =
+  | HTMLElement
+  | {
+      triggerEl?: unknown
+      $el?: unknown
+      getBoundingClientRect?: () => DOMRect | undefined
+    }
+  | null
+
 const props = withDefaults(
   defineProps<{
     open: boolean
@@ -23,13 +32,17 @@ const props = withDefaults(
     formatBytes: (bytes: number) => string
     busy?: boolean
     isMobilePointer?: boolean
-    desktopAnchorEl?: { triggerEl?: unknown; $el?: unknown } | HTMLElement | null
+    desktopAnchorEl?: DesktopAnchorLike
+    desktopGapPx?: number
+    desktopViewportMarginPx?: number
     title?: string
   }>(),
   {
     busy: false,
     isMobilePointer: false,
     desktopAnchorEl: null,
+    desktopGapPx: 8,
+    desktopViewportMarginPx: 8,
     title: '',
   },
 )
@@ -87,13 +100,79 @@ function close() {
   emit('update:open', false)
 }
 
+function unwrapRefCandidate(value: unknown): unknown {
+  let current = value
+  for (let i = 0; i < 4; i += 1) {
+    if (!isRef(current)) return current
+    current = current.value
+  }
+  return current
+}
+
+function resolveAnchorElCandidate(value: unknown): HTMLElement | null {
+  const raw = unwrapRefCandidate(value)
+  if (raw instanceof HTMLElement) return raw
+  if (!raw || typeof raw !== 'object') return null
+
+  const triggerEl = unwrapRefCandidate((raw as { triggerEl?: unknown }).triggerEl)
+  if (triggerEl instanceof HTMLElement) return triggerEl
+
+  if (triggerEl && typeof triggerEl === 'object') {
+    const triggerHostEl = unwrapRefCandidate((triggerEl as { $el?: unknown }).$el)
+    if (triggerHostEl instanceof HTMLElement) return triggerHostEl
+  }
+
+  const hostEl = unwrapRefCandidate((raw as { $el?: unknown }).$el)
+  if (hostEl instanceof HTMLElement) return hostEl
+
+  return null
+}
+
+function resolveAnchorRectCandidate(value: unknown): DOMRect | null {
+  const anchorEl = resolveAnchorElCandidate(value)
+  if (anchorEl) return anchorEl.getBoundingClientRect()
+
+  const raw = unwrapRefCandidate(value)
+  if (!raw || typeof raw !== 'object') return null
+
+  const getRect = (raw as { getBoundingClientRect?: () => DOMRect | undefined }).getBoundingClientRect
+  if (typeof getRect === 'function') {
+    const rect = getRect()
+    if (rect) return rect
+  }
+
+  const triggerEl = unwrapRefCandidate((raw as { triggerEl?: unknown }).triggerEl)
+  if (triggerEl && typeof triggerEl === 'object') {
+    const triggerGetRect = (triggerEl as { getBoundingClientRect?: () => DOMRect | undefined }).getBoundingClientRect
+    if (typeof triggerGetRect === 'function') {
+      const rect = triggerGetRect()
+      if (rect) return rect
+    }
+  }
+
+  return null
+}
+
+function toNonNegativePx(value: unknown, fallback: number): number {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return fallback
+  return Math.max(0, Math.round(n))
+}
+
+async function waitForAnimationFrame(): Promise<void> {
+  if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') return
+  await new Promise<void>((resolve) => {
+    window.requestAnimationFrame(() => resolve())
+  })
+}
+
 // Desktop fixed positioning (anchored popover).
-const PANEL_GAP_PX = 8
-const VIEWPORT_MARGIN_PX = 8
+const panelGapPx = computed(() => toNonNegativePx(props.desktopGapPx, 8))
+const viewportMarginPx = computed(() => toNonNegativePx(props.desktopViewportMarginPx, 8))
 
 const desktopStyle = ref<CSSProperties>({
-  left: `${VIEWPORT_MARGIN_PX}px`,
-  top: `${VIEWPORT_MARGIN_PX}px`,
+  left: `${viewportMarginPx.value}px`,
+  top: `${viewportMarginPx.value}px`,
   visibility: 'hidden',
 })
 
@@ -103,37 +182,53 @@ async function syncDesktopPosition() {
 
   await nextTick()
 
+  const firstPass = computeDesktopStyle()
+  if (!firstPass) return
+  desktopStyle.value = firstPass
+
+  await waitForAnimationFrame()
+  if (!props.open || isMobileSheet.value) return
+  const secondPass = computeDesktopStyle()
+  if (!secondPass) return
+  desktopStyle.value = secondPass
+}
+
+function computeDesktopStyle(): CSSProperties | null {
+  if (typeof window === 'undefined') return null
+
   const panel = panelEl.value
-  const anchor = resolveDesktopAnchorEl()
-  if (!panel || !anchor) return
+  if (!panel) return null
 
   const panelRect = panel.getBoundingClientRect()
-  const anchorRect = anchor.getBoundingClientRect()
+  const anchorRect = resolveDesktopAnchorRect()
+  if (!anchorRect) return null
   const viewportWidth = window.innerWidth
   const viewportHeight = window.innerHeight
+  const gap = panelGapPx.value
+  const margin = viewportMarginPx.value
 
   let left = anchorRect.left
 
   // Default: open above the trigger (composer lives at the bottom).
-  let top = anchorRect.top - panelRect.height - PANEL_GAP_PX
-  const belowTop = anchorRect.bottom + PANEL_GAP_PX
+  let top = anchorRect.top - panelRect.height - gap
+  const belowTop = anchorRect.bottom + gap
   const aboveTop = top
 
-  if (top < VIEWPORT_MARGIN_PX) {
+  if (top < margin) {
     top = belowTop
   }
 
-  if (top + panelRect.height > viewportHeight - VIEWPORT_MARGIN_PX) {
+  if (top + panelRect.height > viewportHeight - margin) {
     // Prefer the side with more room.
-    const roomAbove = anchorRect.top - VIEWPORT_MARGIN_PX
-    const roomBelow = viewportHeight - anchorRect.bottom - VIEWPORT_MARGIN_PX
+    const roomAbove = anchorRect.top - margin
+    const roomBelow = viewportHeight - anchorRect.bottom - margin
     top = roomAbove >= roomBelow ? aboveTop : belowTop
   }
 
-  left = Math.max(VIEWPORT_MARGIN_PX, Math.min(left, viewportWidth - panelRect.width - VIEWPORT_MARGIN_PX))
-  top = Math.max(VIEWPORT_MARGIN_PX, Math.min(top, viewportHeight - panelRect.height - VIEWPORT_MARGIN_PX))
+  left = Math.max(margin, Math.min(left, viewportWidth - panelRect.width - margin))
+  top = Math.max(margin, Math.min(top, viewportHeight - panelRect.height - margin))
 
-  desktopStyle.value = {
+  return {
     left: `${Math.round(left)}px`,
     top: `${Math.round(top)}px`,
     visibility: 'visible',
@@ -141,16 +236,11 @@ async function syncDesktopPosition() {
 }
 
 function resolveDesktopAnchorEl(): HTMLElement | null {
-  const raw = props.desktopAnchorEl as unknown
-  if (raw instanceof HTMLElement) return raw
-  if (!raw || typeof raw !== 'object') return null
+  return resolveAnchorElCandidate(props.desktopAnchorEl as unknown)
+}
 
-  const triggerEl = (raw as { triggerEl?: unknown }).triggerEl
-  if (triggerEl instanceof HTMLElement) return triggerEl
-
-  const hostEl = (raw as { $el?: unknown }).$el
-  if (hostEl instanceof HTMLElement) return hostEl
-  return null
+function resolveDesktopAnchorRect(): DOMRect | null {
+  return resolveAnchorRectCandidate(props.desktopAnchorEl as unknown)
 }
 
 function onDesktopViewportChange() {
@@ -271,10 +361,11 @@ watch(
   () => props.open,
   (open) => {
     if (open) {
+      const margin = viewportMarginPx.value
       // Reset the desktop style so we avoid flashing stale positions.
       desktopStyle.value = {
-        left: `${VIEWPORT_MARGIN_PX}px`,
-        top: `${VIEWPORT_MARGIN_PX}px`,
+        left: `${margin}px`,
+        top: `${margin}px`,
         visibility: 'hidden',
       }
 
@@ -312,7 +403,15 @@ watch(
 )
 
 watch(
-  () => [props.desktopAnchorEl, fileCount.value, props.busy, isMobileSheet.value] as const,
+  () =>
+    [
+      props.desktopAnchorEl,
+      props.desktopGapPx,
+      props.desktopViewportMarginPx,
+      fileCount.value,
+      props.busy,
+      isMobileSheet.value,
+    ] as const,
   () => {
     if (!props.open) return
     if (isMobileSheet.value) void syncMobileSheetPosition()

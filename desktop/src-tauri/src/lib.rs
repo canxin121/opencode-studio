@@ -53,7 +53,7 @@ pub fn run() {
             }
 
             // Backend manager is always present so tray actions and UI commands share
-            // one code path even when sidecar startup fails.
+            // one code path even when backend startup fails.
             app.manage(BackendManager::new());
             app.manage(updater::UpdateProgressState::default());
 

@@ -310,7 +310,7 @@ jobs:
           name: opencode-studio-backend-${{ matrix.target }}
           path: release-assets/backend
 
-      - name: Install backend sidecar (full only, Unix)
+      - name: Install backend binary (full only, Unix)
         if: matrix.flavor == 'full' && !startsWith(matrix.os, 'windows-')
         shell: bash
         run: |
@@ -327,7 +327,7 @@ jobs:
           cp release-assets/backend-extract/opencode-studio "desktop/src-tauri/binaries/opencode-studio-${{ matrix.target }}"
           chmod +x "desktop/src-tauri/binaries/opencode-studio-${{ matrix.target }}"
 
-      - name: Install backend sidecar (full only, Windows)
+      - name: Install backend binary (full only, Windows)
         if: matrix.flavor == 'full' && startsWith(matrix.os, 'windows-')
         shell: pwsh
         run: |
@@ -596,7 +596,7 @@ jobs:
           name: opencode-studio-backend-${{ matrix.target }}
           path: release-assets/backend
 
-      - name: Install backend sidecar (full only, Unix)
+      - name: Install backend binary (full only, Unix)
         if: matrix.flavor == 'full' && !startsWith(matrix.os, 'windows-')
         shell: bash
         run: |
@@ -613,7 +613,7 @@ jobs:
           cp release-assets/backend-extract/opencode-studio "desktop/src-tauri-cef/binaries/opencode-studio-${{ matrix.target }}"
           chmod +x "desktop/src-tauri-cef/binaries/opencode-studio-${{ matrix.target }}"
 
-      - name: Install backend sidecar (full only, Windows)
+      - name: Install backend binary (full only, Windows)
         if: matrix.flavor == 'full' && startsWith(matrix.os, 'windows-')
         shell: pwsh
         run: |

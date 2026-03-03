@@ -152,7 +152,7 @@ export type ChatPageViewContext = {
   openFilePicker: () => void
   openProjectAttachDialog: () => void
   toggleAttachmentsPanel: () => void
-  setAttachmentsPanelOpen: (open: boolean) => void
+  setAttachmentsPanelOpen: (open: boolean) => void | Promise<void>
   closeAttachmentsPanel: () => void
 
   canAbort: MaybeRef<boolean>
@@ -163,7 +163,7 @@ export type ChatPageViewContext = {
   composerActionMenuOpen: MaybeRef<boolean>
   composerActionMenuQuery: MaybeRef<string>
   composerActionMenuGroups: MaybeRef<OptionMenuGroup[]>
-  toggleComposerActionMenu: () => void
+  toggleComposerActionMenu: (event?: MouseEvent | PointerEvent) => void | Promise<void>
   closeComposerActionMenu: () => void
   runComposerActionMenu: (item: OptionMenuItem) => void | Promise<void>
 
@@ -184,7 +184,7 @@ export type ChatPageViewContext = {
   modelHint: MaybeRef<string>
   modelChipLabelMobile: MaybeRef<string>
   modelChipLabel: MaybeRef<string>
-  toggleComposerPicker: (kind: 'agent' | 'model' | 'variant') => void
+  toggleComposerPicker: (kind: 'agent' | 'model' | 'variant') => void | Promise<void>
   variantHint: MaybeRef<string>
   variantChipLabel: MaybeRef<string>
   agentHint: MaybeRef<string>

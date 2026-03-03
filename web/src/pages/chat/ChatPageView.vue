@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, unref } from 'vue'
+import { computed, isRef, ref, unref } from 'vue'
 import { useWindowSize } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
 import {
@@ -196,7 +196,10 @@ const {
 type TooltipAnchorLike = { triggerEl?: unknown; $el?: unknown } | HTMLElement | null
 
 const attachmentsTriggerRef = ref<TooltipAnchorLike>(null)
+const actionsTriggerRef = ref<TooltipAnchorLike>(null)
 const { width: viewportWidth } = useWindowSize()
+const COMPOSER_DESKTOP_MENU_GAP_PX = 16
+const COMPOSER_DESKTOP_MENU_VIEWPORT_MARGIN_PX = 8
 
 const composerToolbarLayout = computed(() => resolveComposerToolbarLayout(ui.isMobilePointer, viewportWidth.value))
 const splitComposerChipRows = computed(() => composerToolbarLayout.value.splitChipRows)
@@ -242,14 +245,31 @@ function handleOverlayReserve(px: number) {
   overlayReservePx.value = Math.max(0, Math.floor(px))
 }
 
-// Compute the anchor element for the picker menu based on which picker is open.
-// This ensures the menu appears right next to the button that triggered it.
+// Resolve popover anchors to the trigger button element.
+// This keeps desktop popups aligned with the button that opened them.
+function unwrapAnchorCandidate(value: unknown): unknown {
+  let current = value
+  for (let i = 0; i < 4; i += 1) {
+    if (!isRef(current)) return current
+    current = current.value
+  }
+  return current
+}
+
 function resolveAnchorEl(target: TooltipAnchorLike): HTMLElement | null {
-  if (target instanceof HTMLElement) return target
-  if (!target || typeof target !== 'object') return null
-  const triggerEl = (target as { triggerEl?: unknown }).triggerEl
+  const raw = unwrapAnchorCandidate(target)
+  if (raw instanceof HTMLElement) return raw
+  if (!raw || typeof raw !== 'object') return null
+
+  const triggerEl = unwrapAnchorCandidate((raw as { triggerEl?: unknown }).triggerEl)
   if (triggerEl instanceof HTMLElement) return triggerEl
-  const rootEl = (target as { $el?: unknown }).$el
+
+  if (triggerEl && typeof triggerEl === 'object') {
+    const triggerHostEl = unwrapAnchorCandidate((triggerEl as { $el?: unknown }).$el)
+    if (triggerHostEl instanceof HTMLElement) return triggerHostEl
+  }
+
+  const rootEl = unwrapAnchorCandidate((raw as { $el?: unknown }).$el)
   if (rootEl instanceof HTMLElement) return rootEl
   return null
 }
@@ -261,6 +281,8 @@ const activePickerAnchor = computed(() => {
   if (mode === 'agent') return resolveAnchorEl(unref(agentTriggerRef) as TooltipAnchorLike)
   return null
 })
+
+const activeActionsAnchor = computed(() => resolveAnchorEl(unref(actionsTriggerRef) as TooltipAnchorLike))
 
 const timelineSessionError = computed(() => {
   if (!chat.selectedSessionError) return null
@@ -474,6 +496,8 @@ void sessionActionsMenuRef
                       :desktop-fixed="true"
                       :desktop-style="composerPickerStyle"
                       :desktop-anchor-el="activePickerAnchor"
+                      :desktop-gap-px="COMPOSER_DESKTOP_MENU_GAP_PX"
+                      :desktop-viewport-margin-px="COMPOSER_DESKTOP_MENU_VIEWPORT_MARGIN_PX"
                       :paginated="composerPickerOpen === 'model' || composerPickerOpen === 'agent'"
                       :page-size="composerPickerOpen === 'model' ? 80 : 60"
                       pagination-mode="group"
@@ -526,6 +550,7 @@ void sessionActionsMenuRef
                         </ToolbarChipButton>
 
                         <IconButton
+                          ref="actionsTriggerRef"
                           class="text-muted-foreground hover:text-foreground hover:bg-secondary/40"
                           :class="[composerActionMenuOpen ? 'bg-secondary/60 text-foreground' : '']"
                           :tooltip="t('chat.page.tools')"
@@ -533,7 +558,7 @@ void sessionActionsMenuRef
                           :title="t('chat.page.tools')"
                           :aria-label="t('chat.page.tools')"
                           @mousedown.prevent
-                          @click.stop="toggleComposerActionMenu"
+                          @click.stop="toggleComposerActionMenu($event)"
                         >
                           <RiMore2Line class="h-4 w-4" />
                         </IconButton>
@@ -549,6 +574,10 @@ void sessionActionsMenuRef
                           :search-placeholder="t('common.searchActions')"
                           :empty-text="t('common.noActionsFound')"
                           :is-mobile-pointer="ui.isMobilePointer"
+                          :desktop-fixed="true"
+                          :desktop-anchor-el="activeActionsAnchor"
+                          :desktop-gap-px="COMPOSER_DESKTOP_MENU_GAP_PX"
+                          :desktop-viewport-margin-px="COMPOSER_DESKTOP_MENU_VIEWPORT_MARGIN_PX"
                           desktop-placement="top-start"
                           desktop-class="w-64"
                           filter-mode="external"
@@ -690,6 +719,8 @@ void sessionActionsMenuRef
     :open="attachmentsPanelOpen"
     :is-mobile-pointer="ui.isMobilePointer"
     :desktop-anchor-el="attachmentsTriggerRef"
+    :desktop-gap-px="COMPOSER_DESKTOP_MENU_GAP_PX"
+    :desktop-viewport-margin-px="COMPOSER_DESKTOP_MENU_VIEWPORT_MARGIN_PX"
     :attached-files="attachedFiles"
     :busy="attachmentsBusy"
     :format-bytes="formatBytes"

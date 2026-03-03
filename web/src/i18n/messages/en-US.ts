@@ -1408,7 +1408,7 @@ export default {
     desktopRuntime: {
       title: 'Desktop backend runtime',
       description:
-        'Configure sidecar backend, OpenCode connectivity, and log levels. Saving restarts the desktop backend.',
+        'Configure backend runtime, OpenCode connectivity, and log levels. Saving restarts the desktop backend.',
       fields: {
         host: 'Host',
         port: 'Port',
@@ -1485,7 +1485,7 @@ export default {
         versionLine: 'Current {current} -> latest {latest}',
         targetLine: 'Target: {target}',
         channelLine: 'Channel: {channel}',
-        serviceHint: 'Service update replaces the sidecar binary and restarts the backend automatically.',
+        serviceHint: 'Service update replaces the backend service and restarts it automatically.',
         installerHint: 'Launching installer closes the app first, then opens the installer UI.',
         suppression: {
           ignored: 'This release is ignored for automatic prompts and auto-install.',

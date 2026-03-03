@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   RiArrowDownSLine,
@@ -241,6 +241,28 @@ const timelineRightMenuOpen = ref(false)
 const timelineRightMenuQuery = ref('')
 const timelineRightMenuAnchorEl = ref<HTMLElement | null>(null)
 
+async function setViewMenuOpen(next: boolean) {
+  if (!next) {
+    viewMenuOpen.value = false
+    viewMenuQuery.value = ''
+    return
+  }
+
+  const hadTimelineMenuOpen = timelineLeftMenuOpen.value || timelineRightMenuOpen.value
+  if (hadTimelineMenuOpen) {
+    timelineLeftMenuOpen.value = false
+    timelineRightMenuOpen.value = false
+    await nextTick()
+  }
+
+  viewMenuOpen.value = true
+  viewMenuQuery.value = ''
+}
+
+function toggleViewMenu() {
+  void setViewMenuOpen(!viewMenuOpen.value)
+}
+
 const timelineCommitByHash = computed(() => {
   const map = new Map<string, GitLogCommit>()
   for (const commit of props.timelineCommits) {
@@ -346,15 +368,38 @@ const timelineRightMenuGroups = computed(() => buildTimelineMenuGroups('right', 
 const timelineLeftButtonLabel = computed(() => timelineCommitLabel(props.timelineLeftCommit))
 const timelineRightButtonLabel = computed(() => timelineCommitLabel(props.timelineRightCommit))
 
-function setTimelineMenuOpen(side: TimelineSide, value: boolean) {
-  if (side === 'left') {
-    timelineLeftMenuOpen.value = value
-    if (value) timelineRightMenuOpen.value = false
+async function setTimelineMenuOpen(side: TimelineSide, value: boolean) {
+  if (!value) {
+    if (side === 'left') {
+      timelineLeftMenuOpen.value = false
+      return
+    }
+    timelineRightMenuOpen.value = false
     return
   }
 
-  timelineRightMenuOpen.value = value
-  if (value) timelineLeftMenuOpen.value = false
+  const shouldCloseViewMenu = viewMenuOpen.value
+  const shouldCloseOppositeMenu = side === 'left' ? timelineRightMenuOpen.value : timelineLeftMenuOpen.value
+
+  if (shouldCloseViewMenu) {
+    viewMenuOpen.value = false
+  }
+
+  if (shouldCloseOppositeMenu) {
+    if (side === 'left') timelineRightMenuOpen.value = false
+    else timelineLeftMenuOpen.value = false
+  }
+
+  if (shouldCloseViewMenu || shouldCloseOppositeMenu) {
+    await nextTick()
+  }
+
+  if (side === 'left') {
+    timelineLeftMenuOpen.value = true
+    return
+  }
+
+  timelineRightMenuOpen.value = true
 }
 
 function setTimelineMenuQuery(side: TimelineSide, value: string) {
@@ -383,7 +428,7 @@ function handleTimelineMenuSelect(side: TimelineSide, item: OptionMenuItem) {
   if (!commit) return
 
   void props.selectTimelineCommit(side, commit)
-  setTimelineMenuOpen(side, false)
+  void setTimelineMenuOpen(side, false)
 }
 
 type BlameColorRegistry = {
@@ -1011,8 +1056,7 @@ function onSendSelection() {
         filter-mode="internal"
         @update:open="
           (v) => {
-            viewMenuOpen = v
-            if (!v) viewMenuQuery = ''
+            void setViewMenuOpen(v)
           }
         "
         @update:query="(v) => (viewMenuQuery = v)"
@@ -1059,12 +1103,7 @@ function onSendSelection() {
             :title="t('files.viewer.viewMenu.title')"
             :aria-label="t('files.viewer.viewMenu.title')"
             @mousedown.prevent
-            @click.stop="
-              () => {
-                viewMenuQuery = ''
-                viewMenuOpen = !viewMenuOpen
-              }
-            "
+            @click.stop="toggleViewMenu"
           >
             <RiMore2Line class="h-4 w-4" />
           </IconButton>
@@ -1231,7 +1270,7 @@ function onSendSelection() {
                 ref="timelineLeftMenuAnchorEl"
                 type="button"
                 class="flex w-full items-center justify-between gap-2 rounded-md border border-border/60 bg-background/80 px-2 py-1 text-left text-[11px] hover:bg-muted/30"
-                @click="setTimelineMenuOpen('left', !timelineLeftMenuOpen)"
+                @click="void setTimelineMenuOpen('left', !timelineLeftMenuOpen)"
               >
                 <span class="truncate">{{ timelineLeftButtonLabel }}</span>
                 <RiArrowDownSLine class="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -1243,7 +1282,7 @@ function onSendSelection() {
                 ref="timelineRightMenuAnchorEl"
                 type="button"
                 class="flex w-full items-center justify-between gap-2 rounded-md border border-border/60 bg-background/80 px-2 py-1 text-left text-[11px] hover:bg-muted/30"
-                @click="setTimelineMenuOpen('right', !timelineRightMenuOpen)"
+                @click="void setTimelineMenuOpen('right', !timelineRightMenuOpen)"
               >
                 <span class="truncate">{{ timelineRightButtonLabel }}</span>
                 <RiArrowDownSLine class="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -1286,7 +1325,7 @@ function onSendSelection() {
               :paginated="true"
               :page-size="10"
               pagination-mode="item"
-              @update:open="(v) => setTimelineMenuOpen('left', v)"
+              @update:open="(v) => void setTimelineMenuOpen('left', v)"
               @update:query="(v) => setTimelineMenuQuery('left', v)"
               @select="(item) => handleTimelineMenuSelect('left', item)"
             />
@@ -1308,7 +1347,7 @@ function onSendSelection() {
               :paginated="true"
               :page-size="10"
               pagination-mode="item"
-              @update:open="(v) => setTimelineMenuOpen('right', v)"
+              @update:open="(v) => void setTimelineMenuOpen('right', v)"
               @update:query="(v) => setTimelineMenuQuery('right', v)"
               @select="(item) => handleTimelineMenuSelect('right', item)"
             />

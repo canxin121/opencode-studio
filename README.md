@@ -92,7 +92,7 @@ Best for local desktop usage.
    - Windows: `.msi` / `.exe`
    - macOS: `.dmg`
    - Linux: `.AppImage` / `.deb` / `.rpm`
-3. Install and launch the app; the bundled backend sidecar starts automatically.
+3. Install and launch the app; the bundled backend service starts automatically.
 
 ### Option 2: Service Install
 

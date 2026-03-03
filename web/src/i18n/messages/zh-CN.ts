@@ -1406,7 +1406,7 @@ export default {
     },
     desktopRuntime: {
       title: '桌面后端运行配置',
-      description: '配置 sidecar 后端、OpenCode 连接与日志级别。保存后会自动重启桌面后端。',
+      description: '配置后端运行参数、OpenCode 连接与日志级别。保存后会自动重启桌面后端。',
       fields: {
         host: '主机',
         port: '端口',
@@ -1482,7 +1482,7 @@ export default {
         versionLine: '当前 {current} -> 最新 {latest}',
         targetLine: '目标平台：{target}',
         channelLine: '渠道：{channel}',
-        serviceHint: '服务更新会替换 sidecar 二进制并自动重启后端。',
+        serviceHint: '服务更新会替换后端服务并自动重启。',
         installerHint: '启动安装程序前会先关闭应用，然后打开安装界面。',
         suppression: {
           ignored: '当前版本已被忽略，不会自动提示或自动安装。',

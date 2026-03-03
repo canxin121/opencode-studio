@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Build the Rust backend and place it where Tauri expects sidecars:
+# Build the Rust backend and place it where Tauri expects bundled binaries:
 #   desktop/src-tauri/binaries/opencode-studio-$TARGET_TRIPLE[.exe]
 #   desktop/src-tauri-cef/binaries/opencode-studio-$TARGET_TRIPLE[.exe]
 
@@ -10,7 +10,7 @@ usage() {
 Usage: prepare-sidecar.sh [--cef] [TARGET_TRIPLE]
 
 Options:
-  --cef            Install sidecar into desktop/src-tauri-cef/binaries
+  --cef            Install backend binary into desktop/src-tauri-cef/binaries
 
 Arguments:
   TARGET_TRIPLE    Rust target triple (defaults to host)
@@ -62,7 +62,7 @@ case "${TARGET_TRIPLE}" in
   *-pc-windows-*) EXT=".exe";;
 esac
 
-echo "Building server sidecar for ${TARGET_TRIPLE}..."
+echo "Building backend service binary for ${TARGET_TRIPLE}..."
 cargo build --manifest-path "$SERVER_MANIFEST" --release --target "$TARGET_TRIPLE" --locked --target-dir "$SERVER_TARGET_DIR"
 
 SRC_BIN="$ROOT_DIR/server/target/$TARGET_TRIPLE/release/opencode-studio$EXT"
@@ -75,4 +75,4 @@ mkdir -p "$TAURI_BIN_DIR"
 DEST_BIN="$TAURI_BIN_DIR/opencode-studio-$TARGET_TRIPLE$EXT"
 cp "$SRC_BIN" "$DEST_BIN"
 
-echo "Sidecar ready: $DEST_BIN"
+echo "Backend binary ready: $DEST_BIN"

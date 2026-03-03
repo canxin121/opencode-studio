@@ -46,7 +46,7 @@ OpenCode Studio 支持两条安装路径：
 1) 安装包安装（桌面应用）
 
 - 从 GitHub Releases 下载原生安装包（`.msi`/`.exe`、`.dmg`、`.AppImage`/`.deb`/`.rpm`）。
-- 包含前端 UI 和内置后端 sidecar。
+- 包含前端 UI 和内置后端服务。
 - 适合本机桌面使用。
 
 2) 服务安装

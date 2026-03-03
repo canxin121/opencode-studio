@@ -34,7 +34,7 @@ $TauriBinDir = Join-Path $RootDir "desktop/$tauriVariant/binaries"
 $Ext = ""
 if ($TargetTriple -match 'windows') { $Ext = ".exe" }
 
-Write-Host "Building server sidecar for $TargetTriple..."
+Write-Host "Building backend service binary for $TargetTriple..."
 & cargo build --manifest-path "$ServerManifest" --release --target "$TargetTriple" --locked --target-dir "$ServerTargetDir"
 
 $SrcBin = Join-Path $RootDir "server/target/$TargetTriple/release/opencode-studio$Ext"
@@ -46,4 +46,4 @@ New-Item -ItemType Directory -Force -Path $TauriBinDir | Out-Null
 $DestBin = Join-Path $TauriBinDir "opencode-studio-$TargetTriple$Ext"
 Copy-Item -Force $SrcBin $DestBin
 
-Write-Host "Sidecar ready: $DestBin"
+Write-Host "Backend binary ready: $DestBin"

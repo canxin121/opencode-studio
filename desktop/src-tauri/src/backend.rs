@@ -62,7 +62,7 @@ impl BackendManager {
         let cfg = config::load_or_create(app).unwrap_or_default();
         let runtime_config_path = config::runtime_config_path(app)
             .ok_or_else(|| "unable to resolve runtime config path".to_string())?;
-        let (child, url) = spawn_sidecar(app, &cfg, &runtime_config_path).await?;
+        let (child, url) = spawn_backend_service(app, &cfg, &runtime_config_path).await?;
 
         {
             let mut guard = self.inner.lock().await;
@@ -115,17 +115,17 @@ fn backend_log_path(app: &AppHandle) -> Option<PathBuf> {
     Some(dir.join("backend.log"))
 }
 
-async fn spawn_sidecar(
+async fn spawn_backend_service(
     app: &AppHandle,
     cfg: &DesktopConfig,
     runtime_config_path: &Path,
 ) -> Result<(tauri_plugin_shell::process::CommandChild, String), String> {
-    // If the sidecar is not bundled, startup fails and desktop commands can
+    // If the bundled backend service is unavailable, startup fails and desktop commands can
     // still report status/manage retries.
-    let sidecar = match app.shell().sidecar("opencode-studio") {
+    let backend_cmd = match app.shell().sidecar("opencode-studio") {
         Ok(cmd) => cmd,
         Err(_) => {
-            return Err("backend sidecar not available in this build".to_string());
+            return Err("backend service not available in this build".to_string());
         }
     };
 
@@ -142,7 +142,7 @@ async fn spawn_sidecar(
         .map_err(|e| format!("resolve app config dir: {e}"))?;
     let home_env = resolve_home_env();
 
-    let mut cmd = sidecar
+    let mut cmd = backend_cmd
         .args([
             "--host",
             cfg.backend.host.as_str(),

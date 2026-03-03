@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch, type CSSProperties } from 'vue'
+import { computed, isRef, nextTick, onBeforeUnmount, ref, watch, type CSSProperties } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   RiArrowDownSLine,
@@ -23,6 +23,15 @@ type ResolvedGroup = OptionMenuGroup & {
   _sourceIndex: number
 }
 
+type DesktopAnchorLike =
+  | HTMLElement
+  | {
+      triggerEl?: unknown
+      $el?: unknown
+      getBoundingClientRect?: () => DOMRect | undefined
+    }
+  | null
+
 const props = withDefaults(
   defineProps<{
     open: boolean
@@ -40,8 +49,10 @@ const props = withDefaults(
     desktopClass?: string
     desktopStyle?: CSSProperties
     desktopFixed?: boolean
-    desktopAnchorEl?: HTMLElement | null
+    desktopAnchorEl?: DesktopAnchorLike
     desktopContentMaxHeightClass?: string
+    desktopGapPx?: number
+    desktopViewportMarginPx?: number
     filterMode?: 'internal' | 'external'
     closeOnSelect?: boolean
     autoFocusSearch?: boolean
@@ -66,6 +77,8 @@ const props = withDefaults(
     desktopFixed: false,
     desktopAnchorEl: null,
     desktopContentMaxHeightClass: 'max-h-64',
+    desktopGapPx: 8,
+    desktopViewportMarginPx: 8,
     filterMode: 'internal',
     closeOnSelect: true,
     autoFocusSearch: true,
@@ -122,13 +135,20 @@ const desktopPlacementClass = computed(() => {
   }
 })
 
-const PANEL_GAP_PX = 8
-const PANEL_VIEWPORT_MARGIN_PX = 8
 const MOBILE_SHEET_MARGIN_PX = 8
 
+function toNonNegativePx(value: unknown, fallback: number): number {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return fallback
+  return Math.max(0, Math.round(n))
+}
+
+const panelGapPx = computed(() => toNonNegativePx(props.desktopGapPx, 8))
+const panelViewportMarginPx = computed(() => toNonNegativePx(props.desktopViewportMarginPx, 8))
+
 const desktopFixedStyle = ref<CSSProperties>({
-  left: `${PANEL_VIEWPORT_MARGIN_PX}px`,
-  top: `${PANEL_VIEWPORT_MARGIN_PX}px`,
+  left: `${panelViewportMarginPx.value}px`,
+  top: `${panelViewportMarginPx.value}px`,
   visibility: 'hidden',
 })
 
@@ -160,20 +180,124 @@ function onDocumentKeydown(event: KeyboardEvent) {
   closeMenu()
 }
 
+function unwrapAnchorCandidate(value: unknown): unknown {
+  let current = value
+  for (let i = 0; i < 4; i += 1) {
+    if (!isRef(current)) return current
+    current = current.value
+  }
+  return current
+}
+
+function resolveAnchorElCandidate(value: unknown): HTMLElement | null {
+  const raw = unwrapAnchorCandidate(value)
+  if (raw instanceof HTMLElement) return raw
+  if (!raw || typeof raw !== 'object') return null
+
+  const triggerEl = unwrapAnchorCandidate((raw as { triggerEl?: unknown }).triggerEl)
+  if (triggerEl instanceof HTMLElement) return triggerEl
+
+  if (triggerEl && typeof triggerEl === 'object') {
+    const triggerHostEl = unwrapAnchorCandidate((triggerEl as { $el?: unknown }).$el)
+    if (triggerHostEl instanceof HTMLElement) return triggerHostEl
+  }
+
+  const hostEl = unwrapAnchorCandidate((raw as { $el?: unknown }).$el)
+  if (hostEl instanceof HTMLElement) return hostEl
+
+  return null
+}
+
+function resolveAnchorRectCandidate(value: unknown): DOMRect | null {
+  const anchorEl = resolveAnchorElCandidate(value)
+  if (anchorEl) return anchorEl.getBoundingClientRect()
+
+  const raw = unwrapAnchorCandidate(value)
+  if (!raw || typeof raw !== 'object') return null
+
+  const getRect = (raw as { getBoundingClientRect?: () => DOMRect | undefined }).getBoundingClientRect
+  if (typeof getRect === 'function') {
+    const rect = getRect()
+    if (rect) return rect
+  }
+
+  const triggerEl = unwrapAnchorCandidate((raw as { triggerEl?: unknown }).triggerEl)
+  if (triggerEl && typeof triggerEl === 'object') {
+    const triggerGetRect = (triggerEl as { getBoundingClientRect?: () => DOMRect | undefined }).getBoundingClientRect
+    if (typeof triggerGetRect === 'function') {
+      const rect = triggerGetRect()
+      if (rect) return rect
+    }
+  }
+
+  return null
+}
+
 function resolveDesktopAnchor(): HTMLElement | null {
-  if (props.desktopAnchorEl instanceof HTMLElement) return props.desktopAnchorEl
+  const anchor = resolveAnchorElCandidate(props.desktopAnchorEl as unknown)
+  if (anchor) return anchor
   const root = rootEl.value
   if (!root) return null
   if (root.parentElement instanceof HTMLElement) return root.parentElement
   return root
 }
 
+function resolveDesktopAnchorRect(): DOMRect | null {
+  const anchorRect = resolveAnchorRectCandidate(props.desktopAnchorEl as unknown)
+  if (anchorRect) return anchorRect
+  const fallbackAnchor = resolveDesktopAnchor()
+  if (!fallbackAnchor) return null
+  return fallbackAnchor.getBoundingClientRect()
+}
+
 function resetDesktopFixedStyle() {
+  const margin = panelViewportMarginPx.value
   desktopFixedStyle.value = {
     ...(props.desktopStyle || {}),
-    left: `${PANEL_VIEWPORT_MARGIN_PX}px`,
-    top: `${PANEL_VIEWPORT_MARGIN_PX}px`,
+    left: `${margin}px`,
+    top: `${margin}px`,
     visibility: 'hidden',
+  }
+}
+
+async function waitForAnimationFrame(): Promise<void> {
+  if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') return
+  await new Promise<void>((resolve) => {
+    window.requestAnimationFrame(() => resolve())
+  })
+}
+
+function computeDesktopFixedStyle(): CSSProperties | null {
+  const panel = panelEl.value
+  const anchorRect = resolveDesktopAnchorRect()
+  if (!panel || !anchorRect) return null
+
+  const panelRect = panel.getBoundingClientRect()
+  const viewportWidth = window.innerWidth
+  const viewportHeight = window.innerHeight
+  const gap = panelGapPx.value
+  const margin = panelViewportMarginPx.value
+
+  const alignEnd = props.desktopPlacement.endsWith('end')
+  const placeTop = props.desktopPlacement.startsWith('top')
+
+  let left = alignEnd ? anchorRect.right - panelRect.width : anchorRect.left
+  let top = placeTop ? anchorRect.top - panelRect.height - gap : anchorRect.bottom + gap
+
+  if (!placeTop && top + panelRect.height > viewportHeight - margin) {
+    top = anchorRect.top - panelRect.height - gap
+  } else if (placeTop && top < margin) {
+    top = anchorRect.bottom + gap
+  }
+
+  left = Math.max(margin, Math.min(left, viewportWidth - panelRect.width - margin))
+  top = Math.max(margin, Math.min(top, viewportHeight - panelRect.height - margin))
+
+  return {
+    ...(props.desktopStyle || {}),
+    left: `${Math.round(left)}px`,
+    top: `${Math.round(top)}px`,
+    visibility: 'visible',
   }
 }
 
@@ -199,36 +323,15 @@ async function syncDesktopFixedPosition() {
 
   await nextTick()
 
-  const panel = panelEl.value
-  const anchor = resolveDesktopAnchor()
-  if (!panel || !anchor) return
+  const firstPass = computeDesktopFixedStyle()
+  if (!firstPass) return
+  desktopFixedStyle.value = firstPass
 
-  const panelRect = panel.getBoundingClientRect()
-  const anchorRect = anchor.getBoundingClientRect()
-  const viewportWidth = window.innerWidth
-  const viewportHeight = window.innerHeight
-
-  const alignEnd = props.desktopPlacement.endsWith('end')
-  const placeTop = props.desktopPlacement.startsWith('top')
-
-  let left = alignEnd ? anchorRect.right - panelRect.width : anchorRect.left
-  let top = placeTop ? anchorRect.top - panelRect.height - PANEL_GAP_PX : anchorRect.bottom + PANEL_GAP_PX
-
-  if (!placeTop && top + panelRect.height > viewportHeight - PANEL_VIEWPORT_MARGIN_PX) {
-    top = anchorRect.top - panelRect.height - PANEL_GAP_PX
-  } else if (placeTop && top < PANEL_VIEWPORT_MARGIN_PX) {
-    top = anchorRect.bottom + PANEL_GAP_PX
-  }
-
-  left = Math.max(PANEL_VIEWPORT_MARGIN_PX, Math.min(left, viewportWidth - panelRect.width - PANEL_VIEWPORT_MARGIN_PX))
-  top = Math.max(PANEL_VIEWPORT_MARGIN_PX, Math.min(top, viewportHeight - panelRect.height - PANEL_VIEWPORT_MARGIN_PX))
-
-  desktopFixedStyle.value = {
-    ...(props.desktopStyle || {}),
-    left: `${Math.round(left)}px`,
-    top: `${Math.round(top)}px`,
-    visibility: 'visible',
-  }
+  await waitForAnimationFrame()
+  if (!props.desktopFixed || !props.open || isMobileSheet.value) return
+  const secondPass = computeDesktopFixedStyle()
+  if (!secondPass) return
+  desktopFixedStyle.value = secondPass
 }
 
 async function syncMobileSheetPosition() {
@@ -468,8 +571,12 @@ watch(
 watch(
   () => [props.query, totalVisibleItemCount.value, showPager.value] as const,
   () => {
-    if (!props.open || !isMobileSheet.value) return
-    void syncMobileSheetPosition()
+    if (!props.open) return
+    if (isMobileSheet.value) {
+      void syncMobileSheetPosition()
+      return
+    }
+    if (props.desktopFixed) void syncDesktopFixedPosition()
   },
 )
 
@@ -574,6 +681,8 @@ watch(
       props.desktopPlacement,
       props.desktopAnchorEl,
       props.desktopStyle,
+      props.desktopGapPx,
+      props.desktopViewportMarginPx,
       props.open,
       isMobileSheet.value,
     ] as const,

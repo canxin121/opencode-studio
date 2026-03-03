@@ -28,10 +28,10 @@
 
 - 内容：单个桌面安装包/应用包，包含：
   - 前端 UI
-  - 作为 Tauri sidecar 打包的 Rust 服务端（`opencode-studio`）
+  - 作为桌面内置后端服务打包的 Rust 服务端（`opencode-studio`）
   - 托盘图标 + 关闭到托盘行为
 - 行为：
-  - 启动应用时自动拉起后端 sidecar。
+  - 启动应用时自动拉起内置后端服务。
   - 关闭窗口仅隐藏，后端继续在托盘运行。
   - 托盘菜单可 start/stop/restart 后端，打开日志/配置，退出应用。
 - 构建配置：`desktop/src-tauri/tauri.conf.full.json`。
@@ -60,22 +60,17 @@ cargo build --manifest-path server/Cargo.toml --release --locked --target-dir se
 
 ### 构建 `full-app`
 
-完整应用会将 Rust 服务端作为 Tauri sidecar 打包。
+完整应用会将 Rust 服务端作为桌面内置后端服务打包。
 
 ```bash
-./scripts/build-frontend-dist.sh
-
-# 构建并复制后端到 desktop/src-tauri/binaries/
-./desktop/scripts/prepare-sidecar.sh
-
-cd desktop/src-tauri
-cargo tauri build --config tauri.conf.full.json
+# 一条命令完成完整桌面构建（UI + 后端 + 打包）
+./desktop/scripts/build-full.sh
 ```
 
 说明：
 
-- sidecar 文件名必须带 `-$TARGET_TRIPLE` 后缀（Tauri 要求）。
-- 在 `full-app` 模式下，Tauri 直接打开后端 URL，前端资源由打包的后端 sidecar（`--ui-dir`）托管。
+- 内置后端二进制文件名必须带 `-$TARGET_TRIPLE` 后缀（Tauri 要求）。
+- 在 `full-app` 模式下，Tauri 直接打开后端 URL，前端资源由打包的内置后端服务（`--ui-dir`）托管。
 - 后端 API 默认端口是 `3000`；如果端口被占用，请修改 `opencode-studio.toml`。
 
 ### 使用 CEF 运行时构建桌面版（`-cef`）

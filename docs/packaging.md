@@ -28,10 +28,10 @@ Repository layout:
 
 - What: one desktop installer/bundle that includes:
   - the frontend UI
-  - the Rust server (`opencode-studio`) bundled as a Tauri sidecar
+  - the Rust server (`opencode-studio`) bundled as the desktop backend service
   - tray icon + close-to-tray behavior
 - Behavior:
-  - App startup automatically starts the backend sidecar.
+  - App startup automatically starts the bundled backend service.
   - Closing the window hides it; the backend continues in the tray.
   - Tray menu can start/stop/restart backend, open logs/config, quit.
 - Built from: `desktop/src-tauri/tauri.conf.full.json`.
@@ -61,23 +61,18 @@ Output:
 
 ### Build `full-app`
 
-The full app bundles the Rust server as a Tauri sidecar.
+The full app bundles the Rust server as the desktop backend service.
 
 ```bash
-./scripts/build-frontend-dist.sh
-
-# Build and copy the backend into desktop/src-tauri/binaries/
-./desktop/scripts/prepare-sidecar.sh
-
-cd desktop/src-tauri
-cargo tauri build --config tauri.conf.full.json
+# One-command full desktop build (UI + backend + package)
+./desktop/scripts/build-full.sh
 ```
 
 Notes:
 
-- The sidecar must be named with a `-$TARGET_TRIPLE` suffix (Tauri requirement).
+- The bundled backend binary must be named with a `-$TARGET_TRIPLE` suffix (Tauri requirement).
 - In `full-app`, Tauri opens the backend URL directly and frontend assets are
-  served by the bundled backend sidecar (`--ui-dir`).
+  served by the bundled backend service (`--ui-dir`).
 - Backend API port defaults to `3000`; if this port is occupied, update
   `opencode-studio.toml` to use another port.
 

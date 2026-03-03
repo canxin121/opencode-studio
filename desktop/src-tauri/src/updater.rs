@@ -101,11 +101,11 @@ pub(crate) async fn apply_service_update(
 
     let result: Result<(), String> = async {
         let asset_url = normalize_http_url(&asset_url)?;
-        let sidecar_path = resolve_sidecar_path()?;
-        if !sidecar_path.is_file() {
+        let service_path = resolve_service_binary_path()?;
+        if !service_path.is_file() {
             return Err(format!(
-                "service sidecar binary not found: {}",
-                sidecar_path.display()
+                "service binary not found: {}",
+                service_path.display()
             ));
         }
 
@@ -154,7 +154,7 @@ pub(crate) async fn apply_service_update(
         std::thread::sleep(Duration::from_millis(250));
 
         progress.set_phase("replacing", "Replacing service binary...");
-        replace_binary_file(&sidecar_path, &extracted_path)?;
+        replace_binary_file(&service_path, &extracted_path)?;
 
         let _ = fs::remove_file(&archive_path);
         let _ = fs::remove_file(&extracted_path);
@@ -359,7 +359,7 @@ fn sanitize_file_name(input: &str) -> String {
         .to_string()
 }
 
-fn resolve_sidecar_path() -> Result<PathBuf, String> {
+fn resolve_service_binary_path() -> Result<PathBuf, String> {
     let exe_path = std::env::current_exe().map_err(|err| format!("resolve current exe: {err}"))?;
     let exe_dir = exe_path
         .parent()
@@ -370,27 +370,27 @@ fn resolve_sidecar_path() -> Result<PathBuf, String> {
         exe_dir
     };
 
-    let mut sidecar_path = base_dir.join("opencode-studio");
+    let mut service_path = base_dir.join("opencode-studio");
     #[cfg(target_os = "windows")]
     {
-        if sidecar_path
+        if service_path
             .extension()
             .is_none_or(|ext| ext != OsStr::new("exe"))
         {
-            sidecar_path.as_mut_os_string().push(".exe");
+            service_path.as_mut_os_string().push(".exe");
         }
     }
     #[cfg(not(target_os = "windows"))]
     {
-        if sidecar_path
+        if service_path
             .extension()
             .is_some_and(|ext| ext == OsStr::new("exe"))
         {
-            sidecar_path.set_extension("");
+            service_path.set_extension("");
         }
     }
 
-    Ok(sidecar_path)
+    Ok(service_path)
 }
 
 fn extract_binary_from_archive(

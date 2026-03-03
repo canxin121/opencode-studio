@@ -46,7 +46,7 @@ OpenCode Studio supports two install paths:
 1) Package install (desktop app)
 
 - Install native packages from GitHub Releases (`.msi`/`.exe`, `.dmg`, `.AppImage`/`.deb`/`.rpm`).
-- Includes frontend UI and bundled backend sidecar.
+- Includes frontend UI and bundled backend service.
 - Best for local desktop use.
 
 2) Service install

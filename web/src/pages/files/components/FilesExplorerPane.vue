@@ -91,6 +91,51 @@ const inlineRenameName = ref('')
 const inlineRenameBusy = ref(false)
 const inlineRenameInputRef = ref<HTMLInputElement | null>(null)
 
+async function setActionMenuOpen(next: boolean) {
+  if (!next) {
+    actionMenuOpen.value = false
+    actionMenuQuery.value = ''
+    return
+  }
+
+  if (fileActionMenuPath.value) {
+    fileActionMenuPath.value = ''
+    await nextTick()
+  }
+
+  actionMenuOpen.value = true
+  actionMenuQuery.value = ''
+}
+
+function toggleActionMenu() {
+  void setActionMenuOpen(!actionMenuOpen.value)
+}
+
+async function setFileActionMenuOpen(path: string, open: boolean) {
+  const targetPath = String(path || '').trim()
+  if (!targetPath) {
+    fileActionMenuPath.value = ''
+    fileActionMenuQuery.value = ''
+    return
+  }
+
+  if (!open) {
+    if (fileActionMenuPath.value === targetPath) fileActionMenuPath.value = ''
+    fileActionMenuQuery.value = ''
+    return
+  }
+
+  if (fileActionMenuPath.value === targetPath) return
+
+  const shouldWait = Boolean(fileActionMenuPath.value) || actionMenuOpen.value
+  if (fileActionMenuPath.value) fileActionMenuPath.value = ''
+  if (actionMenuOpen.value) actionMenuOpen.value = false
+  if (shouldWait) await nextTick()
+
+  fileActionMenuPath.value = targetPath
+  fileActionMenuQuery.value = ''
+}
+
 const selectedDirectoryNode = computed<FileNode | null>(() => {
   const selectedPath = (props.selectedFilePath || '').trim()
   if (!selectedPath) return null
@@ -448,13 +493,20 @@ async function runExplorerAction(item: OptionMenuItem) {
 }
 
 function toggleFileActionMenu(path: string) {
-  if (fileActionMenuPath.value === path) {
+  const targetPath = String(path || '').trim()
+  if (!targetPath) {
     fileActionMenuPath.value = ''
     fileActionMenuQuery.value = ''
     return
   }
-  fileActionMenuPath.value = path
-  fileActionMenuQuery.value = ''
+
+  if (fileActionMenuPath.value === targetPath) {
+    fileActionMenuPath.value = ''
+    fileActionMenuQuery.value = ''
+    return
+  }
+
+  void setFileActionMenuOpen(targetPath, true)
 }
 
 async function runFileActionMenu(node: FileNode, item: OptionMenuItem) {
@@ -663,7 +715,7 @@ onBeforeUnmount(() => {
             :title="t('files.explorer.toolbar.actions')"
             :aria-label="t('files.explorer.toolbar.actions')"
             @mousedown.prevent
-            @click.stop="actionMenuOpen = !actionMenuOpen"
+            @click.stop="toggleActionMenu"
           >
             <RiMore2Line class="h-3.5 w-3.5" />
           </SidebarIconButton>
@@ -679,7 +731,7 @@ onBeforeUnmount(() => {
             :desktop-fixed="true"
             desktop-placement="bottom-start"
             desktop-class="w-72"
-            @update:open="(v) => (actionMenuOpen = v)"
+            @update:open="(v) => void setActionMenuOpen(v)"
             @update:query="(v) => (actionMenuQuery = v)"
             @select="runExplorerAction"
           />
@@ -815,7 +867,7 @@ onBeforeUnmount(() => {
                         size="sm"
                         :title="t('files.explorer.actions.actions')"
                         :active="fileActionMenuPath === entry.row.node.path"
-                        @click.stop="toggleFileActionMenu(entry.row.node.path)"
+                        @click.stop="void toggleFileActionMenu(entry.row.node.path)"
                       >
                         <RiMore2Line class="h-3 w-3" />
                       </SidebarIconButton>
@@ -831,7 +883,7 @@ onBeforeUnmount(() => {
                         :desktop-fixed="true"
                         desktop-placement="bottom-start"
                         desktop-class="w-56"
-                        @update:open="(v) => (fileActionMenuPath = v ? entry.row.node.path : '')"
+                        @update:open="(v) => void setFileActionMenuOpen(entry.row.node.path, v)"
                         @update:query="(v) => (fileActionMenuQuery = v)"
                         @select="(item) => runTreeRowActionMenu(entry.row.node, item)"
                       />
@@ -843,7 +895,7 @@ onBeforeUnmount(() => {
                           size="sm"
                           :title="t('files.explorer.actions.fileActions')"
                           :active="fileActionMenuPath === entry.row.node.path"
-                          @click.stop="toggleFileActionMenu(entry.row.node.path)"
+                          @click.stop="void toggleFileActionMenu(entry.row.node.path)"
                         >
                           <RiMore2Line class="h-3 w-3" />
                         </SidebarIconButton>
@@ -859,7 +911,7 @@ onBeforeUnmount(() => {
                           :desktop-fixed="true"
                           desktop-placement="bottom-start"
                           desktop-class="w-44"
-                          @update:open="(v) => (fileActionMenuPath = v ? entry.row.node.path : '')"
+                          @update:open="(v) => void setFileActionMenuOpen(entry.row.node.path, v)"
                           @update:query="(v) => (fileActionMenuQuery = v)"
                           @select="(item) => runFileActionMenu(entry.row.node, item)"
                         />

@@ -445,7 +445,7 @@ function closeAttachmentsPanel() {
   attachmentsPanelOpen.value = false
 }
 
-function setAttachmentsPanelOpen(next: boolean) {
+async function setAttachmentsPanelOpen(next: boolean) {
   if (!next) {
     closeAttachmentsPanel()
     return
@@ -455,11 +455,12 @@ function setAttachmentsPanelOpen(next: boolean) {
     closeActions: closeComposerActionMenu,
     closePicker: closeComposerPickerMenu,
   })
+  await nextTick()
   attachmentsPanelOpen.value = true
 }
 
 function toggleAttachmentsPanel() {
-  setAttachmentsPanelOpen(!attachmentsPanelOpen.value)
+  void setAttachmentsPanelOpen(!attachmentsPanelOpen.value)
 }
 
 function setComposerPickerOpen(next: boolean) {
@@ -871,7 +872,7 @@ function closeComposerActionMenu() {
   composerActionMenuQuery.value = ''
 }
 
-function toggleComposerActionMenu(event?: MouseEvent | PointerEvent) {
+async function toggleComposerActionMenu(event?: MouseEvent | PointerEvent) {
   if (composerActionMenuOpen.value) {
     closeComposerActionMenu()
     return
@@ -881,6 +882,7 @@ function toggleComposerActionMenu(event?: MouseEvent | PointerEvent) {
     closeActions: closeComposerActionMenu,
     closePicker: closeComposerPickerMenu,
   })
+  await nextTick()
   composerActionMenuOpen.value = true
   composerActionMenuAnchorRef.value = event?.currentTarget instanceof HTMLElement ? event.currentTarget : null
   composerActionMenuQuery.value = ''

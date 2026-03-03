@@ -92,7 +92,7 @@ opencode --version
    - Windows：`.msi` / `.exe`
    - macOS：`.dmg`
    - Linux：`.AppImage` / `.deb` / `.rpm`
-3. 安装并启动应用后，内置后端 sidecar 会自动启动。
+3. 安装并启动应用后，内置后端服务会自动启动。
 
 ### 方式二：服务安装（Service）
 

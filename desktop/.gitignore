@@ -6,7 +6,7 @@ src-tauri-cef/target/
 src-tauri/gen/
 src-tauri-cef/gen/
 
-# Sidecar binaries (generated locally)
+# Bundled backend binaries (generated locally)
 src-tauri/binaries/opencode-studio-*
 src-tauri-cef/binaries/opencode-studio-*
 
