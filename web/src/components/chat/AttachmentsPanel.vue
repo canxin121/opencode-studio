@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 
 import Button from '@/components/ui/Button.vue'
 import IconButton from '@/components/ui/IconButton.vue'
+import Skeleton from '@/components/ui/Skeleton.vue'
 
 type AttachedFile = {
   id: string
@@ -330,7 +331,7 @@ onBeforeUnmount(() => {
     <div
       v-if="open && !isMobileSheet"
       ref="panelEl"
-      class="fixed z-[60] w-[min(420px,calc(100vw-1rem))] max-h-[min(72dvh,560px)] rounded-xl border border-border/70 bg-background/95 shadow-xl backdrop-blur overflow-hidden flex flex-col"
+      class="fixed z-[60] w-[min(420px,calc(100vw-1rem))] max-h-[min(72dvh,560px)] rounded-xl border border-border/70 bg-background/95 shadow-xl backdrop-blur overflow-hidden flex flex-col animate-in fade-in-0 zoom-in-95 duration-200"
       :style="desktopStyle"
       @click.stop
     >
@@ -382,7 +383,25 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="flex-1 min-h-0 overflow-auto pr-1">
-          <div v-if="fileCount === 0" class="rounded-lg border border-border/60 bg-muted/15 px-3 py-3">
+          <div
+            v-if="busy && fileCount === 0"
+            class="rounded-lg border border-border/60 bg-muted/15 px-3 py-3 animate-in fade-in-0 duration-150"
+          >
+            <div class="space-y-2">
+              <Skeleton class="h-3 w-2/3" />
+              <Skeleton class="h-3 w-1/2" />
+              <div class="space-y-1.5 pt-1">
+                <Skeleton class="h-8 w-full" />
+                <Skeleton class="h-8 w-11/12" />
+                <Skeleton class="h-8 w-10/12" />
+              </div>
+            </div>
+          </div>
+
+          <div
+            v-else-if="fileCount === 0"
+            class="rounded-lg border border-border/60 bg-muted/15 px-3 py-3 animate-in fade-in-0 duration-150"
+          >
             <div class="text-xs font-medium">{{ t('chat.attachments.empty.title') }}</div>
             <div class="mt-1 text-[11px] text-muted-foreground">{{ t('chat.attachments.empty.description') }}</div>
           </div>
@@ -448,7 +467,7 @@ onBeforeUnmount(() => {
     <div class="absolute inset-0 bg-black/55 backdrop-blur-sm" />
     <div
       ref="panelEl"
-      class="absolute left-1/2 w-[calc(100%-1rem)] max-w-[24rem] -translate-x-1/2 rounded-xl border border-border/70 bg-background/95 shadow-xl backdrop-blur overflow-hidden flex flex-col"
+      class="absolute left-1/2 w-[calc(100%-1rem)] max-w-[24rem] -translate-x-1/2 rounded-xl border border-border/70 bg-background/95 shadow-xl backdrop-blur overflow-hidden flex flex-col animate-in fade-in-0 zoom-in-95 duration-200"
       :style="mobileSheetStyle"
       @click.stop
     >
@@ -500,7 +519,25 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="flex-1 min-h-0 overflow-auto pr-1">
-          <div v-if="fileCount === 0" class="rounded-lg border border-border/60 bg-muted/15 px-3 py-3">
+          <div
+            v-if="busy && fileCount === 0"
+            class="rounded-lg border border-border/60 bg-muted/15 px-3 py-3 animate-in fade-in-0 duration-150"
+          >
+            <div class="space-y-2.5">
+              <Skeleton class="h-3.5 w-2/3" />
+              <Skeleton class="h-3.5 w-1/2" />
+              <div class="space-y-2 pt-1">
+                <Skeleton class="h-9 w-full" />
+                <Skeleton class="h-9 w-11/12" />
+                <Skeleton class="h-9 w-10/12" />
+              </div>
+            </div>
+          </div>
+
+          <div
+            v-else-if="fileCount === 0"
+            class="rounded-lg border border-border/60 bg-muted/15 px-3 py-3 animate-in fade-in-0 duration-150"
+          >
             <div class="text-sm font-medium">{{ t('chat.attachments.empty.title') }}</div>
             <div class="mt-1 text-[13px] text-muted-foreground">{{ t('chat.attachments.empty.description') }}</div>
           </div>

@@ -7,6 +7,7 @@ import type { DirectoryEntry } from '@/features/sessions/model/types'
 import type { SessionActionItem } from '@/layout/chatSidebar/useSessionActionMenu'
 import type { JsonValue } from '@/types/json'
 import SidebarPager from '@/layout/chatSidebar/components/SidebarPager.vue'
+import SidebarSectionSkeleton from '@/layout/chatSidebar/components/SidebarSectionSkeleton.vue'
 import SessionRow from '@/layout/chatSidebar/components/SessionRow.vue'
 
 const { t } = useI18n()
@@ -37,6 +38,7 @@ const props = defineProps<{
   open: boolean
   page: number
   paging?: boolean
+  loading?: boolean
   pinnedSessionsPageCount: number
   pinnedSessionsTotal: number
   pinnedSessionRows: PinnedSessionRow[]
@@ -120,11 +122,12 @@ function statusMeta(sessionId: string) {
       </div>
     </div>
 
-    <div v-if="open" class="px-2 pb-2">
-      <div v-if="count === 0" class="px-2 py-2 text-xs text-muted-foreground">
+    <div v-if="open" class="px-2 pb-2 animate-in fade-in-0 slide-in-from-top-1 duration-200">
+      <SidebarSectionSkeleton v-if="Boolean(loading)" :rows="3" compact />
+      <div v-else-if="count === 0" class="px-2 py-2 text-xs text-muted-foreground animate-in fade-in-0 duration-150">
         {{ t('chat.sidebar.footers.pinned.empty') }}
       </div>
-      <div v-else class="space-y-1">
+      <div v-else class="space-y-1 animate-in fade-in-0 duration-150">
         <SessionRow
           v-for="item in pinnedSessionRows"
           :key="item.renderKey"

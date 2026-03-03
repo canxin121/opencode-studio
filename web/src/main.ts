@@ -44,7 +44,7 @@ try {
   // ignore
 }
 
-await syncDesktopBackendTarget()
+void syncDesktopBackendTarget().catch(() => {})
 
 const app = createApp(App)
 const pinia = createPinia()

@@ -3,6 +3,7 @@ import type { ComponentPublicInstance } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import SidebarTextButton from '@/components/ui/SidebarTextButton.vue'
+import Skeleton from '@/components/ui/Skeleton.vue'
 import { directoryEntryLabel, sessionLabel } from '@/features/sessions/model/labels'
 import type { DirectoryEntry } from '@/features/sessions/model/types'
 import type { FlatTreeRow } from '@/features/sessions/model/tree'
@@ -11,6 +12,7 @@ import type { JsonValue } from '@/types/json'
 import DirectoryRow from '@/layout/chatSidebar/components/DirectoryRow.vue'
 import SidebarPager from '@/layout/chatSidebar/components/SidebarPager.vue'
 import SessionRow from '@/layout/chatSidebar/components/SessionRow.vue'
+import SidebarSectionSkeleton from '@/layout/chatSidebar/components/SidebarSectionSkeleton.vue'
 
 type SessionLike = {
   id: string
@@ -143,7 +145,7 @@ function statusMeta(sessionId: string) {
             </div>
           </div>
 
-          <div v-if="sessionSearchHits.length" class="mt-1 space-y-0.5">
+          <div v-if="sessionSearchHits.length" class="mt-1 space-y-0.5 animate-in fade-in-0 duration-200">
             <SidebarTextButton
               v-for="hit in sessionSearchHits"
               :key="String(hit.session.id)"
@@ -155,11 +157,16 @@ function statusMeta(sessionId: string) {
             </SidebarTextButton>
           </div>
 
-          <div v-else class="mt-2 text-xs text-muted-foreground">
-            <div class="font-medium">{{ t('chat.sidebar.directoriesList.search.noMatchingSessions') }}</div>
-            <div v-if="searchWarming" class="mt-1 font-mono text-[10px] text-muted-foreground/60">
-              {{ t('chat.sidebar.directoriesList.search.loadingDirectories') }}
+          <div v-else-if="searchWarming" class="mt-2 rounded-md border border-sidebar-border/40 bg-muted/10 px-2 py-2">
+            <div class="space-y-1.5">
+              <Skeleton class="h-3 w-4/5" />
+              <Skeleton class="h-3 w-3/5" />
+              <Skeleton class="h-3 w-2/3" />
             </div>
+          </div>
+
+          <div v-else class="mt-2 text-xs text-muted-foreground animate-in fade-in-0 duration-200">
+            <div class="font-medium">{{ t('chat.sidebar.directoriesList.search.noMatchingSessions') }}</div>
           </div>
         </div>
 
@@ -206,14 +213,19 @@ function statusMeta(sessionId: string) {
                   "
                   class="px-1.5 py-1.5"
                 >
-                  <div class="text-xs text-muted-foreground">
-                    {{ t('chat.sidebar.directoriesList.loadingSessions') }}
-                  </div>
-                  <div class="mt-2 space-y-2 animate-pulse">
-                    <div class="h-3 w-3/4 rounded bg-muted/30" />
-                    <div class="h-3 w-2/3 rounded bg-muted/30" />
-                    <div class="h-3 w-1/2 rounded bg-muted/30" />
-                  </div>
+                  <SidebarSectionSkeleton :rows="3" :with-header="false" compact />
+                </div>
+
+                <div
+                  v-else-if="
+                    props.directoryPageLoading &&
+                    props.sessionCountForDirectory(directory.id, directory.path) > 0 &&
+                    pinnedRows(directory.id).length === 0 &&
+                    props.pagedRowsForDirectory(directory.id).length === 0
+                  "
+                  class="px-1.5 py-1.5"
+                >
+                  <SidebarSectionSkeleton :rows="4" compact />
                 </div>
 
                 <div
@@ -224,7 +236,7 @@ function statusMeta(sessionId: string) {
                 </div>
 
                 <template v-else>
-                  <div v-if="pinnedRows(directory.id).length" class="space-y-0.5">
+                  <div v-if="pinnedRows(directory.id).length" class="space-y-0.5 animate-in fade-in-0 duration-200">
                     <div class="px-1.5 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
                       {{ t('chat.sidebar.directoriesList.pinnedTitle') }}
                     </div>
@@ -287,7 +299,7 @@ function statusMeta(sessionId: string) {
                     </div>
                   </div>
 
-                  <div class="space-y-0.5">
+                  <div class="space-y-0.5 animate-in fade-in-0 duration-200">
                     <div class="px-1.5 flex items-center justify-between gap-2">
                       <div class="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
                         {{ t('chat.sidebar.directoriesList.recentTitle') }}

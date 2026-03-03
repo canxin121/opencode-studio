@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { useAuthStore } from '../stores/auth'
 import { useBackendsStore } from '@/stores/backends'
 import { useHealthStore } from '@/stores/health'
 import { clearUiAuthTokenForBaseUrl } from '@/lib/uiAuthToken'
+import { isDesktopRuntime } from '@/lib/desktopConfig'
 import { i18n, setAppLocale } from '@/i18n'
 import type { AppLocale } from '@/i18n/locale'
 import Button from '@/components/ui/Button.vue'
@@ -20,6 +21,7 @@ const auth = useAuthStore()
 const health = useHealthStore()
 const backends = useBackendsStore()
 const { t } = useI18n()
+const desktopRuntime = isDesktopRuntime()
 
 const password = ref('')
 const busy = ref(false)
@@ -182,6 +184,58 @@ const canSubmit = computed(() => {
   return true
 })
 
+const showBackendLoadingNotice = computed(() => {
+  return desktopRuntime && health.data === null
+})
+
+let backendProbeTimer: ReturnType<typeof setInterval> | null = null
+const backendProbeBusy = ref(false)
+
+async function refreshBackendStatusOnce() {
+  if (backendProbeBusy.value) return
+  backendProbeBusy.value = true
+  try {
+    await Promise.all([health.refresh().catch(() => {}), auth.refresh().catch(() => {})])
+  } finally {
+    backendProbeBusy.value = false
+  }
+}
+
+function scheduleBackendProbe() {
+  if (!showBackendLoadingNotice.value) return
+  if (backendProbeTimer) return
+  backendProbeTimer = setInterval(() => {
+    void refreshBackendStatusOnce()
+  }, 2000)
+}
+
+function clearBackendProbeTimer() {
+  if (!backendProbeTimer) return
+  clearInterval(backendProbeTimer)
+  backendProbeTimer = null
+}
+
+watch(
+  () => showBackendLoadingNotice.value,
+  (show) => {
+    if (show) {
+      scheduleBackendProbe()
+      return
+    }
+    clearBackendProbeTimer()
+  },
+  { immediate: true },
+)
+
+onMounted(() => {
+  if (!showBackendLoadingNotice.value) return
+  void refreshBackendStatusOnce()
+})
+
+onBeforeUnmount(() => {
+  clearBackendProbeTimer()
+})
+
 async function submit() {
   if (!canSubmit.value) return
   busy.value = true
@@ -259,6 +313,19 @@ async function submit() {
       </div>
 
       <div class="grid gap-4">
+        <div
+          v-if="showBackendLoadingNotice"
+          class="rounded-lg border border-border bg-muted/20 p-3 text-sm text-muted-foreground"
+        >
+          <div class="font-medium text-foreground">{{ t('login.backendLoadingTitle') }}</div>
+          <p class="mt-1">{{ t('login.backendLoadingDescription') }}</p>
+          <div class="mt-3">
+            <Button variant="outline" size="sm" :disabled="busy || backendProbeBusy" @click="refreshBackendStatusOnce">
+              {{ backendProbeBusy ? t('common.connecting') : t('login.backendLoadingRetry') }}
+            </Button>
+          </div>
+        </div>
+
         <div class="grid gap-2">
           <label class="text-xs font-medium text-muted-foreground">{{ t('settings.appearance.language.label') }}</label>
           <div class="w-40 max-w-full">
