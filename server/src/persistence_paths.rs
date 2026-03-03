@@ -86,22 +86,39 @@ fn select_existing_path(candidates: Vec<PathBuf>) -> PathBuf {
     best.unwrap_or_else(|| candidates.into_iter().next().unwrap_or_default())
 }
 
-pub(crate) fn studio_data_dir() -> PathBuf {
+pub(crate) fn studio_data_dir_candidates() -> Vec<PathBuf> {
     if let Ok(dir) = std::env::var("OPENCODE_STUDIO_DATA_DIR")
         && !dir.trim().is_empty()
     {
-        return PathBuf::from(dir);
+        return vec![PathBuf::from(dir)];
     }
 
-    crate::path_utils::config_home_dir().join("opencode-studio")
+    let mut candidates = Vec::<PathBuf>::new();
+    if let Some(home) = crate::path_utils::home_dir_path() {
+        candidates.push(home.join(".config").join("opencode-studio"));
+    }
+
+    candidates.push(crate::path_utils::config_home_dir().join("opencode-studio"));
+
+    if cfg!(windows)
+        && let Ok(dir) = std::env::var("APPDATA")
+    {
+        let trimmed = dir.trim();
+        if !trimmed.is_empty() {
+            candidates.push(PathBuf::from(trimmed).join("opencode-studio"));
+        }
+    }
+
+    dedupe_paths(candidates)
 }
 
 pub(crate) fn studio_settings_path_candidates() -> Vec<PathBuf> {
-    let root = studio_data_dir();
-    dedupe_paths(vec![
-        root.join(SETTINGS_FILE),
-        root.join(LEGACY_SETTINGS_FILE),
-    ])
+    let mut candidates = Vec::<PathBuf>::new();
+    for root in studio_data_dir_candidates() {
+        candidates.push(root.join(SETTINGS_FILE));
+        candidates.push(root.join(LEGACY_SETTINGS_FILE));
+    }
+    dedupe_paths(candidates)
 }
 
 pub(crate) fn studio_settings_path() -> PathBuf {
@@ -109,12 +126,14 @@ pub(crate) fn studio_settings_path() -> PathBuf {
 }
 
 pub(crate) fn sidebar_preferences_path_candidates() -> Vec<PathBuf> {
-    let ui_dir = studio_data_dir().join("ui");
-    dedupe_paths(vec![
-        ui_dir.join(SIDEBAR_PREFERENCES_FILE),
-        ui_dir.join(LEGACY_SIDEBAR_PREFERENCES_FILE),
-        ui_dir.join(LEGACY_SESSIONS_SIDEBAR_PREFERENCES_FILE),
-    ])
+    let mut candidates = Vec::<PathBuf>::new();
+    for root in studio_data_dir_candidates() {
+        let ui_dir = root.join("ui");
+        candidates.push(ui_dir.join(SIDEBAR_PREFERENCES_FILE));
+        candidates.push(ui_dir.join(LEGACY_SIDEBAR_PREFERENCES_FILE));
+        candidates.push(ui_dir.join(LEGACY_SESSIONS_SIDEBAR_PREFERENCES_FILE));
+    }
+    dedupe_paths(candidates)
 }
 
 pub(crate) fn sidebar_preferences_path() -> PathBuf {
@@ -122,11 +141,13 @@ pub(crate) fn sidebar_preferences_path() -> PathBuf {
 }
 
 pub(crate) fn terminal_ui_state_path_candidates() -> Vec<PathBuf> {
-    let ui_dir = studio_data_dir().join("ui");
-    dedupe_paths(vec![
-        ui_dir.join(TERMINAL_UI_STATE_FILE),
-        ui_dir.join(LEGACY_TERMINAL_UI_STATE_FILE),
-    ])
+    let mut candidates = Vec::<PathBuf>::new();
+    for root in studio_data_dir_candidates() {
+        let ui_dir = root.join("ui");
+        candidates.push(ui_dir.join(TERMINAL_UI_STATE_FILE));
+        candidates.push(ui_dir.join(LEGACY_TERMINAL_UI_STATE_FILE));
+    }
+    dedupe_paths(candidates)
 }
 
 pub(crate) fn terminal_ui_state_path() -> PathBuf {
@@ -134,30 +155,52 @@ pub(crate) fn terminal_ui_state_path() -> PathBuf {
 }
 
 pub(crate) fn terminal_session_registry_path_candidates() -> Vec<PathBuf> {
-    let terminal_dir = studio_data_dir().join("terminal");
-    dedupe_paths(vec![
-        terminal_dir.join(TERMINAL_SESSION_REGISTRY_FILE),
-        terminal_dir.join(LEGACY_TERMINAL_SESSION_REGISTRY_FILE),
-    ])
+    let mut candidates = Vec::<PathBuf>::new();
+    for root in studio_data_dir_candidates() {
+        let terminal_dir = root.join("terminal");
+        candidates.push(terminal_dir.join(TERMINAL_SESSION_REGISTRY_FILE));
+        candidates.push(terminal_dir.join(LEGACY_TERMINAL_SESSION_REGISTRY_FILE));
+    }
+    dedupe_paths(candidates)
 }
 
 pub(crate) fn terminal_session_registry_path() -> PathBuf {
     select_existing_path(terminal_session_registry_path_candidates())
 }
 
-pub(crate) fn opencode_data_dir() -> PathBuf {
-    crate::path_utils::opencode_data_dir()
-}
+pub(crate) fn opencode_data_dir_candidates() -> Vec<PathBuf> {
+    let mut candidates = Vec::<PathBuf>::new();
 
-pub(crate) fn opencode_storage_dir() -> PathBuf {
-    opencode_data_dir().join(OPENCODE_STORAGE_DIRNAME)
+    candidates.push(crate::path_utils::opencode_data_dir());
+
+    if cfg!(windows)
+        && let Ok(dir) = std::env::var("APPDATA")
+    {
+        let trimmed = dir.trim();
+        if !trimmed.is_empty() {
+            candidates.push(PathBuf::from(trimmed).join("opencode"));
+        }
+    }
+
+    if cfg!(windows)
+        && let Ok(dir) = std::env::var("LOCALAPPDATA")
+    {
+        let trimmed = dir.trim();
+        if !trimmed.is_empty() {
+            candidates.push(PathBuf::from(trimmed).join("opencode"));
+        }
+    }
+
+    dedupe_paths(candidates)
 }
 
 pub(crate) fn opencode_db_path_candidates() -> Vec<PathBuf> {
-    dedupe_paths(vec![
-        opencode_storage_dir().join(OPENCODE_DB_FILE),
-        opencode_data_dir().join(LEGACY_OPENCODE_DB_FILE),
-    ])
+    let mut candidates = Vec::<PathBuf>::new();
+    for root in opencode_data_dir_candidates() {
+        candidates.push(root.join(OPENCODE_STORAGE_DIRNAME).join(OPENCODE_DB_FILE));
+        candidates.push(root.join(LEGACY_OPENCODE_DB_FILE));
+    }
+    dedupe_paths(candidates)
 }
 
 pub(crate) fn opencode_db_path() -> PathBuf {
@@ -165,19 +208,27 @@ pub(crate) fn opencode_db_path() -> PathBuf {
 }
 
 pub(crate) fn opencode_sessions_dir_candidates() -> Vec<PathBuf> {
-    let storage = opencode_storage_dir();
-    dedupe_paths(vec![
-        storage.join(SESSION_RECORDS_DIR),
-        storage.join(LEGACY_SESSION_RECORDS_DIR),
-    ])
+    let mut candidates = Vec::<PathBuf>::new();
+    for root in opencode_data_dir_candidates() {
+        let storage = root.join(OPENCODE_STORAGE_DIRNAME);
+        candidates.push(storage.join(SESSION_RECORDS_DIR));
+        candidates.push(storage.join(LEGACY_SESSION_RECORDS_DIR));
+    }
+    dedupe_paths(candidates)
+}
+
+pub(crate) fn opencode_sessions_dir() -> PathBuf {
+    select_existing_path(opencode_sessions_dir_candidates())
 }
 
 pub(crate) fn opencode_messages_dir_candidates() -> Vec<PathBuf> {
-    let storage = opencode_storage_dir();
-    dedupe_paths(vec![
-        storage.join(MESSAGE_RECORDS_DIR),
-        storage.join(LEGACY_MESSAGE_RECORDS_DIR),
-    ])
+    let mut candidates = Vec::<PathBuf>::new();
+    for root in opencode_data_dir_candidates() {
+        let storage = root.join(OPENCODE_STORAGE_DIRNAME);
+        candidates.push(storage.join(MESSAGE_RECORDS_DIR));
+        candidates.push(storage.join(LEGACY_MESSAGE_RECORDS_DIR));
+    }
+    dedupe_paths(candidates)
 }
 
 pub(crate) fn opencode_messages_dir() -> PathBuf {
@@ -185,11 +236,13 @@ pub(crate) fn opencode_messages_dir() -> PathBuf {
 }
 
 pub(crate) fn opencode_message_parts_dir_candidates() -> Vec<PathBuf> {
-    let storage = opencode_storage_dir();
-    dedupe_paths(vec![
-        storage.join(MESSAGE_PARTS_DIR),
-        storage.join(LEGACY_MESSAGE_PARTS_DIR),
-    ])
+    let mut candidates = Vec::<PathBuf>::new();
+    for root in opencode_data_dir_candidates() {
+        let storage = root.join(OPENCODE_STORAGE_DIRNAME);
+        candidates.push(storage.join(MESSAGE_PARTS_DIR));
+        candidates.push(storage.join(LEGACY_MESSAGE_PARTS_DIR));
+    }
+    dedupe_paths(candidates)
 }
 
 pub(crate) fn opencode_message_parts_dir() -> PathBuf {
@@ -239,6 +292,55 @@ mod tests {
     }
 
     #[test]
+    fn studio_settings_path_prefers_xdg_style_home_when_present_on_windows_like_env() {
+        let _env_lock = ENV_LOCK.lock().unwrap();
+        let tmp = unique_tmp_dir("studio-settings-xdg-home-priority");
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        let home = tmp.join("home");
+        let appdata = tmp.join("appdata");
+        std::fs::create_dir_all(&home).unwrap();
+        std::fs::create_dir_all(&appdata).unwrap();
+
+        let home_settings = home.join(".config").join("opencode-studio").join(SETTINGS_FILE);
+        let app_settings = appdata.join("opencode-studio").join(SETTINGS_FILE);
+        std::fs::create_dir_all(home_settings.parent().unwrap_or(tmp.as_path())).unwrap();
+        std::fs::create_dir_all(app_settings.parent().unwrap_or(tmp.as_path())).unwrap();
+        std::fs::write(&home_settings, b"{\"projects\":[{\"id\":\"home\",\"path\":\"D:/git\"}]}").unwrap();
+        std::fs::write(&app_settings, b"{\"projects\":[{\"id\":\"app\",\"path\":\"C:/repo\"}]}").unwrap();
+
+        let _override = EnvVarGuard::set("OPENCODE_STUDIO_DATA_DIR", "".to_string());
+        let _xdg = EnvVarGuard::set("XDG_CONFIG_HOME", "".to_string());
+        let _home = EnvVarGuard::set("HOME", home.to_string_lossy().to_string());
+        let _appdata = EnvVarGuard::set("APPDATA", appdata.to_string_lossy().to_string());
+
+        assert_eq!(studio_settings_path(), home_settings);
+    }
+
+    #[test]
+    fn studio_settings_path_falls_back_to_appdata_when_home_settings_missing() {
+        let _env_lock = ENV_LOCK.lock().unwrap();
+        let tmp = unique_tmp_dir("studio-settings-appdata-fallback");
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        let home = tmp.join("home");
+        let appdata = tmp.join("appdata");
+        std::fs::create_dir_all(&home).unwrap();
+        std::fs::create_dir_all(&appdata).unwrap();
+
+        let app_settings = appdata.join("opencode-studio").join(SETTINGS_FILE);
+        std::fs::create_dir_all(app_settings.parent().unwrap_or(tmp.as_path())).unwrap();
+        std::fs::write(&app_settings, b"{\"projects\":[{\"id\":\"app\",\"path\":\"D:/git\"}]}").unwrap();
+
+        let _override = EnvVarGuard::set("OPENCODE_STUDIO_DATA_DIR", "".to_string());
+        let _xdg = EnvVarGuard::set("XDG_CONFIG_HOME", "".to_string());
+        let _home = EnvVarGuard::set("HOME", home.to_string_lossy().to_string());
+        let _appdata = EnvVarGuard::set("APPDATA", appdata.to_string_lossy().to_string());
+
+        assert_eq!(studio_settings_path(), app_settings);
+    }
+
+    #[test]
     fn opencode_db_path_prefers_legacy_when_modern_db_is_empty() {
         let _env_lock = ENV_LOCK.lock().unwrap();
         let tmp = unique_tmp_dir("persistence-db-legacy-priority");
@@ -253,6 +355,67 @@ mod tests {
         std::fs::write(&legacy, b"legacy-db").unwrap();
 
         assert_eq!(opencode_db_path(), legacy);
+    }
+
+    #[test]
+    fn opencode_db_path_uses_existing_appdata_storage_when_default_is_missing() {
+        let _env_lock = ENV_LOCK.lock().unwrap();
+        let tmp = unique_tmp_dir("persistence-db-appdata-fallback");
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        let appdata = tmp.join("appdata");
+        let local_appdata = tmp.join("localappdata");
+        std::fs::create_dir_all(&appdata).unwrap();
+        std::fs::create_dir_all(&local_appdata).unwrap();
+
+        let _xdg = EnvVarGuard::set("XDG_DATA_HOME", "".to_string());
+        let _appdata = EnvVarGuard::set("APPDATA", appdata.to_string_lossy().to_string());
+        let _local = EnvVarGuard::set("LOCALAPPDATA", local_appdata.to_string_lossy().to_string());
+
+        let expected = appdata
+            .join("opencode")
+            .join(OPENCODE_STORAGE_DIRNAME)
+            .join(OPENCODE_DB_FILE);
+        std::fs::create_dir_all(expected.parent().unwrap_or(tmp.as_path())).unwrap();
+        std::fs::write(&expected, b"sqlite").unwrap();
+
+        assert_eq!(opencode_db_path(), expected);
+    }
+
+    #[test]
+    fn opencode_db_path_prefers_xdg_style_home_over_windows_appdata_roots() {
+        let _env_lock = ENV_LOCK.lock().unwrap();
+        let tmp = unique_tmp_dir("persistence-db-xdg-home-priority");
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        let home = tmp.join("home");
+        let appdata = tmp.join("appdata");
+        let local_appdata = tmp.join("localappdata");
+        std::fs::create_dir_all(&home).unwrap();
+        std::fs::create_dir_all(&appdata).unwrap();
+        std::fs::create_dir_all(&local_appdata).unwrap();
+
+        let _xdg = EnvVarGuard::set("XDG_DATA_HOME", "".to_string());
+        let _home = EnvVarGuard::set("HOME", home.to_string_lossy().to_string());
+        let _appdata = EnvVarGuard::set("APPDATA", appdata.to_string_lossy().to_string());
+        let _local = EnvVarGuard::set("LOCALAPPDATA", local_appdata.to_string_lossy().to_string());
+
+        let preferred = home
+            .join(".local")
+            .join("share")
+            .join("opencode")
+            .join(OPENCODE_STORAGE_DIRNAME)
+            .join(OPENCODE_DB_FILE);
+        let fallback = appdata
+            .join("opencode")
+            .join(OPENCODE_STORAGE_DIRNAME)
+            .join(OPENCODE_DB_FILE);
+        std::fs::create_dir_all(preferred.parent().unwrap_or(tmp.as_path())).unwrap();
+        std::fs::create_dir_all(fallback.parent().unwrap_or(tmp.as_path())).unwrap();
+        std::fs::write(&preferred, b"local").unwrap();
+        std::fs::write(&fallback, b"roaming").unwrap();
+
+        assert_eq!(opencode_db_path(), preferred);
     }
 
     #[test]

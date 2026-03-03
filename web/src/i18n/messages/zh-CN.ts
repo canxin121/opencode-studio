@@ -296,6 +296,26 @@ export default {
     debug: {
       title: '调试工具',
       intro: '用于快速验证 UI 行为与交互链路。',
+      diagnostics: {
+        title: '运行诊断',
+        description: '查看后端实际使用的 OpenCode/Studio 路径、版本与环境变量。',
+        fields: {
+          directory: '目录覆盖',
+          opencodeCliVersion: 'OpenCode CLI 版本',
+          opencodeBaseUrl: 'OpenCode 基础 URL',
+          studioSettingsPath: 'Studio 设置路径',
+          opencodeDbPath: 'OpenCode 数据库路径',
+          opencodeSessionsPath: 'OpenCode 会话路径',
+        },
+        placeholders: {
+          directory: '例如：D:\\git',
+        },
+        actions: {
+          refresh: '刷新诊断',
+          loading: '加载中...',
+        },
+        fullPayload: '完整诊断数据',
+      },
       toast: {
         title: 'Toast 测试台',
         description: '触发不同类型的 toast、动作回调与去重行为。',

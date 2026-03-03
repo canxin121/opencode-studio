@@ -1,8 +1,25 @@
 import { formatMonthDay } from '@/i18n/intl'
 
 export function normalizeDirForCompare(p: string): string {
-  // Keep comparisons stable across trailing slashes and Windows-style separators.
-  return (p || '').trim().replace(/\\/g, '/').replace(/\/+$/g, '')
+  const trimmed = (p || '').trim()
+  if (!trimmed) return ''
+
+  const decoded = trimmed.includes('%')
+    ? (() => {
+        try {
+          return decodeURIComponent(trimmed)
+        } catch {
+          return trimmed
+        }
+      })()
+    : trimmed
+
+  const slashNormalized = decoded.replace(/\\/g, '/')
+  if (!slashNormalized) return ''
+
+  const canonical = slashNormalized.length > 1 ? slashNormalized.replace(/\/+$/g, '') : slashNormalized
+  if (/^[A-Za-z]:/.test(canonical)) return canonical.toLowerCase()
+  return canonical
 }
 
 export function includesQuery(haystack: string | null | undefined, q: string): boolean {

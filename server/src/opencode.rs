@@ -1,4 +1,5 @@
 use std::net::TcpListener;
+use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Duration;
@@ -253,6 +254,10 @@ impl OpenCodeManager {
             .arg(log_level)
             .stdin(Stdio::null());
 
+        if cfg!(windows) {
+            apply_windows_home_env_defaults(&mut cmd);
+        }
+
         if forward_logs {
             cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
         } else {
@@ -377,6 +382,53 @@ fn format_http_base_url(hostname: &str, port: u16) -> String {
     format!("http://{}:{}", host, port)
 }
 
+fn apply_windows_home_env_defaults(cmd: &mut Command) {
+    let Some((home, xdg_config_home, xdg_data_home)) = windows_home_env_defaults() else {
+        return;
+    };
+
+    if std::env::var("HOME")
+        .ok()
+        .map(|v| v.trim().is_empty())
+        .unwrap_or(true)
+    {
+        cmd.env("HOME", &home);
+    }
+
+    if std::env::var("XDG_CONFIG_HOME")
+        .ok()
+        .map(|v| v.trim().is_empty())
+        .unwrap_or(true)
+    {
+        cmd.env("XDG_CONFIG_HOME", xdg_config_home);
+    }
+    if std::env::var("XDG_DATA_HOME")
+        .ok()
+        .map(|v| v.trim().is_empty())
+        .unwrap_or(true)
+    {
+        cmd.env("XDG_DATA_HOME", xdg_data_home);
+    }
+}
+
+fn windows_home_env_defaults() -> Option<(String, PathBuf, PathBuf)> {
+    let home = std::env::var("HOME")
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .or_else(|| {
+            std::env::var("USERPROFILE")
+                .ok()
+                .map(|v| v.trim().to_string())
+                .filter(|v| !v.is_empty())
+        });
+
+    let home = home?;
+    let xdg_config_home = PathBuf::from(&home).join(".config");
+    let xdg_data_home = PathBuf::from(&home).join(".local").join("share");
+    Some((home, xdg_config_home, xdg_data_home))
+}
+
 async fn forward_child_output(label: &'static str, stream: impl tokio::io::AsyncRead + Unpin) {
     forward_child_output_to_writer(label, stream, tokio::io::stderr()).await;
 }
@@ -488,5 +540,51 @@ mod tests {
         assert!(out.contains("opencode: hello\n"), "{out}");
         assert!(out.contains("opencode: world\n"), "{out}");
         assert!(!out.contains("opencode: \n"), "{out}");
+    }
+
+    #[test]
+    fn windows_home_env_defaults_uses_userprofile_when_home_missing() {
+        let old_userprofile = std::env::var("USERPROFILE").ok();
+        let old_home = std::env::var("HOME").ok();
+        let old_xdg_config = std::env::var("XDG_CONFIG_HOME").ok();
+        let old_xdg_data = std::env::var("XDG_DATA_HOME").ok();
+
+        unsafe {
+            std::env::set_var("USERPROFILE", r"C:\Users\Alice");
+            std::env::remove_var("HOME");
+            std::env::remove_var("XDG_CONFIG_HOME");
+            std::env::remove_var("XDG_DATA_HOME");
+        }
+
+        let (home, xdg_config, xdg_data) = windows_home_env_defaults().expect("defaults");
+        assert_eq!(home, r"C:\Users\Alice");
+        assert_eq!(xdg_config, PathBuf::from(r"C:\Users\Alice").join(".config"));
+        assert_eq!(
+            xdg_data,
+            PathBuf::from(r"C:\Users\Alice").join(".local").join("share")
+        );
+
+        unsafe {
+            if let Some(v) = old_userprofile {
+                std::env::set_var("USERPROFILE", v);
+            } else {
+                std::env::remove_var("USERPROFILE");
+            }
+            if let Some(v) = old_home {
+                std::env::set_var("HOME", v);
+            } else {
+                std::env::remove_var("HOME");
+            }
+            if let Some(v) = old_xdg_config {
+                std::env::set_var("XDG_CONFIG_HOME", v);
+            } else {
+                std::env::remove_var("XDG_CONFIG_HOME");
+            }
+            if let Some(v) = old_xdg_data {
+                std::env::set_var("XDG_DATA_HOME", v);
+            } else {
+                std::env::remove_var("XDG_DATA_HOME");
+            }
+        }
     }
 }

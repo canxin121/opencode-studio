@@ -297,6 +297,26 @@ export default {
     debug: {
       title: 'Debug Tools',
       intro: 'Use this page to quickly verify UI behavior and interaction wiring.',
+      diagnostics: {
+        title: 'Runtime diagnostics',
+        description: 'Inspect OpenCode/Studio paths, version, and environment values used by the backend.',
+        fields: {
+          directory: 'Directory override',
+          opencodeCliVersion: 'OpenCode CLI version',
+          opencodeBaseUrl: 'OpenCode base URL',
+          studioSettingsPath: 'Studio settings path',
+          opencodeDbPath: 'OpenCode DB path',
+          opencodeSessionsPath: 'OpenCode sessions path',
+        },
+        placeholders: {
+          directory: 'Example: D:\\git',
+        },
+        actions: {
+          refresh: 'Refresh diagnostics',
+          loading: 'Loading...',
+        },
+        fullPayload: 'Full diagnostics payload',
+      },
       toast: {
         title: 'Toast Test Bench',
         description: 'Trigger different toast types, action callbacks, and dedupe behavior.',

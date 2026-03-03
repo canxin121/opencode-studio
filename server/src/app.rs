@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use axum::{
     Json, Router,
+    extract::Query,
     http::{HeaderValue, Method, header},
     middleware,
     response::{Html, IntoResponse},
@@ -13,7 +14,9 @@ use axum::{
 use axum_extra::extract::cookie::SameSite;
 use futures_util::stream::{self as futures_stream, StreamExt as _};
 use serde::Serialize;
+use serde::Deserialize;
 use tokio::sync::RwLock;
+use tokio::time::{Duration, timeout};
 use tower_http::{
     cors::{AllowOrigin, Any, CorsLayer},
     limit::RequestBodyLimitLayer,
@@ -65,6 +68,162 @@ async fn health(
         last_open_code_error: oc.last_error,
     };
     Json(resp)
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DiagnosticsQuery {
+    directory: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DiagnosticPathEntry {
+    path: String,
+    exists: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DiagnosticsResponse {
+    timestamp: String,
+    opencode: serde_json::Value,
+    paths: serde_json::Value,
+    environment: serde_json::Value,
+}
+
+fn diag_entry(path: PathBuf) -> DiagnosticPathEntry {
+    let text = path.to_string_lossy().into_owned();
+    let exists = std::fs::metadata(&path).is_ok();
+    DiagnosticPathEntry { path: text, exists }
+}
+
+fn parse_opencode_cli_version(raw: &str) -> Option<String> {
+    for token in raw.split_whitespace().rev() {
+        let trimmed = token.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let starts_with_digit = trimmed
+            .chars()
+            .next()
+            .map(|c| c.is_ascii_digit())
+            .unwrap_or(false);
+        if starts_with_digit {
+            return Some(trimmed.to_string());
+        }
+    }
+    None
+}
+
+async fn detect_opencode_cli_version() -> Option<String> {
+    let output = timeout(
+        Duration::from_millis(1600),
+        tokio::process::Command::new("opencode")
+            .arg("--version")
+            .output(),
+    )
+    .await
+    .ok()?
+    .ok()?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    parse_opencode_cli_version(&stdout)
+        .or_else(|| parse_opencode_cli_version(&stderr))
+        .or_else(|| {
+            if stdout.is_empty() {
+                None
+            } else {
+                Some(stdout)
+            }
+        })
+}
+
+async fn opencode_studio_diagnostics(
+    axum::extract::State(state): axum::extract::State<Arc<AppState>>,
+    Query(query): Query<DiagnosticsQuery>,
+) -> impl IntoResponse {
+    let oc = state.opencode.status().await;
+    let bridge = state.opencode.bridge().await;
+    let opencode_cli_version = detect_opencode_cli_version().await;
+
+    let normalized_directory = query
+        .directory
+        .as_deref()
+        .map(crate::path_utils::normalize_directory_path)
+        .and_then(|text| {
+            let trimmed = text.trim().to_string();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(PathBuf::from(trimmed))
+            }
+        });
+
+    let config_store = crate::opencode_config::OpenCodeConfigStore::from_env();
+    let config_paths = config_store.get_config_paths(normalized_directory.as_deref());
+
+    let response = DiagnosticsResponse {
+        timestamp: time::OffsetDateTime::now_utc()
+            .format(&time::format_description::well_known::Rfc3339)
+            .unwrap_or_default(),
+        opencode: serde_json::json!({
+            "status": {
+                "port": oc.port,
+                "ready": oc.ready,
+                "restarting": oc.restarting,
+                "lastError": oc.last_error,
+                "baseUrl": bridge.as_ref().map(|b| b.base_url.clone()),
+            },
+            "version": {
+                "cli": opencode_cli_version,
+            }
+        }),
+        paths: serde_json::json!({
+            "input": {
+                "directory": query.directory,
+                "normalizedDirectory": normalized_directory.as_ref().map(|p| p.to_string_lossy().into_owned())
+            },
+            "studio": {
+                "settingsPath": diag_entry(crate::persistence_paths::studio_settings_path()),
+                "settingsCandidates": crate::persistence_paths::studio_settings_path_candidates().into_iter().map(diag_entry).collect::<Vec<_>>(),
+                "sidebarPreferencesPath": diag_entry(crate::persistence_paths::sidebar_preferences_path()),
+                "sidebarPreferencesCandidates": crate::persistence_paths::sidebar_preferences_path_candidates().into_iter().map(diag_entry).collect::<Vec<_>>(),
+                "terminalRegistryPath": diag_entry(crate::persistence_paths::terminal_session_registry_path()),
+                "terminalRegistryCandidates": crate::persistence_paths::terminal_session_registry_path_candidates().into_iter().map(diag_entry).collect::<Vec<_>>()
+            },
+            "opencodeStorage": {
+                "dataDir": diag_entry(crate::path_utils::opencode_data_dir()),
+                "dataDirCandidates": crate::persistence_paths::opencode_data_dir_candidates().into_iter().map(diag_entry).collect::<Vec<_>>(),
+                "dbPath": diag_entry(crate::persistence_paths::opencode_db_path()),
+                "dbCandidates": crate::persistence_paths::opencode_db_path_candidates().into_iter().map(diag_entry).collect::<Vec<_>>(),
+                "sessionsDir": diag_entry(crate::persistence_paths::opencode_sessions_dir()),
+                "sessionsDirCandidates": crate::persistence_paths::opencode_sessions_dir_candidates().into_iter().map(diag_entry).collect::<Vec<_>>(),
+                "messagesDir": diag_entry(crate::persistence_paths::opencode_messages_dir()),
+                "messagesDirCandidates": crate::persistence_paths::opencode_messages_dir_candidates().into_iter().map(diag_entry).collect::<Vec<_>>(),
+                "messagePartsDir": diag_entry(crate::persistence_paths::opencode_message_parts_dir()),
+                "messagePartsDirCandidates": crate::persistence_paths::opencode_message_parts_dir_candidates().into_iter().map(diag_entry).collect::<Vec<_>>()
+            },
+            "opencodeConfig": {
+                "userPath": diag_entry(config_paths.user_path.clone()),
+                "projectPath": config_paths.project_path.as_ref().cloned().map(diag_entry),
+                "customPath": config_paths.custom_path.as_ref().cloned().map(diag_entry)
+            }
+        }),
+        environment: serde_json::json!({
+            "HOME": std::env::var("HOME").ok(),
+            "USERPROFILE": std::env::var("USERPROFILE").ok(),
+            "XDG_CONFIG_HOME": std::env::var("XDG_CONFIG_HOME").ok(),
+            "XDG_DATA_HOME": std::env::var("XDG_DATA_HOME").ok(),
+            "APPDATA": std::env::var("APPDATA").ok(),
+            "LOCALAPPDATA": std::env::var("LOCALAPPDATA").ok(),
+            "OPENCODE_STUDIO_DATA_DIR": std::env::var("OPENCODE_STUDIO_DATA_DIR").ok(),
+            "OPENCODE_CONFIG": std::env::var("OPENCODE_CONFIG").ok(),
+        }),
+    };
+
+    Json(response)
 }
 
 fn tracked_status_directories(settings: &crate::settings::Settings) -> Vec<String> {
@@ -661,6 +820,10 @@ pub(crate) async fn run(args: crate::Args) {
             "/opencode-studio/session-locate",
             get(crate::opencode_proxy::opencode_studio_session_locate),
         )
+        .route(
+            "/opencode-studio/diagnostics",
+            get(opencode_studio_diagnostics),
+        )
         // Filesystem
         .route("/fs/home", get(crate::fs::fs_home))
         .route("/fs/mkdir", post(crate::fs::fs_mkdir))
@@ -967,6 +1130,19 @@ mod tests {
         assert!(parsed.contains("ses_upper"));
         assert!(parsed.contains("ses_camel"));
         assert!(parsed.contains("ses_snake"));
+    }
+
+    #[test]
+    fn parse_opencode_cli_version_extracts_semver_token() {
+        assert_eq!(
+            parse_opencode_cli_version("opencode 0.4.7\n").as_deref(),
+            Some("0.4.7")
+        );
+        assert_eq!(
+            parse_opencode_cli_version("opencode version 1.2.3-beta.1").as_deref(),
+            Some("1.2.3-beta.1")
+        );
+        assert!(parse_opencode_cli_version("opencode").is_none());
     }
 
     #[test]

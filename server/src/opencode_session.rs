@@ -2576,6 +2576,71 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn session_list_directory_scope_reads_windows_drive_sessions_from_xdg_style_home() {
+        let _env_lock = ENV_LOCK.lock().unwrap();
+        STORAGE_CACHE.clear();
+
+        let tmp = unique_tmp_dir("session-list-win-drive-xdg-home");
+        tokio::fs::create_dir_all(&tmp).await.unwrap();
+
+        let home = tmp.join("home");
+        tokio::fs::create_dir_all(&home).await.unwrap();
+
+        let _xdg = EnvVarGuard::set("XDG_DATA_HOME", "".to_string());
+        let _home = EnvVarGuard::set("HOME", home.to_string_lossy().to_string());
+
+        write_json(
+            &home
+                .join(".local")
+                .join("share")
+                .join("opencode")
+                .join("storage")
+                .join("session")
+                .join("global")
+                .join("dgit.json"),
+            &serde_json::json!({
+                "id": "dgit",
+                "directory": "D:\\git",
+                "title": "D Git",
+                "slug": "d-git",
+                "time": {"updated": 77.0}
+            }),
+        )
+        .await;
+
+        let resp = session_list(
+            State(dummy_state()),
+            HeaderMap::new(),
+            Query(SessionListQuery {
+                directory: Some("d:/git".to_string()),
+                scope: Some("directory".to_string()),
+                roots: None,
+                start: None,
+                search: None,
+                offset: Some("0".to_string()),
+                limit: Some("30".to_string()),
+                include_total: Some("true".to_string()),
+                include_children: None,
+                ids: None,
+                focus_session_id: None,
+            }),
+        )
+        .await
+        .unwrap();
+
+        let body = to_bytes(resp.into_body(), 1024 * 1024).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let sessions = json
+            .get("sessions")
+            .and_then(|v| v.as_array())
+            .expect("sessions array");
+
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(json.get("total").and_then(|v| v.as_u64()), Some(1));
+        assert_eq!(sessions[0].get("id").and_then(|v| v.as_str()), Some("dgit"));
+    }
+
+    #[tokio::test]
     async fn session_list_directory_scope_does_not_include_global_bucket_for_git_dirs() {
         let _env_lock = ENV_LOCK.lock().unwrap();
         STORAGE_CACHE.clear();

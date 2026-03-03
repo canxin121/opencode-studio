@@ -1,19 +1,68 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from '@/components/ui/Button.vue'
 import Input from '@/components/ui/Input.vue'
 import { useToastsStore, type ToastKind } from '@/stores/toasts'
+import { apiJson } from '@/lib/api'
+import { useDirectoryStore } from '@/stores/directory'
 
 type ToastPreset = 'info' | 'success' | 'error' | 'action' | 'persistent' | 'burst'
+type DiagnosticPathEntry = {
+  path: string
+  exists: boolean
+}
+
+type DiagnosticsPayload = {
+  timestamp?: string
+  opencode?: {
+    status?: {
+      port?: number | null
+      ready?: boolean
+      restarting?: boolean
+      lastError?: string | null
+      baseUrl?: string | null
+    }
+    version?: {
+      cli?: string | null
+    }
+  }
+  paths?: {
+    input?: {
+      directory?: string | null
+      normalizedDirectory?: string | null
+    }
+    studio?: {
+      settingsPath?: DiagnosticPathEntry
+      sidebarPreferencesPath?: DiagnosticPathEntry
+      terminalRegistryPath?: DiagnosticPathEntry
+    }
+    opencodeStorage?: {
+      dbPath?: DiagnosticPathEntry
+      sessionsDir?: DiagnosticPathEntry
+      messagesDir?: DiagnosticPathEntry
+      messagePartsDir?: DiagnosticPathEntry
+    }
+    opencodeConfig?: {
+      userPath?: DiagnosticPathEntry
+      projectPath?: DiagnosticPathEntry | null
+      customPath?: DiagnosticPathEntry | null
+    }
+  }
+}
 
 const toasts = useToastsStore()
+const directoryStore = useDirectoryStore()
 const { t } = useI18n()
 
 const messageDraft = ref('')
 const timeoutDraft = ref('2500')
 const actionLabelDraft = ref('')
 const appendUnique = ref(true)
+const diagnosticsLoading = ref(false)
+const diagnosticsError = ref('')
+const diagnostics = ref<DiagnosticsPayload | null>(null)
+const diagnosticsDirectory = ref('')
 
 const timeoutMs = computed(() => {
   const parsed = Number.parseInt(String(timeoutDraft.value || '').trim(), 10)
@@ -22,6 +71,10 @@ const timeoutMs = computed(() => {
 })
 
 const toastHostReady = computed(() => toasts.isHostReady)
+const diagnosticsPretty = computed(() => {
+  if (!diagnostics.value) return ''
+  return JSON.stringify(diagnostics.value, null, 2)
+})
 
 function resolveMessage(preset: ToastPreset): string {
   const trimmed = String(messageDraft.value || '').trim()
@@ -56,6 +109,31 @@ function pushBurst() {
     toasts.push('info', msg, timeoutMs.value)
   }
 }
+
+function diagnosticsUrl(): string {
+  const directory = String(diagnosticsDirectory.value || '').trim()
+  if (!directory) return '/api/opencode-studio/diagnostics'
+  const params = new URLSearchParams()
+  params.set('directory', directory)
+  return `/api/opencode-studio/diagnostics?${params.toString()}`
+}
+
+async function refreshDiagnostics() {
+  diagnosticsLoading.value = true
+  diagnosticsError.value = ''
+  try {
+    diagnostics.value = await apiJson<DiagnosticsPayload>(diagnosticsUrl())
+  } catch (err) {
+    diagnosticsError.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    diagnosticsLoading.value = false
+  }
+}
+
+onMounted(() => {
+  diagnosticsDirectory.value = String(directoryStore.currentDirectory || '')
+  void refreshDiagnostics()
+})
 </script>
 
 <template>
@@ -64,6 +142,53 @@ function pushBurst() {
       <div class="text-sm font-medium">{{ t('settings.debug.title') }}</div>
       <div class="mt-1 text-xs text-muted-foreground">{{ t('settings.debug.intro') }}</div>
     </div>
+
+    <section class="rounded-lg border border-border bg-background/60 p-4 space-y-4">
+      <div class="flex items-start justify-between gap-3">
+        <div class="space-y-1">
+          <h2 class="text-sm font-semibold">{{ t('settings.debug.diagnostics.title') }}</h2>
+          <p class="text-xs text-muted-foreground">{{ t('settings.debug.diagnostics.description') }}</p>
+        </div>
+        <Button size="sm" variant="outline" :disabled="diagnosticsLoading" @click="refreshDiagnostics">
+          {{ diagnosticsLoading ? t('settings.debug.diagnostics.actions.loading') : t('settings.debug.diagnostics.actions.refresh') }}
+        </Button>
+      </div>
+
+      <label class="grid gap-1">
+        <span class="text-xs text-muted-foreground">{{ t('settings.debug.diagnostics.fields.directory') }}</span>
+        <Input v-model="diagnosticsDirectory" :placeholder="String(t('settings.debug.diagnostics.placeholders.directory'))" />
+      </label>
+
+      <div v-if="diagnosticsError" class="text-xs text-destructive">{{ diagnosticsError }}</div>
+
+      <div v-if="diagnostics" class="grid gap-2 text-xs">
+        <div>
+          <span class="text-muted-foreground">{{ t('settings.debug.diagnostics.fields.opencodeCliVersion') }}: </span>
+          <span class="font-medium">{{ diagnostics.opencode?.version?.cli || '-' }}</span>
+        </div>
+        <div>
+          <span class="text-muted-foreground">{{ t('settings.debug.diagnostics.fields.opencodeBaseUrl') }}: </span>
+          <span class="font-medium">{{ diagnostics.opencode?.status?.baseUrl || '-' }}</span>
+        </div>
+        <div>
+          <span class="text-muted-foreground">{{ t('settings.debug.diagnostics.fields.studioSettingsPath') }}: </span>
+          <span class="font-medium">{{ diagnostics.paths?.studio?.settingsPath?.path || '-' }}</span>
+        </div>
+        <div>
+          <span class="text-muted-foreground">{{ t('settings.debug.diagnostics.fields.opencodeDbPath') }}: </span>
+          <span class="font-medium">{{ diagnostics.paths?.opencodeStorage?.dbPath?.path || '-' }}</span>
+        </div>
+        <div>
+          <span class="text-muted-foreground">{{ t('settings.debug.diagnostics.fields.opencodeSessionsPath') }}: </span>
+          <span class="font-medium">{{ diagnostics.paths?.opencodeStorage?.sessionsDir?.path || '-' }}</span>
+        </div>
+      </div>
+
+      <details v-if="diagnosticsPretty" class="rounded border border-border/70 bg-muted/20 p-3">
+        <summary class="cursor-pointer text-xs font-medium">{{ t('settings.debug.diagnostics.fullPayload') }}</summary>
+        <pre class="mt-2 overflow-auto text-[11px] leading-relaxed whitespace-pre-wrap break-all">{{ diagnosticsPretty }}</pre>
+      </details>
+    </section>
 
     <section class="rounded-lg border border-border bg-background/60 p-4 space-y-4">
       <div class="space-y-1">

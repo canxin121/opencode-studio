@@ -4521,24 +4521,15 @@ pub(crate) async fn opencode_studio_session_locate(
                 .trim()
                 .to_string();
 
-            let norm = |p: &str| {
-                p.trim()
-                    .replace('\\', "/")
-                    .trim_end_matches('/')
-                    .to_string()
-            };
-            let directory_norm = norm(&directory);
+            let directory_norm = crate::path_utils::normalize_directory_for_match(&directory)
+                .unwrap_or_else(|| directory.trim().to_string());
 
             let matched = settings.projects.iter().find(|p| {
                 let root = p.path.trim();
                 if root.is_empty() {
                     return false;
                 }
-                let root_norm = norm(root);
-                directory_norm == root_norm
-                    || directory_norm
-                        .strip_prefix(&(root_norm.clone() + "/"))
-                        .is_some()
+                directory_matches_project_root(&directory_norm, root)
             });
 
             let (project_id, project_path) = if let Some(p) = matched {
@@ -4626,10 +4617,29 @@ pub(crate) async fn opencode_studio_session_locate(
         .into_response())
 }
 
+fn directory_matches_project_root(directory_normalized: &str, project_root: &str) -> bool {
+    let root_norm = crate::path_utils::normalize_directory_for_match(project_root)
+        .unwrap_or_else(|| project_root.trim().to_string());
+    directory_normalized == root_norm
+        || directory_normalized
+            .strip_prefix(&(root_norm + "/"))
+            .is_some()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn directory_matches_project_root_is_windows_case_insensitive() {
+        let directory = crate::path_utils::normalize_directory_for_match("c:\\users\\alice\\repo\\work")
+            .expect("directory");
+        assert!(directory_matches_project_root(
+            &directory,
+            "C:\\Users\\Alice\\Repo"
+        ));
+    }
 
     #[test]
     fn prompt_async_url_rewrite_preserves_query() {

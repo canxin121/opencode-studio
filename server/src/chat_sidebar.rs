@@ -2230,7 +2230,8 @@ pub(crate) async fn directories_get(
     let query_norm = query.query.unwrap_or_default().trim().to_lowercase();
 
     let settings = state.settings.read().await;
-    let mut items = configured_directories(&settings);
+    let configured = configured_directories(&settings);
+    let mut items = all_known_sidebar_directories(&state, &configured);
     if !query_norm.is_empty() {
         items.retain(|entry| {
             entry.id.to_lowercase().contains(&query_norm)

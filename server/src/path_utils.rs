@@ -101,17 +101,6 @@ pub(crate) fn data_home_dir() -> PathBuf {
         }
     }
 
-    if cfg!(windows) {
-        for key in ["LOCALAPPDATA", "APPDATA"] {
-            if let Ok(dir) = std::env::var(key) {
-                let trimmed = dir.trim();
-                if !trimmed.is_empty() {
-                    return PathBuf::from(trimmed);
-                }
-            }
-        }
-    }
-
     home_dir_path()
         .map(|v| v.join(".local").join("share"))
         .unwrap_or_else(|| PathBuf::from("."))
@@ -140,7 +129,16 @@ pub(crate) fn cache_home_dir() -> PathBuf {
 }
 
 pub(crate) fn opencode_config_dir() -> PathBuf {
-    config_home_dir().join("opencode")
+    if let Ok(dir) = std::env::var("XDG_CONFIG_HOME") {
+        let trimmed = dir.trim();
+        if !trimmed.is_empty() {
+            return PathBuf::from(trimmed).join("opencode");
+        }
+    }
+
+    home_dir_path()
+        .map(|v| v.join(".config").join("opencode"))
+        .unwrap_or_else(|| PathBuf::from(".").join("opencode"))
 }
 
 pub(crate) fn opencode_data_dir() -> PathBuf {

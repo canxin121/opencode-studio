@@ -65,7 +65,45 @@ impl OpenCodeConfigStore {
         crate::path_utils::opencode_config_dir()
     }
 
+    fn opencode_config_dir_candidates(&self) -> Vec<PathBuf> {
+        let mut out = Vec::<PathBuf>::new();
+        out.push(self.opencode_config_dir());
+
+        if cfg!(windows)
+            && let Ok(dir) = std::env::var("APPDATA")
+        {
+            let trimmed = dir.trim();
+            if !trimmed.is_empty() {
+                out.push(PathBuf::from(trimmed).join("opencode"));
+            }
+        }
+
+        let mut deduped = Vec::<PathBuf>::new();
+        for path in out {
+            if deduped.iter().any(|existing| existing == &path) {
+                continue;
+            }
+            deduped.push(path);
+        }
+        deduped
+    }
+
+    fn user_config_file_candidates(&self) -> Vec<PathBuf> {
+        let mut out = Vec::<PathBuf>::new();
+        for dir in self.opencode_config_dir_candidates() {
+            out.push(dir.join("opencode.jsonc"));
+            out.push(dir.join("opencode.json"));
+            out.push(dir.join("config.json"));
+        }
+        out
+    }
+
     pub fn config_file_user(&self) -> PathBuf {
+        for candidate in self.user_config_file_candidates() {
+            if candidate.exists() {
+                return candidate;
+            }
+        }
         self.opencode_config_dir().join("opencode.json")
     }
 
@@ -256,5 +294,53 @@ mod tests {
             store.config_file_user(),
             preferred_dir.join("opencode.json")
         );
+    }
+
+    #[test]
+    fn config_file_user_prefers_existing_jsonc_file() {
+        let _env_lock = ENV_LOCK.lock().unwrap();
+        let tmp =
+            std::env::temp_dir().join(format!("opencode-config-store-jsonc-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&tmp);
+
+        let xdg_config = tmp.join("xdg-config");
+        let preferred_dir = xdg_config.join("opencode");
+        std::fs::create_dir_all(&preferred_dir).unwrap();
+        std::fs::write(preferred_dir.join("opencode.jsonc"), "{\n  // ok\n}\n").unwrap();
+
+        let _xdg = EnvVarGuard::set("XDG_CONFIG_HOME", xdg_config.to_string_lossy().to_string());
+
+        let store = OpenCodeConfigStore::from_env();
+        assert_eq!(
+            store.config_file_user(),
+            preferred_dir.join("opencode.jsonc")
+        );
+    }
+
+    #[test]
+    fn config_file_user_prefers_xdg_style_home_over_appdata_when_both_exist() {
+        let _env_lock = ENV_LOCK.lock().unwrap();
+        let tmp =
+            std::env::temp_dir().join(format!("opencode-config-store-home-priority-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&tmp);
+
+        let home = tmp.join("home");
+        let appdata = tmp.join("appdata");
+        std::fs::create_dir_all(&home).unwrap();
+        std::fs::create_dir_all(&appdata).unwrap();
+
+        let home_cfg = home.join(".config").join("opencode");
+        let app_cfg = appdata.join("opencode");
+        std::fs::create_dir_all(&home_cfg).unwrap();
+        std::fs::create_dir_all(&app_cfg).unwrap();
+        std::fs::write(home_cfg.join("opencode.json"), "{}\n").unwrap();
+        std::fs::write(app_cfg.join("opencode.json"), "{\"appdata\":true}\n").unwrap();
+
+        let _xdg = EnvVarGuard::set("XDG_CONFIG_HOME", "".to_string());
+        let _home = EnvVarGuard::set("HOME", home.to_string_lossy().to_string());
+        let _appdata = EnvVarGuard::set("APPDATA", appdata.to_string_lossy().to_string());
+
+        let store = OpenCodeConfigStore::from_env();
+        assert_eq!(store.config_file_user(), home_cfg.join("opencode.json"));
     }
 }
