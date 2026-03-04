@@ -3,7 +3,10 @@ Param(
   [string]$Version = "",
   [switch]$WithFrontend,
   [string]$InstallDir = "",
-  [int]$Port = 3210
+  [string]$Host = "127.0.0.1",
+  [ValidateRange(1, 65535)]
+  [int]$Port = 3210,
+  [string]$UiPassword = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -132,6 +135,9 @@ function Wait-HealthEndpoint([string]$Url, [int]$TimeoutSeconds = 45) {
 Assert-Administrator
 Require-Command "sc.exe" "Windows service management requires sc.exe."
 Require-Command "opencode" "Install OpenCode first (for example: scoop install opencode, choco install opencode, or bun add -g opencode-ai@latest)."
+if ([string]::IsNullOrWhiteSpace($Host)) {
+  throw "Host must be a non-empty hostname or IP address."
+}
 
 function Get-TargetCandidates {
   $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
@@ -170,6 +176,46 @@ function Find-FirstAsset([object]$Release, [string[]]$Names) {
 function Download([string]$Url, [string]$OutFile) {
   Write-Host "Downloading $Url"
   Invoke-WebRequest -Uri $Url -OutFile $OutFile
+}
+
+function Convert-ToTomlBasicString([string]$Value) {
+  if ($null -eq $Value) {
+    $Value = ""
+  }
+  $escaped = $Value `
+    -replace '\\', '\\\\' `
+    -replace '"', '\"' `
+    -replace "`t", '\t' `
+    -replace "`r", '\r' `
+    -replace "`n", '\n'
+  return '"' + $escaped + '"'
+}
+
+function Resolve-HealthHost([string]$BindHost) {
+  $host = if ($null -eq $BindHost) { "" } else { $BindHost.Trim() }
+  if (-not $host) {
+    return "127.0.0.1"
+  }
+  if ($host -eq "0.0.0.0") {
+    return "127.0.0.1"
+  }
+  if ($host -eq "::" -or $host -eq "[::]") {
+    return "::1"
+  }
+  return $host
+}
+
+function Format-HttpUrl([string]$Address, [int]$Port) {
+  $host = if ($null -eq $Address) { "" } else { $Address.Trim() }
+  if (-not $host) {
+    $host = "127.0.0.1"
+  }
+  if ($host.Contains(":")) {
+    if (-not ($host.StartsWith("[") -and $host.EndsWith("]"))) {
+      $host = "[$host]"
+    }
+  }
+  return "http://$host`:$Port"
 }
 
 function Resolve-InstallerProfileContext {
@@ -322,10 +368,10 @@ try {
     "# Runtime configuration for opencode-studio.",
     "",
     "[backend]",
-    "host = '127.0.0.1'",
+    "host = $(Convert-ToTomlBasicString $Host)",
     "port = $Port",
     "# Optional UI session password. Keep empty to disable password login.",
-    "ui_password = ''",
+    "ui_password = $(Convert-ToTomlBasicString $UiPassword)",
     "skip_opencode_start = true",
     "opencode_host = '127.0.0.1'",
     "opencode_port = $OpenCodePort",
@@ -359,14 +405,15 @@ try {
   Invoke-ScCommand -Arguments @("start", $OpenCodeServiceName) -ErrorMessage "Failed to start service '$OpenCodeServiceName'"
   Invoke-ScCommand -Arguments @("start", $ServiceName) -ErrorMessage "Failed to start service '$ServiceName'"
 
-  $HealthUrl = "http://127.0.0.1:$Port/health"
+  $HealthHost = Resolve-HealthHost $Host
+  $HealthUrl = "$(Format-HttpUrl $HealthHost $Port)/health"
   Wait-HealthEndpoint -Url $HealthUrl
 
   Write-Host "Installed. Service: $ServiceName"
   Write-Host "Managed OpenCode service: $OpenCodeServiceName (port $OpenCodePort)"
   Write-Host "Service environment profile: $($ProfileContext.Home)"
   Write-Host "Runtime config: $ConfigFile"
-  Write-Host "Open: http://127.0.0.1:$Port"
+  Write-Host "Open: $(Format-HttpUrl $HealthHost $Port)"
 } finally {
   Remove-Item -Recurse -Force $Tmp | Out-Null
 }

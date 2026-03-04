@@ -12,12 +12,14 @@ VERSION=""
 WITH_FRONTEND="0"
 MODE="user" # linux systemd: user|system
 INSTALL_DIR=""
+HOST="127.0.0.1"
 PORT="3210"
+UI_PASSWORD=""
 
 usage() {
   cat <<'EOF'
 Usage:
-  install-service.sh [--repo owner/repo] [--version vX.Y.Z] [--with-frontend] [--mode user|system] [--install-dir PATH] [--port PORT]
+  install-service.sh [--repo owner/repo] [--version vX.Y.Z] [--with-frontend] [--mode user|system] [--install-dir PATH] [--host HOST] [--port PORT] [--ui-password PASSWORD]
 
 Notes:
   - This installs the Rust server binary (opencode-studio) from GitHub Releases.
@@ -33,7 +35,9 @@ while [[ $# -gt 0 ]]; do
     --with-frontend) WITH_FRONTEND="1"; shift;;
     --mode) MODE="$2"; shift 2;;
     --install-dir) INSTALL_DIR="$2"; shift 2;;
+    --host) HOST="$2"; shift 2;;
     --port) PORT="$2"; shift 2;;
+    --ui-password) UI_PASSWORD="$2"; shift 2;;
     -h|--help) usage; exit 0;;
     *) echo "Unknown arg: $1" >&2; usage; exit 2;;
   esac
@@ -52,6 +56,49 @@ if ! [[ "$PORT" =~ ^[0-9]+$ ]] || ((PORT < 1 || PORT > 65535)); then
   echo "Invalid --port '$PORT'. Expected 1-65535." >&2
   exit 2
 fi
+
+if [[ -z "${HOST// }" ]]; then
+  echo "Invalid --host '$HOST'. Expected a non-empty hostname or IP." >&2
+  exit 2
+fi
+
+toml_escape_basic_string() {
+  local value="$1"
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  value="${value//$'\t'/\\t}"
+  value="${value//$'\r'/\\r}"
+  value="${value//$'\n'/\\n}"
+  printf '%s' "$value"
+}
+
+toml_quote_basic_string() {
+  local value="$1"
+  printf '"%s"' "$(toml_escape_basic_string "$value")"
+}
+
+normalize_connect_host() {
+  local host="$1"
+  case "$host" in
+    0.0.0.0) printf '127.0.0.1' ;;
+    ::|"[::]") printf '::1' ;;
+    *) printf '%s' "$host" ;;
+  esac
+}
+
+format_http_url() {
+  local host="$1"
+  local port="$2"
+  if [[ "$host" == *:* ]]; then
+    if [[ "$host" == \[*\] ]]; then
+      printf 'http://%s:%s' "$host" "$port"
+    else
+      printf 'http://[%s]:%s' "$host" "$port"
+    fi
+  else
+    printf 'http://%s:%s' "$host" "$port"
+  fi
+}
 
 OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
 ARCH="$(uname -m)"
@@ -259,10 +306,10 @@ cat >"$CONFIG_FILE" <<EOF
 # Runtime configuration for opencode-studio.
 
 [backend]
-host = "127.0.0.1"
+host = $(toml_quote_basic_string "$HOST")
 port = $PORT
 # Optional UI session password. Keep empty to disable password login.
-ui_password = ""
+ui_password = $(toml_quote_basic_string "$UI_PASSWORD")
 skip_opencode_start = false
 opencode_host = "127.0.0.1"
 
@@ -357,4 +404,5 @@ fi
 
 echo "Install complete. Binary: $BIN_PATH"
 echo "Runtime config: $CONFIG_FILE"
-echo "Open: http://127.0.0.1:$PORT"
+CONNECT_HOST="$(normalize_connect_host "$HOST")"
+echo "Open: $(format_http_url "$CONNECT_HOST" "$PORT")"

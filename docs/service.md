@@ -60,6 +60,12 @@ Install API-only:
 curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/install-service.sh | bash
 ```
 
+Install with custom bind host / port / password:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/install-service.sh | bash -s -- --with-frontend --host 0.0.0.0 --port 3210 --ui-password "change-me"
+```
+
 Pin a release version (recommended for production-like installs):
 
 ```bash
@@ -101,6 +107,12 @@ Install API-only:
 iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/install-service.ps1) }"
 ```
 
+Install with custom bind host / port / password:
+
+```powershell
+iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/install-service.ps1) } -WithFrontend -Host 0.0.0.0 -Port 3210 -UiPassword 'change-me'"
+```
+
 Uninstall:
 
 ```powershell
@@ -116,6 +128,7 @@ iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/maste
 ## Access in Browser
 
 - Default service URL: `http://127.0.0.1:3210`.
+- Default generated UI password is empty (`ui_password = ""`), so password login is disabled by default.
 - If installed with frontend, open `http://127.0.0.1:3210` directly.
 - If installed API-only, use `http://127.0.0.1:3210/health` to verify service health.
 - To enable UI after API-only install, set `ui_dir` in `opencode-studio.toml` to a valid `dist` path, or reinstall with frontend.

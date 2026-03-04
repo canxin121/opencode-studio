@@ -59,6 +59,12 @@ curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/sc
 curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/install-service.sh | bash
 ```
 
+自定义监听地址 / 端口 / 密码安装：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/install-service.sh | bash -s -- --with-frontend --host 0.0.0.0 --port 3210 --ui-password "change-me"
+```
+
 指定版本安装（建议用于类生产环境）：
 
 ```bash
@@ -100,6 +106,12 @@ iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/maste
 iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/install-service.ps1) }"
 ```
 
+自定义监听地址 / 端口 / 密码安装：
+
+```powershell
+iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/install-service.ps1) } -WithFrontend -Host 0.0.0.0 -Port 3210 -UiPassword 'change-me'"
+```
+
 卸载：
 
 ```powershell
@@ -115,6 +127,7 @@ iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/maste
 ## 浏览器访问
 
 - 默认服务地址：`http://127.0.0.1:3210`。
+- 生成配置里的默认 UI 密码为空（`ui_password = ""`），即默认不启用密码登录。
 - 含前端安装：直接打开 `http://127.0.0.1:3210`。
 - 仅 API 安装：访问 `http://127.0.0.1:3210/health` 验证服务健康状态。
 - 若仅 API 模式后续要启用 UI，可在 `opencode-studio.toml` 设置 `ui_dir` 指向有效 `dist` 路径，或重新安装为含前端模式。

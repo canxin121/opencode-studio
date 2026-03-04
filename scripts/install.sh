@@ -14,12 +14,13 @@ SYSTEMD_MODE="user" # linux systemd: user|system
 INSTALL_DIR=""
 HOST="127.0.0.1"
 PORT="3210"
+UI_PASSWORD=""
 
 usage() {
   cat <<'EOF'
 Usage:
   install.sh [--desktop|--headless] [--repo owner/repo] [--version vX.Y.Z] \
-             [--mode user|system] [--install-dir PATH] [--host HOST] [--port PORT]
+             [--mode user|system] [--install-dir PATH] [--host HOST] [--port PORT] [--ui-password PASSWORD]
 
 Examples:
   install.sh --desktop
@@ -43,6 +44,7 @@ while [[ $# -gt 0 ]]; do
     --install-dir) INSTALL_DIR="$2"; shift 2 ;;
     --host) HOST="$2"; shift 2 ;;
     --port) PORT="$2"; shift 2 ;;
+    --ui-password) UI_PASSWORD="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown arg: $1" >&2; usage; exit 2 ;;
   esac
@@ -57,6 +59,26 @@ if ! [[ "$PORT" =~ ^[0-9]+$ ]] || ((PORT < 1 || PORT > 65535)); then
   echo "Invalid --port '$PORT'. Expected 1-65535." >&2
   exit 2
 fi
+
+if [[ -z "${HOST// }" ]]; then
+  echo "Invalid --host '$HOST'. Expected a non-empty hostname or IP." >&2
+  exit 2
+fi
+
+toml_escape_basic_string() {
+  local value="$1"
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  value="${value//$'\t'/\\t}"
+  value="${value//$'\r'/\\r}"
+  value="${value//$'\n'/\\n}"
+  printf '%s' "$value"
+}
+
+toml_quote_basic_string() {
+  local value="$1"
+  printf '"%s"' "$(toml_escape_basic_string "$value")"
+}
 
 need() { command -v "$1" >/dev/null 2>&1 || { echo "Missing dependency: $1" >&2; exit 1; }; }
 need curl
@@ -270,10 +292,10 @@ cat >"$CONFIG_FILE" <<EOF
 # CLI flags and environment variables can still override these values.
 
 [backend]
-host = "$HOST"
+host = $(toml_quote_basic_string "$HOST")
 port = $PORT
 # Optional UI session password. Keep empty to disable password login.
-ui_password = ""
+ui_password = $(toml_quote_basic_string "$UI_PASSWORD")
 skip_opencode_start = false
 opencode_host = "127.0.0.1"
 

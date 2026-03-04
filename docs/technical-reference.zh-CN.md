@@ -114,7 +114,9 @@ cargo run -p opencode-studio -- \
 | `--version vX.Y.Z` | latest | 指定安装版本 |
 | `--install-dir PATH` | `~/opencode-studio` | 安装根目录（含 `bin/`、可选 `dist/`、`opencode-studio.toml`） |
 | `--mode user|system` | `user` | Linux systemd 安装模式 |
+| `--host HOST` | `127.0.0.1` | 生成配置时的后端监听地址 |
 | `--port PORT` | `3210` | 生成配置时的初始后端端口 |
+| `--ui-password PASSWORD` | empty | 生成配置时的 UI 认证密码（`""` 表示默认关闭密码登录） |
 
 ### Windows 安装脚本（`scripts/install-service.ps1`）
 
@@ -124,7 +126,9 @@ cargo run -p opencode-studio -- \
 | `-Repo owner/repo` | `canxin121/opencode-studio` | Release 资产来源仓库 |
 | `-Version vX.Y.Z` | latest | 指定安装版本 |
 | `-InstallDir PATH` | `%USERPROFILE%\\opencode-studio` | 安装根目录（含 `bin\\`、可选 `dist\\`、`opencode-studio.toml`） |
+| `-Host HOST` | `127.0.0.1` | 生成配置时的后端监听地址 |
 | `-Port PORT` | `3210` | 生成配置时的初始后端端口 |
+| `-UiPassword PASSWORD` | empty | 生成配置时的 UI 认证密码（`""` 表示默认关闭密码登录） |
 
 Windows 安装补充说明：
 

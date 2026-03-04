@@ -7,7 +7,8 @@ Param(
   [string]$Host = "127.0.0.1",
   [ValidateRange(1, 65535)]
   [int]$Port = 3210,
-  [string]$ServiceName = "OpenCodeStudio"
+  [string]$ServiceName = "OpenCodeStudio",
+  [string]$UiPassword = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -160,6 +161,50 @@ function Download([string]$Url, [string]$OutFile) {
   Invoke-WebRequest -Uri $Url -OutFile $OutFile
 }
 
+if ([string]::IsNullOrWhiteSpace($Host)) {
+  throw "Host must be a non-empty hostname or IP address."
+}
+
+function Convert-ToTomlBasicString([string]$Value) {
+  if ($null -eq $Value) {
+    $Value = ""
+  }
+  $escaped = $Value `
+    -replace '\\', '\\\\' `
+    -replace '"', '\"' `
+    -replace "`t", '\t' `
+    -replace "`r", '\r' `
+    -replace "`n", '\n'
+  return '"' + $escaped + '"'
+}
+
+function Resolve-HealthHost([string]$BindHost) {
+  $host = if ($null -eq $BindHost) { "" } else { $BindHost.Trim() }
+  if (-not $host) {
+    return "127.0.0.1"
+  }
+  if ($host -eq "0.0.0.0") {
+    return "127.0.0.1"
+  }
+  if ($host -eq "::" -or $host -eq "[::]") {
+    return "::1"
+  }
+  return $host
+}
+
+function Format-HttpUrl([string]$Address, [int]$Port) {
+  $host = if ($null -eq $Address) { "" } else { $Address.Trim() }
+  if (-not $host) {
+    $host = "127.0.0.1"
+  }
+  if ($host.Contains(":")) {
+    if (-not ($host.StartsWith("[") -and $host.EndsWith("]"))) {
+      $host = "[$host]"
+    }
+  }
+  return "http://$host`:$Port"
+}
+
 function Resolve-InstallerProfileContext {
   $home = ""
   foreach ($candidate in @($env:HOME, $env:USERPROFILE, [Environment]::GetFolderPath("UserProfile"))) {
@@ -310,10 +355,10 @@ try {
     "# CLI flags and environment variables can still override these values.",
     "",
     "[backend]",
-    "host = '$Host'",
+    "host = $(Convert-ToTomlBasicString $Host)",
     "port = $Port",
     "# Optional UI session password. Keep empty to disable password login.",
-    "ui_password = ''",
+    "ui_password = $(Convert-ToTomlBasicString $UiPassword)",
     "skip_opencode_start = true",
     "opencode_host = '127.0.0.1'",
     "opencode_port = 16000",
@@ -349,14 +394,15 @@ try {
   Invoke-ScCommand -Arguments @("start", $OpenCodeServiceName) -ErrorMessage "Failed to start service '$OpenCodeServiceName'"
   Invoke-ScCommand -Arguments @("start", $ServiceName) -ErrorMessage "Failed to start service '$ServiceName'"
 
-  $HealthUrl = "http://$Host`:$Port/health"
+  $HealthHost = Resolve-HealthHost $Host
+  $HealthUrl = "$(Format-HttpUrl $HealthHost $Port)/health"
   Wait-HealthEndpoint -Url $HealthUrl
 
   Write-Host "Wrote runtime config: $ConfigFile"
   Write-Host "Install complete ($Variant). Service: $ServiceName"
   Write-Host "Managed OpenCode service: $OpenCodeServiceName (port 16000)"
   Write-Host "Service environment profile: $($ProfileContext.Home)"
-  Write-Host "Open: http://$Host`:$Port"
+  Write-Host "Open: $(Format-HttpUrl $HealthHost $Port)"
   if ($Variant -eq "headless") {
     Write-Host "Headless mode: no bundled UI installed (API/service only)."
   }

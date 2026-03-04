@@ -114,7 +114,9 @@ Equivalent env vars:
 | `--version vX.Y.Z` | latest | Pin release version |
 | `--install-dir PATH` | `~/opencode-studio` | Install root for `bin/`, optional `dist/`, and `opencode-studio.toml` |
 | `--mode user|system` | `user` | Linux systemd installation mode |
+| `--host HOST` | `127.0.0.1` | Initial backend bind host in generated config |
 | `--port PORT` | `3210` | Initial backend port in generated config |
+| `--ui-password PASSWORD` | empty | Initial UI auth password (`""` keeps password login disabled) |
 
 ### Windows installer (`scripts/install-service.ps1`)
 
@@ -124,7 +126,9 @@ Equivalent env vars:
 | `-Repo owner/repo` | `canxin121/opencode-studio` | GitHub repo for release artifacts |
 | `-Version vX.Y.Z` | latest | Pin release version |
 | `-InstallDir PATH` | `%USERPROFILE%\\opencode-studio` | Install root for `bin\\`, optional `dist\\`, and `opencode-studio.toml` |
+| `-Host HOST` | `127.0.0.1` | Initial backend bind host in generated config |
 | `-Port PORT` | `3210` | Initial backend port in generated config |
+| `-UiPassword PASSWORD` | empty | Initial UI auth password (`""` keeps password login disabled) |
 
 Windows installer notes:
 
