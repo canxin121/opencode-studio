@@ -165,37 +165,85 @@ Windows 服务安装默认写入 `skip_opencode_start = true`，以提高在 SCM
 
 安装包模式下，配置文件位于应用数据目录；可通过托盘菜单直接打开配置文件（Open Config）进行修改。
 
-## 安装后：如何通过 systemd / sc 管理服务
+## 安装后：服务管理（启动/停止/重启/自启动/卸载）
 
 以下命令适用于“服务安装”模式。
 
 Linux（默认 user 模式）：
 
 ```bash
+# 状态 / 启动 / 停止 / 重启
 systemctl --user status opencode-studio
 systemctl --user start opencode-studio
 systemctl --user stop opencode-studio
 systemctl --user restart opencode-studio
+
+# 登录自启动
+systemctl --user enable opencode-studio
+systemctl --user disable opencode-studio
+
+# 卸载服务单元
+curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/uninstall-service.sh | bash
 ```
 
 Linux（`--mode system` 安装）：
 
 ```bash
+# 状态 / 启动 / 停止 / 重启
 sudo systemctl status opencode-studio
 sudo systemctl start opencode-studio
 sudo systemctl stop opencode-studio
 sudo systemctl restart opencode-studio
+
+# 开机自启动
+sudo systemctl enable opencode-studio
+sudo systemctl disable opencode-studio
+
+# 卸载服务单元
+curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/uninstall-service.sh | bash
 ```
 
-Windows（默认服务名 `OpenCodeStudio`）：
+macOS（launchd，标签：`cn.cxits.opencode-studio`）：
+
+```bash
+# 状态
+launchctl list | grep opencode
+
+# 重启
+launchctl kickstart -k gui/$(id -u)/cn.cxits.opencode-studio
+
+# 关闭自启动（卸载 agent）
+launchctl unload "$HOME/Library/LaunchAgents/cn.cxits.opencode-studio.plist"
+
+# 重新开启自启动（加载 agent）
+launchctl load "$HOME/Library/LaunchAgents/cn.cxits.opencode-studio.plist"
+
+# 卸载服务 agent
+curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/uninstall-service.sh | bash
+```
+
+Windows（服务名：`OpenCodeStudio-OpenCode`、`OpenCodeStudio`）：
 
 ```powershell
+# 状态 / 启动 / 停止 / 重启
 sc query OpenCodeStudio-OpenCode
 sc query OpenCodeStudio
 sc start OpenCodeStudio-OpenCode
 sc start OpenCodeStudio
-sc stop OpenCodeStudio-OpenCode
 sc stop OpenCodeStudio
+sc stop OpenCodeStudio-OpenCode
+sc stop OpenCodeStudio; sc start OpenCodeStudio
+
+# 开机自启动
+sc config OpenCodeStudio-OpenCode start= auto
+sc config OpenCodeStudio start= auto
+
+# 关闭自启动
+sc config OpenCodeStudio start= demand
+sc config OpenCodeStudio-OpenCode start= demand
+
+# 卸载服务
+iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/uninstall-service.ps1) }"
 ```
 
 ## 技术细节与参数

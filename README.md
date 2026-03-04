@@ -165,37 +165,85 @@ Apply changes by restarting the service:
 
 In package mode, runtime config is stored in the app data directory. Use the tray menu action to open the config file directly.
 
-## After Install: Manage Service (systemd / sc)
+## After Install: Manage Service (start/stop/restart/autostart/uninstall)
 
 The commands below apply to the service-install path.
 
 Linux (default user-mode install):
 
 ```bash
+# status / start / stop / restart
 systemctl --user status opencode-studio
 systemctl --user start opencode-studio
 systemctl --user stop opencode-studio
 systemctl --user restart opencode-studio
+
+# autostart on login
+systemctl --user enable opencode-studio
+systemctl --user disable opencode-studio
+
+# uninstall service unit
+curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/uninstall-service.sh | bash
 ```
 
 Linux (`--mode system` install):
 
 ```bash
+# status / start / stop / restart
 sudo systemctl status opencode-studio
 sudo systemctl start opencode-studio
 sudo systemctl stop opencode-studio
 sudo systemctl restart opencode-studio
+
+# autostart on boot
+sudo systemctl enable opencode-studio
+sudo systemctl disable opencode-studio
+
+# uninstall service unit
+curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/uninstall-service.sh | bash
 ```
 
-Windows (default service name `OpenCodeStudio`):
+macOS (launchd, label: `cn.cxits.opencode-studio`):
+
+```bash
+# status
+launchctl list | grep opencode
+
+# restart
+launchctl kickstart -k gui/$(id -u)/cn.cxits.opencode-studio
+
+# stop autostart (unload agent)
+launchctl unload "$HOME/Library/LaunchAgents/cn.cxits.opencode-studio.plist"
+
+# enable autostart again (load agent)
+launchctl load "$HOME/Library/LaunchAgents/cn.cxits.opencode-studio.plist"
+
+# uninstall service agent
+curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/uninstall-service.sh | bash
+```
+
+Windows (service names: `OpenCodeStudio-OpenCode`, `OpenCodeStudio`):
 
 ```powershell
+# status / start / stop / restart
 sc query OpenCodeStudio-OpenCode
 sc query OpenCodeStudio
 sc start OpenCodeStudio-OpenCode
 sc start OpenCodeStudio
-sc stop OpenCodeStudio-OpenCode
 sc stop OpenCodeStudio
+sc stop OpenCodeStudio-OpenCode
+sc stop OpenCodeStudio; sc start OpenCodeStudio
+
+# autostart
+sc config OpenCodeStudio-OpenCode start= auto
+sc config OpenCodeStudio start= auto
+
+# disable autostart
+sc config OpenCodeStudio start= demand
+sc config OpenCodeStudio-OpenCode start= demand
+
+# uninstall services
+iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/uninstall-service.ps1) }"
 ```
 
 ## Technical Details and Parameters
