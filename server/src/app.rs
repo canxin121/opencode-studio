@@ -250,6 +250,8 @@ const SESSION_ACTIVITY_IDLE_RETENTION: std::time::Duration =
     std::time::Duration::from_secs(30 * 60);
 const SESSION_RUNTIME_IDLE_RETENTION: std::time::Duration = std::time::Duration::from_secs(30 * 60);
 const STATUS_RECONCILE_FETCH_CONCURRENCY: usize = 6;
+const OPENCODE_BOOTSTRAP_READY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
+const OPENCODE_BOOTSTRAP_RETRY_DELAY: std::time::Duration = std::time::Duration::from_secs(3);
 
 async fn fetch_session_status_map(
     bridge: &crate::opencode::OpenCodeBridge,
@@ -472,6 +474,50 @@ async fn reconcile_runtime_status_from_opencode(state: &Arc<AppState>) {
     }
 }
 
+fn spawn_opencode_bootstrap_task(state: Arc<AppState>) {
+    tokio::spawn(async move {
+        loop {
+            if let Err(err) = state.opencode.start_if_needed().await {
+                tracing::warn!(
+                    target: "opencode_studio.opencode",
+                    error = %err,
+                    "failed to start OpenCode during startup bootstrap"
+                );
+            }
+
+            match state
+                .opencode
+                .ensure_ready(OPENCODE_BOOTSTRAP_READY_TIMEOUT)
+                .await
+            {
+                Ok(()) => {
+                    if let Err(err) = state
+                        .plugin_runtime
+                        .refresh_from_opencode_config_layers(None)
+                        .await
+                    {
+                        tracing::warn!(
+                            target: "opencode_studio.plugin_runtime",
+                            error = %err,
+                            "failed to refresh plugin runtime after OpenCode became ready"
+                        );
+                    }
+                    break;
+                }
+                Err(err) => {
+                    tracing::warn!(
+                        target: "opencode_studio.opencode",
+                        error = %err,
+                        retry_after_secs = OPENCODE_BOOTSTRAP_RETRY_DELAY.as_secs(),
+                        "OpenCode not ready yet; will retry"
+                    );
+                    tokio::time::sleep(OPENCODE_BOOTSTRAP_RETRY_DELAY).await;
+                }
+            }
+        }
+    });
+}
+
 async fn session_activity(
     axum::extract::State(state): axum::extract::State<Arc<AppState>>,
 ) -> impl IntoResponse {
@@ -631,27 +677,13 @@ pub(crate) async fn run(args: crate::Args) {
     let (settings_path, settings_value) = crate::settings::init_settings().await;
 
     let configured_opencode_port = args.opencode_port;
+    let should_bootstrap_opencode = configured_opencode_port.is_some() || !args.skip_opencode_start;
     let opencode = Arc::new(crate::opencode::OpenCodeManager::new(
         args.opencode_host.clone(),
         configured_opencode_port,
         args.skip_opencode_start,
         args.opencode_log_level,
     ));
-    if let Err(err) = opencode.start_if_needed().await {
-        tracing::error!(
-            "Failed to start OpenCode: {err}. Ensure 'opencode' is in PATH or pass --opencode-port to a running instance."
-        );
-        std::process::exit(1);
-    }
-    if let Err(err) = opencode
-        .ensure_ready(std::time::Duration::from_secs(20))
-        .await
-    {
-        tracing::error!(
-            "OpenCode is required but not available: {err}. Ensure 'opencode' is in PATH or pass --opencode-port to a running instance."
-        );
-        std::process::exit(1);
-    }
 
     let terminal = Arc::new(crate::terminal::TerminalManager::new());
     terminal.clone().spawn_cleanup_task();
@@ -679,15 +711,12 @@ pub(crate) async fn run(args: crate::Args) {
         settings: Arc::new(RwLock::new(settings_value)),
     });
 
-    if let Err(err) = state
-        .plugin_runtime
-        .refresh_from_opencode_config_layers(None)
-        .await
-    {
-        tracing::warn!(
-            target: "opencode_studio.plugin_runtime",
-            error = %err,
-            "failed to refresh plugin runtime on startup"
+    if should_bootstrap_opencode {
+        spawn_opencode_bootstrap_task(state.clone());
+    } else {
+        tracing::info!(
+            target: "opencode_studio.opencode",
+            "OpenCode bootstrap disabled (--skip-opencode-start without --opencode-port)"
         );
     }
 

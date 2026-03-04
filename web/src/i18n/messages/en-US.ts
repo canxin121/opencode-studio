@@ -276,6 +276,7 @@ export default {
     passwordPlaceholder: 'Password',
     passwordRequired: 'Password required',
     backendNotReachable: 'Backend not reachable',
+    opencodeNotReady: 'OpenCode backend is still starting. Please try again shortly.',
     failedToUpdateBackend: 'Failed to update backend',
     failedToRemoveBackend: 'Failed to remove backend',
     failedToAddBackend: 'Failed to add backend',

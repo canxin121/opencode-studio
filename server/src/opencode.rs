@@ -264,9 +264,16 @@ impl OpenCodeManager {
             cmd.stdout(Stdio::null()).stderr(Stdio::null());
         }
 
-        let mut child = cmd
-            .spawn()
-            .map_err(|e| format!("Failed to start OpenCode: {e}"))?;
+        let mut child = match cmd.spawn() {
+            Ok(child) => child,
+            Err(err) => {
+                let message = format!("Failed to start OpenCode: {err}");
+                *self.ready.write().await = false;
+                *self.last_error.write().await = Some(message.clone());
+                *self.managed_port.write().await = None;
+                return Err(message);
+            }
+        };
 
         if forward_logs {
             if let Some(stdout) = child.stdout.take() {

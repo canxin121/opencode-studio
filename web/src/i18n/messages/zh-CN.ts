@@ -275,6 +275,7 @@ export default {
     passwordPlaceholder: '密码',
     passwordRequired: '需要密码',
     backendNotReachable: '后端不可用',
+    opencodeNotReady: 'OpenCode 后端尚未就绪，请稍后重试',
     failedToUpdateBackend: '更新后端失败',
     failedToRemoveBackend: '移除后端失败',
     failedToAddBackend: '添加后端失败',

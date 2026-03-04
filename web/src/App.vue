@@ -16,7 +16,7 @@ const health = useHealthStore()
 const settings = useSettingsStore()
 
 const initialLoading = ref(true)
-const showLogin = computed(() => auth.needsLogin || health.data === null)
+const showLogin = computed(() => auth.needsLogin || health.data === null || !health.data.isOpenCodeReady)
 
 onMounted(async () => {
   await Promise.all([auth.refresh(), health.refresh()])

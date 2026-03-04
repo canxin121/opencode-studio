@@ -185,7 +185,7 @@ const canSubmit = computed(() => {
 })
 
 const showBackendLoadingNotice = computed(() => {
-  return desktopRuntime && health.data === null
+  return desktopRuntime && (health.data === null || !health.data.isOpenCodeReady)
 })
 
 let backendProbeTimer: ReturnType<typeof setInterval> | null = null
@@ -279,6 +279,14 @@ async function submit() {
         // auth.login already refreshed state + lastError.
         return
       }
+    }
+
+    if (!health.data?.isOpenCodeReady) {
+      const detail = String(health.data?.lastOpenCodeError || '').trim()
+      formError.value = detail
+        ? `${String(t('login.opencodeNotReady'))}: ${detail}`
+        : String(t('login.opencodeNotReady'))
+      return
     }
 
     password.value = ''
