@@ -244,6 +244,9 @@ sc config OpenCodeStudio-OpenCode start= demand
 
 # uninstall services
 iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/uninstall-service.ps1) }"
+
+# uninstall services + installed files
+iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/uninstall-service.ps1) } -RemoveInstallDir"
 ```
 
 ## Technical Details and Parameters

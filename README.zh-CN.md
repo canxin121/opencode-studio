@@ -244,6 +244,9 @@ sc config OpenCodeStudio-OpenCode start= demand
 
 # 卸载服务
 iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/uninstall-service.ps1) }"
+
+# 卸载服务 + 删除安装文件
+iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/uninstall-service.ps1) } -RemoveInstallDir"
 ```
 
 ## 技术细节与参数

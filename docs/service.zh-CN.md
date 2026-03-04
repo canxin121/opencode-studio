@@ -106,6 +106,12 @@ iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/maste
 iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/uninstall-service.ps1) }"
 ```
 
+卸载并同时删除安装文件（默认 `%USERPROFILE%\\opencode-studio`）：
+
+```powershell
+iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/uninstall-service.ps1) } -RemoveInstallDir"
+```
+
 ## 浏览器访问
 
 - 默认服务地址：`http://127.0.0.1:3000`。

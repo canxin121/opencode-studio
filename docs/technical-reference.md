@@ -139,7 +139,8 @@ Windows installer notes:
 | Parameter | Default | Description |
 | --- | --- | --- |
 | `-ServiceName` | `OpenCodeStudio` | Target Windows service name |
-| `-InstallDir PATH` | `%USERPROFILE%\\opencode-studio` | Compatibility parameter (accepted but not required) |
+| `-InstallDir PATH` | `%USERPROFILE%\\opencode-studio` | Install root used when `-RemoveInstallDir` is set |
+| `-RemoveInstallDir` | disabled | Also remove install directory after services are deleted |
 
 ## Runtime Parameters (CLI Flags / Env Vars)
 

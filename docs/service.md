@@ -107,6 +107,12 @@ Uninstall:
 iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/uninstall-service.ps1) }"
 ```
 
+Uninstall and also remove installed files (`%USERPROFILE%\\opencode-studio` by default):
+
+```powershell
+iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/uninstall-service.ps1) } -RemoveInstallDir"
+```
+
 ## Access in Browser
 
 - Default service URL: `http://127.0.0.1:3000`.

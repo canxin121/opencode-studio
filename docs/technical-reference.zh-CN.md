@@ -139,7 +139,8 @@ Windows 安装补充说明：
 | 参数 | 默认值 | 说明 |
 | --- | --- | --- |
 | `-ServiceName` | `OpenCodeStudio` | 目标 Windows 服务名 |
-| `-InstallDir PATH` | `%USERPROFILE%\\opencode-studio` | 兼容性参数（可传但非必需） |
+| `-InstallDir PATH` | `%USERPROFILE%\\opencode-studio` | 设置 `-RemoveInstallDir` 时用于指定安装目录 |
+| `-RemoveInstallDir` | disabled | 在删除服务后同时删除安装目录 |
 
 ## 运行参数（CLI Flags / Env Vars）
 
