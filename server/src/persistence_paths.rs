@@ -246,10 +246,8 @@ pub(crate) fn opencode_message_parts_dir() -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::{LazyLock, Mutex};
+    use crate::test_support::ENV_LOCK;
     use std::time::{SystemTime, UNIX_EPOCH};
-
-    static ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
     struct EnvVarGuard {
         key: &'static str,
@@ -372,12 +370,15 @@ mod tests {
         let tmp = unique_tmp_dir("persistence-db-appdata-fallback");
         std::fs::create_dir_all(&tmp).unwrap();
 
+        let home = tmp.join("home");
         let appdata = tmp.join("appdata");
         let local_appdata = tmp.join("localappdata");
+        std::fs::create_dir_all(&home).unwrap();
         std::fs::create_dir_all(&appdata).unwrap();
         std::fs::create_dir_all(&local_appdata).unwrap();
 
         let _xdg = EnvVarGuard::set("XDG_DATA_HOME", "".to_string());
+        let _home = EnvVarGuard::set("HOME", home.to_string_lossy().to_string());
         let _appdata = EnvVarGuard::set("APPDATA", appdata.to_string_lossy().to_string());
         let _local = EnvVarGuard::set("LOCALAPPDATA", local_appdata.to_string_lossy().to_string());
 
