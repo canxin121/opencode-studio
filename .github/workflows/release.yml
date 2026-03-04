@@ -336,17 +336,25 @@ jobs:
             TARGET_DIR="server/target-cross-$TARGET_TRIPLE"
           fi
 
-          LOCK_ARGS=(--locked)
+          USE_UNLOCKED_BUILD="false"
           if [[ "$PATCHED_GIT2" == "true" ]]; then
             echo "Using unlocked build because git2 dependency was normalized for this tag"
-            LOCK_ARGS=()
+            USE_UNLOCKED_BUILD="true"
           fi
 
           echo "Building Rust backend (server) release for ${TARGET_TRIPLE} via ${BUILD_TOOL}..."
           if [[ "$BUILD_TOOL" == "cross" ]]; then
-            "${BUILD_CMD[@]}" build --config 'build.rustc-wrapper=""' --manifest-path server/Cargo.toml --release "${LOCK_ARGS[@]}" --target "$TARGET_TRIPLE" --target-dir "$TARGET_DIR"
+            if [[ "$USE_UNLOCKED_BUILD" == "true" ]]; then
+              "${BUILD_CMD[@]}" build --config 'build.rustc-wrapper=""' --manifest-path server/Cargo.toml --release --target "$TARGET_TRIPLE" --target-dir "$TARGET_DIR"
+            else
+              "${BUILD_CMD[@]}" build --config 'build.rustc-wrapper=""' --manifest-path server/Cargo.toml --release --locked --target "$TARGET_TRIPLE" --target-dir "$TARGET_DIR"
+            fi
           else
-            "${BUILD_CMD[@]}" build --manifest-path server/Cargo.toml --release "${LOCK_ARGS[@]}" --target "$TARGET_TRIPLE" --target-dir "$TARGET_DIR"
+            if [[ "$USE_UNLOCKED_BUILD" == "true" ]]; then
+              "${BUILD_CMD[@]}" build --manifest-path server/Cargo.toml --release --target "$TARGET_TRIPLE" --target-dir "$TARGET_DIR"
+            else
+              "${BUILD_CMD[@]}" build --manifest-path server/Cargo.toml --release --locked --target "$TARGET_TRIPLE" --target-dir "$TARGET_DIR"
+            fi
           fi
 
           BIN_NAME="opencode-studio${EXT}"
