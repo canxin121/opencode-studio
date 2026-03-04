@@ -33,6 +33,7 @@ const props = withDefaults(
     busy?: boolean
     isMobilePointer?: boolean
     desktopAnchorEl?: DesktopAnchorLike
+    desktopPlacement?: 'top-start' | 'top-end' | 'bottom-start' | 'bottom-end'
     desktopGapPx?: number
     desktopViewportMarginPx?: number
     title?: string
@@ -41,6 +42,7 @@ const props = withDefaults(
     busy: false,
     isMobilePointer: false,
     desktopAnchorEl: null,
+    desktopPlacement: 'top-start',
     desktopGapPx: 8,
     desktopViewportMarginPx: 8,
     title: '',
@@ -206,23 +208,16 @@ function computeDesktopStyle(): CSSProperties | null {
   const viewportHeight = window.innerHeight
   const gap = panelGapPx.value
   const margin = viewportMarginPx.value
+  const alignEnd = props.desktopPlacement.endsWith('end')
+  const placeTop = props.desktopPlacement.startsWith('top')
 
-  let left = anchorRect.left
+  let left = alignEnd ? anchorRect.right - panelRect.width : anchorRect.left
+  let top = placeTop ? anchorRect.top - panelRect.height - gap : anchorRect.bottom + gap
 
-  // Default: open above the trigger (composer lives at the bottom).
-  let top = anchorRect.top - panelRect.height - gap
-  const belowTop = anchorRect.bottom + gap
-  const aboveTop = top
-
-  if (top < margin) {
-    top = belowTop
-  }
-
-  if (top + panelRect.height > viewportHeight - margin) {
-    // Prefer the side with more room.
-    const roomAbove = anchorRect.top - margin
-    const roomBelow = viewportHeight - anchorRect.bottom - margin
-    top = roomAbove >= roomBelow ? aboveTop : belowTop
+  if (!placeTop && top + panelRect.height > viewportHeight - margin) {
+    top = anchorRect.top - panelRect.height - gap
+  } else if (placeTop && top < margin) {
+    top = anchorRect.bottom + gap
   }
 
   left = Math.max(margin, Math.min(left, viewportWidth - panelRect.width - margin))
@@ -318,10 +313,9 @@ async function syncMobileSheetPosition() {
 
   const safeTop = cssVarPx('--oc-safe-area-top', 0)
   const safeBottom = cssVarPx('--oc-safe-area-bottom', 0)
-  const bottomNav = cssVarPx('--oc-bottom-nav-height', 56)
 
   const topInset = safeTop + MOBILE_SHEET_MARGIN_PX
-  const bottomInset = safeBottom + bottomNav + MOBILE_SHEET_MARGIN_PX
+  const bottomInset = safeBottom + MOBILE_SHEET_MARGIN_PX
   const maxHeight = Math.max(MOBILE_SHEET_MIN_MAX_HEIGHT_PX, viewportHeight - topInset - bottomInset)
   const panelHeight = Math.min(maxHeight, Math.max(0, panel.scrollHeight))
 
@@ -406,6 +400,7 @@ watch(
   () =>
     [
       props.desktopAnchorEl,
+      props.desktopPlacement,
       props.desktopGapPx,
       props.desktopViewportMarginPx,
       fileCount.value,
@@ -430,8 +425,9 @@ onBeforeUnmount(() => {
     <div
       v-if="open && !isMobileSheet"
       ref="panelEl"
-      class="fixed z-[60] w-[min(420px,calc(100vw-1rem))] max-h-[min(72dvh,560px)] rounded-xl border border-border/70 bg-background/95 shadow-xl backdrop-blur overflow-hidden flex flex-col animate-in fade-in-0 zoom-in-95 duration-200"
+      class="pointer-events-auto fixed z-[60] w-[min(420px,calc(100vw-1rem))] max-h-[min(72dvh,560px)] rounded-xl border border-border/70 bg-background/95 shadow-xl backdrop-blur overflow-hidden flex flex-col"
       :style="desktopStyle"
+      @pointerdown.stop
       @click.stop
     >
       <div class="flex items-center justify-between gap-3 px-3 py-2 border-b border-border/40">
@@ -562,12 +558,13 @@ onBeforeUnmount(() => {
     </div>
   </Teleport>
 
-  <div v-if="open && isMobileSheet" class="fixed inset-0 z-50" @click="close">
+  <div v-if="open && isMobileSheet" class="fixed inset-0 z-50" @pointerdown.stop @click="close">
     <div class="absolute inset-0 bg-black/55 backdrop-blur-sm" />
     <div
       ref="panelEl"
-      class="absolute left-1/2 w-[calc(100%-1rem)] max-w-[24rem] -translate-x-1/2 rounded-xl border border-border/70 bg-background/95 shadow-xl backdrop-blur overflow-hidden flex flex-col animate-in fade-in-0 zoom-in-95 duration-200"
+      class="absolute left-1/2 w-[calc(100%-1rem)] max-w-[24rem] -translate-x-1/2 rounded-xl border border-border/70 bg-background/95 shadow-xl backdrop-blur overflow-hidden flex flex-col"
       :style="mobileSheetStyle"
+      @pointerdown.stop
       @click.stop
     >
       <div class="flex items-center justify-between gap-3 px-4 py-3 border-b border-border/40">

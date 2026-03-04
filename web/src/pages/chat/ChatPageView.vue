@@ -282,6 +282,7 @@ const activePickerAnchor = computed(() => {
   return null
 })
 
+const activeAttachmentsAnchor = computed(() => resolveAnchorEl(unref(attachmentsTriggerRef) as TooltipAnchorLike))
 const activeActionsAnchor = computed(() => resolveAnchorEl(unref(actionsTriggerRef) as TooltipAnchorLike))
 
 const timelineSessionError = computed(() => {
@@ -718,7 +719,8 @@ void sessionActionsMenuRef
   <AttachmentsPanel
     :open="attachmentsPanelOpen"
     :is-mobile-pointer="ui.isMobilePointer"
-    :desktop-anchor-el="attachmentsTriggerRef"
+    :desktop-anchor-el="activeAttachmentsAnchor"
+    desktop-placement="top-start"
     :desktop-gap-px="COMPOSER_DESKTOP_MENU_GAP_PX"
     :desktop-viewport-margin-px="COMPOSER_DESKTOP_MENU_VIEWPORT_MARGIN_PX"
     :attached-files="attachedFiles"
