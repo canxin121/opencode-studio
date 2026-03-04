@@ -201,19 +201,29 @@ jobs:
           ref: ${{ env.RELEASE_REF }}
 
       - name: Normalize git2 OpenSSL config for release builds
+        id: normalize-git2-config
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
+          import os
           import re
 
           cargo_toml = Path("server/Cargo.toml")
           content = cargo_toml.read_text(encoding="utf-8")
+          output_path = os.environ.get("GITHUB_OUTPUT")
+
+          def set_output(patched: bool) -> None:
+              if not output_path:
+                  return
+              with open(output_path, "a", encoding="utf-8") as output_file:
+                  output_file.write(f"patched={'true' if patched else 'false'}\n")
 
           match = re.search(r'(?m)^git2\s*=\s*"([^"]+)"\s*$', content)
           if not match:
               print("git2 dependency already uses explicit feature configuration")
+              set_output(False)
               raise SystemExit(0)
 
           version = match.group(1)
@@ -225,6 +235,7 @@ jobs:
               content[: match.start()] + replacement + content[match.end() :],
               encoding="utf-8",
           )
+          set_output(True)
           print(f"updated git2 dependency to vendored OpenSSL mode (version {version})")
           PY
 
@@ -306,6 +317,7 @@ jobs:
           TARGET_TRIPLE="${{ matrix.target }}"
           RELEASE_TAG="${{ env.RELEASE_TAG }}"
           BUILD_TOOL="${{ matrix.build_tool }}"
+          PATCHED_GIT2="${{ steps.normalize-git2-config.outputs.patched }}"
           OUT_DIR="release-assets"
 
           EXT=""
@@ -324,11 +336,17 @@ jobs:
             TARGET_DIR="server/target-cross-$TARGET_TRIPLE"
           fi
 
+          LOCK_ARGS=(--locked)
+          if [[ "$PATCHED_GIT2" == "true" ]]; then
+            echo "Using unlocked build because git2 dependency was normalized for this tag"
+            LOCK_ARGS=()
+          fi
+
           echo "Building Rust backend (server) release for ${TARGET_TRIPLE} via ${BUILD_TOOL}..."
           if [[ "$BUILD_TOOL" == "cross" ]]; then
-            "${BUILD_CMD[@]}" build --config 'build.rustc-wrapper=""' --manifest-path server/Cargo.toml --release --locked --target "$TARGET_TRIPLE" --target-dir "$TARGET_DIR"
+            "${BUILD_CMD[@]}" build --config 'build.rustc-wrapper=""' --manifest-path server/Cargo.toml --release "${LOCK_ARGS[@]}" --target "$TARGET_TRIPLE" --target-dir "$TARGET_DIR"
           else
-            "${BUILD_CMD[@]}" build --manifest-path server/Cargo.toml --release --locked --target "$TARGET_TRIPLE" --target-dir "$TARGET_DIR"
+            "${BUILD_CMD[@]}" build --manifest-path server/Cargo.toml --release "${LOCK_ARGS[@]}" --target "$TARGET_TRIPLE" --target-dir "$TARGET_DIR"
           fi
 
           BIN_NAME="opencode-studio${EXT}"
