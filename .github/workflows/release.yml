@@ -200,6 +200,34 @@ jobs:
         with:
           ref: ${{ env.RELEASE_REF }}
 
+      - name: Normalize git2 OpenSSL config for release builds
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          cargo_toml = Path("server/Cargo.toml")
+          content = cargo_toml.read_text(encoding="utf-8")
+
+          match = re.search(r'(?m)^git2\s*=\s*"([^"]+)"\s*$', content)
+          if not match:
+              print("git2 dependency already uses explicit feature configuration")
+              raise SystemExit(0)
+
+          version = match.group(1)
+          replacement = (
+              f'git2 = {{ version = "{version}", default-features = false, '
+              'features = ["ssh", "https", "vendored-libgit2", "vendored-openssl"] }}'
+          )
+          cargo_toml.write_text(
+              content[: match.start()] + replacement + content[match.end() :],
+              encoding="utf-8",
+          )
+          print(f"updated git2 dependency to vendored OpenSSL mode (version {version})")
+          PY
+
       - name: Validate native target mapping
         if: matrix.native == true
         shell: bash
