@@ -128,16 +128,18 @@ cargo run -p opencode-studio -- \
 Windows 安装补充说明：
 
 - 服务通过 NSSM（`nssm.exe`）注册，再由 `sc.exe` 管理生命周期。
+- Windows 安装还会创建 `OpenCodeStudio-OpenCode`（`opencode serve --port 16000`），并将
+  `OpenCodeStudio` 配置为依赖该服务。
 - 首次运行若未检测到 NSSM，会自动下载并落地到 `<install-root>\\tools\\nssm.exe`。
 - 读取 GitHub Release 元数据时支持 `GITHUB_TOKEN` / `GH_TOKEN`，可降低 API 限流风险。
-- 生成的 Windows 配置默认 `skip_opencode_start = true`。
+- 生成的 Windows 配置默认 `skip_opencode_start = true` 且 `opencode_port = 16000`。
 
 ### Windows 卸载脚本（`scripts/uninstall-service.ps1`）
 
 | 参数 | 默认值 | 说明 |
 | --- | --- | --- |
 | `-ServiceName` | `OpenCodeStudio` | 目标 Windows 服务名 |
-| `-InstallDir PATH` | `%USERPROFILE%\\opencode-studio` | 当 `PATH` 中无 NSSM 时，用于定位 `tools\\nssm.exe` |
+| `-InstallDir PATH` | `%USERPROFILE%\\opencode-studio` | 兼容性参数（可传但非必需） |
 
 ## 运行参数（CLI Flags / Env Vars）
 

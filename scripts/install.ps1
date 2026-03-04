@@ -101,6 +101,22 @@ function Ensure-Nssm([string]$InstallDir, [string]$TmpDir) {
   throw "Failed to install NSSM wrapper (nssm.exe not found in downloaded archive)."
 }
 
+function Wait-HealthEndpoint([string]$Url, [int]$TimeoutSeconds = 45) {
+  $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+  while ((Get-Date) -lt $deadline) {
+    try {
+      $resp = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 4
+      if ($resp.StatusCode -ge 200 -and $resp.StatusCode -lt 500) {
+        return
+      }
+    } catch {
+    }
+    Start-Sleep -Seconds 1
+  }
+
+  throw "Service health check timed out at $Url"
+}
+
 function Get-TargetCandidates {
   $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
   switch ($arch) {
@@ -212,9 +228,9 @@ try {
     "port = $Port",
     "skip_opencode_start = true",
     "opencode_host = '127.0.0.1'",
+    "opencode_port = 16000",
     "",
-    "# To connect to an already running OpenCode, set:",
-    "# opencode_port = 16000"
+    "# To disable managed OpenCode service, remove opencode_port and adjust skip_opencode_start."
   )
   if ($Variant -eq "desktop") {
     $TomlLines += "ui_dir = '$UiDir'"
@@ -222,16 +238,31 @@ try {
   $TomlLines | Set-Content -Encoding UTF8 -Path $ConfigFile
 
   $NssmExe = Ensure-Nssm -InstallDir $InstallDir -TmpDir $Tmp
+  $OpenCodeServiceName = "$ServiceName-OpenCode"
+  $OpenCodeExe = (Get-Command "opencode").Source
+
+  Write-Host "Configuring Windows OpenCode companion service (auto start): $OpenCodeServiceName"
+  Invoke-ScCommand -Arguments @("stop", $OpenCodeServiceName) -AllowedExitCodes @(0, 1060, 1062) -ErrorMessage "Failed to stop existing service '$OpenCodeServiceName'"
+  Invoke-ScCommand -Arguments @("delete", $OpenCodeServiceName) -AllowedExitCodes @(0, 1060, 1072) -ErrorMessage "Failed to delete existing service '$OpenCodeServiceName'"
+  Invoke-ExeCommand -ExePath $NssmExe -Arguments @("install", $OpenCodeServiceName, $OpenCodeExe, "serve", "--port", "16000") -ErrorMessage "Failed to register service '$OpenCodeServiceName' with NSSM"
+  Invoke-ExeCommand -ExePath $NssmExe -Arguments @("set", $OpenCodeServiceName, "Start", "SERVICE_AUTO_START") -ErrorMessage "Failed to set startup mode for service '$OpenCodeServiceName'"
 
   Write-Host "Configuring Windows service (auto start): $ServiceName"
   Invoke-ScCommand -Arguments @("stop", $ServiceName) -AllowedExitCodes @(0, 1060, 1062) -ErrorMessage "Failed to stop existing service '$ServiceName'"
-  Invoke-ScCommand -Arguments @("delete", $ServiceName) -AllowedExitCodes @(0, 1060) -ErrorMessage "Failed to delete existing service '$ServiceName'"
+  Invoke-ScCommand -Arguments @("delete", $ServiceName) -AllowedExitCodes @(0, 1060, 1072) -ErrorMessage "Failed to delete existing service '$ServiceName'"
   Invoke-ExeCommand -ExePath $NssmExe -Arguments @("install", $ServiceName, $BackendInstall, "--config", $ConfigFile) -ErrorMessage "Failed to register service '$ServiceName' with NSSM"
   Invoke-ExeCommand -ExePath $NssmExe -Arguments @("set", $ServiceName, "Start", "SERVICE_AUTO_START") -ErrorMessage "Failed to set startup mode for service '$ServiceName'"
+  Invoke-ScCommand -Arguments @("config", $ServiceName, "depend=", $OpenCodeServiceName) -ErrorMessage "Failed to configure service dependency for '$ServiceName'"
+
+  Invoke-ScCommand -Arguments @("start", $OpenCodeServiceName) -ErrorMessage "Failed to start service '$OpenCodeServiceName'"
   Invoke-ScCommand -Arguments @("start", $ServiceName) -ErrorMessage "Failed to start service '$ServiceName'"
+
+  $HealthUrl = "http://$Host`:$Port/health"
+  Wait-HealthEndpoint -Url $HealthUrl
 
   Write-Host "Wrote runtime config: $ConfigFile"
   Write-Host "Install complete ($Variant). Service: $ServiceName"
+  Write-Host "Managed OpenCode service: $OpenCodeServiceName (port 16000)"
   Write-Host "Open: http://$Host`:$Port"
   if ($Variant -eq "headless") {
     Write-Host "Headless mode: no bundled UI installed (API/service only)."

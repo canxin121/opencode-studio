@@ -98,6 +98,11 @@ Best for local desktop usage.
 
 Best for always-on hosts, server-like usage, or environments managed by `systemd` / `sc` (Windows uses an NSSM service wrapper under SCM).
 
+On Windows, installer scripts register two services:
+
+- `OpenCodeStudio-OpenCode` (managed `opencode serve` on port `16000`)
+- `OpenCodeStudio` (web/API service depending on `OpenCodeStudio-OpenCode`)
+
 Unix (Linux/macOS):
 
 ```bash
@@ -148,8 +153,7 @@ opencode_host = "127.0.0.1"
 ```
 
 Windows service installs default to `skip_opencode_start = true` so the service can start reliably under SCM.
-If you want OpenCode Studio to manage `opencode serve` automatically, set it to `false` after ensuring
-`opencode` is installed and available for the service account.
+The installer also writes `opencode_port = 16000` and manages a companion `OpenCodeStudio-OpenCode` service.
 
 Apply changes by restarting the service:
 
@@ -186,8 +190,11 @@ sudo systemctl restart opencode-studio
 Windows (default service name `OpenCodeStudio`):
 
 ```powershell
+sc query OpenCodeStudio-OpenCode
 sc query OpenCodeStudio
+sc start OpenCodeStudio-OpenCode
 sc start OpenCodeStudio
+sc stop OpenCodeStudio-OpenCode
 sc stop OpenCodeStudio
 ```
 

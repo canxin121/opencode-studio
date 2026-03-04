@@ -113,6 +113,22 @@ function Ensure-Nssm([string]$InstallDir, [string]$TmpDir) {
   throw "Failed to install NSSM wrapper (nssm.exe not found in downloaded archive)."
 }
 
+function Wait-HealthEndpoint([string]$Url, [int]$TimeoutSeconds = 45) {
+  $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+  while ((Get-Date) -lt $deadline) {
+    try {
+      $resp = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 4
+      if ($resp.StatusCode -ge 200 -and $resp.StatusCode -lt 500) {
+        return
+      }
+    } catch {
+    }
+    Start-Sleep -Seconds 1
+  }
+
+  throw "Service health check timed out at $Url"
+}
+
 Assert-Administrator
 Require-Command "sc.exe" "Windows service management requires sc.exe."
 Require-Command "opencode" "Install OpenCode first (for example: scoop install opencode, choco install opencode, or bun add -g opencode-ai@latest)."
@@ -211,6 +227,9 @@ try {
 
   # Install Windows service. Requires an elevated PowerShell.
   $ServiceName = "OpenCodeStudio"
+  $OpenCodeServiceName = "$ServiceName-OpenCode"
+  $OpenCodePort = 16000
+  $OpenCodeExe = (Get-Command "opencode").Source
   $BinPath = $BackendInstall
 
   $TomlLines = @(
@@ -221,9 +240,9 @@ try {
     "port = $Port",
     "skip_opencode_start = true",
     "opencode_host = '127.0.0.1'",
+    "opencode_port = $OpenCodePort",
     "",
-    "# To connect to an already running OpenCode, set:",
-    "# opencode_port = 16000"
+    "# To disable managed OpenCode service, remove opencode_port and adjust skip_opencode_start."
   )
   if ($WithFrontend) {
     $TomlLines += "ui_dir = '$UiDir'"
@@ -232,14 +251,27 @@ try {
 
   $NssmExe = Ensure-Nssm -InstallDir $InstallDir -TmpDir $Tmp
 
+  Write-Host "Creating Windows service $OpenCodeServiceName"
+  Invoke-ScCommand -Arguments @("stop", $OpenCodeServiceName) -AllowedExitCodes @(0, 1060, 1062) -ErrorMessage "Failed to stop existing service '$OpenCodeServiceName'"
+  Invoke-ScCommand -Arguments @("delete", $OpenCodeServiceName) -AllowedExitCodes @(0, 1060, 1072) -ErrorMessage "Failed to delete existing service '$OpenCodeServiceName'"
+  Invoke-ExeCommand -ExePath $NssmExe -Arguments @("install", $OpenCodeServiceName, $OpenCodeExe, "serve", "--port", "$OpenCodePort") -ErrorMessage "Failed to register service '$OpenCodeServiceName' with NSSM"
+  Invoke-ExeCommand -ExePath $NssmExe -Arguments @("set", $OpenCodeServiceName, "Start", "SERVICE_AUTO_START") -ErrorMessage "Failed to set startup mode for service '$OpenCodeServiceName'"
+
   Write-Host "Creating Windows service $ServiceName"
   Invoke-ScCommand -Arguments @("stop", $ServiceName) -AllowedExitCodes @(0, 1060, 1062) -ErrorMessage "Failed to stop existing service '$ServiceName'"
-  Invoke-ScCommand -Arguments @("delete", $ServiceName) -AllowedExitCodes @(0, 1060) -ErrorMessage "Failed to delete existing service '$ServiceName'"
+  Invoke-ScCommand -Arguments @("delete", $ServiceName) -AllowedExitCodes @(0, 1060, 1072) -ErrorMessage "Failed to delete existing service '$ServiceName'"
   Invoke-ExeCommand -ExePath $NssmExe -Arguments @("install", $ServiceName, $BinPath, "--config", $ConfigFile) -ErrorMessage "Failed to register service '$ServiceName' with NSSM"
   Invoke-ExeCommand -ExePath $NssmExe -Arguments @("set", $ServiceName, "Start", "SERVICE_AUTO_START") -ErrorMessage "Failed to set startup mode for service '$ServiceName'"
+  Invoke-ScCommand -Arguments @("config", $ServiceName, "depend=", $OpenCodeServiceName) -ErrorMessage "Failed to configure service dependency for '$ServiceName'"
+
+  Invoke-ScCommand -Arguments @("start", $OpenCodeServiceName) -ErrorMessage "Failed to start service '$OpenCodeServiceName'"
   Invoke-ScCommand -Arguments @("start", $ServiceName) -ErrorMessage "Failed to start service '$ServiceName'"
 
+  $HealthUrl = "http://127.0.0.1:$Port/health"
+  Wait-HealthEndpoint -Url $HealthUrl
+
   Write-Host "Installed. Service: $ServiceName"
+  Write-Host "Managed OpenCode service: $OpenCodeServiceName (port $OpenCodePort)"
   Write-Host "Runtime config: $ConfigFile"
   Write-Host "Open: http://127.0.0.1:$Port"
 } finally {

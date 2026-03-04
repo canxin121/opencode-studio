@@ -81,6 +81,11 @@ curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/sc
 
 安装脚本通过 NSSM（`nssm.exe`）注册服务，并使用 `sc.exe` 管理生命周期。
 
+Windows 安装会创建两个服务：
+
+- `OpenCodeStudio-OpenCode`（运行 `opencode serve --port 16000`）
+- `OpenCodeStudio`（依赖 `OpenCodeStudio-OpenCode`）
+
 请在管理员权限 PowerShell 中运行：
 
 安装含前端版本：
@@ -99,12 +104,6 @@ iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/maste
 
 ```powershell
 iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/uninstall-service.ps1) }"
-```
-
-如果 NSSM 仅存在于自定义安装目录，可传 `-InstallDir` 让卸载脚本定位 `tools\\nssm.exe`：
-
-```powershell
-iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/uninstall-service.ps1) } -InstallDir 'C:\\path\\to\\opencode-studio'"
 ```
 
 ## 浏览器访问
@@ -134,8 +133,8 @@ iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/maste
 - `opencode_host` / `opencode_port`（连接已有 OpenCode）
 - `ui_dir`（托管前端 dist）
 
-Windows 安装脚本默认将 `skip_opencode_start` 设为 `true`，以提升 SCM 下的启动稳定性。
-若希望 Studio 自动拉起 `opencode serve`，请确认服务账号可访问 `opencode` 后改为 `false`。
+Windows 安装脚本会写入 `skip_opencode_start = true` 与 `opencode_port = 16000`，并通过
+`OpenCodeStudio-OpenCode` 伴随服务托管 OpenCode。
 
 安装脚本生成的服务单元会显式使用：
 `--config <install-root>/opencode-studio.toml`。

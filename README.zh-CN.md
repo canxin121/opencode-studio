@@ -98,6 +98,11 @@ opencode --version
 
 适合服务器、开发机常驻、或需要用 `systemd` / `sc` 统一管理的场景（Windows 由 SCM + NSSM 包装运行服务进程）。
 
+Windows 安装脚本会注册两个服务：
+
+- `OpenCodeStudio-OpenCode`（托管 `opencode serve`，端口 `16000`）
+- `OpenCodeStudio`（Web/API 服务，依赖 `OpenCodeStudio-OpenCode`）
+
 Unix（Linux/macOS）：
 
 ```bash
@@ -148,7 +153,7 @@ opencode_host = "127.0.0.1"
 ```
 
 Windows 服务安装默认写入 `skip_opencode_start = true`，以提高在 SCM 下的启动稳定性。
-若希望 OpenCode Studio 自动托管 `opencode serve`，请先确保服务账号可访问 `opencode`，再改回 `false`。
+安装脚本还会写入 `opencode_port = 16000`，并自动托管 `OpenCodeStudio-OpenCode` 伴随服务。
 
 修改后重启服务生效：
 
@@ -185,8 +190,11 @@ sudo systemctl restart opencode-studio
 Windows（默认服务名 `OpenCodeStudio`）：
 
 ```powershell
+sc query OpenCodeStudio-OpenCode
 sc query OpenCodeStudio
+sc start OpenCodeStudio-OpenCode
 sc start OpenCodeStudio
+sc stop OpenCodeStudio-OpenCode
 sc stop OpenCodeStudio
 ```
 
