@@ -561,7 +561,9 @@ mod tests {
         assert_eq!(xdg_config, PathBuf::from(r"C:\Users\Alice").join(".config"));
         assert_eq!(
             xdg_data,
-            PathBuf::from(r"C:\Users\Alice").join(".local").join("share")
+            PathBuf::from(r"C:\Users\Alice")
+                .join(".local")
+                .join("share")
         );
 
         unsafe {

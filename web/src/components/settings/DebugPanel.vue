@@ -150,13 +150,20 @@ onMounted(() => {
           <p class="text-xs text-muted-foreground">{{ t('settings.debug.diagnostics.description') }}</p>
         </div>
         <Button size="sm" variant="outline" :disabled="diagnosticsLoading" @click="refreshDiagnostics">
-          {{ diagnosticsLoading ? t('settings.debug.diagnostics.actions.loading') : t('settings.debug.diagnostics.actions.refresh') }}
+          {{
+            diagnosticsLoading
+              ? t('settings.debug.diagnostics.actions.loading')
+              : t('settings.debug.diagnostics.actions.refresh')
+          }}
         </Button>
       </div>
 
       <label class="grid gap-1">
         <span class="text-xs text-muted-foreground">{{ t('settings.debug.diagnostics.fields.directory') }}</span>
-        <Input v-model="diagnosticsDirectory" :placeholder="String(t('settings.debug.diagnostics.placeholders.directory'))" />
+        <Input
+          v-model="diagnosticsDirectory"
+          :placeholder="String(t('settings.debug.diagnostics.placeholders.directory'))"
+        />
       </label>
 
       <div v-if="diagnosticsError" class="text-xs text-destructive">{{ diagnosticsError }}</div>
@@ -186,7 +193,9 @@ onMounted(() => {
 
       <details v-if="diagnosticsPretty" class="rounded border border-border/70 bg-muted/20 p-3">
         <summary class="cursor-pointer text-xs font-medium">{{ t('settings.debug.diagnostics.fullPayload') }}</summary>
-        <pre class="mt-2 overflow-auto text-[11px] leading-relaxed whitespace-pre-wrap break-all">{{ diagnosticsPretty }}</pre>
+        <pre class="mt-2 overflow-auto text-[11px] leading-relaxed whitespace-pre-wrap break-all">{{
+          diagnosticsPretty
+        }}</pre>
       </details>
     </section>
 

@@ -100,9 +100,7 @@ pub(crate) fn studio_data_dir_candidates() -> Vec<PathBuf> {
 
     candidates.push(crate::path_utils::config_home_dir().join("opencode-studio"));
 
-    if cfg!(windows)
-        && let Ok(dir) = std::env::var("APPDATA")
-    {
+    if let Ok(dir) = std::env::var("APPDATA") {
         let trimmed = dir.trim();
         if !trimmed.is_empty() {
             candidates.push(PathBuf::from(trimmed).join("opencode-studio"));
@@ -173,18 +171,14 @@ pub(crate) fn opencode_data_dir_candidates() -> Vec<PathBuf> {
 
     candidates.push(crate::path_utils::opencode_data_dir());
 
-    if cfg!(windows)
-        && let Ok(dir) = std::env::var("APPDATA")
-    {
+    if let Ok(dir) = std::env::var("APPDATA") {
         let trimmed = dir.trim();
         if !trimmed.is_empty() {
             candidates.push(PathBuf::from(trimmed).join("opencode"));
         }
     }
 
-    if cfg!(windows)
-        && let Ok(dir) = std::env::var("LOCALAPPDATA")
-    {
+    if let Ok(dir) = std::env::var("LOCALAPPDATA") {
         let trimmed = dir.trim();
         if !trimmed.is_empty() {
             candidates.push(PathBuf::from(trimmed).join("opencode"));
@@ -302,12 +296,23 @@ mod tests {
         std::fs::create_dir_all(&home).unwrap();
         std::fs::create_dir_all(&appdata).unwrap();
 
-        let home_settings = home.join(".config").join("opencode-studio").join(SETTINGS_FILE);
+        let home_settings = home
+            .join(".config")
+            .join("opencode-studio")
+            .join(SETTINGS_FILE);
         let app_settings = appdata.join("opencode-studio").join(SETTINGS_FILE);
         std::fs::create_dir_all(home_settings.parent().unwrap_or(tmp.as_path())).unwrap();
         std::fs::create_dir_all(app_settings.parent().unwrap_or(tmp.as_path())).unwrap();
-        std::fs::write(&home_settings, b"{\"projects\":[{\"id\":\"home\",\"path\":\"D:/git\"}]}").unwrap();
-        std::fs::write(&app_settings, b"{\"projects\":[{\"id\":\"app\",\"path\":\"C:/repo\"}]}").unwrap();
+        std::fs::write(
+            &home_settings,
+            b"{\"projects\":[{\"id\":\"home\",\"path\":\"D:/git\"}]}",
+        )
+        .unwrap();
+        std::fs::write(
+            &app_settings,
+            b"{\"projects\":[{\"id\":\"app\",\"path\":\"C:/repo\"}]}",
+        )
+        .unwrap();
 
         let _override = EnvVarGuard::set("OPENCODE_STUDIO_DATA_DIR", "".to_string());
         let _xdg = EnvVarGuard::set("XDG_CONFIG_HOME", "".to_string());
@@ -330,7 +335,11 @@ mod tests {
 
         let app_settings = appdata.join("opencode-studio").join(SETTINGS_FILE);
         std::fs::create_dir_all(app_settings.parent().unwrap_or(tmp.as_path())).unwrap();
-        std::fs::write(&app_settings, b"{\"projects\":[{\"id\":\"app\",\"path\":\"D:/git\"}]}").unwrap();
+        std::fs::write(
+            &app_settings,
+            b"{\"projects\":[{\"id\":\"app\",\"path\":\"D:/git\"}]}",
+        )
+        .unwrap();
 
         let _override = EnvVarGuard::set("OPENCODE_STUDIO_DATA_DIR", "".to_string());
         let _xdg = EnvVarGuard::set("XDG_CONFIG_HOME", "".to_string());

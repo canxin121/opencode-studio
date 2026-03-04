@@ -284,8 +284,17 @@ fn session_matches_directory(session: &Value, filter_dir: &str, allow_descendant
     }
 }
 
+fn is_windows_drive_absolute_like(path: &Path) -> bool {
+    let text = path.as_os_str().to_string_lossy();
+    let bytes = text.as_bytes();
+    bytes.len() >= 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && (bytes[2] == b'\\' || bytes[2] == b'/')
+}
+
 async fn find_git_dir(start: &Path) -> Option<PathBuf> {
-    let mut current = if start.is_absolute() {
+    let mut current = if start.is_absolute() || is_windows_drive_absolute_like(start) {
         start.to_path_buf()
     } else {
         std::env::current_dir()

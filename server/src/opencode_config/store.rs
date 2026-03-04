@@ -299,8 +299,10 @@ mod tests {
     #[test]
     fn config_file_user_prefers_existing_jsonc_file() {
         let _env_lock = ENV_LOCK.lock().unwrap();
-        let tmp =
-            std::env::temp_dir().join(format!("opencode-config-store-jsonc-{}", std::process::id()));
+        let tmp = std::env::temp_dir().join(format!(
+            "opencode-config-store-jsonc-{}",
+            std::process::id()
+        ));
         let _ = std::fs::create_dir_all(&tmp);
 
         let xdg_config = tmp.join("xdg-config");
@@ -320,8 +322,10 @@ mod tests {
     #[test]
     fn config_file_user_prefers_xdg_style_home_over_appdata_when_both_exist() {
         let _env_lock = ENV_LOCK.lock().unwrap();
-        let tmp =
-            std::env::temp_dir().join(format!("opencode-config-store-home-priority-{}", std::process::id()));
+        let tmp = std::env::temp_dir().join(format!(
+            "opencode-config-store-home-priority-{}",
+            std::process::id()
+        ));
         let _ = std::fs::create_dir_all(&tmp);
 
         let home = tmp.join("home");

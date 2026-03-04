@@ -13,8 +13,8 @@ use axum::{
 };
 use axum_extra::extract::cookie::SameSite;
 use futures_util::stream::{self as futures_stream, StreamExt as _};
-use serde::Serialize;
 use serde::Deserialize;
+use serde::Serialize;
 use tokio::sync::RwLock;
 use tokio::time::{Duration, timeout};
 use tower_http::{
@@ -131,7 +131,7 @@ async fn detect_opencode_cli_version() -> Option<String> {
     let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
     parse_opencode_cli_version(&stdout)
         .or_else(|| parse_opencode_cli_version(&stderr))
-        .or_else(|| {
+        .or({
             if stdout.is_empty() {
                 None
             } else {

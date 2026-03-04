@@ -4633,8 +4633,9 @@ mod tests {
 
     #[test]
     fn directory_matches_project_root_is_windows_case_insensitive() {
-        let directory = crate::path_utils::normalize_directory_for_match("c:\\users\\alice\\repo\\work")
-            .expect("directory");
+        let directory =
+            crate::path_utils::normalize_directory_for_match("c:\\users\\alice\\repo\\work")
+                .expect("directory");
         assert!(directory_matches_project_root(
             &directory,
             "C:\\Users\\Alice\\Repo"
