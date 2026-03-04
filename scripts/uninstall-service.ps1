@@ -90,6 +90,72 @@ function Assert-SafeInstallDir([string]$Path) {
   }
 }
 
+function Stop-ProcessesFromInstallDir([string]$Path) {
+  $full = [System.IO.Path]::GetFullPath($Path).TrimEnd('\\') + "\\"
+  $procs = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+    $_.ProcessId -ne $PID -and $_.ExecutablePath -and $_.ExecutablePath.StartsWith($full, [StringComparison]::OrdinalIgnoreCase)
+  }
+
+  foreach ($proc in $procs) {
+    try {
+      Stop-Process -Id $proc.ProcessId -Force -ErrorAction Stop
+    } catch {
+    }
+  }
+}
+
+function Remove-InstallDirWithRetry([string]$Path, [int]$MaxAttempts = 8, [int]$DelayMilliseconds = 1000) {
+  for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+    if (-not (Test-Path -LiteralPath $Path)) {
+      return $true
+    }
+
+    Stop-ProcessesFromInstallDir -Path $Path
+
+    try {
+      Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction Stop
+    } catch {
+      if ($attempt -lt $MaxAttempts) {
+        Start-Sleep -Milliseconds $DelayMilliseconds
+        continue
+      }
+    }
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+      return $true
+    }
+
+    if ($attempt -lt $MaxAttempts) {
+      Start-Sleep -Milliseconds $DelayMilliseconds
+    }
+  }
+
+  return -not (Test-Path -LiteralPath $Path)
+}
+
+function Start-DeferredInstallDirRemoval([string]$Path) {
+  $escaped = $Path.Replace("'", "''")
+  $cleanupScript = @"
+`$target = '$escaped'
+for (`$i = 0; `$i -lt 120; `$i++) {
+  if (-not (Test-Path -LiteralPath `$target)) {
+    exit 0
+  }
+
+  try {
+    Remove-Item -LiteralPath `$target -Recurse -Force -ErrorAction Stop
+  } catch {
+    Start-Sleep -Seconds 2
+    continue
+  }
+}
+exit 0
+"@
+
+  $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($cleanupScript))
+  Start-Process -FilePath "powershell.exe" -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-EncodedCommand", $encoded) -WindowStyle Hidden | Out-Null
+}
+
 Assert-Administrator
 Require-Command "sc.exe" "Windows service management requires sc.exe."
 
@@ -97,6 +163,8 @@ $OpenCodeServiceName = "$ServiceName-OpenCode"
 if (-not $InstallDir) {
   $InstallDir = Resolve-InstallDir $InstallDir
 }
+
+$InstallDir = [System.IO.Path]::GetFullPath($InstallDir)
 
 Invoke-ScCommand -Arguments @("stop", $ServiceName) -AllowedExitCodes @(0, 1060, 1062) -ErrorMessage "Failed to stop service '$ServiceName'"
 Stop-ServiceProcess -Name $ServiceName
@@ -113,9 +181,14 @@ Write-Host "Removed Windows service: $OpenCodeServiceName"
 
 if ($RemoveInstallDir) {
   Assert-SafeInstallDir -Path $InstallDir
-  if (Test-Path $InstallDir) {
-    Remove-Item -Recurse -Force $InstallDir
-    Write-Host "Removed install directory: $InstallDir"
+  if (Test-Path -LiteralPath $InstallDir) {
+    if (Remove-InstallDirWithRetry -Path $InstallDir) {
+      Write-Host "Removed install directory: $InstallDir"
+    } else {
+      Start-DeferredInstallDirRemoval -Path $InstallDir
+      Write-Warning "Install directory is currently in use and was scheduled for background cleanup: $InstallDir"
+      Write-Host "Close processes using this directory; cleanup will continue automatically in the background."
+    }
   } else {
     Write-Host "Install directory not found (already removed): $InstallDir"
   }
