@@ -170,8 +170,8 @@ target/runner 守护：
 
 服务安装脚本不会作为 release 资产发布，请直接使用 GitHub raw 链接，例如：
 
-- `https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install-service.sh`
-- `https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install-service.ps1`
+- `https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/install-service.sh`
+- `https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/install-service.ps1`
 
 ## 未签名构建
 

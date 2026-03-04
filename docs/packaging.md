@@ -173,8 +173,8 @@ Target/runner guard:
 
 Service install scripts are not published as release assets. Use GitHub raw URLs instead, for example:
 
-- `https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install-service.sh`
-- `https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install-service.ps1`
+- `https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/install-service.sh`
+- `https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/install-service.ps1`
 
 ## Unsigned builds
 

@@ -50,19 +50,19 @@ opencode --version
 安装含前端版本：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install-service.sh | bash -s -- --with-frontend
+curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/install-service.sh | bash -s -- --with-frontend
 ```
 
 安装仅 API 版本：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install-service.sh | bash
+curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/install-service.sh | bash
 ```
 
 指定版本安装（建议用于类生产环境）：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install-service.sh | bash -s -- --version v0.1.0 --with-frontend
+curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/install-service.sh | bash -s -- --version v0.1.0 --with-frontend
 ```
 
 安装后：
@@ -74,7 +74,7 @@ curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/main/scri
 卸载服务单元（不会自动删除二进制和数据，除非你手动删除）：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/uninstall-service.sh | bash
+curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/uninstall-service.sh | bash
 ```
 
 ## Windows（PowerShell）
@@ -86,25 +86,25 @@ curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/main/scri
 安装含前端版本：
 
 ```powershell
-iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install-service.ps1) } -WithFrontend"
+iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/install-service.ps1) } -WithFrontend"
 ```
 
 安装仅 API 版本：
 
 ```powershell
-iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install-service.ps1) }"
+iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/install-service.ps1) }"
 ```
 
 卸载：
 
 ```powershell
-iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/uninstall-service.ps1) }"
+iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/uninstall-service.ps1) }"
 ```
 
 如果 NSSM 仅存在于自定义安装目录，可传 `-InstallDir` 让卸载脚本定位 `tools\\nssm.exe`：
 
 ```powershell
-iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/uninstall-service.ps1) } -InstallDir 'C:\\path\\to\\opencode-studio'"
+iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/uninstall-service.ps1) } -InstallDir 'C:\\path\\to\\opencode-studio'"
 ```
 
 ## 浏览器访问

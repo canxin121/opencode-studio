@@ -51,19 +51,19 @@ opencode --version
 Install with bundled frontend:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install-service.sh | bash -s -- --with-frontend
+curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/install-service.sh | bash -s -- --with-frontend
 ```
 
 Install API-only:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install-service.sh | bash
+curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/install-service.sh | bash
 ```
 
 Pin a release version (recommended for production-like installs):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install-service.sh | bash -s -- --version v0.1.0 --with-frontend
+curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/install-service.sh | bash -s -- --version v0.1.0 --with-frontend
 ```
 
 After installation:
@@ -75,7 +75,7 @@ After installation:
 Uninstall service unit (keeps binary/data unless you delete them):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/uninstall-service.sh | bash
+curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/uninstall-service.sh | bash
 ```
 
 ## Windows (PowerShell)
@@ -87,25 +87,25 @@ Run in an elevated PowerShell:
 Install with bundled frontend:
 
 ```powershell
-iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install-service.ps1) } -WithFrontend"
+iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/install-service.ps1) } -WithFrontend"
 ```
 
 Install API-only:
 
 ```powershell
-iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install-service.ps1) }"
+iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/install-service.ps1) }"
 ```
 
 Uninstall:
 
 ```powershell
-iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/uninstall-service.ps1) }"
+iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/uninstall-service.ps1) }"
 ```
 
 If NSSM is only available in a custom install root, pass `-InstallDir` to help the uninstaller locate `tools\\nssm.exe`:
 
 ```powershell
-iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/uninstall-service.ps1) } -InstallDir 'C:\\path\\to\\opencode-studio'"
+iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/uninstall-service.ps1) } -InstallDir 'C:\\path\\to\\opencode-studio'"
 ```
 
 ## Access in Browser

@@ -4,7 +4,7 @@ set -euo pipefail
 # One-click-ish installer for the OpenCode Studio server as a background service.
 #
 # Examples:
-#   curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/install-service.sh | bash -s -- --with-frontend
+#   curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/install-service.sh | bash -s -- --with-frontend
 #   curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/v0.1.0/scripts/install-service.sh | bash -s -- --version v0.1.0 --with-frontend
 
 REPO="canxin121/opencode-studio"
