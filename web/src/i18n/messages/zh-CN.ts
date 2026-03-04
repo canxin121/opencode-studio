@@ -369,8 +369,8 @@ export default {
           label: '名称',
           labelPlaceholder: '例如：本地 Studio',
           baseUrl: '基础 URL',
-          baseUrlPlaceholder: 'http://127.0.0.1:3000',
-          examples: '示例：`http://127.0.0.1:3000` 或 `https://studio.example.com`',
+          baseUrlPlaceholder: 'http://127.0.0.1:3210',
+          examples: '示例：`http://127.0.0.1:3210` 或 `https://studio.example.com`',
           setActive: '设为当前（将重新加载）',
         },
         edit: {
@@ -1443,7 +1443,7 @@ export default {
       },
       placeholders: {
         host: '127.0.0.1',
-        port: '3000',
+        port: '3210',
         corsOrigins: '每行一个来源，例如 http://localhost:5173',
         uiPassword: '留空则禁用密码登录',
         opencodeHost: '127.0.0.1',

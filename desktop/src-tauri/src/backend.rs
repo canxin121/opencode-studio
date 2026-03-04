@@ -279,7 +279,7 @@ fn ui_dir_candidates(resource_dir: &Path) -> Vec<PathBuf> {
 }
 
 fn pick_port(preferred: u16) -> Result<u16, String> {
-    let port = if preferred == 0 { 3000 } else { preferred };
+    let port = if preferred == 0 { 3210 } else { preferred };
 
     // In the full desktop build we default the webview URL to http://127.0.0.1:<port>,
     // so we MUST keep the backend on the configured port. If it's already taken,

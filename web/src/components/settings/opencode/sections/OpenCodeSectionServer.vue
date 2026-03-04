@@ -43,7 +43,7 @@ export default defineComponent({
 
     const corsSuggestionOptions: PickerOption[] = [
       { value: 'http://localhost:5173' },
-      { value: 'http://localhost:3000' },
+      { value: 'http://localhost:3210' },
       { value: 'https://example.com' },
     ]
     const watcherIgnoreSuggestionOptions: PickerOption[] = [

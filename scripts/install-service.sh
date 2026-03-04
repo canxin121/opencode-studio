@@ -12,11 +12,12 @@ VERSION=""
 WITH_FRONTEND="0"
 MODE="user" # linux systemd: user|system
 INSTALL_DIR=""
+PORT="3210"
 
 usage() {
   cat <<'EOF'
 Usage:
-  install-service.sh [--repo owner/repo] [--version vX.Y.Z] [--with-frontend] [--mode user|system] [--install-dir PATH]
+  install-service.sh [--repo owner/repo] [--version vX.Y.Z] [--with-frontend] [--mode user|system] [--install-dir PATH] [--port PORT]
 
 Notes:
   - This installs the Rust server binary (opencode-studio) from GitHub Releases.
@@ -32,6 +33,7 @@ while [[ $# -gt 0 ]]; do
     --with-frontend) WITH_FRONTEND="1"; shift;;
     --mode) MODE="$2"; shift 2;;
     --install-dir) INSTALL_DIR="$2"; shift 2;;
+    --port) PORT="$2"; shift 2;;
     -h|--help) usage; exit 0;;
     *) echo "Unknown arg: $1" >&2; usage; exit 2;;
   esac
@@ -44,6 +46,11 @@ if ! command -v opencode >/dev/null 2>&1; then
   echo "Missing dependency: opencode" >&2
   echo "Install OpenCode first, for example: curl -fsSL https://opencode.ai/install | bash" >&2
   exit 1
+fi
+
+if ! [[ "$PORT" =~ ^[0-9]+$ ]] || ((PORT < 1 || PORT > 65535)); then
+  echo "Invalid --port '$PORT'. Expected 1-65535." >&2
+  exit 2
 fi
 
 OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
@@ -253,7 +260,9 @@ cat >"$CONFIG_FILE" <<EOF
 
 [backend]
 host = "127.0.0.1"
-port = 3000
+port = $PORT
+# Optional UI session password. Keep empty to disable password login.
+ui_password = ""
 skip_opencode_start = false
 opencode_host = "127.0.0.1"
 
@@ -348,4 +357,4 @@ fi
 
 echo "Install complete. Binary: $BIN_PATH"
 echo "Runtime config: $CONFIG_FILE"
-echo "Open: http://127.0.0.1:3000"
+echo "Open: http://127.0.0.1:$PORT"

@@ -114,11 +114,11 @@ iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/maste
 
 ## 浏览器访问
 
-- 默认服务地址：`http://127.0.0.1:3000`。
-- 含前端安装：直接打开 `http://127.0.0.1:3000`。
-- 仅 API 安装：访问 `http://127.0.0.1:3000/health` 验证服务健康状态。
+- 默认服务地址：`http://127.0.0.1:3210`。
+- 含前端安装：直接打开 `http://127.0.0.1:3210`。
+- 仅 API 安装：访问 `http://127.0.0.1:3210/health` 验证服务健康状态。
 - 若仅 API 模式后续要启用 UI，可在 `opencode-studio.toml` 设置 `ui_dir` 指向有效 `dist` 路径，或重新安装为含前端模式。
-- 需远程访问时，将 `host = "0.0.0.0"`，重启服务后访问 `http://<server-ip>:3000`。
+- 需远程访问时，将 `host = "0.0.0.0"`，重启服务后访问 `http://<server-ip>:3210`。
 
 ## 配置
 
@@ -136,11 +136,15 @@ iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/maste
 可在 `opencode-studio.toml` 中调整 `[backend]` 字段来修改运行行为：
 
 - `host` / `port`
+- `ui_password`（空字符串表示关闭 UI 密码登录）
 - `opencode_host` / `opencode_port`（连接已有 OpenCode）
 - `ui_dir`（托管前端 dist）
 
 Windows 安装脚本会写入 `skip_opencode_start = true` 与 `opencode_port = 16000`，并通过
 `OpenCodeStudio-OpenCode` 伴随服务托管 OpenCode。
+为保证与桌面版一致，安装脚本还会向两个 Windows 服务注入用户目录相关环境变量
+（`HOME`、`APPDATA`、`LOCALAPPDATA`、`XDG_CONFIG_HOME`、`XDG_DATA_HOME`，以及可选的
+`OPENCODE_CONFIG`）。
 
 安装脚本生成的服务单元会显式使用：
 `--config <install-root>/opencode-studio.toml`。

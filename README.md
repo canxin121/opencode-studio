@@ -125,11 +125,11 @@ iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/maste
 
 ## After Install: Open in Browser
 
-- Default service address is `http://127.0.0.1:3000` (from `host` + `port` in config).
-- If installed with frontend, open `http://127.0.0.1:3000` directly.
-- If installed API-only, use `http://127.0.0.1:3000/health` to verify service is running.
+- Default service address is `http://127.0.0.1:3210` (from `host` + `port` in config).
+- If installed with frontend, open `http://127.0.0.1:3210` directly.
+- If installed API-only, use `http://127.0.0.1:3210/health` to verify service is running.
 - To enable UI after API-only install, set `ui_dir` in `opencode-studio.toml` to a valid `dist` directory, or reinstall with `--with-frontend` / `-WithFrontend`.
-- For remote machine access, change `host` to `0.0.0.0`, restart service, then visit `http://<server-ip>:3000`.
+- For remote machine access, change `host` to `0.0.0.0`, restart service, then visit `http://<server-ip>:3210`.
 
 ## After Install: Update Configuration
 
@@ -145,7 +145,8 @@ Edit key values under `[backend]` to update host/port, UI serving path, or OpenC
 ```toml
 [backend]
 host = "127.0.0.1"
-port = 3000
+port = 3210
+ui_password = ""
 skip_opencode_start = false
 opencode_host = "127.0.0.1"
 # opencode_port = 16000

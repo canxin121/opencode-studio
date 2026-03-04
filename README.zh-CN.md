@@ -125,11 +125,11 @@ iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/maste
 
 ## 安装后：如何在浏览器访问
 
-- 服务默认地址是 `http://127.0.0.1:3000`（由配置里的 `host` + `port` 决定）。
-- 如果是“含内置 UI”安装，直接打开 `http://127.0.0.1:3000`。
-- 如果是“仅 API”安装，可访问 `http://127.0.0.1:3000/health` 确认服务是否正常。
+- 服务默认地址是 `http://127.0.0.1:3210`（由配置里的 `host` + `port` 决定）。
+- 如果是“含内置 UI”安装，直接打开 `http://127.0.0.1:3210`。
+- 如果是“仅 API”安装，可访问 `http://127.0.0.1:3210/health` 确认服务是否正常。
 - 仅 API 模式想启用网页 UI，可在 `opencode-studio.toml` 中设置 `ui_dir` 指向有效的 `dist` 目录，或重新用 `--with-frontend` / `-WithFrontend` 安装。
-- 需要远程机器访问时，把 `host` 改为 `0.0.0.0`，重启服务后通过 `http://<服务器IP>:3000` 访问。
+- 需要远程机器访问时，把 `host` 改为 `0.0.0.0`，重启服务后通过 `http://<服务器IP>:3210` 访问。
 
 ## 安装后：如何调整配置文件
 
@@ -145,7 +145,8 @@ iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/maste
 ```toml
 [backend]
 host = "127.0.0.1"
-port = 3000
+port = 3210
+ui_password = ""
 skip_opencode_start = false
 opencode_host = "127.0.0.1"
 # opencode_port = 16000

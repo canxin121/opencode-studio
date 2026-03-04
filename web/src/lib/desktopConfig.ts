@@ -50,7 +50,7 @@ function asDesktopConfig(value: unknown): DesktopConfig | null {
   const backend = root.backend as Record<string, unknown>
 
   const portRaw = Number(backend.port)
-  const port = Number.isFinite(portRaw) ? Math.max(0, Math.floor(portRaw)) : 3000
+  const port = Number.isFinite(portRaw) ? Math.max(0, Math.floor(portRaw)) : 3210
 
   const corsRaw = Array.isArray(backend.cors_origins) ? backend.cors_origins : []
   const cors_origins = corsRaw.map((v) => String(v || '').trim()).filter((v) => v.length > 0)

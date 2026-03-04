@@ -81,7 +81,7 @@ cargo run -p opencode-studio -- \
   --ui-dir web/dist
 ```
 
-Open `http://127.0.0.1:3000`.
+Open `http://127.0.0.1:3210`.
 
 Notes:
 
@@ -114,6 +114,7 @@ Equivalent env vars:
 | `--version vX.Y.Z` | latest | Pin release version |
 | `--install-dir PATH` | `~/opencode-studio` | Install root for `bin/`, optional `dist/`, and `opencode-studio.toml` |
 | `--mode user|system` | `user` | Linux systemd installation mode |
+| `--port PORT` | `3210` | Initial backend port in generated config |
 
 ### Windows installer (`scripts/install-service.ps1`)
 
@@ -123,7 +124,7 @@ Equivalent env vars:
 | `-Repo owner/repo` | `canxin121/opencode-studio` | GitHub repo for release artifacts |
 | `-Version vX.Y.Z` | latest | Pin release version |
 | `-InstallDir PATH` | `%USERPROFILE%\\opencode-studio` | Install root for `bin\\`, optional `dist\\`, and `opencode-studio.toml` |
-| `-Port PORT` | `3000` | Initial backend port in generated config |
+| `-Port PORT` | `3210` | Initial backend port in generated config |
 
 Windows installer notes:
 
@@ -133,6 +134,9 @@ Windows installer notes:
 - First run downloads NSSM if absent, then persists it at `<install-root>\\tools\\nssm.exe`.
 - `GITHUB_TOKEN`/`GH_TOKEN` are honored for GitHub API calls to reduce rate-limit risk.
 - Generated Windows config defaults `skip_opencode_start = true` and `opencode_port = 16000`.
+- Installer injects user-profile environment variables into both Windows services (`HOME`, `APPDATA`,
+  `LOCALAPPDATA`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, and optional `OPENCODE_CONFIG`) so
+  OpenCode/Studio can resolve the same user config paths as desktop mode.
 
 ### Windows uninstaller (`scripts/uninstall-service.ps1`)
 
@@ -150,7 +154,7 @@ Windows installer notes:
 | --- | --- | --- |
 | `OPENCODE_STUDIO_CONFIG` / `--config` | `<exe-dir>/opencode-studio.toml` | Runtime TOML config path; auto-loads from executable directory when unset |
 | `OPENCODE_STUDIO_HOST` / `--host` | `127.0.0.1` | Bind address |
-| `OPENCODE_STUDIO_PORT` / `--port` | `3000` | HTTP port |
+| `OPENCODE_STUDIO_PORT` / `--port` | `3210` | HTTP port |
 | `OPENCODE_STUDIO_UI_DIR` / `--ui-dir` | (unset) | Built UI directory; unset means API-only/headless |
 
 ### OpenCode bridge

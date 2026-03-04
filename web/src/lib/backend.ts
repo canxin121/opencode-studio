@@ -176,7 +176,7 @@ export function ensureBackendsConfigInStorage(): BackendsConfigV1 {
     const backend: BackendTarget = {
       id: randomId(),
       label: 'Desktop local backend',
-      baseUrl: normalizeBackendBaseUrl('http://127.0.0.1:3000'),
+      baseUrl: normalizeBackendBaseUrl('http://127.0.0.1:3210'),
       createdAt: now,
       lastUsedAt: now,
     }
@@ -195,7 +195,7 @@ export function ensureBackendsConfigInStorage(): BackendsConfigV1 {
   const backend: BackendTarget = {
     id: randomId(),
     label: origin ? 'This server' : 'Backend',
-    baseUrl: origin || normalizeBackendBaseUrl('http://127.0.0.1:3000'),
+    baseUrl: origin || normalizeBackendBaseUrl('http://127.0.0.1:3210'),
     createdAt: now,
     lastUsedAt: now,
   }

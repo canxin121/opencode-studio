@@ -81,7 +81,7 @@ cargo run -p opencode-studio -- \
   --ui-dir web/dist
 ```
 
-访问 `http://127.0.0.1:3000`。
+访问 `http://127.0.0.1:3210`。
 
 说明：
 
@@ -114,6 +114,7 @@ cargo run -p opencode-studio -- \
 | `--version vX.Y.Z` | latest | 指定安装版本 |
 | `--install-dir PATH` | `~/opencode-studio` | 安装根目录（含 `bin/`、可选 `dist/`、`opencode-studio.toml`） |
 | `--mode user|system` | `user` | Linux systemd 安装模式 |
+| `--port PORT` | `3210` | 生成配置时的初始后端端口 |
 
 ### Windows 安装脚本（`scripts/install-service.ps1`）
 
@@ -123,7 +124,7 @@ cargo run -p opencode-studio -- \
 | `-Repo owner/repo` | `canxin121/opencode-studio` | Release 资产来源仓库 |
 | `-Version vX.Y.Z` | latest | 指定安装版本 |
 | `-InstallDir PATH` | `%USERPROFILE%\\opencode-studio` | 安装根目录（含 `bin\\`、可选 `dist\\`、`opencode-studio.toml`） |
-| `-Port PORT` | `3000` | 生成配置时的初始后端端口 |
+| `-Port PORT` | `3210` | 生成配置时的初始后端端口 |
 
 Windows 安装补充说明：
 
@@ -133,6 +134,9 @@ Windows 安装补充说明：
 - 首次运行若未检测到 NSSM，会自动下载并落地到 `<install-root>\\tools\\nssm.exe`。
 - 读取 GitHub Release 元数据时支持 `GITHUB_TOKEN` / `GH_TOKEN`，可降低 API 限流风险。
 - 生成的 Windows 配置默认 `skip_opencode_start = true` 且 `opencode_port = 16000`。
+- 安装器会向两个 Windows 服务注入用户目录相关环境变量（`HOME`、`APPDATA`、
+  `LOCALAPPDATA`、`XDG_CONFIG_HOME`、`XDG_DATA_HOME`，以及可选 `OPENCODE_CONFIG`），
+  以便 OpenCode/Studio 读取与桌面版一致的用户配置路径。
 
 ### Windows 卸载脚本（`scripts/uninstall-service.ps1`）
 
@@ -150,7 +154,7 @@ Windows 安装补充说明：
 | --- | --- | --- |
 | `OPENCODE_STUDIO_CONFIG` / `--config` | `<exe-dir>/opencode-studio.toml` | 运行时 TOML 配置路径；未设置时可从可执行文件目录自动加载 |
 | `OPENCODE_STUDIO_HOST` / `--host` | `127.0.0.1` | 监听地址 |
-| `OPENCODE_STUDIO_PORT` / `--port` | `3000` | HTTP 端口 |
+| `OPENCODE_STUDIO_PORT` / `--port` | `3210` | HTTP 端口 |
 | `OPENCODE_STUDIO_UI_DIR` / `--ui-dir` | (unset) | 前端构建目录；未设置则为仅 API/headless |
 
 ### OpenCode bridge 参数

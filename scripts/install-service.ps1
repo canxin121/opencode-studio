@@ -3,7 +3,7 @@ Param(
   [string]$Version = "",
   [switch]$WithFrontend,
   [string]$InstallDir = "",
-  [int]$Port = 3000
+  [int]$Port = 3210
 )
 
 $ErrorActionPreference = "Stop"
@@ -172,6 +172,92 @@ function Download([string]$Url, [string]$OutFile) {
   Invoke-WebRequest -Uri $Url -OutFile $OutFile
 }
 
+function Resolve-InstallerProfileContext {
+  $home = ""
+  foreach ($candidate in @($env:HOME, $env:USERPROFILE, [Environment]::GetFolderPath("UserProfile"))) {
+    $value = if ($null -eq $candidate) { "" } else { $candidate.ToString().Trim() }
+    if ($value) {
+      $home = $value
+      break
+    }
+  }
+  if (-not $home) {
+    throw "Unable to resolve installer user profile directory."
+  }
+
+  $appData = [Environment]::GetFolderPath("ApplicationData")
+  if (-not $appData) {
+    $appData = Join-Path $home "AppData\Roaming"
+  }
+
+  $localAppData = [Environment]::GetFolderPath("LocalApplicationData")
+  if (-not $localAppData) {
+    $localAppData = Join-Path $home "AppData\Local"
+  }
+
+  $homeConfigDir = Join-Path $home ".config"
+  $homeOpenCodeDir = Join-Path $homeConfigDir "opencode"
+  $appDataOpenCodeDir = Join-Path $appData "opencode"
+
+  $openCodeConfig = ""
+  $openCodeConfigCandidates = @(
+    (Join-Path $homeOpenCodeDir "opencode.jsonc"),
+    (Join-Path $homeOpenCodeDir "opencode.json"),
+    (Join-Path $homeOpenCodeDir "config.json"),
+    (Join-Path $appDataOpenCodeDir "opencode.jsonc"),
+    (Join-Path $appDataOpenCodeDir "opencode.json"),
+    (Join-Path $appDataOpenCodeDir "config.json")
+  )
+  foreach ($candidate in $openCodeConfigCandidates) {
+    if (Test-Path $candidate) {
+      $openCodeConfig = $candidate
+      break
+    }
+  }
+
+  return @{
+    Home = $home
+    AppData = $appData
+    LocalAppData = $localAppData
+    XdgConfigHome = $homeConfigDir
+    XdgDataHome = Join-Path (Join-Path $home ".local") "share"
+    StudioDataDir = Join-Path $appData "opencode-studio"
+    OpenCodeConfig = $openCodeConfig
+  }
+}
+
+function Get-ServiceEnvironmentPairs([hashtable]$ProfileContext) {
+  $pairs = @(
+    "HOME=$($ProfileContext.Home)",
+    "USERPROFILE=$($ProfileContext.Home)",
+    "APPDATA=$($ProfileContext.AppData)",
+    "LOCALAPPDATA=$($ProfileContext.LocalAppData)",
+    "XDG_CONFIG_HOME=$($ProfileContext.XdgConfigHome)",
+    "XDG_DATA_HOME=$($ProfileContext.XdgDataHome)",
+    "OPENCODE_STUDIO_DATA_DIR=$($ProfileContext.StudioDataDir)"
+  )
+
+  $openCodeConfig = if ($null -eq $ProfileContext.OpenCodeConfig) { "" } else { $ProfileContext.OpenCodeConfig.ToString().Trim() }
+  if ($openCodeConfig) {
+    $pairs += "OPENCODE_CONFIG=$openCodeConfig"
+  }
+  return $pairs
+}
+
+function Configure-NssmServiceContext {
+  Param(
+    [string]$NssmExe,
+    [string]$ServiceName,
+    [string]$AppDirectory,
+    [string[]]$EnvironmentPairs
+  )
+
+  Invoke-ExeCommand -ExePath $NssmExe -Arguments @("set", $ServiceName, "AppDirectory", $AppDirectory) -ErrorMessage "Failed to set app directory for service '$ServiceName'"
+  $envArgs = @("set", $ServiceName, "AppEnvironmentExtra")
+  $envArgs += $EnvironmentPairs
+  Invoke-ExeCommand -ExePath $NssmExe -Arguments $envArgs -ErrorMessage "Failed to set environment for service '$ServiceName'"
+}
+
 $Targets = Get-TargetCandidates
 $Release = Get-ReleaseJson
 $TagName = $Release.tag_name
@@ -238,6 +324,8 @@ try {
     "[backend]",
     "host = '127.0.0.1'",
     "port = $Port",
+    "# Optional UI session password. Keep empty to disable password login.",
+    "ui_password = ''",
     "skip_opencode_start = true",
     "opencode_host = '127.0.0.1'",
     "opencode_port = $OpenCodePort",
@@ -250,17 +338,21 @@ try {
   $TomlLines | Set-Content -Encoding UTF8 -Path $ConfigFile
 
   $NssmExe = Ensure-Nssm -InstallDir $InstallDir -TmpDir $Tmp
+  $ProfileContext = Resolve-InstallerProfileContext
+  $ServiceEnvironmentPairs = Get-ServiceEnvironmentPairs -ProfileContext $ProfileContext
 
   Write-Host "Creating Windows service $OpenCodeServiceName"
   Invoke-ScCommand -Arguments @("stop", $OpenCodeServiceName) -AllowedExitCodes @(0, 1060, 1062) -ErrorMessage "Failed to stop existing service '$OpenCodeServiceName'"
   Invoke-ScCommand -Arguments @("delete", $OpenCodeServiceName) -AllowedExitCodes @(0, 1060, 1072) -ErrorMessage "Failed to delete existing service '$OpenCodeServiceName'"
   Invoke-ExeCommand -ExePath $NssmExe -Arguments @("install", $OpenCodeServiceName, $OpenCodeExe, "serve", "--port", "$OpenCodePort") -ErrorMessage "Failed to register service '$OpenCodeServiceName' with NSSM"
+  Configure-NssmServiceContext -NssmExe $NssmExe -ServiceName $OpenCodeServiceName -AppDirectory $InstallDir -EnvironmentPairs $ServiceEnvironmentPairs
   Invoke-ExeCommand -ExePath $NssmExe -Arguments @("set", $OpenCodeServiceName, "Start", "SERVICE_AUTO_START") -ErrorMessage "Failed to set startup mode for service '$OpenCodeServiceName'"
 
   Write-Host "Creating Windows service $ServiceName"
   Invoke-ScCommand -Arguments @("stop", $ServiceName) -AllowedExitCodes @(0, 1060, 1062) -ErrorMessage "Failed to stop existing service '$ServiceName'"
   Invoke-ScCommand -Arguments @("delete", $ServiceName) -AllowedExitCodes @(0, 1060, 1072) -ErrorMessage "Failed to delete existing service '$ServiceName'"
   Invoke-ExeCommand -ExePath $NssmExe -Arguments @("install", $ServiceName, $BinPath, "--config", $ConfigFile) -ErrorMessage "Failed to register service '$ServiceName' with NSSM"
+  Configure-NssmServiceContext -NssmExe $NssmExe -ServiceName $ServiceName -AppDirectory $InstallDir -EnvironmentPairs $ServiceEnvironmentPairs
   Invoke-ExeCommand -ExePath $NssmExe -Arguments @("set", $ServiceName, "Start", "SERVICE_AUTO_START") -ErrorMessage "Failed to set startup mode for service '$ServiceName'"
   Invoke-ScCommand -Arguments @("config", $ServiceName, "depend=", $OpenCodeServiceName) -ErrorMessage "Failed to configure service dependency for '$ServiceName'"
 
@@ -272,6 +364,7 @@ try {
 
   Write-Host "Installed. Service: $ServiceName"
   Write-Host "Managed OpenCode service: $OpenCodeServiceName (port $OpenCodePort)"
+  Write-Host "Service environment profile: $($ProfileContext.Home)"
   Write-Host "Runtime config: $ConfigFile"
   Write-Host "Open: http://127.0.0.1:$Port"
 } finally {

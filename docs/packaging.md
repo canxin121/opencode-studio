@@ -73,7 +73,7 @@ Notes:
 - The bundled backend binary must be named with a `-$TARGET_TRIPLE` suffix (Tauri requirement).
 - In `full-app`, Tauri opens the backend URL directly and frontend assets are
   served by the bundled backend service (`--ui-dir`).
-- Backend API port defaults to `3000`; if this port is occupied, update
+- Backend API port defaults to `3210`; if this port is occupied, update
   `opencode-studio.toml` to use another port.
 
 ### Build desktop with CEF runtime (`-cef`)

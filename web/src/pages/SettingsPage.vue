@@ -82,7 +82,7 @@ const desktopRuntimeEnabled = isDesktopRuntime()
 const desktopRuntimeLoading = ref(false)
 const desktopRuntimeSaving = ref(false)
 const desktopBackendHost = ref('127.0.0.1')
-const desktopBackendPortInput = ref('3000')
+const desktopBackendPortInput = ref('3210')
 const desktopCorsOriginsText = ref('')
 const desktopCorsAllowAll = ref(false)
 const desktopAutostartOnBoot = ref(true)
@@ -119,7 +119,7 @@ function parseCorsOriginsText(input: string): string[] {
 function applyDesktopRuntimeForm(cfg: DesktopConfig) {
   desktopAutostartOnBoot.value = cfg.autostart_on_boot !== false
   desktopBackendHost.value = String(cfg.backend.host || '127.0.0.1').trim() || '127.0.0.1'
-  desktopBackendPortInput.value = String(cfg.backend.port || 3000)
+  desktopBackendPortInput.value = String(cfg.backend.port || 3210)
   desktopCorsOriginsText.value = (cfg.backend.cors_origins || []).join('\n')
   desktopCorsAllowAll.value = cfg.backend.cors_allow_all === true
   desktopBackendLogLevel.value = normalizeLogLevelInput(String(cfg.backend.backend_log_level || '')) || ''
@@ -168,7 +168,7 @@ async function saveDesktopRuntimeConfig() {
   const opencodePort = opencodePortText.length > 0 ? parsedOpencodePort : null
 
   const uiPassword = String(desktopUiPassword.value || '')
-  const normalizedUiPassword = uiPassword.trim().length > 0 ? uiPassword : null
+  const normalizedUiPassword = uiPassword.trim().length > 0 ? uiPassword : ''
 
   desktopRuntimeSaving.value = true
   try {

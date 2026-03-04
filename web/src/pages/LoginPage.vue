@@ -410,7 +410,7 @@ async function submit() {
             <label class="text-xs font-medium text-muted-foreground">{{ t('login.baseUrl') }}</label>
             <Input
               v-model="newBackendUrl"
-              placeholder="http://127.0.0.1:3000"
+              placeholder="http://127.0.0.1:3210"
               :disabled="busy"
               class="h-10"
               autocomplete="url"

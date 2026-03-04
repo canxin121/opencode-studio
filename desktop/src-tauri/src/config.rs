@@ -52,12 +52,12 @@ impl Default for BackendConfig {
     fn default() -> Self {
         Self {
             host: "127.0.0.1".to_string(),
-            port: 3000,
+            port: 3210,
             ui_dir: None,
             cors_origins: Vec::new(),
             cors_allow_all: false,
             backend_log_level: None,
-            ui_password: None,
+            ui_password: Some(String::new()),
             ui_cookie_samesite: None,
             opencode_host: "127.0.0.1".to_string(),
             opencode_port: None,
@@ -130,6 +130,9 @@ fn ensure_parent_dir(path: &Path) -> Result<(), String> {
 fn normalize_config(mut cfg: DesktopConfig) -> DesktopConfig {
     cfg.backend.host = normalize_host(&cfg.backend.host);
     cfg.backend.ui_dir = normalize_optional_path(cfg.backend.ui_dir.take());
+    if cfg.backend.ui_password.is_none() {
+        cfg.backend.ui_password = Some(String::new());
+    }
     cfg.backend.opencode_host = normalize_host(&cfg.backend.opencode_host);
     cfg.backend.cors_origins = normalize_cors_origins(cfg.backend.cors_origins);
     cfg.backend.backend_log_level = normalize_log_level(cfg.backend.backend_log_level.take());

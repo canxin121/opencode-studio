@@ -71,7 +71,7 @@ cargo build --manifest-path server/Cargo.toml --release --locked --target-dir se
 
 - 内置后端二进制文件名必须带 `-$TARGET_TRIPLE` 后缀（Tauri 要求）。
 - 在 `full-app` 模式下，Tauri 直接打开后端 URL，前端资源由打包的内置后端服务（`--ui-dir`）托管。
-- 后端 API 默认端口是 `3000`；如果端口被占用，请修改 `opencode-studio.toml`。
+- 后端 API 默认端口是 `3210`；如果端口被占用，请修改 `opencode-studio.toml`。
 
 ### 使用 CEF 运行时构建桌面版（`-cef`）
 

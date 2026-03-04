@@ -370,8 +370,8 @@ export default {
           label: 'Label',
           labelPlaceholder: 'e.g. Local Studio',
           baseUrl: 'Base URL',
-          baseUrlPlaceholder: 'http://127.0.0.1:3000',
-          examples: 'Examples: `http://127.0.0.1:3000` or `https://studio.example.com`',
+          baseUrlPlaceholder: 'http://127.0.0.1:3210',
+          examples: 'Examples: `http://127.0.0.1:3210` or `https://studio.example.com`',
           setActive: 'Set as active (reload)',
         },
         edit: {
@@ -1445,7 +1445,7 @@ export default {
       },
       placeholders: {
         host: '127.0.0.1',
-        port: '3000',
+        port: '3210',
         corsOrigins: 'One origin per line, e.g. http://localhost:5173',
         uiPassword: 'Keep empty to disable password login',
         opencodeHost: '127.0.0.1',

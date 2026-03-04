@@ -8,7 +8,7 @@
       "script": "bun run dev",
       "cwd": "../../web"
     },
-    "devUrl": "http://127.0.0.1:3000",
+    "devUrl": "http://127.0.0.1:3210",
     "frontendDist": "../../web/dist"
   },
   "app": {
@@ -19,7 +19,7 @@
         "width": 1200,
         "height": 820,
         "resizable": true,
-        "url": "http://127.0.0.1:3000"
+        "url": "http://127.0.0.1:3210"
       }
     ],
     "security": {

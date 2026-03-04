@@ -55,7 +55,7 @@ pub(crate) struct Args {
     pub(crate) host: String,
 
     /// HTTP port
-    #[arg(short, long, env = "OPENCODE_STUDIO_PORT", default_value_t = 3000)]
+    #[arg(short, long, env = "OPENCODE_STUDIO_PORT", default_value_t = 3210)]
     pub(crate) port: u16,
 
     /// Enable UI session password

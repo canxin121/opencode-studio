@@ -13,7 +13,7 @@ INSTALL_VARIANT="desktop"
 SYSTEMD_MODE="user" # linux systemd: user|system
 INSTALL_DIR=""
 HOST="127.0.0.1"
-PORT="3000"
+PORT="3210"
 
 usage() {
   cat <<'EOF'
@@ -272,6 +272,8 @@ cat >"$CONFIG_FILE" <<EOF
 [backend]
 host = "$HOST"
 port = $PORT
+# Optional UI session password. Keep empty to disable password login.
+ui_password = ""
 skip_opencode_start = false
 opencode_host = "127.0.0.1"
 
