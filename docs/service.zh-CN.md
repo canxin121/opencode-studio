@@ -17,6 +17,11 @@
 - Windows 服务安装还需要：
   - 管理员权限 PowerShell（Run as Administrator）
   - `sc.exe`（Windows 标准组件内置）
+  - 首次安装可访问外网下载 NSSM（后续会缓存到 `%TEMP%`，并复制到 `<install-root>\\tools\\nssm.exe`）
+
+可选但推荐（CI/共享出口环境）：
+
+- 运行 Windows 安装脚本前设置 `GITHUB_TOKEN` 或 `GH_TOKEN`，避免读取 GitHub Release 元数据时触发 API 限流
 
 安装 OpenCode（任选其一）：
 
@@ -74,7 +79,7 @@ curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/main/scri
 
 ## Windows（PowerShell）
 
-安装脚本通过 `sc.exe` 创建 Windows 服务。
+安装脚本通过 NSSM（`nssm.exe`）注册服务，并使用 `sc.exe` 管理生命周期。
 
 请在管理员权限 PowerShell 中运行：
 
@@ -94,6 +99,12 @@ iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/main/
 
 ```powershell
 iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/uninstall-service.ps1) }"
+```
+
+如果 NSSM 仅存在于自定义安装目录，可传 `-InstallDir` 让卸载脚本定位 `tools\\nssm.exe`：
+
+```powershell
+iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/main/scripts/uninstall-service.ps1) } -InstallDir 'C:\\path\\to\\opencode-studio'"
 ```
 
 ## 浏览器访问
@@ -122,6 +133,9 @@ iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/main/
 - `host` / `port`
 - `opencode_host` / `opencode_port`（连接已有 OpenCode）
 - `ui_dir`（托管前端 dist）
+
+Windows 安装脚本默认将 `skip_opencode_start` 设为 `true`，以提升 SCM 下的启动稳定性。
+若希望 Studio 自动拉起 `opencode serve`，请确认服务账号可访问 `opencode` 后改为 `false`。
 
 安装脚本生成的服务单元会显式使用：
 `--config <install-root>/opencode-studio.toml`。

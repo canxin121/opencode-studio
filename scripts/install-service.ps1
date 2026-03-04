@@ -44,6 +44,75 @@ function Invoke-ScCommand {
   throw "$ErrorMessage (exit code $exitCode)."
 }
 
+function Invoke-ExeCommand {
+  Param(
+    [string]$ExePath,
+    [string[]]$Arguments,
+    [int[]]$AllowedExitCodes = @(0),
+    [string]$ErrorMessage = "External command failed"
+  )
+
+  $output = & $ExePath @Arguments 2>&1
+  $exitCode = $LASTEXITCODE
+  if ($AllowedExitCodes -contains $exitCode) {
+    return
+  }
+
+  $details = (($output | ForEach-Object { $_.ToString().TrimEnd() }) -join [Environment]::NewLine).Trim()
+  if ($details) {
+    throw "$ErrorMessage (exit code $exitCode).`n$details"
+  }
+  throw "$ErrorMessage (exit code $exitCode)."
+}
+
+function Get-GitHubHeaders {
+  $headers = @{ "User-Agent" = "opencode-studio-installer" }
+  if ($env:GITHUB_TOKEN) {
+    $headers["Authorization"] = "Bearer $($env:GITHUB_TOKEN)"
+  } elseif ($env:GH_TOKEN) {
+    $headers["Authorization"] = "Bearer $($env:GH_TOKEN)"
+  }
+  return $headers
+}
+
+function Ensure-Nssm([string]$InstallDir, [string]$TmpDir) {
+  $cmd = Get-Command "nssm.exe" -ErrorAction SilentlyContinue
+  if ($cmd) {
+    return $cmd.Source
+  }
+
+  $toolsDir = Join-Path $InstallDir "tools"
+  $bundled = Join-Path $toolsDir "nssm.exe"
+  if (Test-Path $bundled) {
+    return $bundled
+  }
+
+  $archive = Join-Path $TmpDir "nssm-2.24.zip"
+  $cacheArchive = Join-Path $env:TEMP "opencode-studio-nssm-2.24.zip"
+  if (Test-Path $cacheArchive) {
+    Copy-Item -Force $cacheArchive $archive
+  } else {
+    Download "https://nssm.cc/release/nssm-2.24.zip" $archive
+    Copy-Item -Force $archive $cacheArchive
+  }
+  $extractDir = Join-Path $TmpDir "nssm"
+  Expand-Archive -Force -Path $archive -DestinationPath $extractDir
+
+  $candidates = @(
+    (Join-Path $extractDir "nssm-2.24\\win64\\nssm.exe"),
+    (Join-Path $extractDir "nssm-2.24\\win32\\nssm.exe")
+  )
+  foreach ($candidate in $candidates) {
+    if (Test-Path $candidate) {
+      New-Item -ItemType Directory -Force -Path $toolsDir | Out-Null
+      Copy-Item -Force $candidate $bundled
+      return $bundled
+    }
+  }
+
+  throw "Failed to install NSSM wrapper (nssm.exe not found in downloaded archive)."
+}
+
 Assert-Administrator
 Require-Command "sc.exe" "Windows service management requires sc.exe."
 Require-Command "opencode" "Install OpenCode first (for example: scoop install opencode, choco install opencode, or bun add -g opencode-ai@latest)."
@@ -63,7 +132,7 @@ function Get-ReleaseJson {
   } else {
     $url = "https://api.github.com/repos/$Repo/releases/latest"
   }
-  return Invoke-RestMethod -Uri $url -Headers @{"User-Agent"="opencode-studio-installer"}
+  return Invoke-RestMethod -Uri $url -Headers (Get-GitHubHeaders)
 }
 
 function Find-AssetUrl([object]$Release, [string]$Name) {
@@ -150,7 +219,7 @@ try {
     "[backend]",
     "host = '127.0.0.1'",
     "port = $Port",
-    "skip_opencode_start = false",
+    "skip_opencode_start = true",
     "opencode_host = '127.0.0.1'",
     "",
     "# To connect to an already running OpenCode, set:",
@@ -161,12 +230,13 @@ try {
   }
   $TomlLines | Set-Content -Encoding UTF8 -Path $ConfigFile
 
-  $BinPathWithArgs = '"' + $BinPath + '" --config "' + $ConfigFile + '"'
+  $NssmExe = Ensure-Nssm -InstallDir $InstallDir -TmpDir $Tmp
 
   Write-Host "Creating Windows service $ServiceName"
   Invoke-ScCommand -Arguments @("stop", $ServiceName) -AllowedExitCodes @(0, 1060, 1062) -ErrorMessage "Failed to stop existing service '$ServiceName'"
   Invoke-ScCommand -Arguments @("delete", $ServiceName) -AllowedExitCodes @(0, 1060) -ErrorMessage "Failed to delete existing service '$ServiceName'"
-  Invoke-ScCommand -Arguments @("create", $ServiceName, "binPath= $BinPathWithArgs", "start= auto") -ErrorMessage "Failed to create service '$ServiceName'"
+  Invoke-ExeCommand -ExePath $NssmExe -Arguments @("install", $ServiceName, $BinPath, "--config", $ConfigFile) -ErrorMessage "Failed to register service '$ServiceName' with NSSM"
+  Invoke-ExeCommand -ExePath $NssmExe -Arguments @("set", $ServiceName, "Start", "SERVICE_AUTO_START") -ErrorMessage "Failed to set startup mode for service '$ServiceName'"
   Invoke-ScCommand -Arguments @("start", $ServiceName) -ErrorMessage "Failed to start service '$ServiceName'"
 
   Write-Host "Installed. Service: $ServiceName"

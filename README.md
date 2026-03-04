@@ -96,7 +96,7 @@ Best for local desktop usage.
 
 ### Option 2: Service Install
 
-Best for always-on hosts, server-like usage, or environments managed by `systemd` / `sc`.
+Best for always-on hosts, server-like usage, or environments managed by `systemd` / `sc` (Windows uses an NSSM service wrapper under SCM).
 
 Unix (Linux/macOS):
 
@@ -146,6 +146,10 @@ opencode_host = "127.0.0.1"
 # opencode_port = 16000
 # ui_dir = "/absolute/path/to/web/dist"
 ```
+
+Windows service installs default to `skip_opencode_start = true` so the service can start reliably under SCM.
+If you want OpenCode Studio to manage `opencode serve` automatically, set it to `false` after ensuring
+`opencode` is installed and available for the service account.
 
 Apply changes by restarting the service:
 

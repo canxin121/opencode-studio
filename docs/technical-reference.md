@@ -125,6 +125,20 @@ Equivalent env vars:
 | `-InstallDir PATH` | `%USERPROFILE%\\opencode-studio` | Install root for `bin\\`, optional `dist\\`, and `opencode-studio.toml` |
 | `-Port PORT` | `3000` | Initial backend port in generated config |
 
+Windows installer notes:
+
+- Service registration uses NSSM (`nssm.exe`) and is controlled via `sc.exe`.
+- First run downloads NSSM if absent, then persists it at `<install-root>\\tools\\nssm.exe`.
+- `GITHUB_TOKEN`/`GH_TOKEN` are honored for GitHub API calls to reduce rate-limit risk.
+- Generated Windows config defaults `skip_opencode_start = true`.
+
+### Windows uninstaller (`scripts/uninstall-service.ps1`)
+
+| Parameter | Default | Description |
+| --- | --- | --- |
+| `-ServiceName` | `OpenCodeStudio` | Target Windows service name |
+| `-InstallDir PATH` | `%USERPROFILE%\\opencode-studio` | Used to locate bundled `tools\\nssm.exe` when not on `PATH` |
+
 ## Runtime Parameters (CLI Flags / Env Vars)
 
 ### Core backend

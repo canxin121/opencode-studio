@@ -96,7 +96,7 @@ opencode --version
 
 ### 方式二：服务安装（Service）
 
-适合服务器、开发机常驻、或需要用 `systemd` / `sc` 统一管理的场景。
+适合服务器、开发机常驻、或需要用 `systemd` / `sc` 统一管理的场景（Windows 由 SCM + NSSM 包装运行服务进程）。
 
 Unix（Linux/macOS）：
 
@@ -146,6 +146,9 @@ opencode_host = "127.0.0.1"
 # opencode_port = 16000
 # ui_dir = "/absolute/path/to/web/dist"
 ```
+
+Windows 服务安装默认写入 `skip_opencode_start = true`，以提高在 SCM 下的启动稳定性。
+若希望 OpenCode Studio 自动托管 `opencode serve`，请先确保服务账号可访问 `opencode`，再改回 `false`。
 
 修改后重启服务生效：
 
