@@ -229,7 +229,7 @@ jobs:
           version = match.group(1)
           replacement = (
               f'git2 = {{ version = "{version}", default-features = false, '
-              'features = ["ssh", "https", "vendored-libgit2", "vendored-openssl"] }}'
+              'features = ["ssh", "https", "vendored-libgit2", "vendored-openssl"] }'
           )
           cargo_toml.write_text(
               content[: match.start()] + replacement + content[match.end() :],
