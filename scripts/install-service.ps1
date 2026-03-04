@@ -8,6 +8,13 @@ Param(
 
 $ErrorActionPreference = "Stop"
 
+function Assert-Administrator {
+  $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+  if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    throw "This installer must run in an elevated PowerShell (Run as Administrator)."
+  }
+}
+
 function Require-Command([string]$Name, [string]$Hint = "") {
   if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
     if ($Hint) {
@@ -17,11 +24,27 @@ function Require-Command([string]$Name, [string]$Hint = "") {
   }
 }
 
-$principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
-if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-  throw "This installer must run in an elevated PowerShell (Run as Administrator)."
+function Invoke-ScCommand {
+  Param(
+    [string[]]$Arguments,
+    [int[]]$AllowedExitCodes = @(0),
+    [string]$ErrorMessage = "sc.exe command failed"
+  )
+
+  $output = & sc.exe @Arguments 2>&1
+  $exitCode = $LASTEXITCODE
+  if ($AllowedExitCodes -contains $exitCode) {
+    return
+  }
+
+  $details = (($output | ForEach-Object { $_.ToString().TrimEnd() }) -join [Environment]::NewLine).Trim()
+  if ($details) {
+    throw "$ErrorMessage (exit code $exitCode).`n$details"
+  }
+  throw "$ErrorMessage (exit code $exitCode)."
 }
 
+Assert-Administrator
 Require-Command "sc.exe" "Windows service management requires sc.exe."
 Require-Command "opencode" "Install OpenCode first (for example: scoop install opencode, choco install opencode, or bun add -g opencode-ai@latest)."
 
@@ -141,10 +164,10 @@ try {
   $BinPathWithArgs = '"' + $BinPath + '" --config "' + $ConfigFile + '"'
 
   Write-Host "Creating Windows service $ServiceName"
-  & sc.exe stop $ServiceName | Out-Null 2>$null
-  & sc.exe delete $ServiceName | Out-Null 2>$null
-  & sc.exe create $ServiceName binPath= $BinPathWithArgs start= auto | Out-Null
-  & sc.exe start $ServiceName | Out-Null
+  Invoke-ScCommand -Arguments @("stop", $ServiceName) -AllowedExitCodes @(0, 1060, 1062) -ErrorMessage "Failed to stop existing service '$ServiceName'"
+  Invoke-ScCommand -Arguments @("delete", $ServiceName) -AllowedExitCodes @(0, 1060) -ErrorMessage "Failed to delete existing service '$ServiceName'"
+  Invoke-ScCommand -Arguments @("create", $ServiceName, "binPath= $BinPathWithArgs", "start= auto") -ErrorMessage "Failed to create service '$ServiceName'"
+  Invoke-ScCommand -Arguments @("start", $ServiceName) -ErrorMessage "Failed to start service '$ServiceName'"
 
   Write-Host "Installed. Service: $ServiceName"
   Write-Host "Runtime config: $ConfigFile"

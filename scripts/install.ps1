@@ -12,6 +12,26 @@ Param(
 
 $ErrorActionPreference = "Stop"
 
+function Invoke-ScCommand {
+  Param(
+    [string[]]$Arguments,
+    [int[]]$AllowedExitCodes = @(0),
+    [string]$ErrorMessage = "sc.exe command failed"
+  )
+
+  $output = & sc.exe @Arguments 2>&1
+  $exitCode = $LASTEXITCODE
+  if ($AllowedExitCodes -contains $exitCode) {
+    return
+  }
+
+  $details = (($output | ForEach-Object { $_.ToString().TrimEnd() }) -join [Environment]::NewLine).Trim()
+  if ($details) {
+    throw "$ErrorMessage (exit code $exitCode).`n$details"
+  }
+  throw "$ErrorMessage (exit code $exitCode)."
+}
+
 function Get-TargetCandidates {
   $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
   switch ($arch) {
@@ -138,10 +158,10 @@ try {
   $BinPathWithArgs = $QuotedExe + " " + ($Args -join " ")
 
   Write-Host "Configuring Windows service (auto start): $ServiceName"
-  & sc.exe stop $ServiceName | Out-Null 2>$null
-  & sc.exe delete $ServiceName | Out-Null 2>$null
-  & sc.exe create $ServiceName binPath= $BinPathWithArgs start= auto | Out-Null
-  & sc.exe start $ServiceName | Out-Null
+  Invoke-ScCommand -Arguments @("stop", $ServiceName) -AllowedExitCodes @(0, 1060, 1062) -ErrorMessage "Failed to stop existing service '$ServiceName'"
+  Invoke-ScCommand -Arguments @("delete", $ServiceName) -AllowedExitCodes @(0, 1060) -ErrorMessage "Failed to delete existing service '$ServiceName'"
+  Invoke-ScCommand -Arguments @("create", $ServiceName, "binPath= $BinPathWithArgs", "start= auto") -ErrorMessage "Failed to create service '$ServiceName'"
+  Invoke-ScCommand -Arguments @("start", $ServiceName) -ErrorMessage "Failed to start service '$ServiceName'"
 
   Write-Host "Wrote runtime config: $ConfigFile"
   Write-Host "Install complete ($Variant). Service: $ServiceName"
