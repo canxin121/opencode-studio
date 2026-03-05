@@ -184,12 +184,20 @@ mkdir -p "$INSTALL_DIR" "$BIN_DIR"
 
 fetch_release_json() {
   local url
+  local curl_args=(-fsSL -H "User-Agent: opencode-studio-installer")
+
+  if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+    curl_args+=( -H "Authorization: Bearer ${GITHUB_TOKEN}" )
+  elif [[ -n "${GH_TOKEN:-}" ]]; then
+    curl_args+=( -H "Authorization: Bearer ${GH_TOKEN}" )
+  fi
+
   if [[ -n "$VERSION" ]]; then
     url="https://api.github.com/repos/${REPO}/releases/tags/${VERSION}"
   else
     url="https://api.github.com/repos/${REPO}/releases/latest"
   fi
-  curl -fsSL "$url"
+  curl "${curl_args[@]}" "$url"
 }
 
 asset_url_by_name() {

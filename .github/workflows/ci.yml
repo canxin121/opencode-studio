@@ -144,17 +144,6 @@ jobs:
           bun-version: latest
           no-cache: true
 
-      - name: Add Bun global bin to PATH (Unix)
-        if: runner.os != 'Windows'
-        run: echo "$(bun pm bin -g)" >> "$GITHUB_PATH"
-
-      - name: Add Bun global bin to PATH (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $bunBin = bun pm bin -g
-          Add-Content -Path $env:GITHUB_PATH -Value $bunBin
-
       - name: Install OpenCode CLI
         run: bun add -g opencode-ai@latest
 
