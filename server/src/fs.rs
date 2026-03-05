@@ -461,6 +461,7 @@ fn mime_for_ext(path: &Path) -> &'static str {
         .to_ascii_lowercase()
         .as_str()
     {
+        "pdf" => "application/pdf",
         "png" => "image/png",
         "jpg" | "jpeg" => "image/jpeg",
         "gif" => "image/gif",
@@ -469,6 +470,20 @@ fn mime_for_ext(path: &Path) -> &'static str {
         "ico" => "image/x-icon",
         "bmp" => "image/bmp",
         "avif" => "image/avif",
+        "mp3" => "audio/mpeg",
+        "wav" => "audio/wav",
+        "ogg" | "oga" => "audio/ogg",
+        "m4a" => "audio/mp4",
+        "aac" => "audio/aac",
+        "flac" => "audio/flac",
+        "opus" => "audio/opus",
+        "weba" => "audio/webm",
+        "mp4" => "video/mp4",
+        "webm" => "video/webm",
+        "ogv" => "video/ogg",
+        "mov" => "video/quicktime",
+        "m4v" => "video/x-m4v",
+        "mkv" => "video/x-matroska",
         _ => "application/octet-stream",
     }
 }
@@ -523,6 +538,7 @@ pub async fn fs_raw(Query(q): Query<ReadQuery>) -> ApiResult<Response> {
         .status(StatusCode::OK)
         .header("cache-control", "no-store")
         .header("content-type", mime)
+        .header("content-disposition", content_disposition_inline(&abs))
         .body(Body::from(content))
         .unwrap())
 }
@@ -533,7 +549,7 @@ pub struct FsPathQuery {
     pub path: Option<String>,
 }
 
-fn content_disposition_attachment(path: &Path) -> String {
+fn content_disposition_for(path: &Path, disposition_type: &str) -> String {
     let raw = path
         .file_name()
         .map(|s| s.to_string_lossy().into_owned())
@@ -551,9 +567,17 @@ fn content_disposition_attachment(path: &Path) -> String {
 
     let encoded = urlencoding::encode(&raw);
     format!(
-        "attachment; filename=\"{}\"; filename*=UTF-8''{}",
-        ascii, encoded
+        "{}; filename=\"{}\"; filename*=UTF-8''{}",
+        disposition_type, ascii, encoded
     )
+}
+
+fn content_disposition_attachment(path: &Path) -> String {
+    content_disposition_for(path, "attachment")
+}
+
+fn content_disposition_inline(path: &Path) -> String {
+    content_disposition_for(path, "inline")
 }
 
 pub async fn fs_download(
@@ -2069,5 +2093,33 @@ mod tests {
     fn decode_utf8_chunk_rejects_invalid_utf8() {
         let invalid = [0xF0, 0x28, 0x8C, 0x28];
         assert!(decode_utf8_chunk(&invalid).is_err());
+    }
+
+    #[test]
+    fn mime_for_ext_maps_pdf_and_media_extensions() {
+        assert_eq!(mime_for_ext(Path::new("report.PDF")), "application/pdf");
+        assert_eq!(mime_for_ext(Path::new("voice.ogg")), "audio/ogg");
+        assert_eq!(mime_for_ext(Path::new("clip.webm")), "video/webm");
+    }
+
+    #[test]
+    fn mime_for_ext_falls_back_for_unknown_or_invalid_extension() {
+        assert_eq!(
+            mime_for_ext(Path::new("archive.custom")),
+            "application/octet-stream"
+        );
+        assert_eq!(
+            mime_for_ext(Path::new("no-extension")),
+            "application/octet-stream"
+        );
+    }
+
+    #[test]
+    fn content_disposition_inline_sanitizes_ascii_fallback() {
+        let value = content_disposition_inline(Path::new("/tmp/报表 \"Q1\".pdf"));
+        assert!(value.starts_with("inline; "));
+        assert!(value.contains("filename=\""));
+        assert!(!value.contains("filename=\"报表 \"Q1\".pdf\""));
+        assert!(value.contains("filename*=UTF-8''"));
     }
 }
