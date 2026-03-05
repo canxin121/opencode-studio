@@ -1,4 +1,4 @@
-import { SUPPORTED_LOCALES, type AppLocale } from '@/i18n/locale'
+import { SUPPORTED_LOCALES, type AppLocale } from '../i18n/locale'
 
 type TranslateFn = (key: string) => string
 

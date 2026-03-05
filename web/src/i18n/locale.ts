@@ -1,5 +1,5 @@
-import { getLocalString, setLocalString } from '@/lib/persist'
-import { localStorageKeys } from '@/lib/persistence/storageKeys'
+import { getLocalString, setLocalString } from '../lib/persist'
+import { localStorageKeys } from '../lib/persistence/storageKeys'
 
 export const SUPPORTED_LOCALES = ['zh-CN', 'en-US', 'es-ES', 'hi-IN', 'ar-SA', 'pt-BR', 'fr-FR'] as const
 export type AppLocale = (typeof SUPPORTED_LOCALES)[number]
