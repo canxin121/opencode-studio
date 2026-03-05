@@ -37,3 +37,14 @@ test('files page restores timeline visibility on next file open', () => {
   assert.ok(source.includes('timelineVisibilityPreference.value = false'))
   assert.ok(source.includes('timelineVisibilityPreference.value = true'))
 })
+
+test('files page restores selected file when mobile files view remounts', () => {
+  const file = resolve(import.meta.dir, '../src/pages/FilesPage.vue')
+  const source = readFileSync(file, 'utf8')
+
+  assert.ok(source.includes("const restoredSelectedFilePath = ref('')"))
+  assert.ok(source.includes('uiState.selectedPath'))
+  assert.ok(source.includes('async function restoreMobileSelectedFile(rootPath: string, seq: number) {'))
+  assert.ok(source.includes('if (!isMobile.value) return'))
+  assert.ok(source.includes('await restoreMobileSelectedFile(next, seq)'))
+})
