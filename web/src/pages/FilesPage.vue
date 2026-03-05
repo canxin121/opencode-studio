@@ -1580,7 +1580,7 @@ async function loadBlame(opts?: { force?: boolean }) {
     } else {
       blameCache.delete(key)
       if (draftContent.value.trim()) {
-        blameError.value = 'No blame data returned for current file. Try reloading blame.'
+        blameError.value = t('files.timeline.errors.noBlameData')
       }
     }
   } catch (err) {
@@ -1655,7 +1655,12 @@ async function applyGitPatch(patch: string, mode: GitPatchMode) {
     }
     void loadGitDiff()
 
-    const label = mode === 'stage' ? 'Hunk staged' : mode === 'unstage' ? 'Hunk unstaged' : 'Hunk discarded'
+    const label =
+      mode === 'stage'
+        ? t('files.toasts.hunkStaged')
+        : mode === 'unstage'
+          ? t('files.toasts.hunkUnstaged')
+          : t('files.toasts.hunkDiscarded')
     toasts.push('success', label)
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
@@ -2287,7 +2292,7 @@ async function createNode(kind: CreateKind, basePath: string, name: string) {
 
   const trimmedName = String(name || '').trim()
   if (!trimmedName) {
-    throw new Error(kind === 'createFile' ? 'Filename is required' : 'Folder name is required')
+    throw new Error(kind === 'createFile' ? t('files.errors.filenameRequired') : t('files.errors.folderNameRequired'))
   }
 
   const targetDir = normalizeCreateDirectory(basePath)
@@ -2320,7 +2325,7 @@ async function renameNodePath(oldPath: string, nextName: string) {
   if (!rootPath) throw new Error(String(t('files.errors.noProjectSelected')))
 
   const trimmedName = String(nextName || '').trim()
-  if (!trimmedName) throw new Error('Name is required')
+  if (!trimmedName) throw new Error(t('files.errors.nameRequired'))
 
   const parent = oldPath.split('/').slice(0, -1).join('/')
   const newPath = joinPath(parent || rootPath, trimmedName)
@@ -2830,9 +2835,7 @@ onMounted(async () => {
                           <div class="px-0.5 text-[11px] text-muted-foreground">
                             <span v-if="!hasFileSearch">{{ t('files.search.files.hint') }}</span>
                             <span v-else-if="searching">{{ t('common.searching') }}</span>
-                            <span v-else
-                              >{{ searchResults.length }} result{{ searchResults.length === 1 ? '' : 's' }}</span
-                            >
+                            <span v-else>{{ t('files.search.files.results', { count: searchResults.length }) }}</span>
                           </div>
                         </template>
 

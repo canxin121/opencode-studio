@@ -1,4 +1,5 @@
 import { computed, ref, type Ref } from 'vue'
+import { i18n } from '@/i18n'
 
 type ToastKind = 'info' | 'success' | 'error'
 type Toasts = { push: (kind: ToastKind, message: string, timeoutMs?: number) => void }
@@ -46,7 +47,8 @@ export function useChatAttachments(opts: { toasts: Toasts; composerRef: Ref<Comp
     return await new Promise<string>((resolve, reject) => {
       const reader = new FileReader()
       reader.onload = () => resolve(String(reader.result || ''))
-      reader.onerror = () => reject(reader.error || new Error('Failed to read file'))
+      reader.onerror = () =>
+        reject(reader.error || new Error(i18n.global.t('chat.attachments.errors.failedToReadUnknown')))
       reader.readAsDataURL(file)
     })
   }
@@ -65,11 +67,19 @@ export function useChatAttachments(opts: { toasts: Toasts; composerRef: Ref<Comp
         if (!(file instanceof File)) continue
 
         if (file.size > MAX_LOCAL_ATTACHMENT_BYTES) {
-          toasts.push('error', `File too large: ${file.name} (${formatBytes(file.size)})`)
+          toasts.push(
+            'error',
+            i18n.global.t('chat.attachments.errors.fileTooLarge', { name: file.name, size: formatBytes(file.size) }),
+          )
           continue
         }
         if (localTotal + file.size > MAX_LOCAL_ATTACHMENT_TOTAL_BYTES) {
-          toasts.push('error', `Attachments too large (max ${formatBytes(MAX_LOCAL_ATTACHMENT_TOTAL_BYTES)})`)
+          toasts.push(
+            'error',
+            i18n.global.t('chat.attachments.errors.totalTooLarge', {
+              size: formatBytes(MAX_LOCAL_ATTACHMENT_TOTAL_BYTES),
+            }),
+          )
           continue
         }
 
@@ -84,12 +94,12 @@ export function useChatAttachments(opts: { toasts: Toasts; composerRef: Ref<Comp
         try {
           url = await readFileAsDataUrl(file)
         } catch (err) {
-          toasts.push('error', `Failed to read file: ${filename}`)
+          toasts.push('error', i18n.global.t('chat.attachments.errors.failedToReadFile', { name: filename }))
           continue
         }
         if (epoch !== attachEpoch) break
         if (!url.startsWith('data:')) {
-          toasts.push('error', `Unsupported file: ${filename}`)
+          toasts.push('error', i18n.global.t('chat.attachments.errors.unsupportedFile', { name: filename }))
           continue
         }
 

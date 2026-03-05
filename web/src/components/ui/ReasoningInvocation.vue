@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { RiBrainAi3Line, RiChat4Line } from '@remixicon/vue'
+import { useI18n } from 'vue-i18n'
 
 import ActivityDisclosureButton from '@/components/ui/ActivityDisclosureButton.vue'
 import { stripMarkdownToText } from '@/lib/markdown'
@@ -21,6 +22,8 @@ const props = defineProps<{
   // Bump this value to force-close details.
   collapseSignal?: number
 }>()
+
+const { t } = useI18n()
 
 const isOpen = ref(Boolean(props.initiallyExpanded))
 
@@ -77,7 +80,11 @@ const variant = computed<ReasoningVariant>(() => {
   return 'thinking'
 })
 
-const label = computed(() => (variant.value === 'thinking' ? 'Thinking' : 'Justification'))
+const label = computed(() =>
+  variant.value === 'thinking'
+    ? t('chat.messages.activity.reasoningInvocation.types.thinking')
+    : t('chat.messages.activity.reasoningInvocation.types.justification'),
+)
 const Icon = computed(() => (variant.value === 'thinking' ? RiBrainAi3Line : RiChat4Line))
 const summary = computed(() => reasoningSummary(textContent.value))
 
@@ -109,7 +116,7 @@ watch(
       <div v-show="isOpen" class="pl-6 pt-0.5 pb-1">
         <div class="oc-activity-detail">
           <div v-if="detailLoading" class="px-3 py-2 text-[11px] text-muted-foreground/70 italic">
-            Loading details...
+            {{ t('chat.messages.activity.reasoningInvocation.loadingDetails') }}
           </div>
           <div
             class="max-h-80 overflow-auto whitespace-pre-wrap break-words text-[11px] text-muted-foreground/70 px-3 py-2"

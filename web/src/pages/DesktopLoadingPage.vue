@@ -22,9 +22,9 @@ const { t } = useI18n()
       <div
         class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10 ring-1 ring-inset ring-primary/20"
       >
-        <img src="/favicon.svg" alt="OpenCode Studio" class="h-8 w-8" />
+        <img src="/favicon.svg" :alt="t('app.title')" class="h-8 w-8" />
       </div>
-      <h1 class="text-xl font-semibold tracking-tight text-foreground">OpenCode Studio</h1>
+      <h1 class="text-xl font-semibold tracking-tight text-foreground">{{ t('app.title') }}</h1>
       <p class="mt-2 text-sm text-muted-foreground">{{ t('login.backendLoadingToast') }}</p>
 
       <div class="mt-6 flex items-center justify-center gap-3 text-muted-foreground" v-if="!backendError">

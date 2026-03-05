@@ -129,7 +129,13 @@ export function useOpenCodeConfigPanelPermissionsPreset(opts: {
     }
     opts.markDirty()
     opts.refreshJsonBuffer('permission')
-    opts.toasts.push('success', `Applied permission preset: ${sel} (${opts.permissionPresetMode.value})`)
+    opts.toasts.push(
+      'success',
+      i18n.global.t('settings.opencodeConfig.errors.appliedPermissionPreset', {
+        preset: sel,
+        mode: opts.permissionPresetMode.value,
+      }),
+    )
   }
 
   function toolCapabilityTags(id: string): PermissionTag[] {

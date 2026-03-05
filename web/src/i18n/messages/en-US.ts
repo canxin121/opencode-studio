@@ -185,6 +185,14 @@ export default {
     },
   },
   ui: {
+    codeEditor: {
+      loading: 'Loading editor...',
+      loadFailed: 'Editor failed to load.',
+    },
+    diffViewer: {
+      empty: 'No diff content.',
+      renderFailed: 'Failed to render diff',
+    },
     pathPicker: {
       actions: {
         browse: 'Browse',
@@ -490,6 +498,7 @@ export default {
         importedKindJsonInto: 'Imported {kind} JSON into {id}',
         setPermissionWildcard: 'Set permission.* = {action}',
         appliedActionToToolsCount: 'Applied {action} to {count} tools',
+        appliedPermissionPreset: 'Applied permission preset: {preset} ({mode})',
       },
 
       validation: {
@@ -1845,6 +1854,12 @@ export default {
       },
     },
 
+    commandPalette: {
+      empty: 'No commands found',
+      aliases: 'Aliases',
+      hint: 'Up/Down navigate | Enter select | Esc close',
+    },
+
     page: {
       nav: {
         previousUserMessage: 'Previous user message',
@@ -1907,6 +1922,13 @@ export default {
         title: 'No attachments',
         description: 'Use the buttons above to attach files.',
       },
+      errors: {
+        failedToReadUnknown: 'Failed to read file',
+        fileTooLarge: 'File too large: {name} ({size})',
+        totalTooLarge: 'Attachments too large (max {size})',
+        failedToReadFile: 'Failed to read file: {name}',
+        unsupportedFile: 'Unsupported file: {name}',
+      },
     },
 
     attachProjectDialog: {
@@ -1932,6 +1954,68 @@ export default {
       activity: {
         moreCount: '+{count} more...',
         hide: 'Hide',
+        toolInvocation: {
+          toolNames: {
+            bash: 'Run Command',
+            edit: 'Edit File',
+            applyPatch: 'Apply Patch',
+            replaceText: 'Replace Text',
+            read: 'Read File',
+            write: 'Write File',
+            list: 'List Files',
+            glob: 'Find Files',
+            search: 'Search',
+            grep: 'Grep',
+            fetch: 'Fetch URL',
+            question: 'Question',
+            task: 'Task',
+          },
+          summary: {
+            askedQuestions: 'Asked {count} question(s)',
+          },
+          sections: {
+            input: 'Input',
+            diff: 'Diff',
+            diffCode: 'diff',
+            error: 'Error',
+            output: 'Output',
+          },
+          wrap: {
+            label: 'Wrap',
+            enable: 'Enable wrap lines',
+            disable: 'Disable wrap lines',
+          },
+          status: {
+            failed: 'Failed',
+            loadingDetails: 'Loading details...',
+            completedWithoutOutput: '(Completed with no output)',
+            stoppedSessionEnded: '(Stopped: session ended)',
+            running: 'Running...',
+          },
+        },
+        metaInvocation: {
+          types: {
+            snapshot: 'Snapshot',
+            patch: 'Patch',
+            retry: 'Retry',
+            compaction: 'Compaction',
+            meta: 'Meta',
+          },
+          summary: {
+            files: '{count} file(s)',
+            attempt: 'attempt {count}',
+            auto: 'auto',
+            manual: 'manual',
+          },
+          loadingDetails: 'Loading details...',
+        },
+        reasoningInvocation: {
+          types: {
+            thinking: 'Thinking',
+            justification: 'Justification',
+          },
+          loadingDetails: 'Loading details...',
+        },
       },
       optimistic: {
         sending: 'sending...',
@@ -2758,6 +2842,7 @@ export default {
         description: 'Your organization requires SSO for this remote',
       },
       terminalHelp: {
+        title: 'Requires terminal',
         description: 'This action requires an interactive terminal',
       },
       gpgPassphrase: {
@@ -3091,6 +3176,8 @@ export default {
       authenticationRequiredForAction: '{action}: authentication required',
       sshAuthenticationRequiredForAction: '{action}: SSH authentication required in terminal',
       stashActionRef: 'stash {action} {ref}',
+      droppedStashes: 'Dropped {count} stashes',
+      noStashesToDrop: 'No stashes to drop',
       ignoredPath: 'Ignored {path}',
       pushNeedsRemoteSetup: 'No remote/upstream found. Create a GitHub repository and publish now?',
       createGithubRepoAction: 'Create and Push',
@@ -3130,6 +3217,9 @@ export default {
   files: {
     errors: {
       noProjectSelected: 'No project selected',
+      filenameRequired: 'Filename is required',
+      folderNameRequired: 'Folder name is required',
+      nameRequired: 'Name is required',
     },
     actions: {
       download: 'Download',
@@ -3173,6 +3263,7 @@ export default {
         hint: 'Type to search file names and paths.',
         noQuery: 'No search query.',
         noFilesFound: 'No files found.',
+        results: '{count} results',
       },
       content: {
         placeholder: 'Search',
@@ -3214,6 +3305,7 @@ export default {
         cannotOpen: 'Cannot open timeline for this entry',
         missingInCommit: 'File does not exist in this commit.',
         binaryUnavailable: 'Selected commit stores this file as binary. Text compare is unavailable.',
+        noBlameData: 'No blame data returned for current file. Try reloading blame.',
       },
       info: {
         truncated: 'Commit content is large and has been truncated for preview.',
@@ -3298,6 +3390,7 @@ export default {
         desktopDescription: 'Pick a file from the tree.',
       },
       binaryPreviewUnavailable: 'Binary file preview not available.',
+      pdfPreviewTitle: 'PDF preview',
       imageAltFallback: 'Image',
       timeline: {
         selectCommitTitle: 'Select commit',
@@ -3316,6 +3409,9 @@ export default {
     },
     toasts: {
       saveFileBeforeGitHunkActions: 'Save the file before applying git hunk actions',
+      hunkStaged: 'Hunk staged',
+      hunkUnstaged: 'Hunk unstaged',
+      hunkDiscarded: 'Hunk discarded',
       saveCurrentFileBeforeReplaceAcrossFiles: 'Save current file before replacing across files',
       replaceAcrossFiles: {
         replacedMatch: 'Replaced {count} match{suffix}',

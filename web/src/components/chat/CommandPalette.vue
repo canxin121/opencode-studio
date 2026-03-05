@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, type Component } from 'vue'
 import { RiRefreshLine } from '@remixicon/vue'
+import { useI18n } from 'vue-i18n'
 import ListRowButton from '@/components/ui/ListRowButton.vue'
 
 // Intentionally UI-only; ChatPage keeps state + keyboard navigation.
@@ -28,6 +29,7 @@ const emit = defineEmits<{
 }>()
 
 const rootEl = ref<HTMLDivElement | null>(null)
+const { t } = useI18n()
 
 function containsTarget(target: Node | null): boolean {
   if (!target) return false
@@ -51,7 +53,9 @@ function setIndex(i: number) {
       <div v-if="loading" class="flex items-center justify-center py-4 text-muted-foreground">
         <RiRefreshLine class="h-4 w-4 animate-spin" />
       </div>
-      <div v-else-if="commands.length === 0" class="px-3 py-2 text-sm text-muted-foreground">No commands found</div>
+      <div v-else-if="commands.length === 0" class="px-3 py-2 text-sm text-muted-foreground">
+        {{ t('chat.commandPalette.empty') }}
+      </div>
       <div v-else class="space-y-1">
         <ListRowButton
           v-for="(cmd, idx) in commands"
@@ -69,7 +73,7 @@ function setIndex(i: number) {
                 v-if="cmd.isBuiltIn"
                 class="text-[10px] uppercase font-bold tracking-tight rounded border border-amber-300/40 bg-amber-200/10 text-amber-600 px-1.5 py-0.5"
               >
-                system
+                {{ t('chat.roles.system') }}
               </span>
               <span
                 v-else-if="cmd.scope"
@@ -86,7 +90,7 @@ function setIndex(i: number) {
             </div>
             <div v-if="cmd.description" class="text-xs text-muted-foreground truncate">{{ cmd.description }}</div>
             <div v-if="cmd.aliases?.length" class="text-xs text-muted-foreground truncate">
-              Aliases: /{{ cmd.aliases.join(' /') }}
+              {{ t('chat.commandPalette.aliases') }}: /{{ cmd.aliases.join(' /') }}
             </div>
             <div v-if="!cmd.description && !cmd.aliases?.length" class="text-xs text-muted-foreground truncate">
               /{{ cmd.name }}
@@ -96,7 +100,7 @@ function setIndex(i: number) {
       </div>
     </div>
     <div class="px-3 py-1.5 border-t border-border/60 text-[11px] text-muted-foreground">
-      Up/Down navigate | Enter select | Esc close
+      {{ t('chat.commandPalette.hint') }}
     </div>
   </div>
 </template>

@@ -375,7 +375,7 @@ function repoDirOrEmpty(): string {
     :title="t('git.authDialogs.gpgEnablePreset.title')"
     :description="t('git.authDialogs.gpgEnablePreset.description')"
     :confirm-text="t('git.authDialogs.gpgEnablePreset.confirmEnableRetry')"
-    cancel-text="Cancel"
+    :cancel-text="t('common.cancel')"
     :busy="gpgEnableBusy"
     :confirm-disabled="gpgEnableBusy"
     :cancel-disabled="gpgEnableBusy"

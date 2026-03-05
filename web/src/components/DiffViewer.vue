@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watchEffect } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 import { Diff2HtmlUI } from 'diff2html/lib-esm/ui/js/diff2html-ui-base'
 import { ColorSchemeType } from 'diff2html/lib-esm/types'
@@ -19,6 +20,8 @@ const props = withDefaults(
     wrap: false,
   },
 )
+
+const { t } = useI18n()
 
 const container = ref<HTMLElement | null>(null)
 const error = ref<string | null>(null)
@@ -120,7 +123,7 @@ watchEffect(() => {
       applyAdaptiveLineNumberWidth(target)
     } catch (e) {
       console.error(e)
-      error.value = 'Failed to render diff'
+      error.value = String(t('ui.diffViewer.renderFailed'))
       target.innerHTML = ''
     }
   })
@@ -129,7 +132,7 @@ watchEffect(() => {
 
 <template>
   <div class="diff-container">
-    <div v-if="!trimmed" class="p-4 text-center text-muted-foreground">No diff content.</div>
+    <div v-if="!trimmed" class="p-4 text-center text-muted-foreground">{{ t('ui.diffViewer.empty') }}</div>
     <div v-else-if="error" class="p-4 text-red-500 bg-red-500/10 rounded">{{ error }}</div>
     <div v-else ref="container" class="diff-content" :class="{ 'diff-content--wrapped': props.wrap }" />
   </div>

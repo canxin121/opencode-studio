@@ -1227,7 +1227,7 @@ function onSendSelection() {
           v-else
           :src="rawUrl"
           class="h-full w-full rounded-md border border-border/40 bg-background"
-          :title="selectedFile?.name || 'PDF preview'"
+          :title="selectedFile?.name || t('files.viewer.pdfPreviewTitle')"
         />
       </div>
 

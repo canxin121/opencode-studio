@@ -78,7 +78,11 @@ export function useGitStashOps(opts: {
       } catch (err) {
         if (handleGitBusy(err, 'Stash branch', () => stashBranchFrom(refStr))) return
         if (err instanceof ApiError && (err.code || '').trim() === 'git_interactive_required') {
-          openTerminalHelp('Requires terminal', err.message, `git stash branch ${branch} ${r}`)
+          openTerminalHelp(
+            i18n.global.t('git.authDialogs.terminalHelp.title'),
+            err.message,
+            `git stash branch ${branch} ${r}`,
+          )
           return
         }
         toasts.push('error', err instanceof Error ? err.message : String(err))
@@ -181,7 +185,12 @@ export function useGitStashOps(opts: {
           body: JSON.stringify({}),
         })
         const cleared = Number(resp?.cleared || 0)
-        toasts.push('success', cleared > 0 ? `Dropped ${cleared} stashes` : 'No stashes to drop')
+        toasts.push(
+          'success',
+          cleared > 0
+            ? i18n.global.t('git.toasts.droppedStashes', { count: cleared })
+            : i18n.global.t('git.toasts.noStashesToDrop'),
+        )
         await load()
       } catch (err) {
         if (handleGitBusy(err, 'Stash drop all', stashDropAll)) return
@@ -206,7 +215,7 @@ export function useGitStashOps(opts: {
       stashViewTitle.value = (resp?.ref || r).trim() || r
       stashViewDiff.value = (resp?.diff || '').trimEnd()
       if (!stashViewDiff.value) {
-        stashViewError.value = 'No diff output for this stash entry.'
+        stashViewError.value = i18n.global.t('git.ui.dialogs.stashDiff.empty')
       }
     } catch (err) {
       stashViewError.value = err instanceof Error ? err.message : String(err)

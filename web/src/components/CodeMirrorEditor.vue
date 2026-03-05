@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 import { VueMonacoEditor, loader } from '@/lib/monaco-editor'
 import type * as Monaco from 'monaco-editor'
@@ -28,6 +29,8 @@ const props = defineProps<{
   diffDecorationsEnabled?: boolean
   codeLensActions?: Array<{ line: number; title: string; onClick: () => void }>
 }>()
+
+const { t } = useI18n()
 
 const emit = defineEmits<{
   (e: 'update:modelValue', v: string): void
@@ -725,7 +728,7 @@ watch(modelPath, () => {
 
 <template>
   <div class="monaco-host" :data-files-theme="props.useFilesTheme ? '1' : '0'">
-    <div v-if="!ready" class="monaco-loading">Loading editor...</div>
+    <div v-if="!ready" class="monaco-loading">{{ t('ui.codeEditor.loading') }}</div>
     <VueMonacoEditor
       v-else
       v-model:value="value"
@@ -736,10 +739,10 @@ watch(modelPath, () => {
       @mount="handleMount"
     >
       <template #default>
-        <div class="monaco-loading">Loading editor...</div>
+        <div class="monaco-loading">{{ t('ui.codeEditor.loading') }}</div>
       </template>
       <template #failure>
-        <div class="monaco-loading">Editor failed to load.</div>
+        <div class="monaco-loading">{{ t('ui.codeEditor.loadFailed') }}</div>
       </template>
     </VueMonacoEditor>
   </div>
