@@ -21,7 +21,7 @@ function nowMs(): number {
   return Date.now()
 }
 
-type DesktopBackendStatus = {
+export type DesktopBackendStatus = {
   running: boolean
   url?: string | null
   last_error?: string | null
@@ -249,6 +249,12 @@ function normalizeDesktopStatus(raw: unknown): DesktopBackendStatus | null {
   }
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, Math.max(0, Math.floor(ms)))
+  })
+}
+
 function upsertDesktopBackend(url: string) {
   const normalizedUrl = normalizeBackendBaseUrl(url)
   if (!normalizedUrl) return
@@ -259,7 +265,11 @@ function upsertDesktopBackend(url: string) {
 
   if (existingByUrl) {
     const nextBackends = cfg.backends.map((b) =>
-      b.id === existingByUrl.id ? { ...b, label: 'Desktop local backend', lastUsedAt: now } : b,
+      b.id === existingByUrl.id
+        ? { ...b, label: 'Desktop local backend', baseUrl: normalizedUrl, lastUsedAt: now }
+        : b.label === 'This server'
+          ? { ...b, baseUrl: normalizedUrl, lastUsedAt: now }
+          : b,
     )
     writeBackendsConfigToStorage({
       ...cfg,
@@ -272,7 +282,11 @@ function upsertDesktopBackend(url: string) {
   const existingDesktop = cfg.backends.find((b) => b.label === 'Desktop local backend')
   if (existingDesktop) {
     const nextBackends = cfg.backends.map((b) =>
-      b.id === existingDesktop.id ? { ...b, baseUrl: normalizedUrl, lastUsedAt: now } : b,
+      b.id === existingDesktop.id
+        ? { ...b, baseUrl: normalizedUrl, lastUsedAt: now }
+        : b.label === 'This server'
+          ? { ...b, baseUrl: normalizedUrl, lastUsedAt: now }
+          : b,
     )
     writeBackendsConfigToStorage({
       ...cfg,
@@ -293,26 +307,90 @@ function upsertDesktopBackend(url: string) {
   writeBackendsConfigToStorage({
     ...cfg,
     activeBackendId: backend.id,
-    backends: [backend, ...cfg.backends],
+    backends: [backend, ...cfg.backends].map((b) =>
+      b.label === 'This server' ? { ...b, baseUrl: normalizedUrl, lastUsedAt: now } : b,
+    ),
   })
 }
 
-export async function syncDesktopBackendTarget(): Promise<void> {
+function normalizeDesktopConnectHost(host: string): string {
+  const trimmed = String(host || '').trim()
+  if (!trimmed || trimmed === '0.0.0.0') return '127.0.0.1'
+  if (trimmed === '::' || trimmed === '[::]') return '::1'
+  return trimmed
+}
+
+async function readDesktopConfiguredBackendUrl(invoke: TauriInvoke): Promise<string> {
+  try {
+    const raw = await invoke('desktop_config_get')
+    if (!isRecord(raw)) return ''
+    const backend = isRecord(raw.backend) ? raw.backend : null
+    if (!backend) return ''
+
+    const host = normalizeDesktopConnectHost(typeof backend.host === 'string' ? backend.host : '')
+    const portNum = Number(backend.port)
+    const port = Number.isFinite(portNum) ? Math.floor(portNum) : 0
+    if (!host || port < 1 || port > 65535) return ''
+
+    const bracketHost = host.includes(':') && !host.startsWith('[') ? `[${host}]` : host
+    return normalizeBackendBaseUrl(`http://${bracketHost}:${port}`)
+  } catch {
+    return ''
+  }
+}
+
+function asErrorMessage(err: unknown): string {
+  if (err instanceof Error) return String(err.message || '').trim()
+  return String(err || '').trim()
+}
+
+export async function syncDesktopBackendTarget(): Promise<DesktopBackendStatus | null> {
   const invoke = readTauriInvoke()
-  if (!invoke) return
+  if (!invoke) return null
+
+  const readStatus = async (): Promise<DesktopBackendStatus | null> => {
+    try {
+      return normalizeDesktopStatus(await invoke('desktop_backend_status'))
+    } catch {
+      return null
+    }
+  }
 
   try {
-    const rawStatus = await invoke('desktop_backend_status')
-    let status = normalizeDesktopStatus(rawStatus)
+    let startupError = ''
+    let status = await readStatus()
 
     if (!status?.running || !status.url) {
-      const started = await invoke('desktop_backend_start')
-      status = normalizeDesktopStatus(started)
+      try {
+        status = normalizeDesktopStatus(await invoke('desktop_backend_start'))
+      } catch (err) {
+        startupError = asErrorMessage(err)
+        // Startup can race with autostart in desktop setup.
+        // Fall through to status polling so we can still capture the final URL.
+      }
+
+      if (!status?.url) {
+        for (let i = 0; i < 20; i += 1) {
+          await sleep(250)
+          status = await readStatus()
+          if (status?.url) break
+        }
+      }
     }
 
-    const url = String(status?.url || '').trim()
+    if ((!status || !status.running) && startupError && !status?.last_error) {
+      status = {
+        running: false,
+        url: status?.url ?? null,
+        last_error: startupError,
+      }
+    }
+
+    const url = String(status?.url || '').trim() || (await readDesktopConfiguredBackendUrl(invoke))
     if (url) upsertDesktopBackend(url)
+    return status
   } catch {
     // ignore: desktop command may be unavailable in some runtimes.
+    return null
   }
 }

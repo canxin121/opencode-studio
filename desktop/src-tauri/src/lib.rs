@@ -20,7 +20,7 @@ use tauri_plugin_autostart::ManagerExt;
 use backend::BackendManager;
 
 pub fn run() {
-    tauri::Builder::<AppRuntime>::new()
+    let app = tauri::Builder::<AppRuntime>::new()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_autostart::init(
@@ -140,16 +140,21 @@ pub fn run() {
             let manager = app_handle.state::<BackendManager>().inner().clone();
             tauri::async_runtime::spawn(async move {
                 let _ = manager.ensure_started(&app_handle).await;
-                // If the main window is configured to load the backend URL, force a reload once ready.
-                if let Some(win) = app_handle.get_webview_window("main") {
-                    let _ = win.eval("try { window.location.reload(); } catch {}");
-                }
             });
 
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application")
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|app_handle, event| {
+        if matches!(event, tauri::RunEvent::ExitRequested { .. }) {
+            let manager = app_handle.state::<BackendManager>().inner().clone();
+            tauri::async_runtime::block_on(async {
+                let _ = manager.stop(app_handle).await;
+            });
+        }
+    });
 }
 
 #[tauri::command]
@@ -372,9 +377,6 @@ async fn handle_tray_menu(app: &AppHandle, id: &str) {
         "backend_start" => {
             let manager = app.state::<BackendManager>().inner().clone();
             let _ = manager.ensure_started(app).await;
-            if let Some(win) = app.get_webview_window("main") {
-                let _ = win.eval("try { window.location.reload(); } catch {}");
-            }
         }
         "backend_stop" => {
             let manager = app.state::<BackendManager>().inner().clone();
@@ -383,9 +385,6 @@ async fn handle_tray_menu(app: &AppHandle, id: &str) {
         "backend_restart" => {
             let manager = app.state::<BackendManager>().inner().clone();
             let _ = manager.restart(app).await;
-            if let Some(win) = app.get_webview_window("main") {
-                let _ = win.eval("try { window.location.reload(); } catch {}");
-            }
         }
         "open_logs" => {
             let _ = backend::open_logs_dir(app);

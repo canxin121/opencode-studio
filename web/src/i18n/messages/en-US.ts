@@ -264,6 +264,7 @@ export default {
     backendLoadingDescription:
       'Desktop backend is still initializing. The page will recover automatically once it is ready.',
     backendLoadingRetry: 'Retry now',
+    backendLoadingToast: 'Desktop backend is still initializing. Please wait a moment.',
     backendLabel: 'Backend',
     selectBackendTitle: 'Backend',
     searchBackends: 'Search backends',
@@ -280,6 +281,8 @@ export default {
     failedToUpdateBackend: 'Failed to update backend',
     failedToRemoveBackend: 'Failed to remove backend',
     failedToAddBackend: 'Failed to add backend',
+    saveNewBackendFirst: 'Save the new backend before continuing',
+    openRuntimeConfig: 'Open runtime config',
     removeBackendTitle: 'Remove backend?',
   },
   settings: {

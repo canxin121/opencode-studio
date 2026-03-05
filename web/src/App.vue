@@ -1,26 +1,98 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watchEffect } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch, watchEffect } from 'vue'
 
 import { useAuthStore } from './stores/auth'
 import { useHealthStore } from './stores/health'
 import { useSettingsStore } from './stores/settings'
+import { desktopBackendStatus, desktopOpenConfig, isDesktopRuntime } from './lib/desktopConfig'
+import { syncDesktopBackendTarget } from './lib/backend'
 
 import { applyAppearanceSettingsToDom } from './lib/appearance'
 
 import LoginPage from './pages/LoginPage.vue'
+import DesktopLoadingPage from './pages/DesktopLoadingPage.vue'
 import MainLayout from './layout/MainLayout.vue'
 import ToastHost from './components/ToastHost.vue'
 
 const auth = useAuthStore()
 const health = useHealthStore()
 const settings = useSettingsStore()
+const desktopRuntime = isDesktopRuntime()
 
-const initialLoading = ref(true)
-const showLogin = computed(() => auth.needsLogin || health.data === null || !health.data.isOpenCodeReady)
+const backendReady = computed(() => health.data !== null && health.data.isOpenCodeReady)
+const showDesktopLoading = computed(() => desktopRuntime && !backendReady.value)
+const showLogin = computed(() => !showDesktopLoading.value && (auth.needsLogin || !backendReady.value))
 
-onMounted(async () => {
-  await Promise.all([auth.refresh(), health.refresh()])
-  initialLoading.value = false
+let desktopProbeTimer: ReturnType<typeof setInterval> | null = null
+let desktopProbeBusy = false
+const desktopBackendError = ref('')
+
+async function refreshDesktopBootState() {
+  if (desktopProbeBusy) return
+  desktopProbeBusy = true
+  try {
+    if (desktopRuntime) {
+      const syncState = await syncDesktopBackendTarget().catch(() => null)
+      if (String(syncState?.last_error || '').trim()) {
+        desktopBackendError.value = String(syncState?.last_error || '').trim()
+      } else {
+        const status = await desktopBackendStatus().catch(() => null)
+        const err = String(status?.last_error || '').trim()
+        desktopBackendError.value = err
+      }
+    }
+
+    await health.refresh().catch(() => {})
+    if (health.data !== null) {
+      desktopBackendError.value = ''
+      await auth.refresh().catch(() => {})
+    }
+  } finally {
+    desktopProbeBusy = false
+  }
+}
+
+const loadingError = computed(() => (desktopRuntime ? desktopBackendError.value : ''))
+
+function openRuntimeConfig() {
+  if (!desktopRuntime) return
+  void desktopOpenConfig().catch(() => {})
+}
+
+function clearDesktopProbeTimer() {
+  if (!desktopProbeTimer) return
+  clearInterval(desktopProbeTimer)
+  desktopProbeTimer = null
+}
+
+function scheduleDesktopProbe() {
+  if (!showDesktopLoading.value) return
+  if (desktopProbeTimer) return
+  desktopProbeTimer = setInterval(() => {
+    void refreshDesktopBootState()
+  }, 2000)
+}
+
+onMounted(() => {
+  void auth.refresh().catch(() => {})
+  void health.refresh().catch(() => {})
+})
+
+watch(
+  () => showDesktopLoading.value,
+  (loading) => {
+    if (loading) {
+      void refreshDesktopBootState()
+      scheduleDesktopProbe()
+      return
+    }
+    clearDesktopProbeTimer()
+  },
+  { immediate: true },
+)
+
+onBeforeUnmount(() => {
+  clearDesktopProbeTimer()
 })
 
 watchEffect(() => {
@@ -32,17 +104,12 @@ watchEffect(() => {
 <template>
   <div class="app-root">
     <ToastHost />
-    <!-- Initial Loading State: Matches Login Page aesthetic for seamless transition -->
-    <div v-if="initialLoading" class="flex min-h-screen items-center justify-center bg-background px-4">
-      <div class="flex flex-col items-center gap-6 animate-pulse">
-        <div
-          class="flex h-20 w-20 items-center justify-center rounded-3xl bg-primary/10 ring-1 ring-inset ring-foreground/5"
-        >
-          <img src="/favicon.svg" alt="OpenCode Studio" class="h-12 w-12 opacity-90" />
-        </div>
-      </div>
-    </div>
-
+    <DesktopLoadingPage
+      v-if="showDesktopLoading"
+      :backend-error="loadingError"
+      @retry="refreshDesktopBootState"
+      @open-config="openRuntimeConfig"
+    />
     <LoginPage v-else-if="showLogin" />
     <MainLayout v-else />
   </div>

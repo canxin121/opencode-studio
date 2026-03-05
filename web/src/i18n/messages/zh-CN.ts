@@ -263,6 +263,7 @@ export default {
     backendLoadingTitle: '后端加载中，请稍候',
     backendLoadingDescription: '正在初始化桌面后端，页面会在就绪后自动恢复。',
     backendLoadingRetry: '立即重试',
+    backendLoadingToast: '桌面后端正在初始化，请稍候。',
     backendLabel: '后端',
     selectBackendTitle: '后端',
     searchBackends: '搜索后端',
@@ -279,6 +280,8 @@ export default {
     failedToUpdateBackend: '更新后端失败',
     failedToRemoveBackend: '移除后端失败',
     failedToAddBackend: '添加后端失败',
+    saveNewBackendFirst: '请先保存新后端，再继续连接',
+    openRuntimeConfig: '打开运行配置',
     removeBackendTitle: '移除后端？',
   },
   settings: {

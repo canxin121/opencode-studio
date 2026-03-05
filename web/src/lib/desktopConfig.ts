@@ -34,6 +34,12 @@ export type DesktopUpdateProgress = {
   error: string | null
 }
 
+export type DesktopBackendStatus = {
+  running: boolean
+  url?: string | null
+  last_error?: string | null
+}
+
 function readTauriInvoke(): TauriInvoke | null {
   try {
     const candidate = (window as unknown as { __TAURI_INTERNALS__?: { invoke?: unknown } }).__TAURI_INTERNALS__?.invoke
@@ -109,6 +115,16 @@ function asDesktopUpdateProgress(value: unknown): DesktopUpdateProgress | null {
   }
 }
 
+function asDesktopBackendStatus(value: unknown): DesktopBackendStatus | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const root = value as Record<string, unknown>
+  return {
+    running: root.running === true,
+    url: typeof root.url === 'string' ? root.url : null,
+    last_error: typeof root.last_error === 'string' ? root.last_error : null,
+  }
+}
+
 export function isDesktopRuntime(): boolean {
   return !!readTauriInvoke()
 }
@@ -131,6 +147,19 @@ export async function desktopBackendRestart(): Promise<void> {
   const invoke = readTauriInvoke()
   if (!invoke) return
   await invoke('desktop_backend_restart')
+}
+
+export async function desktopBackendStatus(): Promise<DesktopBackendStatus | null> {
+  const invoke = readTauriInvoke()
+  if (!invoke) return null
+  const raw = await invoke('desktop_backend_status')
+  return asDesktopBackendStatus(raw)
+}
+
+export async function desktopOpenConfig(): Promise<void> {
+  const invoke = readTauriInvoke()
+  if (!invoke) return
+  await invoke('desktop_open_config')
 }
 
 export async function desktopRuntimeInfo(): Promise<DesktopRuntimeInfo | null> {

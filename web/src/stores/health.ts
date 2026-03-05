@@ -3,6 +3,19 @@ import { computed, ref } from 'vue'
 
 import { apiJson } from '../lib/api'
 
+const HEALTH_REQUEST_TIMEOUT_MS = 5000
+
+function timeoutSignal(ms: number): AbortSignal | undefined {
+  try {
+    if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+      return AbortSignal.timeout(ms)
+    }
+  } catch {
+    // ignore
+  }
+  return undefined
+}
+
 type Health = {
   status: string
   timestamp: string
@@ -23,7 +36,7 @@ export const useHealthStore = defineStore('health', () => {
     loading.value = true
     error.value = null
     try {
-      data.value = await apiJson<Health>('/health')
+      data.value = await apiJson<Health>('/health', { signal: timeoutSignal(HEALTH_REQUEST_TIMEOUT_MS) })
     } catch (err) {
       error.value = err instanceof Error ? err.message : String(err)
       data.value = null

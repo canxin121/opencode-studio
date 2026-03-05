@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/auth'
 import { useBackendsStore } from '@/stores/backends'
 import { useHealthStore } from '@/stores/health'
+import { useToastsStore } from '@/stores/toasts'
 import { clearUiAuthTokenForBaseUrl } from '@/lib/uiAuthToken'
 import { isDesktopRuntime } from '@/lib/desktopConfig'
 import { i18n, setAppLocale } from '@/i18n'
@@ -20,6 +21,7 @@ const NEW_BACKEND_ID = '__new__'
 const auth = useAuthStore()
 const health = useHealthStore()
 const backends = useBackendsStore()
+const toasts = useToastsStore()
 const { t } = useI18n()
 const desktopRuntime = isDesktopRuntime()
 
@@ -177,11 +179,13 @@ const canSubmit = computed(() => {
   if (busy.value) return false
   const id = String(selectedBackendId.value || '').trim()
   if (!id) return false
-  if (id === NEW_BACKEND_ID) {
-    if (!newBackendLabel.value.trim()) return false
-    if (!newBackendUrl.value.trim()) return false
-  }
+  if (id === NEW_BACKEND_ID) return false
   return true
+})
+
+const canSaveNewBackend = computed(() => {
+  if (busy.value) return false
+  return Boolean(newBackendLabel.value.trim() && newBackendUrl.value.trim())
 })
 
 const showBackendLoadingNotice = computed(() => {
@@ -190,12 +194,21 @@ const showBackendLoadingNotice = computed(() => {
 
 let backendProbeTimer: ReturnType<typeof setInterval> | null = null
 const backendProbeBusy = ref(false)
+let backendLoadingToastShown = false
+
+const visibleAuthError = computed(() => {
+  if (showBackendLoadingNotice.value) return null
+  return auth.lastError
+})
 
 async function refreshBackendStatusOnce() {
   if (backendProbeBusy.value) return
   backendProbeBusy.value = true
   try {
-    await Promise.all([health.refresh().catch(() => {}), auth.refresh().catch(() => {})])
+    await health.refresh().catch(() => {})
+    if (health.data !== null) {
+      await auth.refresh().catch(() => {})
+    }
   } finally {
     backendProbeBusy.value = false
   }
@@ -219,9 +232,14 @@ watch(
   () => showBackendLoadingNotice.value,
   (show) => {
     if (show) {
+      if (!backendLoadingToastShown) {
+        toasts.push('info', String(t('login.backendLoadingToast')), 2600)
+        backendLoadingToastShown = true
+      }
       scheduleBackendProbe()
       return
     }
+    backendLoadingToastShown = false
     clearBackendProbeTimer()
   },
   { immediate: true },
@@ -236,6 +254,31 @@ onBeforeUnmount(() => {
   clearBackendProbeTimer()
 })
 
+function cancelNewBackend() {
+  newBackendLabel.value = ''
+  newBackendUrl.value = ''
+  selectedBackendId.value = backends.activeBackend?.id || backends.backends[0]?.id || ''
+  formError.value = null
+}
+
+function saveNewBackend() {
+  if (!canSaveNewBackend.value) return
+  const res = backends.addBackend({
+    label: newBackendLabel.value,
+    baseUrl: newBackendUrl.value,
+    setActive: true,
+  })
+  if (!res.ok) {
+    formError.value = res.error || String(t('login.failedToAddBackend'))
+    return
+  }
+
+  selectedBackendId.value = res.backend.id
+  newBackendLabel.value = ''
+  newBackendUrl.value = ''
+  formError.value = null
+}
+
 async function submit() {
   if (!canSubmit.value) return
   busy.value = true
@@ -246,16 +289,8 @@ async function submit() {
     let backendChanged = false
 
     if (selectedId === NEW_BACKEND_ID) {
-      const res = backends.addBackend({
-        label: newBackendLabel.value,
-        baseUrl: newBackendUrl.value,
-        setActive: true,
-      })
-      if (!res.ok) {
-        formError.value = res.error || String(t('login.failedToAddBackend'))
-        return
-      }
-      backendChanged = true
+      formError.value = String(t('login.saveNewBackendFirst'))
+      return
     } else if (selectedId && selectedId !== activeBefore) {
       backends.setActiveBackend(selectedId)
       backendChanged = true
@@ -304,8 +339,8 @@ async function submit() {
 </script>
 
 <template>
-  <div class="flex min-h-screen items-center justify-center bg-background px-4">
-    <div class="w-full max-w-[360px] space-y-6">
+  <div class="h-screen overflow-y-auto bg-background px-4">
+    <div class="mx-auto w-full max-w-[360px] space-y-6 py-6">
       <div class="flex flex-col items-center gap-4 text-center">
         <div
           class="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 ring-1 ring-inset ring-foreground/5"
@@ -321,19 +356,6 @@ async function submit() {
       </div>
 
       <div class="grid gap-4">
-        <div
-          v-if="showBackendLoadingNotice"
-          class="rounded-lg border border-border bg-muted/20 p-3 text-sm text-muted-foreground"
-        >
-          <div class="font-medium text-foreground">{{ t('login.backendLoadingTitle') }}</div>
-          <p class="mt-1">{{ t('login.backendLoadingDescription') }}</p>
-          <div class="mt-3">
-            <Button variant="outline" size="sm" :disabled="busy || backendProbeBusy" @click="refreshBackendStatusOnce">
-              {{ backendProbeBusy ? t('common.connecting') : t('login.backendLoadingRetry') }}
-            </Button>
-          </div>
-        </div>
-
         <div class="grid gap-2">
           <label class="text-xs font-medium text-muted-foreground">{{ t('settings.appearance.language.label') }}</label>
           <div class="w-40 max-w-full">
@@ -417,6 +439,14 @@ async function submit() {
               inputmode="url"
             />
           </div>
+          <div class="flex items-center justify-end gap-2">
+            <Button variant="secondary" size="sm" :disabled="busy" @click="cancelNewBackend">
+              {{ t('common.cancel') }}
+            </Button>
+            <Button size="sm" :disabled="!canSaveNewBackend" @click="saveNewBackend">
+              {{ t('common.save') }}
+            </Button>
+          </div>
         </div>
 
         <div
@@ -484,11 +514,11 @@ async function submit() {
         </Button>
       </div>
 
-      <div v-if="formError || auth.lastError" class="animate-in fade-in slide-in-from-top-2">
+      <div v-if="formError || visibleAuthError" class="animate-in fade-in slide-in-from-top-2">
         <div
           class="rounded-lg bg-destructive/10 p-3 text-center text-sm font-medium text-destructive ring-1 ring-inset ring-destructive/20"
         >
-          {{ formError || auth.lastError }}
+          {{ formError || visibleAuthError }}
         </div>
       </div>
     </div>

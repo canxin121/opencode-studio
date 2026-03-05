@@ -2,6 +2,7 @@ use std::fs;
 use std::io::Write;
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
+use std::process::Command as StdCommand;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -29,6 +30,7 @@ pub struct BackendManager {
 #[derive(Default)]
 struct BackendInner {
     child: Option<tauri_plugin_shell::process::CommandChild>,
+    pid: Option<u32>,
     url: Option<String>,
     last_error: Option<String>,
 }
@@ -62,10 +64,22 @@ impl BackendManager {
         let cfg = config::load_or_create(app).unwrap_or_default();
         let runtime_config_path = config::runtime_config_path(app)
             .ok_or_else(|| "unable to resolve runtime config path".to_string())?;
-        let (child, url) = spawn_backend_service(app, &cfg, &runtime_config_path).await?;
+        let (child, url) = match spawn_backend_service(app, &cfg, &runtime_config_path).await {
+            Ok(started) => started,
+            Err(err) => {
+                let mut guard = self.inner.lock().await;
+                guard.child = None;
+                guard.pid = None;
+                guard.url = None;
+                guard.last_error = Some(err.clone());
+                append_backend_log_line(app, &format!("[desktop] backend start failed: {err}"));
+                return Err(err);
+            }
+        };
 
         {
             let mut guard = self.inner.lock().await;
+            guard.pid = Some(child.pid());
             guard.child = Some(child);
             guard.url = Some(url.clone());
             guard.last_error = None;
@@ -75,15 +89,28 @@ impl BackendManager {
     }
 
     pub async fn stop(&self, app: &AppHandle) -> Result<(), String> {
-        let mut child = {
+        let (mut child, pid) = {
             let mut guard = self.inner.lock().await;
             guard.url = None;
-            guard.child.take()
+            (guard.child.take(), guard.pid.take())
         };
 
         if let Some(c) = child.take() {
-            // Try to kill the backend.
+            let pid = c.pid();
+            kill_process_tree(pid);
+            // Try to kill directly as a fallback in case taskkill misses.
             let _ = c.kill();
+            #[cfg(target_os = "windows")]
+            force_cleanup_port_windows(app);
+            wait_for_port_release(app).await;
+            return Ok(());
+        }
+
+        if let Some(pid) = pid {
+            kill_process_tree(pid);
+            #[cfg(target_os = "windows")]
+            force_cleanup_port_windows(app);
+            wait_for_port_release(app).await;
         }
 
         let _ = app; // reserved for future graceful shutdown.
@@ -134,7 +161,8 @@ async fn spawn_backend_service(
         _ => resolve_ui_dir(app)?,
     };
     let port = pick_port(cfg.backend.port)?;
-    let url = format!("http://{}:{}", cfg.backend.host, port);
+    let connect_host = normalize_connect_host(&cfg.backend.host);
+    let url = format!("http://{}:{}", connect_host, port);
 
     let data_dir = app
         .path()
@@ -225,12 +253,32 @@ async fn spawn_backend_service(
                     }
                 }
                 CommandEvent::Error(err) => {
-                    let _ = err;
+                    let msg = format!("[backend error] {err}");
+                    if let Some(f) = file.as_mut() {
+                        let _ = f.write_all(msg.as_bytes());
+                        let _ = f.write_all(b"\n");
+                    }
+                    let manager = app_handle.state::<BackendManager>().inner().clone();
+                    let mut guard = manager.inner.lock().await;
+                    guard.last_error = Some(err.to_string());
                 }
                 CommandEvent::Terminated(payload) => {
-                    // Persist crash info.
-                    let _ = payload;
-                    let _ = app_handle;
+                    let msg = format!(
+                        "[backend terminated] code={:?} signal={:?}",
+                        payload.code, payload.signal
+                    );
+                    if let Some(f) = file.as_mut() {
+                        let _ = f.write_all(msg.as_bytes());
+                        let _ = f.write_all(b"\n");
+                    }
+                    let manager = app_handle.state::<BackendManager>().inner().clone();
+                    let mut guard = manager.inner.lock().await;
+                    if guard.child.is_some() {
+                        guard.child = None;
+                        guard.pid = None;
+                        guard.url = None;
+                        guard.last_error = Some(msg);
+                    }
                     break;
                 }
                 _ => {}
@@ -238,10 +286,43 @@ async fn spawn_backend_service(
         }
     });
 
-    // Healthcheck.
+    // Wait until the web server endpoint is reachable so the desktop webview can
+    // open the login page immediately after startup. This does NOT wait for
+    // OpenCode readiness; /health is expected to respond even while OpenCode is
+    // still bootstrapping.
     wait_for_health(&url).await?;
 
     Ok((child, url))
+}
+
+fn kill_process_tree(pid: u32) {
+    #[cfg(target_os = "windows")]
+    {
+        let _ = StdCommand::new("taskkill")
+            .args(["/F", "/T", "/PID", &pid.to_string()])
+            .status();
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let pid_str = pid.to_string();
+        let _ = StdCommand::new("pkill")
+            .args(["-TERM", "-P", pid_str.as_str()])
+            .status();
+        let _ = StdCommand::new("kill")
+            .args(["-TERM", pid_str.as_str()])
+            .status();
+    }
+}
+
+fn append_backend_log_line(app: &AppHandle, line: &str) {
+    let Some(path) = backend_log_path(app) else {
+        return;
+    };
+    let _ = fs::create_dir_all(path.parent().unwrap_or_else(|| Path::new(".")));
+    if let Ok(mut file) = fs::OpenOptions::new().create(true).append(true).open(path) {
+        let _ = writeln!(file, "{line}");
+    }
 }
 
 fn resolve_ui_dir(app: &AppHandle) -> Result<PathBuf, String> {
@@ -281,16 +362,238 @@ fn ui_dir_candidates(resource_dir: &Path) -> Vec<PathBuf> {
 fn pick_port(preferred: u16) -> Result<u16, String> {
     let port = if preferred == 0 { 3210 } else { preferred };
 
-    // In the full desktop build we default the webview URL to http://127.0.0.1:<port>,
-    // so we MUST keep the backend on the configured port. If it's already taken,
+    // Keep the backend on the configured port. If it's already taken,
     // tell the user to pick a new port.
-    if TcpListener::bind(("127.0.0.1", port)).is_ok() {
+    if can_bind_port(port) {
         return Ok(port);
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        if recover_windows_ghost_port(port) {
+            return Ok(port);
+        }
     }
 
     Err(format!(
         "backend port {port} is not available. Edit the desktop runtime config file (opencode-studio.toml) to change the port, or stop the other process using it."
     ))
+}
+
+fn can_bind_port(port: u16) -> bool {
+    TcpListener::bind(("127.0.0.1", port)).is_ok()
+}
+
+async fn wait_for_port_release(app: &AppHandle) {
+    let cfg = config::load_or_create(app).unwrap_or_default();
+    let port = if cfg.backend.port == 0 { 3210 } else { cfg.backend.port };
+
+    for _ in 0..30 {
+        if TcpListener::bind(("127.0.0.1", port)).is_ok() {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn try_cleanup_stale_backend_on_port(port: u16) -> bool {
+    let pids = listening_pids_on_port_windows(port);
+    if pids.is_empty() {
+        return false;
+    }
+
+    let mut killed_any = false;
+    for pid in pids {
+        if pid == std::process::id() {
+            continue;
+        }
+
+        // Only auto-kill if this looks like our stale backend.
+        if let Some(image_name) = process_name_for_pid_windows(pid) {
+            let normalized = image_name.trim().to_ascii_lowercase();
+            if !normalized.contains("opencode-studio") {
+                continue;
+            }
+        } else {
+            // If a PID exists in TCP table but process lookup fails, still attempt a best-effort kill.
+            // This can happen transiently during process teardown on Windows.
+        }
+
+        let ok = StdCommand::new("taskkill")
+            .args(["/F", "/T", "/PID", &pid.to_string()])
+            .status()
+            .ok()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        killed_any = killed_any || ok;
+    }
+    killed_any
+}
+
+#[cfg(target_os = "windows")]
+fn recover_windows_ghost_port(port: u16) -> bool {
+    if can_bind_port(port) {
+        return true;
+    }
+
+    if try_cleanup_stale_backend_on_port(port) && wait_for_bind_available(port, 80, 100) {
+        return true;
+    }
+
+    // If HTTP.sys owns the port (PID 4), restart the HTTP service as a best effort.
+    if listening_pids_on_port_windows(port).iter().any(|pid| *pid == 4)
+        && restart_http_service_windows()
+        && wait_for_bind_available(port, 60, 100)
+    {
+        return true;
+    }
+
+    // Last best-effort recovery for stale network stack state.
+    let _ = StdCommand::new("wsl").arg("--shutdown").status();
+    let _ = restart_windows_service("hns");
+    let _ = restart_windows_service("winnat");
+
+    wait_for_bind_available(port, 80, 100)
+}
+
+#[cfg(target_os = "windows")]
+fn wait_for_bind_available(port: u16, rounds: usize, wait_ms: u64) -> bool {
+    for _ in 0..rounds {
+        if can_bind_port(port) {
+            return true;
+        }
+        std::thread::sleep(Duration::from_millis(wait_ms));
+    }
+    false
+}
+
+#[cfg(target_os = "windows")]
+fn restart_http_service_windows() -> bool {
+    let stop_ok = StdCommand::new("net")
+        .args(["stop", "http", "/y"])
+        .status()
+        .ok()
+        .map(|s| s.success())
+        .unwrap_or(false);
+
+    let start_ok = StdCommand::new("net")
+        .args(["start", "http"])
+        .status()
+        .ok()
+        .map(|s| s.success())
+        .unwrap_or(false);
+
+    stop_ok || start_ok
+}
+
+#[cfg(target_os = "windows")]
+fn restart_windows_service(service: &str) -> bool {
+    let status = StdCommand::new("powershell")
+        .args([
+            "-NoProfile",
+            "-Command",
+            &format!("$s=Get-Service -Name '{service}' -ErrorAction SilentlyContinue; if ($s) {{ try {{ Restart-Service -Name '{service}' -Force -ErrorAction Stop; exit 0 }} catch {{ exit 1 }} }} else {{ exit 0 }}"),
+        ])
+        .status();
+    status.ok().map(|s| s.success()).unwrap_or(false)
+}
+
+#[cfg(target_os = "windows")]
+fn force_cleanup_port_windows(app: &AppHandle) {
+    let cfg = config::load_or_create(app).unwrap_or_default();
+    let port = if cfg.backend.port == 0 { 3210 } else { cfg.backend.port };
+    for pid in listening_pids_on_port_windows(port) {
+        if pid == std::process::id() {
+            continue;
+        }
+        let _ = StdCommand::new("taskkill")
+            .args(["/F", "/T", "/PID", &pid.to_string()])
+            .status();
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn listening_pids_on_port_windows(port: u16) -> Vec<u32> {
+    let mut out = Vec::new();
+    let output = StdCommand::new("netstat")
+        .args(["-ano", "-p", "tcp"])
+        .output()
+        .ok();
+    let Some(output) = output else {
+        return out;
+    };
+    if !output.status.success() {
+        return out;
+    }
+
+    let text = String::from_utf8_lossy(&output.stdout);
+    for line in text.lines() {
+        let cols: Vec<&str> = line.split_whitespace().collect();
+        if cols.len() < 5 {
+            continue;
+        }
+        // TCP 127.0.0.1:3210 0.0.0.0:0 LISTENING 12345
+        if !(cols[3].eq_ignore_ascii_case("LISTENING") || cols[3].to_ascii_uppercase().contains("LISTEN")) {
+            continue;
+        }
+        if !windows_addr_matches_port(cols[1], port) {
+            continue;
+        }
+        if let Ok(pid) = cols[4].parse::<u32>() {
+            if !out.iter().any(|v| v == &pid) {
+                out.push(pid);
+            }
+        }
+    }
+    out
+}
+
+#[cfg(target_os = "windows")]
+fn windows_addr_matches_port(addr: &str, port: u16) -> bool {
+    let port_suffix = format!(":{port}");
+    addr.ends_with(&port_suffix)
+}
+
+#[cfg(target_os = "windows")]
+fn process_name_for_pid_windows(pid: u32) -> Option<String> {
+    let output = StdCommand::new("tasklist")
+        .args([
+            "/FI",
+            &format!("PID eq {pid}"),
+            "/FO",
+            "CSV",
+            "/NH",
+        ])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+
+    let text = String::from_utf8_lossy(&output.stdout);
+    let first = text.lines().next()?.trim();
+    if first.is_empty() || first.eq_ignore_ascii_case("INFO: No tasks are running which match the specified criteria.") {
+        return None;
+    }
+    // "Image Name","PID","Session Name","Session#","Mem Usage"
+    let trimmed = first.trim_matches('"');
+    let mut parts = trimmed.split("\",\"");
+    let image = parts.next()?.trim();
+    if image.is_empty() {
+        None
+    } else {
+        Some(image.to_string())
+    }
+}
+
+fn normalize_connect_host(host: &str) -> String {
+    let value = host.trim();
+    match value {
+        "" | "0.0.0.0" => "127.0.0.1".to_string(),
+        "::" | "[::]" => "::1".to_string(),
+        _ => value.to_string(),
+    }
 }
 
 async fn wait_for_health(base_url: &str) -> Result<(), String> {
@@ -352,22 +655,34 @@ fn resolve_home_env() -> Option<String> {
 
 fn merge_cors_origins(cfg: &DesktopConfig) -> Vec<String> {
     let mut origins = Vec::<String>::new();
+    let mut push_unique = |origin: &str| {
+        if !origins.iter().any(|v| v == origin) {
+            origins.push(origin.to_string());
+        }
+    };
 
     for raw in &cfg.backend.cors_origins {
         let trimmed = raw.trim();
         if trimmed.is_empty() {
             continue;
         }
-        if !origins.iter().any(|v| v == trimmed) {
-            origins.push(trimmed.to_string());
-        }
+        push_unique(trimmed);
+    }
+
+    // Desktop app UI is served by Tauri's local protocol and calls the backend over HTTP.
+    // Allow common Tauri window origins by default so local desktop fetches are not blocked
+    // by browser CORS when users change backend ports.
+    for desktop_origin in [
+        "tauri://localhost",
+        "http://tauri.localhost",
+        "https://tauri.localhost",
+    ] {
+        push_unique(desktop_origin);
     }
 
     if cfg!(debug_assertions) {
         for dev_origin in ["http://localhost:5173", "http://127.0.0.1:5173"] {
-            if !origins.iter().any(|v| v == dev_origin) {
-                origins.push(dev_origin.to_string());
-            }
+            push_unique(dev_origin);
         }
     }
 
