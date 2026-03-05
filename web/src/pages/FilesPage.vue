@@ -223,6 +223,7 @@ function persistExplorerNow() {
 function restoreExplorerState(rootPath: string): boolean {
   const base = trimTrailingSlashes(normalizePath((rootPath || '').trim()))
   if (!base) return false
+  restoredSelectedFilePath.value = ''
 
   const uiKey = storageKey(STORAGE_FILES_EXPLORER_UI_PREFIX, base)
   const uiState = readJson<FilesExplorerUiState | null>(localStorage, uiKey, null)
@@ -246,6 +247,11 @@ function restoreExplorerState(rootPath: string): boolean {
         ? normalizePath(String(uiState.selectedDirectoryPath || '').trim())
         : ''
     selectedDirectoryPath.value = selectedDir && withinWorkspace(selectedDir, base) ? selectedDir : ''
+
+    const selectedPath =
+      typeof uiState.selectedPath === 'string' ? normalizePath(String(uiState.selectedPath || '').trim()) : ''
+    restoredSelectedFilePath.value =
+      selectedPath && withinWorkspace(selectedPath, base) && !isPathHiddenInFiles(selectedPath) ? selectedPath : ''
   }
 
   const cacheKey = storageKey(STORAGE_FILES_EXPLORER_CACHE_PREFIX, base)
@@ -333,6 +339,7 @@ const hasContentSearch = computed(() => Boolean(contentSearchQuery.value.trim())
 const selectedFile = ref<FileNode | null>(null)
 const selectedDirectoryPath = ref('')
 const highlightedPath = ref('')
+const restoredSelectedFilePath = ref('')
 const fileContent = ref('')
 const draftContent = ref('')
 const fileChunkTotalBytes = ref(0)
@@ -988,6 +995,30 @@ function isPathHiddenInFiles(absOrRelPath: string): boolean {
 
   const direct = normalizeRelativePathKey(normalized)
   return HIDDEN_FILE_RELATIVE_PATHS.has(direct)
+}
+
+function buildFileNode(path: string): FileNode {
+  const normalized = normalizePath(String(path || '').trim())
+  const name = normalized.split('/').filter(Boolean).pop() || normalized
+  return {
+    name,
+    path: normalized,
+    type: 'file',
+    extension: extensionFromPath(name),
+  }
+}
+
+async function restoreMobileSelectedFile(rootPath: string, seq: number) {
+  if (!isMobile.value) return
+  if (isStaleRootRestore(seq, rootPath)) return
+
+  const selectedPath = normalizePath(String(restoredSelectedFilePath.value || '').trim())
+  if (!selectedPath || !withinWorkspace(selectedPath, rootPath) || isPathHiddenInFiles(selectedPath)) return
+
+  const currentPath = normalizePath(String(selectedFile.value?.path || '').trim())
+  if (currentPath === selectedPath) return
+
+  await openFile(buildFileNode(selectedPath))
 }
 
 function resetFileTimelineState() {
@@ -2785,6 +2816,8 @@ async function restoreForRoot(next: string) {
     await loadDirectory(dir).catch(() => {})
     if (isStaleRootRestore(seq, next)) return
   }
+
+  await restoreMobileSelectedFile(next, seq)
 }
 
 watch(

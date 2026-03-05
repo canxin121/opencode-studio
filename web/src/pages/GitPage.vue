@@ -283,6 +283,35 @@ const { selectedFile, diffSource, selectedIsConflict, selectFile } = useGitDiffS
   refresh: refreshDiff,
 })
 
+const restoringMobileOpenItem = ref(false)
+
+watch(
+  () => [ui.isMobile, repoRoot.value] as const,
+  (next, old) => {
+    const [isMobile, nextRepo] = next
+    const [prevIsMobile, prevRepo] = old ?? [null, null]
+    const nextKey = (nextRepo || '').trim()
+    const prevKey = (prevRepo || '').trim()
+    if (isMobile === prevIsMobile && nextKey === prevKey) return
+    if (!isMobile || !nextKey) return
+
+    const saved = gitRepos.getMobileOpenItem(nextKey)
+    restoringMobileOpenItem.value = true
+    selectedFile.value = saved?.path || null
+    diffSource.value = saved?.source || 'working'
+    restoringMobileOpenItem.value = false
+  },
+  { immediate: true },
+)
+
+watch(
+  () => [ui.isMobile, repoRoot.value, selectedFile.value, diffSource.value] as const,
+  ([isMobile, repo, path, source]) => {
+    if (!isMobile || restoringMobileOpenItem.value) return
+    gitRepos.setMobileOpenItem(repo, path, source)
+  },
+)
+
 function repoKey(suffix: string): string {
   return gitRepoScopedStorageKey(suffix, repoRoot.value)
 }

@@ -7,6 +7,8 @@ const STORAGE_KEY = localStorageKeys.git.selectedRepoByProject
 const CLOSED_STORAGE_KEY = localStorageKeys.git.closedReposByProject
 
 type Map = Record<string, string>
+type GitDiffSource = 'working' | 'staged'
+type MobileGitOpenItem = { path: string; source: GitDiffSource }
 
 function isRecord(value: JsonLike): value is Record<string, JsonLike> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -32,6 +34,7 @@ function toStringMap(raw: Record<string, JsonLike>): Map {
 export const useGitReposStore = defineStore('gitRepos', () => {
   const selectedByProject = ref<Map>({})
   const closedByProject = ref<Record<string, string[]>>({})
+  const mobileOpenItemByRepo = ref<Record<string, MobileGitOpenItem>>({})
 
   // Hydrate once on first use.
   try {
@@ -121,11 +124,43 @@ export const useGitReposStore = defineStore('gitRepos', () => {
     persistClosed()
   }
 
+  function getMobileOpenItem(repoRoot: string | null | undefined): MobileGitOpenItem | null {
+    const key = (repoRoot || '').trim()
+    if (!key) return null
+    const state = mobileOpenItemByRepo.value[key]
+    if (!state) return null
+    const path = (state.path || '').trim()
+    if (!path) return null
+    return {
+      path,
+      source: state.source === 'staged' ? 'staged' : 'working',
+    }
+  }
+
+  function setMobileOpenItem(repoRoot: string | null | undefined, path: string | null, source: GitDiffSource) {
+    const key = (repoRoot || '').trim()
+    if (!key) return
+    const nextPath = (path || '').trim()
+    if (!nextPath) {
+      if (!mobileOpenItemByRepo.value[key]) return
+      const next = { ...mobileOpenItemByRepo.value }
+      delete next[key]
+      mobileOpenItemByRepo.value = next
+      return
+    }
+    mobileOpenItemByRepo.value = {
+      ...mobileOpenItemByRepo.value,
+      [key]: { path: nextPath, source: source === 'staged' ? 'staged' : 'working' },
+    }
+  }
+
   return {
     getSelectedRelative,
     setSelectedRelative,
     getClosedRelatives,
     closeRepo,
     reopenRepo,
+    getMobileOpenItem,
+    setMobileOpenItem,
   }
 })
