@@ -1,6 +1,6 @@
 # Security
 
-[English](SECURITY.md) | 简体中文
+[English](../../../SECURITY.md) | 简体中文
 
 ## 威胁模型
 

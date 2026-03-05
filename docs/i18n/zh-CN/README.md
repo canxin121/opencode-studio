@@ -1,9 +1,9 @@
 # OpenCode Studio
 
-[English](README.md) | 简体中文
+[English](../../../README.md) | 简体中文
 
 <p align="center">
-  <img src="web/public/apple-touch-icon-180x180.png" width="128" alt="OpenCode Studio 桌面版图标" />
+  <img src="../../../web/public/apple-touch-icon-180x180.png" width="128" alt="OpenCode Studio 桌面版图标" />
 </p>
 
 <p align="center">
@@ -15,9 +15,9 @@
 <p align="center">
   <a href="https://github.com/canxin121/opencode-studio/releases/latest">下载发布版</a>
   ·
-  <a href="docs/technical-reference.md">技术文档</a>
+  <a href="../../technical-reference.md">技术文档</a>
   ·
-  <a href="docs/service.md">服务安装</a>
+  <a href="../../service.md">服务安装</a>
   ·
   <a href="https://github.com/canxin121/opencode-studio/issues">问题反馈</a>
 </p>
@@ -59,13 +59,13 @@
 ## 页面预览
 
 <p align="center">
-  <a href="assets/studio-chat.png"><img src="assets/studio-chat.png" width="300" alt="聊天界面" /></a>
-  <a href="assets/studio-files.png"><img src="assets/studio-files.png" width="300" alt="文件浏览与编辑" /></a>
-  <a href="assets/studio-terminal.png"><img src="assets/studio-terminal.png" width="300" alt="内置终端" /></a>
+  <a href="../../../assets/studio-chat.png"><img src="../../../assets/studio-chat.png" width="300" alt="聊天界面" /></a>
+  <a href="../../../assets/studio-files.png"><img src="../../../assets/studio-files.png" width="300" alt="文件浏览与编辑" /></a>
+  <a href="../../../assets/studio-terminal.png"><img src="../../../assets/studio-terminal.png" width="300" alt="内置终端" /></a>
 </p>
 <p align="center">
-  <a href="assets/studio-git.png"><img src="assets/studio-git.png" width="300" alt="Git 状态与 Diff" /></a>
-  <a href="assets/studio-settings.png"><img src="assets/studio-settings.png" width="300" alt="设置页" /></a>
+  <a href="../../../assets/studio-git.png"><img src="../../../assets/studio-git.png" width="300" alt="Git 状态与 Diff" /></a>
+  <a href="../../../assets/studio-settings.png"><img src="../../../assets/studio-settings.png" width="300" alt="设置页" /></a>
 </p>
 
 - 聊天页面：会话管理、消息流、工具调用可视化。
@@ -314,17 +314,17 @@ iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/maste
 
 技术栈、目录结构、CLI/环境变量参数、安装脚本参数、连接外部 OpenCode、开发命令等统一放在：
 
-- [`docs/technical-reference.md`](docs/technical-reference.md)
+- [`docs/technical-reference.md`](../../technical-reference.md)
 
 补充文档：
-- [`docs/service.md`](docs/service.md)（服务安装/卸载细节）
-- [`docs/packaging.md`](docs/packaging.md)（安装包与构建产物说明）
-- [`desktop/README.md`](desktop/README.md)（桌面打包说明）
-- [`docs/opencode-studio.toml.example`](docs/opencode-studio.toml.example)（配置模板）
-- [`docs/backend-accel-parity-review.md`](docs/backend-accel-parity-review.md)（后端加速一致性评审）
-- [`SECURITY.md`](SECURITY.md)（安全说明）
-- [`CONTRIBUTING.md`](CONTRIBUTING.md)（贡献指南）
+- [`docs/service.md`](../../service.md)（服务安装/卸载细节）
+- [`docs/packaging.md`](../../packaging.md)（安装包与构建产物说明）
+- [`desktop/README.md`](../../../desktop/README.md)（桌面打包说明）
+- [`docs/opencode-studio.toml.example`](../../opencode-studio.toml.example)（配置模板）
+- [`docs/backend-accel-parity-review.md`](../../backend-accel-parity-review.md)（后端加速一致性评审）
+- [`SECURITY.md`](../../../SECURITY.md)（安全说明）
+- [`CONTRIBUTING.md`](../../../CONTRIBUTING.md)（贡献指南）
 
 ## License
 
-本项目采用 MIT License，详见 [`LICENSE`](LICENSE)。
+本项目采用 MIT License，详见 [`LICENSE`](../../../LICENSE)。

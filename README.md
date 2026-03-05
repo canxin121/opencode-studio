@@ -1,6 +1,6 @@
 # OpenCode Studio
 
-English | [简体中文](README.zh-CN.md)
+English | [简体中文](docs/i18n/zh-CN/README.md)
 
 <p align="center">
   <img src="web/public/apple-touch-icon-180x180.png" width="128" alt="OpenCode Studio desktop app icon" />

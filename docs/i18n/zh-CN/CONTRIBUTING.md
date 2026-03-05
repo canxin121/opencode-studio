@@ -1,6 +1,6 @@
 # Contributing
 
-[English](CONTRIBUTING.md) | 简体中文
+[English](../../../CONTRIBUTING.md) | 简体中文
 
 感谢你对 OpenCode Studio 的关注与贡献。
 

@@ -1,6 +1,6 @@
 # AGENTS 验收门槛（对齐 CI）
 
-[English](AGENTS.md) | 简体中文
+[English](../../../AGENTS.md) | 简体中文
 
 本文件定义 Agent 在交付变更前必须满足的最低验收门槛。
 基准来源：`.github/workflows/ci.yml`。

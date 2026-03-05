@@ -1,6 +1,6 @@
 # AGENTS Acceptance Gates (Aligned with CI)
 
-English | [简体中文](AGENTS.zh-CN.md)
+English | [简体中文](docs/i18n/zh-CN/AGENTS.md)
 
 This file defines the minimum acceptance gates that agents must satisfy before handing off changes.
 Baseline source: `.github/workflows/ci.yml`.
