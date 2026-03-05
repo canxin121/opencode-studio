@@ -207,29 +207,29 @@ function Format-HttpUrl([string]$Address, [int]$Port) {
 }
 
 function Resolve-InstallerProfileContext {
-  $home = ""
+  $profileHome = ""
   foreach ($candidate in @($env:HOME, $env:USERPROFILE, [Environment]::GetFolderPath("UserProfile"))) {
     $value = if ($null -eq $candidate) { "" } else { $candidate.ToString().Trim() }
     if ($value) {
-      $home = $value
+      $profileHome = $value
       break
     }
   }
-  if (-not $home) {
+  if (-not $profileHome) {
     throw "Unable to resolve installer user profile directory."
   }
 
   $appData = [Environment]::GetFolderPath("ApplicationData")
   if (-not $appData) {
-    $appData = Join-Path $home "AppData\Roaming"
+    $appData = Join-Path $profileHome "AppData\Roaming"
   }
 
   $localAppData = [Environment]::GetFolderPath("LocalApplicationData")
   if (-not $localAppData) {
-    $localAppData = Join-Path $home "AppData\Local"
+    $localAppData = Join-Path $profileHome "AppData\Local"
   }
 
-  $homeConfigDir = Join-Path $home ".config"
+  $homeConfigDir = Join-Path $profileHome ".config"
   $homeOpenCodeDir = Join-Path $homeConfigDir "opencode"
   $appDataOpenCodeDir = Join-Path $appData "opencode"
 
@@ -250,11 +250,11 @@ function Resolve-InstallerProfileContext {
   }
 
   return @{
-    Home = $home
+    Home = $profileHome
     AppData = $appData
     LocalAppData = $localAppData
     XdgConfigHome = $homeConfigDir
-    XdgDataHome = Join-Path (Join-Path $home ".local") "share"
+    XdgDataHome = Join-Path (Join-Path $profileHome ".local") "share"
     StudioDataDir = Join-Path $appData "opencode-studio"
     OpenCodeConfig = $openCodeConfig
   }
