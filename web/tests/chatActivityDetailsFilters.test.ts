@@ -12,10 +12,10 @@ import {
   normalizeChatActivityFilters,
 } from '../src/lib/chatActivity'
 
-test('activity defaults remove step and agent detail types', () => {
-  assert.equal(DEFAULT_CHAT_ACTIVITY_FILTERS.includes('step-start'), false)
-  assert.equal(DEFAULT_CHAT_ACTIVITY_FILTERS.includes('step-finish'), false)
-  assert.equal(DEFAULT_CHAT_ACTIVITY_FILTERS.includes('agent'), false)
+test('activity defaults enable all transport detail types', () => {
+  assert.equal(DEFAULT_CHAT_ACTIVITY_FILTERS.includes('step-start'), true)
+  assert.equal(DEFAULT_CHAT_ACTIVITY_FILTERS.includes('step-finish'), true)
+  assert.equal(DEFAULT_CHAT_ACTIVITY_FILTERS.includes('agent'), true)
 
   const optionIds = ACTIVITY_DEFAULT_EXPANDED_OPTIONS.map((item) => item.id)
   assert.equal(optionIds.includes('step-start'), false)
@@ -23,9 +23,9 @@ test('activity defaults remove step and agent detail types', () => {
   assert.equal(optionIds.includes('agent'), false)
 })
 
-test('normalizers ignore removed step and agent keys', () => {
+test('normalizers keep step and agent keys in default order', () => {
   const filters = normalizeChatActivityFilters(['step-start', 'agent', 'snapshot'])
-  assert.deepEqual(filters, ['tool', 'snapshot'])
+  assert.deepEqual(filters, ['tool', 'step-start', 'snapshot', 'agent'])
 
   const expanded = normalizeChatActivityDefaultExpanded(['step-finish', 'agent', 'snapshot', 'thinking'])
   assert.deepEqual(expanded, ['snapshot', 'thinking'])
