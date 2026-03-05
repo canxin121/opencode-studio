@@ -2,9 +2,9 @@
 
 [English](README.md) | 简体中文
 
-OpenCode Studio 是一个面向 OpenCode 的本地优先 Web UI。它运行一个 Rust (Axum) 服务端：负责托管构建后的 Vue 前端资源，并将请求桥接/代理到 OpenCode 服务（`opencode serve`）。
+OpenCode Studio 是一个面向 OpenCode 的本地优先工作台，把聊天、文件、终端、Git 和设置集中到同一个界面。支持 Windows、macOS、Linux，可按场景选择桌面安装包或服务模式部署。
 
-> 说明：本项目为社区实现，非 OpenCode 团队官方项目，与其不存在官方隶属关系。OpenCode 上游项目：https://github.com/anomalyco/opencode
+> 说明：本项目为社区实现，非 OpenCode 团队官方项目，与其不存在官方隶属关系。OpenCode 上游项目：[anomalyco/opencode](https://github.com/anomalyco/opencode)
 
 <p align="center">
   <img src="web/public/apple-touch-icon-180x180.png" width="128" alt="OpenCode Studio 桌面版图标" />
@@ -270,16 +270,16 @@ iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/maste
 
 技术栈、目录结构、CLI/环境变量参数、安装脚本参数、连接外部 OpenCode、开发命令等统一放在：
 
-- `docs/technical-reference.md`
+- [`docs/technical-reference.md`](docs/technical-reference.md)
 
 补充文档：
 
-- `docs/service.md`（服务安装/卸载细节）
-- `docs/packaging.md`（安装包与构建产物说明）
-- `docs/opencode-studio.toml.example`（配置模板）
-- `SECURITY.md`（安全说明）
-- `CONTRIBUTING.md`（贡献指南）
+- [`docs/service.md`](docs/service.md)（服务安装/卸载细节）
+- [`docs/packaging.md`](docs/packaging.md)（安装包与构建产物说明）
+- [`docs/opencode-studio.toml.example`](docs/opencode-studio.toml.example)（配置模板）
+- [`SECURITY.md`](SECURITY.md)（安全说明）
+- [`CONTRIBUTING.md`](CONTRIBUTING.md)（贡献指南）
 
 ## License
 
-本项目采用 MIT License，详见 `LICENSE`。
+本项目采用 MIT License，详见 [`LICENSE`](LICENSE)。

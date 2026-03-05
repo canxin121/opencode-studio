@@ -14,6 +14,7 @@ import './style.css'
 import App from './App.vue'
 import { router } from './router'
 import { i18n, ensureDefaultLocale, setAppLocale } from './i18n'
+import { DEFAULT_LOCALE, normalizeAppLocale } from './i18n/locale'
 import { readSessionIdFromQuery } from './app/navigation/sessionQuery'
 import { useToastsStore } from './stores/toasts'
 import { useAuthStore } from './stores/auth'
@@ -54,7 +55,7 @@ app.use(router)
 
 // Keep <html lang> in sync with i18n locale.
 ensureDefaultLocale()
-setAppLocale(i18n.global.locale.value as 'zh-CN' | 'en-US')
+setAppLocale(normalizeAppLocale(i18n.global.locale.value) || DEFAULT_LOCALE)
 const toasts = useToastsStore(pinia)
 const auth = useAuthStore(pinia)
 
