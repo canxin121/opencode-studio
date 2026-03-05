@@ -2,7 +2,7 @@
 
 [English](README.md) | 简体中文
 
-OpenCode Studio 是一个面向 OpenCode 的本地优先工作台，把聊天、文件、终端、Git 和设置集中到同一个界面。支持 Windows、macOS、Linux，可按场景选择桌面安装包或服务模式部署。
+OpenCode Studio 是一个面向 OpenCode 的高性能、多功能工作台，把聊天、文件、终端、Git 和设置集中到同一个界面，并支持插件自定义 UI 与动作扩展。支持 Windows、macOS、Linux，可按场景选择桌面安装包或服务模式部署。
 
 > 说明：本项目为社区实现，非 OpenCode 团队官方项目，与其不存在官方隶属关系。OpenCode 上游项目：[anomalyco/opencode](https://github.com/anomalyco/opencode)
 

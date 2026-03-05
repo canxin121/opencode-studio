@@ -2,7 +2,7 @@
 
 English | [简体中文](README.zh-CN.md)
 
-OpenCode Studio is a local-first workspace for OpenCode that brings chat, files, terminal, Git, and settings into one place. It works on Windows, macOS, and Linux, and supports both desktop package install and service-mode deployment.
+OpenCode Studio is a high-performance, all-in-one workspace for OpenCode that brings chat, files, terminal, Git, and settings into one interface. It supports plugin-customized UI and actions, runs on Windows, macOS, and Linux, and supports both desktop package install and service-mode deployment.
 
 > Note: This is a community project and is not built by the OpenCode team and is not affiliated with them. Upstream OpenCode: [anomalyco/opencode](https://github.com/anomalyco/opencode)
 
