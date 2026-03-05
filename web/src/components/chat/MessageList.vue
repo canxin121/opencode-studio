@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { RiCheckLine, RiFileLine, RiLoader4Line, RiSparkling2Line } from '@remixicon/vue'
+import { RiCheckLine, RiFileLine, RiLoader4Line, RiSparkling2Line, RiTimeLine } from '@remixicon/vue'
 import { useI18n } from 'vue-i18n'
 
 import MarkdownRenderer from '@/components/markdown/MarkdownRenderer.vue'
@@ -304,6 +304,10 @@ function sessionErrorAtLabel(): string {
                 <template v-if="optimisticUser.status === 'sending'">
                   <RiLoader4Line class="h-3.5 w-3.5 animate-spin" />
                   {{ t('chat.messages.optimistic.sending') }}
+                </template>
+                <template v-else-if="optimisticUser.status === 'queued'">
+                  <RiTimeLine class="h-3.5 w-3.5" />
+                  {{ t('chat.messages.optimistic.queued') }}
                 </template>
                 <template v-else>
                   <RiCheckLine class="h-3.5 w-3.5 text-emerald-500" />

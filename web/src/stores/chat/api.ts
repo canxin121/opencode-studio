@@ -450,12 +450,27 @@ export async function abortSession(sessionId: string, directory?: string | null)
   await apiJson(`/api/session/${encodeURIComponent(sessionId)}/abort${directoryQuery(directory)}`, { method: 'POST' })
 }
 
-export async function sendMessage(sessionId: string, payload: JsonValue, directory?: string | null): Promise<void> {
-  await apiJson(`/api/session/${encodeURIComponent(sessionId)}/message${directoryQuery(directory)}`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
+export type SendMessageResponse = {
+  queued?: boolean
+}
+
+export async function sendMessage(
+  sessionId: string,
+  payload: JsonValue,
+  directory?: string | null,
+): Promise<SendMessageResponse> {
+  const resp = await apiJson<JsonValue>(
+    `/api/session/${encodeURIComponent(sessionId)}/message${directoryQuery(directory)}`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+  )
+  const body = asRecord(resp)
+  return {
+    queued: typeof body.queued === 'boolean' ? body.queued : undefined,
+  }
 }
 
 export async function listMessages(

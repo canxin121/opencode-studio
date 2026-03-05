@@ -19,7 +19,7 @@ export async function sendMessageToSession(
 ) {
   const trimmed = (opts.text || '').trim()
   const providedParts = Array.isArray(opts.parts) ? opts.parts : []
-  if (!trimmed && providedParts.length === 0) return
+  if (!trimmed && providedParts.length === 0) return { queued: false }
 
   const providerID = (opts.providerID || '').trim()
   const modelID = (opts.modelID || '').trim()
@@ -49,7 +49,7 @@ export async function sendMessageToSession(
   if (agent) payload.agent = agent
   if (variant) payload.variant = variant
 
-  await chatApi.sendMessage(sessionId, payload, getDirectoryForSession(sessionId))
+  return await chatApi.sendMessage(sessionId, payload, getDirectoryForSession(sessionId))
 }
 
 export async function sendTextToSession(

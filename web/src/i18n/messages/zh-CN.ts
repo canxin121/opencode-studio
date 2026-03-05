@@ -2021,6 +2021,7 @@ export default {
       },
       optimistic: {
         sending: '发送中...',
+        queued: '排队中',
         sent: '已发送',
       },
     },

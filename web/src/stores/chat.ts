@@ -1492,7 +1492,7 @@ export const useChatStore = defineStore('chat', () => {
     },
   ) {
     clearSessionError(sessionId)
-    await sendMessageToSession(sessionId, opts, getDirectoryForSession)
+    return await sendMessageToSession(sessionId, opts, getDirectoryForSession)
   }
 
   async function sendText(sessionId: string, text: string) {

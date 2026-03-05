@@ -2024,6 +2024,7 @@ export default {
       },
       optimistic: {
         sending: 'sending...',
+        queued: 'queued',
         sent: 'sent',
       },
     },
