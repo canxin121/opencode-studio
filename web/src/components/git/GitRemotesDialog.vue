@@ -9,6 +9,7 @@ import Input from '@/components/ui/Input.vue'
 import OptionPicker from '@/components/ui/OptionPicker.vue'
 import type { PickerOption } from '@/components/ui/pickerOption.types'
 import ScrollArea from '@/components/ui/ScrollArea.vue'
+import Skeleton from '@/components/ui/Skeleton.vue'
 
 import type { GitRemoteInfo } from '@/types/git'
 
@@ -169,7 +170,16 @@ const selectedInfo = computed(() => props.remotes.find((r) => r.name === props.s
 
       <div class="rounded-md border border-border/50 overflow-hidden">
         <div v-if="remotesError" class="p-3 text-xs text-red-500">{{ remotesError }}</div>
-        <div v-else-if="remotesLoading" class="p-3 text-xs text-muted-foreground">{{ t('common.loading') }}</div>
+        <div v-else-if="remotesLoading" class="space-y-2 p-3">
+          <div
+            v-for="i in 5"
+            :key="`remotes-skeleton-${i}`"
+            class="space-y-1.5 rounded-sm border border-border/30 p-2.5"
+          >
+            <Skeleton class="h-3 w-24" />
+            <Skeleton class="h-3" :class="i % 2 === 0 ? 'w-11/12' : 'w-4/5'" />
+          </div>
+        </div>
         <ScrollArea v-else class="h-40">
           <div v-if="!remotes.length" class="p-3 text-xs text-muted-foreground">
             {{ t('git.ui.dialogs.remotes.empty') }}

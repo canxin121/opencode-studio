@@ -31,6 +31,7 @@ import SegmentedButton from '@/components/ui/SegmentedButton.vue'
 import SegmentedControl from '@/components/ui/SegmentedControl.vue'
 import SidebarIconButton from '@/components/ui/SidebarIconButton.vue'
 import SidebarListItem from '@/components/ui/SidebarListItem.vue'
+import Skeleton from '@/components/ui/Skeleton.vue'
 import ScrollArea from '@/components/ui/ScrollArea.vue'
 
 import { fileIconClass, fileIconComponent } from '../fileKinds'
@@ -774,7 +775,14 @@ onBeforeUnmount(() => {
         @drop="onExplorerDrop"
       >
         <div class="px-1 pb-2 pt-1">
-          <div v-if="!hasRootChildren" class="oc-vscode-empty">{{ t('common.loading') }}</div>
+          <div v-if="!hasRootChildren" class="space-y-1.5 px-1 py-1.5">
+            <div v-for="i in 8" :key="`tree-skeleton-${i}`" class="rounded-sm px-1.5 py-1">
+              <div class="flex items-center gap-2" :style="{ paddingLeft: `${((i - 1) % 3) * 14}px` }">
+                <Skeleton class="h-3.5 w-3.5 shrink-0 rounded-sm" />
+                <Skeleton class="h-3" :class="i % 3 === 0 ? 'w-1/3' : i % 2 === 0 ? 'w-1/2' : 'w-2/3'" />
+              </div>
+            </div>
+          </div>
 
           <ul v-else class="space-y-0.5">
             <li v-for="entry in treeRows" :key="entry.key">

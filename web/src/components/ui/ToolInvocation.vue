@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   RiPencilLine,
   RiFileEditLine,
@@ -127,6 +128,8 @@ const props = defineProps<{
   collapseSignal?: number
 }>()
 
+const { t } = useI18n()
+
 const isOpen = ref(Boolean(props.initiallyExpanded))
 const activityDiffWrap = ref(true)
 
@@ -188,21 +191,25 @@ const metadata = computed(() => {
 })
 
 const displayName = computed(() => {
-  const t = toolName.value.toLowerCase()
-  if (t === 'bash') return 'Run Command'
-  if (t === 'edit' || t === 'multiedit') return 'Edit File'
-  if (t === 'apply_patch') return 'Apply Patch'
-  if (t === 'str_replace' || t === 'str_replace_based_edit_tool') return 'Replace Text'
-  if (t === 'read') return 'Read File'
-  if (t === 'write') return 'Write File'
-  if (t === 'list') return 'List Files'
-  if (t === 'glob') return 'Find Files'
-  if (t === 'search') return 'Search'
-  if (t === 'grep') return 'Grep'
-  if (t === 'webfetch' || t === 'fetch' || t === 'curl' || t === 'wget') return 'Fetch URL'
-  if (t === 'question') return 'Question'
-  if (t === 'task') return 'Task'
-  return t.charAt(0).toUpperCase() + t.slice(1)
+  const tool = toolName.value.toLowerCase()
+  if (tool === 'bash') return t('chat.messages.activity.toolInvocation.toolNames.bash')
+  if (tool === 'edit' || tool === 'multiedit') return t('chat.messages.activity.toolInvocation.toolNames.edit')
+  if (tool === 'apply_patch') return t('chat.messages.activity.toolInvocation.toolNames.applyPatch')
+  if (tool === 'str_replace' || tool === 'str_replace_based_edit_tool') {
+    return t('chat.messages.activity.toolInvocation.toolNames.replaceText')
+  }
+  if (tool === 'read') return t('chat.messages.activity.toolInvocation.toolNames.read')
+  if (tool === 'write') return t('chat.messages.activity.toolInvocation.toolNames.write')
+  if (tool === 'list') return t('chat.messages.activity.toolInvocation.toolNames.list')
+  if (tool === 'glob') return t('chat.messages.activity.toolInvocation.toolNames.glob')
+  if (tool === 'search') return t('chat.messages.activity.toolInvocation.toolNames.search')
+  if (tool === 'grep') return t('chat.messages.activity.toolInvocation.toolNames.grep')
+  if (tool === 'webfetch' || tool === 'fetch' || tool === 'curl' || tool === 'wget') {
+    return t('chat.messages.activity.toolInvocation.toolNames.fetch')
+  }
+  if (tool === 'question') return t('chat.messages.activity.toolInvocation.toolNames.question')
+  if (tool === 'task') return t('chat.messages.activity.toolInvocation.toolNames.task')
+  return tool.charAt(0).toUpperCase() + tool.slice(1)
 })
 
 const icon = computed(() => {
@@ -256,46 +263,46 @@ function summarizeUnknownInputValue(value: ToolValue): string {
 
 const summary = computed(() => {
   const inp = input.value && typeof input.value === 'object' ? input.value : {}
-  const t = toolName.value.toLowerCase()
+  const tool = toolName.value.toLowerCase()
 
   // Prefer upstream title/label when available.
   const title = typeof state.value?.title === 'string' ? state.value.title.trim() : ''
   if (title) return title.substring(0, 80)
 
-  if (t === 'bash' && typeof inp.command === 'string') {
+  if (tool === 'bash' && typeof inp.command === 'string') {
     const firstLine = inp.command.split('\n')[0] || ''
     return firstLine.substring(0, 60)
   }
 
-  if (['edit', 'multiedit', 'read', 'write'].includes(t)) {
+  if (['edit', 'multiedit', 'read', 'write'].includes(tool)) {
     const path = inp.filePath || inp.file_path || inp.path
     if (typeof path === 'string') {
       return path.split('/').pop() || path
     }
   }
 
-  if (t === 'task' && typeof inp.description === 'string') {
+  if (tool === 'task' && typeof inp.description === 'string') {
     return inp.description.substring(0, 50)
   }
 
-  if (t === 'glob' && typeof inp.pattern === 'string') {
+  if (tool === 'glob' && typeof inp.pattern === 'string') {
     return inp.pattern.substring(0, 80)
   }
 
-  if ((t === 'search' || t === 'grep') && typeof inp.pattern === 'string') {
+  if ((tool === 'search' || tool === 'grep') && typeof inp.pattern === 'string') {
     const where = typeof inp.path === 'string' ? inp.path : ''
     return where ? `${inp.pattern}  in  ${where}`.substring(0, 80) : inp.pattern.substring(0, 80)
   }
 
-  if ((t === 'webfetch' || t === 'fetch' || t === 'curl' || t === 'wget') && typeof inp.url === 'string') {
+  if ((tool === 'webfetch' || tool === 'fetch' || tool === 'curl' || tool === 'wget') && typeof inp.url === 'string') {
     return inp.url.substring(0, 80)
   }
 
-  if (t === 'question' && Array.isArray(inp.questions)) {
-    return `Asked ${inp.questions.length} question(s)`
+  if (tool === 'question' && Array.isArray(inp.questions)) {
+    return t('chat.messages.activity.toolInvocation.summary.askedQuestions', { count: inp.questions.length })
   }
 
-  if (t === 'list' && typeof inp.path === 'string') {
+  if (tool === 'list' && typeof inp.path === 'string') {
     return inp.path
   }
 
@@ -519,7 +526,9 @@ const shouldShowInput = computed(() => {
           <div v-if="isStale" class="text-muted-foreground/80">
             <RiStopCircleLine class="h-3.5 w-3.5" />
           </div>
-          <div v-else-if="isError" class="text-[10px] font-semibold text-destructive">Failed</div>
+          <div v-else-if="isError" class="text-[10px] font-semibold text-destructive">
+            {{ t('chat.messages.activity.toolInvocation.status.failed') }}
+          </div>
           <div v-else-if="isSuccess && !isOpen" class="text-emerald-500/80">
             <RiCheckLine class="h-3.5 w-3.5" />
           </div>
@@ -530,11 +539,13 @@ const shouldShowInput = computed(() => {
     <Transition name="toolreveal">
       <div v-show="isOpen" class="pl-6 pt-0.5 pb-1">
         <div class="space-y-2">
-          <div v-if="detailLoading" class="text-[11px] text-muted-foreground/70 italic">Loading details...</div>
+          <div v-if="detailLoading" class="text-[11px] text-muted-foreground/70 italic">
+            {{ t('chat.messages.activity.toolInvocation.status.loadingDetails') }}
+          </div>
 
           <div v-if="shouldShowInput" class="text-xs">
             <div class="text-muted-foreground/80 mb-1 font-medium flex justify-between items-center">
-              <span>Input</span>
+              <span>{{ t('chat.messages.activity.toolInvocation.sections.input') }}</span>
               <span class="text-[10px] uppercase tracking-wider opacity-70">{{ displayInputData.lang }}</span>
             </div>
             <CodeBlock :code="displayInputData.text" :lang="displayInputData.lang" :compact="true" class="my-0" />
@@ -542,7 +553,7 @@ const shouldShowInput = computed(() => {
 
           <div v-if="activityDiffPreview" class="text-xs">
             <div class="text-muted-foreground/80 mb-1 font-medium flex justify-between items-center">
-              <span>Diff</span>
+              <span>{{ t('chat.messages.activity.toolInvocation.sections.diff') }}</span>
               <div class="flex items-center gap-2">
                 <button
                   type="button"
@@ -552,14 +563,24 @@ const shouldShowInput = computed(() => {
                       ? 'bg-secondary/70 text-foreground shadow-inner'
                       : 'text-muted-foreground opacity-80 hover:bg-secondary/40 hover:text-foreground hover:opacity-100'
                   "
-                  :title="activityDiffWrap ? 'Disable wrap lines' : 'Enable wrap lines'"
-                  :aria-label="activityDiffWrap ? 'Disable wrap lines' : 'Enable wrap lines'"
+                  :title="
+                    activityDiffWrap
+                      ? t('chat.messages.activity.toolInvocation.wrap.disable')
+                      : t('chat.messages.activity.toolInvocation.wrap.enable')
+                  "
+                  :aria-label="
+                    activityDiffWrap
+                      ? t('chat.messages.activity.toolInvocation.wrap.disable')
+                      : t('chat.messages.activity.toolInvocation.wrap.enable')
+                  "
                   :aria-pressed="activityDiffWrap"
                   @click="activityDiffWrap = !activityDiffWrap"
                 >
-                  Wrap
+                  {{ t('chat.messages.activity.toolInvocation.wrap.label') }}
                 </button>
-                <span class="text-[10px] uppercase tracking-wider opacity-70">diff</span>
+                <span class="text-[10px] uppercase tracking-wider opacity-70">
+                  {{ t('chat.messages.activity.toolInvocation.sections.diffCode') }}
+                </span>
               </div>
             </div>
             <div class="oc-activity-detail h-96 overflow-hidden">
@@ -579,9 +600,11 @@ const shouldShowInput = computed(() => {
           </div>
 
           <div v-if="displayOutput || error" class="text-xs">
-            <div v-if="error" class="text-destructive mb-1 font-medium">Error</div>
+            <div v-if="error" class="text-destructive mb-1 font-medium">
+              {{ t('chat.messages.activity.toolInvocation.sections.error') }}
+            </div>
             <div v-else class="text-muted-foreground/80 mb-1 font-medium flex justify-between items-center">
-              <span>Output</span>
+              <span>{{ t('chat.messages.activity.toolInvocation.sections.output') }}</span>
               <span class="text-[10px] uppercase tracking-wider opacity-70">{{ outputLang }}</span>
             </div>
             <CodeBlock v-if="displayOutput" :code="displayOutput" :lang="outputLang" :compact="true" class="my-0" />
@@ -591,12 +614,16 @@ const shouldShowInput = computed(() => {
             v-else-if="!detailLoading && !isLazy && !shouldShowInput && !isRunning && isSuccess"
             class="text-[11px] text-muted-foreground/70 italic"
           >
-            (Completed with no output)
+            {{ t('chat.messages.activity.toolInvocation.status.completedWithoutOutput') }}
           </div>
 
-          <div v-else-if="isStale" class="text-[11px] text-muted-foreground/70 italic">(Stopped: session ended)</div>
+          <div v-else-if="isStale" class="text-[11px] text-muted-foreground/70 italic">
+            {{ t('chat.messages.activity.toolInvocation.status.stoppedSessionEnded') }}
+          </div>
 
-          <div v-else-if="isRunning" class="text-[11px] text-muted-foreground/70 italic">Running...</div>
+          <div v-else-if="isRunning" class="text-[11px] text-muted-foreground/70 italic">
+            {{ t('chat.messages.activity.toolInvocation.status.running') }}
+          </div>
         </div>
       </div>
     </Transition>

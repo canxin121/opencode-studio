@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { RiFileList2Line, RiMagicLine, RiRefreshLine, RiScissorsLine, RiStackLine } from '@remixicon/vue'
+import { useI18n } from 'vue-i18n'
 
 import ActivityDisclosureButton from '@/components/ui/ActivityDisclosureButton.vue'
 import CodeBlock from './CodeBlock.vue'
@@ -23,6 +24,8 @@ const props = defineProps<{
   // Bump this value to force-close details.
   collapseSignal?: number
 }>()
+
+const { t } = useI18n()
 
 const isOpen = ref(Boolean(props.initiallyExpanded))
 
@@ -52,15 +55,15 @@ const kind = computed(() => String(props.part?.type || '').toLowerCase())
 const title = computed(() => {
   switch (kind.value) {
     case 'snapshot':
-      return 'Snapshot'
+      return t('chat.messages.activity.metaInvocation.types.snapshot')
     case 'patch':
-      return 'Patch'
+      return t('chat.messages.activity.metaInvocation.types.patch')
     case 'retry':
-      return 'Retry'
+      return t('chat.messages.activity.metaInvocation.types.retry')
     case 'compaction':
-      return 'Compaction'
+      return t('chat.messages.activity.metaInvocation.types.compaction')
     default:
-      return kind.value || 'Meta'
+      return kind.value || t('chat.messages.activity.metaInvocation.types.meta')
   }
 })
 
@@ -95,16 +98,24 @@ const summary = computed(() => {
       : typeof p.fileCount === 'number' && Number.isFinite(p.fileCount)
         ? Math.max(0, Math.floor(p.fileCount))
         : 0
-    return files ? `${files} file(s)` : ''
+    return files ? t('chat.messages.activity.metaInvocation.summary.files', { count: files }) : ''
   }
   if (kind.value === 'retry') {
-    const attempt = typeof p.attempt === 'number' ? `attempt ${p.attempt}` : ''
+    const attempt =
+      typeof p.attempt === 'number'
+        ? t('chat.messages.activity.metaInvocation.summary.attempt', { count: p.attempt })
+        : ''
     const error = asRecord(p.error)
     const msg = typeof error.message === 'string' ? error.message : ''
     return [attempt, short(msg, 56)].filter(Boolean).join(' · ')
   }
   if (kind.value === 'compaction') {
-    const auto = typeof p.auto === 'boolean' ? (p.auto ? 'auto' : 'manual') : ''
+    const auto =
+      typeof p.auto === 'boolean'
+        ? p.auto
+          ? t('chat.messages.activity.metaInvocation.summary.auto')
+          : t('chat.messages.activity.metaInvocation.summary.manual')
+        : ''
     return auto
   }
   return ''
@@ -146,7 +157,9 @@ watch(
 
     <Transition name="toolreveal">
       <div v-show="isOpen" class="pl-6 pt-0.5 pb-1">
-        <div v-if="detailLoading" class="text-[11px] text-muted-foreground/70 italic mb-1">Loading details...</div>
+        <div v-if="detailLoading" class="text-[11px] text-muted-foreground/70 italic mb-1">
+          {{ t('chat.messages.activity.metaInvocation.loadingDetails') }}
+        </div>
         <CodeBlock :code="details" lang="json" :compact="true" class="my-0" />
       </div>
     </Transition>

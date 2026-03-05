@@ -185,6 +185,14 @@ export default {
     },
   },
   ui: {
+    codeEditor: {
+      loading: '编辑器加载中...',
+      loadFailed: '编辑器加载失败。',
+    },
+    diffViewer: {
+      empty: '无 diff 内容。',
+      renderFailed: '渲染 diff 失败',
+    },
     pathPicker: {
       actions: {
         browse: '浏览',
@@ -489,6 +497,7 @@ export default {
         importedKindJsonInto: '已将 {kind} JSON 导入到 {id}',
         setPermissionWildcard: '已设置 permission.* = {action}',
         appliedActionToToolsCount: '已对 {count} 个工具应用 {action}',
+        appliedPermissionPreset: '已应用权限预设：{preset}（{mode}）',
       },
 
       validation: {
@@ -1842,6 +1851,12 @@ export default {
       },
     },
 
+    commandPalette: {
+      empty: '未找到命令',
+      aliases: '别名',
+      hint: '上下切换 | 回车选择 | Esc 关闭',
+    },
+
     page: {
       nav: {
         previousUserMessage: '上一条用户消息',
@@ -1904,6 +1919,13 @@ export default {
         title: '无附件',
         description: '使用上方按钮添加文件。',
       },
+      errors: {
+        failedToReadUnknown: '读取文件失败',
+        fileTooLarge: '文件过大：{name}（{size}）',
+        totalTooLarge: '附件总大小过大（上限 {size}）',
+        failedToReadFile: '读取文件失败：{name}',
+        unsupportedFile: '不支持的文件：{name}',
+      },
     },
 
     attachProjectDialog: {
@@ -1929,6 +1951,68 @@ export default {
       activity: {
         moreCount: '+{count} 条更多...',
         hide: '隐藏',
+        toolInvocation: {
+          toolNames: {
+            bash: '运行命令',
+            edit: '编辑文件',
+            applyPatch: '应用补丁',
+            replaceText: '替换文本',
+            read: '读取文件',
+            write: '写入文件',
+            list: '列出文件',
+            glob: '查找文件',
+            search: '搜索',
+            grep: 'Grep',
+            fetch: '抓取 URL',
+            question: '提问',
+            task: '任务',
+          },
+          summary: {
+            askedQuestions: '已提问 {count} 个问题',
+          },
+          sections: {
+            input: '输入',
+            diff: 'Diff',
+            diffCode: 'diff',
+            error: '错误',
+            output: '输出',
+          },
+          wrap: {
+            label: '换行',
+            enable: '启用自动换行',
+            disable: '关闭自动换行',
+          },
+          status: {
+            failed: '失败',
+            loadingDetails: '正在加载详情...',
+            completedWithoutOutput: '（已完成，无输出）',
+            stoppedSessionEnded: '（已停止：会话结束）',
+            running: '运行中...',
+          },
+        },
+        metaInvocation: {
+          types: {
+            snapshot: '快照',
+            patch: '补丁',
+            retry: '重试',
+            compaction: '压缩',
+            meta: '元信息',
+          },
+          summary: {
+            files: '{count} 个文件',
+            attempt: '第 {count} 次尝试',
+            auto: '自动',
+            manual: '手动',
+          },
+          loadingDetails: '正在加载详情...',
+        },
+        reasoningInvocation: {
+          types: {
+            thinking: '思考',
+            justification: '依据',
+          },
+          loadingDetails: '正在加载详情...',
+        },
       },
       optimistic: {
         sending: '发送中...',
@@ -2753,6 +2837,7 @@ export default {
         description: '你的组织对此远端要求 SSO',
       },
       terminalHelp: {
+        title: '需要终端',
         description: '该操作需要交互式终端',
       },
       gpgPassphrase: {
@@ -3086,6 +3171,8 @@ export default {
       authenticationRequiredForAction: '{action}：需要身份验证',
       sshAuthenticationRequiredForAction: '{action}：需要在终端完成 SSH 身份验证',
       stashActionRef: 'stash {action} {ref}',
+      droppedStashes: '已删除 {count} 个 stash',
+      noStashesToDrop: '没有可删除的 stash',
       ignoredPath: '已忽略 {path}',
       pushNeedsRemoteSetup: '未找到远程或上游分支。现在创建 GitHub 仓库并发布吗？',
       createGithubRepoAction: '创建并推送',
@@ -3125,6 +3212,9 @@ export default {
   files: {
     errors: {
       noProjectSelected: '未选择项目',
+      filenameRequired: '文件名不能为空',
+      folderNameRequired: '文件夹名不能为空',
+      nameRequired: '名称不能为空',
     },
     actions: {
       download: '下载',
@@ -3168,6 +3258,7 @@ export default {
         hint: '输入以搜索文件名和路径。',
         noQuery: '没有搜索关键字。',
         noFilesFound: '未找到文件。',
+        results: '{count} 条结果',
       },
       content: {
         placeholder: '搜索',
@@ -3209,6 +3300,7 @@ export default {
         cannotOpen: '无法为此条目打开时间线',
         missingInCommit: '此提交中该文件不存在。',
         binaryUnavailable: '所选提交中该文件为二进制文件，无法进行文本对比。',
+        noBlameData: '当前文件未返回 blame 数据，请尝试重新加载。',
       },
       info: {
         truncated: '提交内容过大，已截断用于预览。',
@@ -3293,6 +3385,7 @@ export default {
         desktopDescription: '从树中选择一个文件。',
       },
       binaryPreviewUnavailable: '不支持预览二进制文件。',
+      pdfPreviewTitle: 'PDF 预览',
       imageAltFallback: '图片',
       timeline: {
         selectCommitTitle: '选择提交',
@@ -3311,6 +3404,9 @@ export default {
     },
     toasts: {
       saveFileBeforeGitHunkActions: '应用 Git hunk 操作前请先保存文件',
+      hunkStaged: '已暂存 hunk',
+      hunkUnstaged: '已取消暂存 hunk',
+      hunkDiscarded: '已丢弃 hunk',
       saveCurrentFileBeforeReplaceAcrossFiles: '跨文件替换前请先保存当前文件',
       replaceAcrossFiles: {
         replacedMatch: '已替换 {count} 处匹配{suffix}',
