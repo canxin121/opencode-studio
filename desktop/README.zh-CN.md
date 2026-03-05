@@ -19,5 +19,6 @@ bun install --cwd web
 bun run --cwd web build
 
 # Full app（包含内置后端服务；需要先构建并放置后端二进制）
-# 完整本地构建步骤见 docs/packaging.md
 ```
+
+完整本地构建步骤见 [`docs/packaging.md`](../docs/packaging.md)。

@@ -319,7 +319,9 @@ All technical details, configuration parameters, and developer-centric reference
 Related docs:
 - [`docs/service.md`](docs/service.md) (service install/uninstall details)
 - [`docs/packaging.md`](docs/packaging.md) (package artifacts and build outputs)
+- [`desktop/README.md`](desktop/README.md) (desktop packaging notes)
 - [`docs/opencode-studio.toml.example`](docs/opencode-studio.toml.example) (runtime config example)
+- [`docs/backend-accel-parity-review.md`](docs/backend-accel-parity-review.md) (backend acceleration parity review)
 - [`SECURITY.md`](SECURITY.md) (security notes)
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) (contribution guide)
 

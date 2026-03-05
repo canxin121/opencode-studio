@@ -319,7 +319,9 @@ iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/maste
 补充文档：
 - [`docs/service.md`](docs/service.md)（服务安装/卸载细节）
 - [`docs/packaging.md`](docs/packaging.md)（安装包与构建产物说明）
+- [`desktop/README.md`](desktop/README.md)（桌面打包说明）
 - [`docs/opencode-studio.toml.example`](docs/opencode-studio.toml.example)（配置模板）
+- [`docs/backend-accel-parity-review.md`](docs/backend-accel-parity-review.md)（后端加速一致性评审）
 - [`SECURITY.md`](SECURITY.md)（安全说明）
 - [`CONTRIBUTING.md`](CONTRIBUTING.md)（贡献指南）
 

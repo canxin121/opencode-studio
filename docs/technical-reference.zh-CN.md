@@ -235,4 +235,4 @@ cargo test -q --manifest-path server/Cargo.toml
 
 该服务暴露了较强的本地能力（工作区范围文件读写、git 操作、终端拉起）。建议仅绑定 localhost；若必须对外暴露，请启用 `OPENCODE_STUDIO_UI_PASSWORD` 并置于可信反向代理之后。
 
-威胁模型和漏洞上报流程见 `SECURITY.md`。
+威胁模型和漏洞上报流程见 [`SECURITY.md`](../SECURITY.md)。

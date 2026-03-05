@@ -21,5 +21,6 @@ bun install --cwd web
 bun run --cwd web build
 
 # Full app (includes bundled backend service; requires building + placing the backend binary first)
-# See docs/packaging.md for the full local build steps.
 ```
+
+For full local build steps, see [`docs/packaging.md`](../docs/packaging.md).

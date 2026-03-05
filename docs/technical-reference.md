@@ -235,4 +235,4 @@ Tip: for UI debugging, use `build:rust-debug` and point `--ui-dir` to `web/dist-
 
 The service exposes powerful local capabilities (workspace-scoped file read/write, git operations, terminal spawning). Keep it on localhost, or enable `OPENCODE_STUDIO_UI_PASSWORD` and place it behind a trusted reverse proxy if exposure is required.
 
-For threat model and reporting guidance, see `SECURITY.md`.
+For threat model and reporting guidance, see [`SECURITY.md`](../SECURITY.md).
