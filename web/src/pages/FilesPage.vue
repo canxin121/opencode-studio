@@ -72,6 +72,8 @@ import type { FsContentSearchFileResult, FsContentSearchMatch } from '@/features
 import { useDesktopSidebarResize } from '@/composables/useDesktopSidebarResize'
 import { localStorageKeys } from '@/lib/persistence/storageKeys'
 import { useChatStore } from '@/stores/chat'
+import { useSettingsStore } from '@/stores/settings'
+import type { Settings } from '@/stores/settings'
 import { useToastsStore } from '@/stores/toasts'
 import { useDirectoryStore } from '@/stores/directory'
 import { useUiStore } from '@/stores/ui'
@@ -92,6 +94,7 @@ const LARGE_FILE_WARNING_BYTES = 1024 * 1024
 const HIDDEN_FILE_RELATIVE_PATHS = new Set(['web/src/data/directorySessionSnapshotDb.ts'])
 
 const chat = useChatStore()
+const settings = useSettingsStore()
 const toasts = useToastsStore()
 const directoryStore = useDirectoryStore()
 const ui = useUiStore()
@@ -431,8 +434,64 @@ const selectionAnchorPath = ref('')
 const confirmDiscardOpen = ref(false)
 const pendingSelect = ref<FileNode | null>(null)
 
+let syncingFilesVisibilityPreferencesFromSettings = false
+let filesVisibilityPreferencesInitialized = false
+
+function persistFilesVisibilityPreferencesToSettings() {
+  if (!filesVisibilityPreferencesInitialized) return
+  if (syncingFilesVisibilityPreferencesFromSettings) return
+  if (!settings.data) return
+
+  const showGitignored = !respectGitignore.value
+  const patch: Partial<Settings> = {}
+
+  if (settings.data.directoryShowHidden !== showHidden.value) {
+    patch.directoryShowHidden = showHidden.value
+  }
+  if (settings.data.filesViewShowGitignored !== showGitignored) {
+    patch.filesViewShowGitignored = showGitignored
+  }
+  if (Object.keys(patch).length === 0) return
+
+  void settings.save(patch)
+}
+
+function syncFilesVisibilityPreferencesFromSettings(next: Settings | null) {
+  if (!next) return
+
+  const hasShowHidden = typeof next.directoryShowHidden === 'boolean'
+  const hasShowGitignored = typeof next.filesViewShowGitignored === 'boolean'
+
+  syncingFilesVisibilityPreferencesFromSettings = true
+  if (hasShowHidden) {
+    showHidden.value = Boolean(next.directoryShowHidden)
+  }
+  if (hasShowGitignored) {
+    respectGitignore.value = !Boolean(next.filesViewShowGitignored)
+  }
+  syncingFilesVisibilityPreferencesFromSettings = false
+
+  filesVisibilityPreferencesInitialized = true
+
+  if (hasShowHidden && hasShowGitignored) return
+
+  const patch: Partial<Settings> = {}
+  if (!hasShowHidden) {
+    patch.directoryShowHidden = showHidden.value
+  }
+  if (!hasShowGitignored) {
+    patch.filesViewShowGitignored = !respectGitignore.value
+  }
+
+  void settings.save(patch)
+}
+
 watch(showHidden, (v) => localStorage.setItem(STORAGE_FILES_SHOW_HIDDEN, v ? 'true' : 'false'))
-watch(respectGitignore, (v) => localStorage.setItem(STORAGE_FILES_RESPECT_GITIGNORE, v ? 'true' : 'false'))
+watch(showHidden, () => persistFilesVisibilityPreferencesToSettings())
+watch(respectGitignore, (v) => {
+  localStorage.setItem(STORAGE_FILES_RESPECT_GITIGNORE, v ? 'true' : 'false')
+  persistFilesVisibilityPreferencesToSettings()
+})
 watch(autoSaveEnabled, (v) => {
   localStorage.setItem(STORAGE_FILES_AUTOSAVE, v ? 'true' : 'false')
   if (!v) {
@@ -446,6 +505,13 @@ watch(timelineVisibilityPreference, (v) =>
 watch(explorerSidebarMode, (v) => localStorage.setItem(STORAGE_FILES_SIDEBAR_MODE, v))
 watch(explorerSearchMode, (v) => localStorage.setItem(STORAGE_FILES_SEARCH_MODE, v))
 watch(contentSearchScopeMode, (v) => localStorage.setItem(STORAGE_FILES_CONTENT_SCOPE_MODE, v))
+watch(
+  () => settings.data,
+  (next) => {
+    syncFilesVisibilityPreferencesFromSettings(next)
+  },
+  { immediate: true },
+)
 
 watch(
   () => [blameEnabled.value, selectedFile.value?.path, viewerMode.value, root.value] as const,

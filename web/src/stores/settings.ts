@@ -42,6 +42,10 @@ export type Settings = {
   diffLayoutPreference?: 'dynamic' | 'inline' | 'side-by-side'
   diffViewMode?: 'single' | 'stacked'
 
+  // Files
+  directoryShowHidden?: boolean
+  filesViewShowGitignored?: boolean
+
   githubClientId?: string
   githubScopes?: string
 
