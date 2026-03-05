@@ -33,7 +33,8 @@ function toDesktopLocalBackendBaseUrl(host: string, port: number): string {
   const normalizedHost = normalizeDesktopConnectHost(host)
   const numericPort = Number.isFinite(Number(port)) ? Math.floor(Number(port)) : 0
   if (!normalizedHost || numericPort < 1 || numericPort > 65535) return ''
-  const bracketHost = normalizedHost.includes(':') && !normalizedHost.startsWith('[') ? `[${normalizedHost}]` : normalizedHost
+  const bracketHost =
+    normalizedHost.includes(':') && !normalizedHost.startsWith('[') ? `[${normalizedHost}]` : normalizedHost
   return normalizeBackendBaseUrl(`http://${bracketHost}:${numericPort}`)
 }
 
