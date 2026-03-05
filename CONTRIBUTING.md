@@ -1,6 +1,6 @@
 # Contributing
 
-English | [简体中文](docs/i18n/zh-CN/CONTRIBUTING.md)
+English | [简体中文](docs/i18n/zh-CN/CONTRIBUTING.md) | [Español](docs/i18n/es/CONTRIBUTING.md)
 
 Thanks for your interest in improving OpenCode Studio.
 

@@ -1,6 +1,6 @@
 # OpenCode Studio
 
-[English](../../../README.md) | 简体中文
+[English](../../../README.md) | 简体中文 | [Español](../es/README.md)
 
 <p align="center">
   <img src="../../../web/public/apple-touch-icon-180x180.png" width="128" alt="OpenCode Studio 桌面版图标" />
@@ -18,6 +18,8 @@
   <a href="../../technical-reference.md">技术文档</a>
   ·
   <a href="../../service.md">服务安装</a>
+  ·
+  <a href="../README.md">语言索引</a>
   ·
   <a href="https://github.com/canxin121/opencode-studio/issues">问题反馈</a>
 </p>
@@ -322,6 +324,7 @@ iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/maste
 - [`desktop/README.md`](../../../desktop/README.md)（桌面打包说明）
 - [`docs/opencode-studio.toml.example`](../../opencode-studio.toml.example)（配置模板）
 - [`docs/backend-accel-parity-review.md`](../../backend-accel-parity-review.md)（后端加速一致性评审）
+- [`docs/i18n/README.md`](../README.md)（语言版本索引）
 - [`SECURITY.md`](../../../SECURITY.md)（安全说明）
 - [`CONTRIBUTING.md`](../../../CONTRIBUTING.md)（贡献指南）
 

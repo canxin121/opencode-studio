@@ -1,6 +1,6 @@
 # Security
 
-English | [简体中文](docs/i18n/zh-CN/SECURITY.md)
+English | [简体中文](docs/i18n/zh-CN/SECURITY.md) | [Español](docs/i18n/es/SECURITY.md)
 
 ## Threat model
 

@@ -1,6 +1,6 @@
 # OpenCode Studio
 
-English | [简体中文](docs/i18n/zh-CN/README.md)
+English | [简体中文](docs/i18n/zh-CN/README.md) | [Español](docs/i18n/es/README.md)
 
 <p align="center">
   <img src="web/public/apple-touch-icon-180x180.png" width="128" alt="OpenCode Studio desktop app icon" />
@@ -18,6 +18,8 @@ English | [简体中文](docs/i18n/zh-CN/README.md)
   <a href="docs/technical-reference.md">Technical Docs</a>
   ·
   <a href="docs/service.md">Service Install</a>
+  ·
+  <a href="docs/i18n/README.md">Language Index</a>
   ·
   <a href="https://github.com/canxin121/opencode-studio/issues">Issue Tracker</a>
 </p>
@@ -322,6 +324,7 @@ Related docs:
 - [`desktop/README.md`](desktop/README.md) (desktop packaging notes)
 - [`docs/opencode-studio.toml.example`](docs/opencode-studio.toml.example) (runtime config example)
 - [`docs/backend-accel-parity-review.md`](docs/backend-accel-parity-review.md) (backend acceleration parity review)
+- [`docs/i18n/README.md`](docs/i18n/README.md) (language matrix)
 - [`SECURITY.md`](SECURITY.md) (security notes)
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) (contribution guide)
 
