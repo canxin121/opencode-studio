@@ -27,6 +27,17 @@ export type FsSearchResponse = {
 
 export type FsUploadResponse = { success: boolean; path: string; bytes: number }
 
+export type FsReadChunkResponse = {
+  path: string
+  content: string
+  offset: number
+  limit: number
+  loadedBytes: number
+  totalBytes: number
+  hasMore: boolean
+  nextOffset?: number
+}
+
 export type FsContentSearchMatch = {
   line: number
   startColumn: number
@@ -153,6 +164,23 @@ export async function replaceFileContent(input: {
 
 export async function readFileText(input: { directory: string; path: string }): Promise<string> {
   return apiText(`/api/fs/read?directory=${encodeURIComponent(input.directory)}&path=${encodeURIComponent(input.path)}`)
+}
+
+export async function readFileChunk(input: {
+  directory: string
+  path: string
+  offset?: number
+  limit?: number
+}): Promise<FsReadChunkResponse> {
+  const params = [
+    `directory=${encodeURIComponent(input.directory)}`,
+    `path=${encodeURIComponent(input.path)}`,
+    `offset=${encodeURIComponent(String(Math.max(0, Math.floor(input.offset ?? 0))))}`,
+  ]
+  if (typeof input.limit === 'number' && Number.isFinite(input.limit)) {
+    params.push(`limit=${encodeURIComponent(String(Math.max(0, Math.floor(input.limit))))}`)
+  }
+  return apiJson<FsReadChunkResponse>(`/api/fs/read-chunk?${params.join('&')}`)
 }
 
 export async function writeFile(input: {

@@ -35,6 +35,20 @@ import type { GitBlameLine, GitDiffMeta, GitLogCommit } from '@/types/git'
 type GitDiffMode = 'working' | 'staged'
 type GitPatchMode = 'stage' | 'unstage' | 'discard'
 type TimelineSide = 'left' | 'right'
+type LargeFilePrompt = {
+  totalBytes: number
+  totalLabel: string
+  initialLoadLabel: string
+}
+
+type FileChunkUi = {
+  loadedBytes: number
+  loadedLabel: string
+  totalBytes: number
+  totalLabel: string
+  hasMore: boolean
+  loadingMore: boolean
+}
 
 const showMobileViewer = defineModel<boolean>('showMobileViewer', { default: false })
 const autoSaveEnabled = defineModel<boolean>('autoSaveEnabled', { default: false })
@@ -58,6 +72,8 @@ const props = defineProps<{
   fileLoading: boolean
   fileError: string | null
   fileStatusLabel: string
+  largeFilePrompt: LargeFilePrompt | null
+  fileChunkUi: FileChunkUi | null
   blameEnabled: boolean
   blameLoading: boolean
   blameError: string | null
@@ -94,6 +110,8 @@ const props = defineProps<{
   openSidebar: () => boolean | void | Promise<boolean | void>
   openRaw: () => boolean | void | Promise<boolean | void>
   save: () => boolean | void | Promise<boolean | void>
+  confirmLargeFileLoad: () => boolean | void | Promise<boolean | void>
+  loadMoreFileContent: () => boolean | void | Promise<boolean | void>
   copyToClipboard: (text: string) => void | Promise<void>
 }>()
 
@@ -1169,6 +1187,26 @@ function onSendSelection() {
         {{ t('common.loading') }}
       </div>
 
+      <div v-else-if="largeFilePrompt" class="p-3">
+        <div class="rounded-md border border-amber-500/50 bg-amber-500/10 p-3 text-sm">
+          <div class="font-medium text-foreground">{{ t('files.viewer.largeFile.title') }}</div>
+          <div class="mt-1 text-muted-foreground">
+            {{ t('files.viewer.largeFile.description', { size: largeFilePrompt.totalLabel }) }}
+          </div>
+          <div class="mt-1 text-xs text-muted-foreground">
+            {{ t('files.viewer.largeFile.initialLoadHint', { size: largeFilePrompt.initialLoadLabel }) }}
+          </div>
+          <div class="mt-3 flex items-center gap-2">
+            <Button size="sm" @click="() => props.confirmLargeFileLoad()">{{
+              t('files.viewer.largeFile.continue')
+            }}</Button>
+            <Button variant="outline" size="sm" @click="props.openRaw">{{
+              t('files.viewer.actions.downloadRaw')
+            }}</Button>
+          </div>
+        </div>
+      </div>
+
       <div v-else-if="viewerMode === 'binary'" class="p-3">
         <div class="rounded-md border border-border bg-background/40 px-3 py-2 text-muted-foreground typography-meta">
           {{ t('files.viewer.binaryPreviewUnavailable') }}
@@ -1226,6 +1264,27 @@ function onSendSelection() {
         :class="showMarkdownSplit && isMobile ? 'flex-col' : ''"
       >
         <div
+          v-if="fileChunkUi && (fileChunkUi.hasMore || fileChunkUi.loadingMore)"
+          class="w-full border-b border-border/40 bg-muted/20 px-3 py-2 text-xs text-muted-foreground"
+        >
+          <div class="flex flex-wrap items-center gap-2">
+            <span>{{
+              t('files.viewer.largeFile.partialLoadedBanner', {
+                loaded: fileChunkUi.loadedLabel,
+                total: fileChunkUi.totalLabel,
+              })
+            }}</span>
+            <Button
+              size="xs"
+              variant="outline"
+              :disabled="fileChunkUi.loadingMore || !fileChunkUi.hasMore"
+              @click="() => props.loadMoreFileContent()"
+            >
+              {{ fileChunkUi.loadingMore ? t('common.loading') : t('files.viewer.largeFile.loadMore') }}
+            </Button>
+          </div>
+        </div>
+        <div
           v-if="showMarkdownSource"
           class="min-h-0 min-w-0"
           :class="
@@ -1261,6 +1320,27 @@ function onSendSelection() {
       </div>
 
       <div v-else class="h-full flex min-h-0">
+        <div
+          v-if="!timelineEnabled && fileChunkUi && (fileChunkUi.hasMore || fileChunkUi.loadingMore)"
+          class="absolute inset-x-0 top-0 z-10 border-b border-border/40 bg-muted/20 px-3 py-2 text-xs text-muted-foreground"
+        >
+          <div class="flex flex-wrap items-center gap-2">
+            <span>{{
+              t('files.viewer.largeFile.partialLoadedBanner', {
+                loaded: fileChunkUi.loadedLabel,
+                total: fileChunkUi.totalLabel,
+              })
+            }}</span>
+            <Button
+              size="xs"
+              variant="outline"
+              :disabled="fileChunkUi.loadingMore || !fileChunkUi.hasMore"
+              @click="() => props.loadMoreFileContent()"
+            >
+              {{ fileChunkUi.loadingMore ? t('common.loading') : t('files.viewer.largeFile.loadMore') }}
+            </Button>
+          </div>
+        </div>
         <template v-if="timelineEnabled">
           <div class="flex-1 min-w-0 relative flex flex-col">
             <div
@@ -1357,6 +1437,7 @@ function onSendSelection() {
         <div
           v-else
           class="flex-1 min-w-0 relative"
+          :class="!timelineEnabled && fileChunkUi && (fileChunkUi.hasMore || fileChunkUi.loadingMore) ? 'pt-11' : ''"
           @mouseup="updateSelectionFromEditor"
           @keyup="updateSelectionFromEditor"
         >

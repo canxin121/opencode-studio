@@ -18,6 +18,7 @@ use axum::{
 use ignore::WalkBuilder;
 use regex::{Regex, RegexBuilder};
 use serde::{Deserialize, Serialize};
+use tokio::io::{AsyncReadExt, AsyncSeekExt, SeekFrom};
 use tokio::process::Command;
 
 use crate::path_utils::{home_dir_env, normalize_directory_path};
@@ -259,6 +260,8 @@ pub struct ReadQuery {
 
 const MAX_READ_BYTES: u64 = 50 * 1024 * 1024;
 pub(crate) const MAX_UPLOAD_BYTES: usize = MAX_READ_BYTES as usize;
+const DEFAULT_READ_CHUNK_LIMIT: usize = 256 * 1024;
+const MAX_READ_CHUNK_LIMIT: usize = 2 * 1024 * 1024;
 
 pub async fn fs_read(Query(q): Query<ReadQuery>) -> ApiResult<Response> {
     let file_path = q.path.unwrap_or_default();
@@ -310,6 +313,144 @@ pub async fn fs_read(Query(q): Query<ReadQuery>) -> ApiResult<Response> {
         .header("content-type", "text/plain")
         .body(Body::from(content))
         .unwrap())
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ReadChunkQuery {
+    pub path: Option<String>,
+    pub offset: Option<usize>,
+    pub limit: Option<usize>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadChunkResponse {
+    pub path: String,
+    pub content: String,
+    pub offset: usize,
+    pub limit: usize,
+    pub loaded_bytes: usize,
+    pub total_bytes: usize,
+    pub has_more: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_offset: Option<usize>,
+}
+
+fn decode_utf8_chunk(bytes: &[u8]) -> ApiResult<(String, usize)> {
+    if bytes.is_empty() {
+        return Ok((String::new(), 0));
+    }
+
+    match std::str::from_utf8(bytes) {
+        Ok(content) => Ok((content.to_string(), bytes.len())),
+        Err(err) => {
+            if err.error_len().is_some() {
+                return Err(AppError::bad_request("Specified file is not UTF-8 text"));
+            }
+
+            let valid_up_to = err.valid_up_to();
+            let valid = std::str::from_utf8(&bytes[..valid_up_to])
+                .map_err(|_| AppError::bad_request("Specified file is not UTF-8 text"))?;
+            Ok((valid.to_string(), valid_up_to))
+        }
+    }
+}
+
+pub async fn fs_read_chunk(Query(q): Query<ReadChunkQuery>) -> ApiResult<Json<ReadChunkResponse>> {
+    let file_path = q.path.unwrap_or_default();
+    let file_path = file_path.trim();
+    if file_path.is_empty() {
+        return Err(AppError::bad_request("Path is required"));
+    }
+
+    let resolved = resolve_path(file_path);
+    if has_parent_dir_component(&resolved) {
+        return Err(AppError::bad_request(
+            "Invalid path: path traversal not allowed",
+        ));
+    }
+
+    let abs = if resolved.is_absolute() {
+        resolved
+    } else {
+        std::env::current_dir()
+            .unwrap_or_else(|_| PathBuf::from("."))
+            .join(resolved)
+    };
+
+    let meta = tokio::fs::metadata(&abs)
+        .await
+        .map_err(|err| match err.kind() {
+            std::io::ErrorKind::NotFound => AppError::not_found("File not found"),
+            std::io::ErrorKind::PermissionDenied => AppError::forbidden("Access to file denied"),
+            _ => AppError::internal("Failed to read file"),
+        })?;
+
+    if !meta.is_file() {
+        return Err(AppError::bad_request("Specified path is not a file"));
+    }
+    if meta.len() > MAX_READ_BYTES {
+        return Err(AppError::payload_too_large("File too large"));
+    }
+
+    let total_bytes_u64 = meta.len();
+    let total_bytes = usize::try_from(total_bytes_u64).unwrap_or(usize::MAX);
+    let offset = q.offset.unwrap_or(0);
+    if (offset as u64) > total_bytes_u64 {
+        return Err(AppError::bad_request("Offset is out of range"));
+    }
+
+    let limit = q
+        .limit
+        .unwrap_or(DEFAULT_READ_CHUNK_LIMIT)
+        .min(MAX_READ_CHUNK_LIMIT);
+
+    if limit == 0 {
+        let has_more = offset < total_bytes;
+        return Ok(Json(ReadChunkResponse {
+            path: to_api_path(&abs),
+            content: String::new(),
+            offset,
+            limit,
+            loaded_bytes: offset,
+            total_bytes,
+            has_more,
+            next_offset: if has_more { Some(offset) } else { None },
+        }));
+    }
+
+    let mut file = tokio::fs::File::open(&abs)
+        .await
+        .map_err(|err| match err.kind() {
+            std::io::ErrorKind::NotFound => AppError::not_found("File not found"),
+            std::io::ErrorKind::PermissionDenied => AppError::forbidden("Access to file denied"),
+            _ => AppError::internal(err.to_string()),
+        })?;
+
+    file.seek(SeekFrom::Start(offset as u64))
+        .await
+        .map_err(|err| AppError::internal(err.to_string()))?;
+
+    let mut buffer = Vec::with_capacity(limit);
+    file.take(limit as u64)
+        .read_to_end(&mut buffer)
+        .await
+        .map_err(|err| AppError::internal(err.to_string()))?;
+
+    let (content, consumed_bytes) = decode_utf8_chunk(&buffer)?;
+    let loaded_bytes = offset.saturating_add(consumed_bytes);
+    let has_more = (loaded_bytes as u64) < total_bytes_u64;
+
+    Ok(Json(ReadChunkResponse {
+        path: to_api_path(&abs),
+        content,
+        offset,
+        limit,
+        loaded_bytes,
+        total_bytes,
+        has_more,
+        next_offset: if has_more { Some(loaded_bytes) } else { None },
+    }))
 }
 
 fn mime_for_ext(path: &Path) -> &'static str {
@@ -1905,5 +2046,28 @@ mod tests {
     fn to_api_path_uses_forward_slashes() {
         let path = Path::new("C:\\Users\\Alice\\workspace\\file.txt");
         assert_eq!(to_api_path(path), "C:/Users/Alice/workspace/file.txt");
+    }
+
+    #[test]
+    fn decode_utf8_chunk_accepts_full_utf8() {
+        let bytes = "hello 世界".as_bytes();
+        let (content, consumed) = decode_utf8_chunk(bytes).expect("expected valid utf8");
+        assert_eq!(content, "hello 世界");
+        assert_eq!(consumed, bytes.len());
+    }
+
+    #[test]
+    fn decode_utf8_chunk_trims_partial_multibyte_suffix() {
+        let bytes = "hello 世界".as_bytes();
+        let partial = &bytes[..bytes.len() - 1];
+        let (content, consumed) = decode_utf8_chunk(partial).expect("expected trimmed utf8 chunk");
+        assert_eq!(content, "hello 世");
+        assert_eq!(consumed, partial.len() - 2);
+    }
+
+    #[test]
+    fn decode_utf8_chunk_rejects_invalid_utf8() {
+        let invalid = [0xF0, 0x28, 0x8C, 0x28];
+        assert!(decode_utf8_chunk(&invalid).is_err());
     }
 }

@@ -3246,6 +3246,16 @@ export default {
         copyContents: '复制内容',
         downloadRaw: '下载原始文件',
       },
+      largeFile: {
+        title: '检测到大文件',
+        description: '该文件大小为 {size}。加载超大文件可能影响编辑器性能。',
+        initialLoadHint: '先加载前 {size}，再按需继续加载后续内容。',
+        continue: '继续加载',
+        loadMore: '加载更多',
+        partialLoadedBanner: '已加载 {loaded} / {total}。',
+        pendingStatus: '大文件：{size}。继续加载后可预览。',
+        partialLoadedStatus: '已部分加载 {loaded}/{total}',
+      },
       status: {
         loadingTimelineCommits: '正在加载时间线提交...',
         loadingBlame: '正在加载 blame...',
