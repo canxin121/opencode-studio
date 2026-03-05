@@ -2,9 +2,9 @@
 
 English | [简体中文](README.zh-CN.md)
 
-OpenCode Studio is a local-first web UI for OpenCode. It runs a Rust (Axum) server that serves the built Vue app and bridges/proxies requests to an OpenCode server (`opencode serve`).
+OpenCode Studio is a local-first workspace for OpenCode that brings chat, files, terminal, Git, and settings into one place. It works on Windows, macOS, and Linux, and supports both desktop package install and service-mode deployment.
 
-> Note: This is a community project and is not built by the OpenCode team and is not affiliated with them. Upstream OpenCode: https://github.com/anomalyco/opencode
+> Note: This is a community project and is not built by the OpenCode team and is not affiliated with them. Upstream OpenCode: [anomalyco/opencode](https://github.com/anomalyco/opencode)
 
 <p align="center">
   <img src="web/public/apple-touch-icon-180x180.png" width="128" alt="OpenCode Studio desktop app icon" />
@@ -270,18 +270,18 @@ iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/maste
 
 All technical details, configuration parameters, and developer-centric references are consolidated in:
 
-- `docs/technical-reference.md`
+- [`docs/technical-reference.md`](docs/technical-reference.md)
 
 Related docs:
 
-- `docs/service.md` (service install/uninstall details)
-- `docs/packaging.md` (package artifacts and build outputs)
-- `docs/opencode-studio.toml.example` (runtime config example)
-- `SECURITY.md` (security notes)
-- `CONTRIBUTING.md` (contribution guide)
+- [`docs/service.md`](docs/service.md) (service install/uninstall details)
+- [`docs/packaging.md`](docs/packaging.md) (package artifacts and build outputs)
+- [`docs/opencode-studio.toml.example`](docs/opencode-studio.toml.example) (runtime config example)
+- [`SECURITY.md`](SECURITY.md) (security notes)
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) (contribution guide)
 
 ## License
 
 MIT.
 
-See `LICENSE`.
+See [`LICENSE`](LICENSE).
