@@ -32,6 +32,7 @@ import {
 } from '@/lib/desktopConfig'
 import { syncDesktopBackendTarget } from '@/lib/backend'
 import { localStorageKeys } from '@/lib/persistence/storageKeys'
+import { buildLocalePickerOptions } from '@/pages/loginLocaleOptions'
 import {
   CHAT_ACTIVITY_EXPAND_KEYS,
   DEFAULT_CHAT_ACTIVITY_EXPAND_KEYS,
@@ -555,10 +556,7 @@ const uiLocale = computed<AppLocale>({
   },
 })
 
-const localePickerOptions = computed(() => [
-  { value: 'zh-CN', label: String(t('settings.appearance.language.options.zhCN')) },
-  { value: 'en-US', label: String(t('settings.appearance.language.options.enUS')) },
-])
+const localePickerOptions = computed(() => buildLocalePickerOptions((key) => String(t(key))))
 
 const themeVariantPickerOptions = computed(() => [
   { value: 'light', label: String(t('settings.appearance.theme.options.light')) },

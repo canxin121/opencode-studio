@@ -1,13 +1,29 @@
+import { SUPPORTED_LOCALES, type AppLocale } from '@/i18n/locale'
+
 type TranslateFn = (key: string) => string
 
 export type LocalePickerOption = {
-  value: 'zh-CN' | 'en-US'
+  value: AppLocale
   label: string
 }
 
+const localeOptionKeyByLocale: Record<AppLocale, string> = {
+  'zh-CN': 'zhCN',
+  'en-US': 'enUS',
+  'es-ES': 'esES',
+  'hi-IN': 'hiIN',
+  'ar-SA': 'arSA',
+  'pt-BR': 'ptBR',
+  'fr-FR': 'frFR',
+}
+
+export function buildLocalePickerOptions(t: TranslateFn): LocalePickerOption[] {
+  return SUPPORTED_LOCALES.map((locale) => ({
+    value: locale,
+    label: String(t(`settings.appearance.language.options.${localeOptionKeyByLocale[locale]}`)),
+  }))
+}
+
 export function buildLoginLocalePickerOptions(t: TranslateFn): LocalePickerOption[] {
-  return [
-    { value: 'zh-CN', label: String(t('settings.appearance.language.options.zhCN')) },
-    { value: 'en-US', label: String(t('settings.appearance.language.options.enUS')) },
-  ]
+  return buildLocalePickerOptions(t)
 }

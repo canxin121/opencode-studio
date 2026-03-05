@@ -1556,6 +1556,11 @@ export default {
         options: {
           enUS: 'English',
           zhCN: '简体中文',
+          esES: 'Spanish (Spain)',
+          hiIN: 'Hindi (India)',
+          arSA: 'Arabic (Saudi Arabia)',
+          ptBR: 'Portuguese (Brazil)',
+          frFR: 'French (France)',
         },
       },
       theme: {

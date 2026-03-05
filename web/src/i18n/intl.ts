@@ -1,14 +1,8 @@
 import { i18n } from './index'
-import { DEFAULT_LOCALE, type AppLocale } from './locale'
-
-function normalizeAppLocale(raw: unknown): AppLocale {
-  const v = String(raw || '').trim()
-  if (v === 'zh-CN' || v === 'en-US') return v
-  return DEFAULT_LOCALE
-}
+import { DEFAULT_LOCALE, normalizeAppLocale, type AppLocale } from './locale'
 
 export function getIntlLocale(): AppLocale {
-  return normalizeAppLocale(i18n.global.locale.value)
+  return normalizeAppLocale(i18n.global.locale.value) || DEFAULT_LOCALE
 }
 
 const numberFormatCache = new Map<string, Intl.NumberFormat>()
