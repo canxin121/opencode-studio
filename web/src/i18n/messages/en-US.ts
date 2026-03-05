@@ -3131,6 +3131,7 @@ export default {
     actions: {
       download: 'Download',
       copyPath: 'Copy path',
+      copyAbsolutePath: 'Copy absolute path',
     },
     confirmDiscard: {
       title: 'Unsaved changes',

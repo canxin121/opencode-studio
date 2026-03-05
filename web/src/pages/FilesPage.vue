@@ -1280,11 +1280,15 @@ async function openSelectedFileRaw() {
   await triggerDownloadForPath(file.path, file.name)
 }
 
-async function runExplorerFileAction(action: 'download' | 'copy-path', node: FileNode) {
-  if (node.type !== 'file') return
-
+async function runExplorerFileAction(action: 'download' | 'copy-path' | 'copy-absolute-path', node: FileNode) {
   if (action === 'download') {
+    if (node.type !== 'file') return
     triggerDownloadForPath(node.path, node.name)
+    return
+  }
+
+  if (action === 'copy-absolute-path') {
+    await copyToClipboard(node.path)
     return
   }
 
