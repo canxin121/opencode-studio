@@ -121,3 +121,54 @@ jobs:
           python3 -m json.tool desktop/src-tauri/tauri.conf.json >/dev/null
           python3 -m json.tool desktop/src-tauri/tauri.conf.full.json >/dev/null
           python3 -m json.tool desktop/src-tauri/capabilities/default.json >/dev/null
+
+  service-installers:
+    name: Service installers (${{ matrix.platform }})
+    needs: version
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+          - os: windows-latest
+            platform: windows
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+          no-cache: true
+
+      - name: Add Bun global bin to PATH (Unix)
+        if: runner.os != 'Windows'
+        run: echo "$(bun pm bin -g)" >> "$GITHUB_PATH"
+
+      - name: Add Bun global bin to PATH (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $bunBin = bun pm bin -g
+          Add-Content -Path $env:GITHUB_PATH -Value $bunBin
+
+      - name: Install OpenCode CLI
+        run: bun add -g opencode-ai@latest
+
+      - name: Verify OpenCode CLI
+        run: opencode --version
+
+      - name: Run Linux service flow test
+        if: runner.os == 'Linux'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: bash scripts/test-unix-service-flow.sh --mode system
+
+      - name: Run Windows service flow test
+        if: runner.os == 'Windows'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/test-windows-service-flow.ps1

@@ -47,6 +47,22 @@ python3 -m json.tool desktop/src-tauri/tauri.conf.full.json >/dev/null
 python3 -m json.tool desktop/src-tauri/capabilities/default.json >/dev/null
 ```
 
+### Service installer end-to-end (CI job: `service-installers`)
+
+Linux:
+
+```bash
+bun add -g opencode-ai@latest
+bash scripts/test-unix-service-flow.sh --mode system
+```
+
+Windows (elevated PowerShell):
+
+```powershell
+bun add -g opencode-ai@latest
+pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/test-windows-service-flow.ps1
+```
+
 ## Acceptance Criteria
 
 - All commands above must exit successfully (`exit code 0`).

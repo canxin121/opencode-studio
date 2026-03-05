@@ -47,6 +47,22 @@ python3 -m json.tool desktop/src-tauri/tauri.conf.full.json >/dev/null
 python3 -m json.tool desktop/src-tauri/capabilities/default.json >/dev/null
 ```
 
+### 服务安装端到端（对应 CI job: `service-installers`）
+
+Linux：
+
+```bash
+bun add -g opencode-ai@latest
+bash scripts/test-unix-service-flow.sh --mode system
+```
+
+Windows（管理员权限 PowerShell）：
+
+```powershell
+bun add -g opencode-ai@latest
+pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/test-windows-service-flow.ps1
+```
+
 ## 验收判定
 
 - 上述命令全部返回成功（exit code 0）才算通过。
