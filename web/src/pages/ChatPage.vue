@@ -858,6 +858,7 @@ const {
   showOptimisticUser,
   resetForSessionSwitch,
   beginOptimisticSend,
+  markOptimisticQueued,
   markOptimisticSent,
   clearOnSendFailure,
 } = stream
@@ -1177,10 +1178,14 @@ async function send() {
       effectiveDefaults: modelSelection.effectiveDefaults.value,
     })
 
-    await chat.sendMessage(sid, { ...runCfg, parts })
+    const sendResult = await chat.sendMessage(sid, { ...runCfg, parts })
 
     // Mark the optimistic message as sent (generation may still be running).
-    markOptimisticSent(sid)
+    if (sendResult?.queued) {
+      markOptimisticQueued(sid)
+    } else {
+      markOptimisticSent(sid)
+    }
   } catch (e) {
     // Keep UI consistent if send fails.
     clearOnSendFailure()

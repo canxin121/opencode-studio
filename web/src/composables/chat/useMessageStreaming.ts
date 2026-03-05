@@ -4,7 +4,7 @@ export type OptimisticUserMessage = {
   key: string
   sessionId: string
   createdAt: number
-  status: 'sending' | 'sent'
+  status: 'sending' | 'queued' | 'sent'
   text: string
   files: Array<{ filename: string; mime: string; url?: string; serverPath?: string }>
   // Last user message id visible in the timeline when the send started.
@@ -60,6 +60,18 @@ function normalizeComparableText(text: string): string {
     .replace(/\r\n/g, '\n')
     .replace(/\r/g, '\n')
     .trim()
+}
+
+function setOptimisticStatus(
+  optimisticUser: { value: OptimisticUserMessage | null },
+  sessionId: string,
+  status: OptimisticUserMessage['status'],
+) {
+  const sid = (sessionId || '').trim()
+  if (!sid) return
+  const current = optimisticUser.value
+  if (!current || current.sessionId !== sid) return
+  optimisticUser.value = { ...current, status }
 }
 
 function textsRoughlyMatch(a: string, b: string): boolean {
@@ -193,11 +205,11 @@ export function useMessageStreaming(opts: {
   }
 
   function markOptimisticSent(sessionId: string) {
-    const sid = (sessionId || '').trim()
-    if (!sid) return
-    if (optimisticUser.value && optimisticUser.value.sessionId === sid) {
-      optimisticUser.value = { ...optimisticUser.value, status: 'sent' }
-    }
+    setOptimisticStatus(optimisticUser, sessionId, 'sent')
+  }
+
+  function markOptimisticQueued(sessionId: string) {
+    setOptimisticStatus(optimisticUser, sessionId, 'queued')
   }
 
   function clearOnSendFailure() {
@@ -249,6 +261,7 @@ export function useMessageStreaming(opts: {
     showOptimisticUser,
     resetForSessionSwitch,
     beginOptimisticSend,
+    markOptimisticQueued,
     markOptimisticSent,
     clearOnSendFailure,
   }
