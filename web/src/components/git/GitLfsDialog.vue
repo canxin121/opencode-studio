@@ -5,6 +5,7 @@ import Button from '@/components/ui/Button.vue'
 import FormDialog from '@/components/ui/FormDialog.vue'
 import Input from '@/components/ui/Input.vue'
 import ScrollArea from '@/components/ui/ScrollArea.vue'
+import Skeleton from '@/components/ui/Skeleton.vue'
 
 import type { GitLfsLockInfo } from '@/types/git'
 
@@ -116,7 +117,16 @@ function onUpdateText(key: 'trackPattern' | 'lockPath', v: string | number) {
           }}</Button>
         </div>
         <ScrollArea class="h-40 border rounded-md">
-          <div v-if="locksLoading" class="p-3 text-xs text-muted-foreground">{{ t('common.loading') }}</div>
+          <div v-if="locksLoading" class="space-y-2 p-3">
+            <div v-for="i in 4" :key="`locks-skeleton-${i}`" class="space-y-2 rounded-sm border border-border/30 p-2.5">
+              <Skeleton class="h-3 w-2/3" />
+              <Skeleton class="h-3 w-1/2" />
+              <div class="flex gap-2">
+                <Skeleton class="h-7 w-14 rounded-md" />
+                <Skeleton class="h-7 w-20 rounded-md" />
+              </div>
+            </div>
+          </div>
           <div v-else-if="!locks.length" class="p-3 text-xs text-muted-foreground">
             {{ t('git.ui.dialogs.lfs.emptyLocks') }}
           </div>

@@ -24,6 +24,7 @@ import MobileSidebarEmptyState from '@/components/ui/MobileSidebarEmptyState.vue
 import OptionMenu from '@/components/ui/OptionMenu.vue'
 import SegmentedButton from '@/components/ui/SegmentedButton.vue'
 import SegmentedControl from '@/components/ui/SegmentedControl.vue'
+import Skeleton from '@/components/ui/Skeleton.vue'
 import type { OptionMenuGroup, OptionMenuItem } from '@/components/ui/optionMenu.types'
 import { buildUnifiedDiffModel } from '@/features/git/diff/unifiedDiff'
 import { formatDateTimeYMDHM, formatDateYMDShort2DigitYear } from '@/i18n/intl'
@@ -1182,9 +1183,20 @@ function onSendSelection() {
         </div>
       </template>
 
-      <div v-else-if="fileLoading" class="p-3 flex items-center gap-2 text-muted-foreground typography-meta">
-        <RiLoader4Line class="h-4 w-4 animate-spin" />
-        {{ t('common.loading') }}
+      <div v-else-if="fileLoading" class="p-3">
+        <div class="space-y-3 rounded-md border border-border/40 bg-background/30 p-3">
+          <div class="flex items-center gap-2">
+            <Skeleton class="h-3.5 w-3.5 rounded-sm" />
+            <Skeleton class="h-3 w-40" />
+          </div>
+          <div class="space-y-2">
+            <Skeleton class="h-3 w-11/12" />
+            <Skeleton class="h-3 w-4/5" />
+            <Skeleton class="h-3 w-5/6" />
+            <Skeleton class="h-3 w-3/4" />
+          </div>
+          <Skeleton class="h-56 w-full rounded-md sm:h-72" />
+        </div>
       </div>
 
       <div v-else-if="largeFilePrompt" class="p-3">
@@ -1220,8 +1232,11 @@ function onSendSelection() {
       </div>
 
       <div v-else-if="viewerMode === 'pdf'" class="flex h-full flex-col p-2">
-        <div v-if="!rawUrl" class="p-3 text-muted-foreground typography-meta">
-          {{ t('files.viewer.status.loadingPdf') }}
+        <div v-if="!rawUrl" class="p-2">
+          <div class="space-y-2 rounded-md border border-border/40 bg-background/30 p-3">
+            <Skeleton class="h-3 w-32" />
+            <Skeleton class="h-[65vh] max-h-[42rem] w-full rounded-md" />
+          </div>
         </div>
         <iframe
           v-else
@@ -1235,20 +1250,28 @@ function onSendSelection() {
         <div class="w-full max-w-2xl rounded-md border border-border/40 bg-muted/10 p-4">
           <div class="mb-2 text-xs text-muted-foreground">{{ selectedFile?.name }}</div>
           <audio v-if="rawUrl" :src="rawUrl" controls class="w-full" />
-          <div v-else class="text-sm text-muted-foreground">{{ t('files.viewer.status.loadingAudio') }}</div>
+          <div v-else class="space-y-2">
+            <Skeleton class="h-3 w-1/3" />
+            <Skeleton class="h-10 w-full rounded-md" />
+          </div>
         </div>
       </div>
 
       <div v-else-if="viewerMode === 'video'" class="grid h-full place-items-center p-3">
         <div class="w-full max-w-5xl rounded-md border border-border/40 bg-background/70 p-2">
           <video v-if="rawUrl" :src="rawUrl" controls class="max-h-[72vh] w-full rounded" />
-          <div v-else class="p-3 text-sm text-muted-foreground">{{ t('files.viewer.status.loadingVideo') }}</div>
+          <div v-else class="p-2">
+            <Skeleton class="h-[48vh] max-h-[34rem] w-full rounded" />
+          </div>
         </div>
       </div>
 
       <div v-else-if="viewerMode === 'image' || isSelectedImage" class="flex h-full items-center justify-center p-3">
-        <div v-if="!rawUrl" class="text-muted-foreground typography-meta">
-          {{ t('files.viewer.status.loadingImage') }}
+        <div v-if="!rawUrl" class="w-full max-w-5xl p-1">
+          <div class="space-y-2 rounded-md border border-border/40 bg-background/30 p-3">
+            <Skeleton class="h-3 w-1/3" />
+            <Skeleton class="h-[52vh] max-h-[36rem] w-full rounded-md" />
+          </div>
         </div>
         <img
           v-else

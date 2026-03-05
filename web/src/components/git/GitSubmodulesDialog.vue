@@ -5,6 +5,7 @@ import Button from '@/components/ui/Button.vue'
 import FormDialog from '@/components/ui/FormDialog.vue'
 import Input from '@/components/ui/Input.vue'
 import ScrollArea from '@/components/ui/ScrollArea.vue'
+import Skeleton from '@/components/ui/Skeleton.vue'
 
 import type { GitSubmoduleInfo } from '@/types/git'
 
@@ -89,7 +90,21 @@ function onUpdateText(key: 'newUrl' | 'newPath' | 'newBranch', v: string | numbe
 
       <div class="rounded-md border border-border/50 overflow-hidden">
         <div v-if="error" class="p-3 text-xs text-red-500">{{ error }}</div>
-        <div v-else-if="loading" class="p-3 text-xs text-muted-foreground">{{ t('common.loading') }}</div>
+        <div v-else-if="loading" class="space-y-2 p-3">
+          <div
+            v-for="i in 4"
+            :key="`submodules-skeleton-${i}`"
+            class="space-y-2 rounded-sm border border-border/30 p-2.5"
+          >
+            <Skeleton class="h-3 w-2/5" />
+            <Skeleton class="h-3" :class="i % 2 === 0 ? 'w-11/12' : 'w-4/5'" />
+            <div class="flex flex-wrap gap-2">
+              <Skeleton class="h-7 w-14 rounded-md" />
+              <Skeleton class="h-7 w-16 rounded-md" />
+              <Skeleton class="h-7 w-24 rounded-md" />
+            </div>
+          </div>
+        </div>
         <ScrollArea v-else class="h-64">
           <div v-if="!submodules.length" class="p-3 text-xs text-muted-foreground">
             {{ t('git.ui.dialogs.submodules.empty') }}

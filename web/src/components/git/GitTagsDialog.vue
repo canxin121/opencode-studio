@@ -7,6 +7,7 @@ import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import FormDialog from '@/components/ui/FormDialog.vue'
 import Input from '@/components/ui/Input.vue'
 import OptionPicker from '@/components/ui/OptionPicker.vue'
+import Skeleton from '@/components/ui/Skeleton.vue'
 
 import type { GitTagInfo } from '@/types/git'
 
@@ -118,7 +119,23 @@ function onUpdateRemote(v: string | number) {
       </div>
 
       <div class="rounded-md border border-border/50 overflow-hidden">
-        <div v-if="tagsLoading" class="p-3 text-xs text-muted-foreground">{{ t('common.loading') }}</div>
+        <div v-if="tagsLoading" class="space-y-2 p-3">
+          <div
+            v-for="i in 5"
+            :key="`tags-skeleton-${i}`"
+            class="flex flex-col gap-2 rounded-sm border border-border/30 p-2.5 sm:flex-row sm:items-start sm:justify-between"
+          >
+            <div class="min-w-0 flex-1 space-y-1.5">
+              <Skeleton class="h-3 w-28" />
+              <Skeleton class="h-3 w-36" />
+              <Skeleton v-if="i % 2 === 0" class="h-3 w-4/5" />
+            </div>
+            <div class="flex gap-2">
+              <Skeleton class="h-8 w-14 rounded-md" />
+              <Skeleton class="h-8 w-24 rounded-md" />
+            </div>
+          </div>
+        </div>
         <div v-else-if="!tagsList.length" class="p-3 text-xs text-muted-foreground">
           {{ t('git.ui.dialogs.tags.empty') }}
         </div>

@@ -9,6 +9,7 @@ import Input from '@/components/ui/Input.vue'
 import OptionPicker from '@/components/ui/OptionPicker.vue'
 import type { PickerOption } from '@/components/ui/pickerOption.types'
 import ScrollArea from '@/components/ui/ScrollArea.vue'
+import Skeleton from '@/components/ui/Skeleton.vue'
 import DiffViewer from '@/components/DiffViewer.vue'
 
 import { formatDateTimeYMDHM } from '@/i18n/intl'
@@ -249,8 +250,19 @@ function onFilterRefTypeChange(value: string | number) {
 
         <div class="rounded-md border border-border/50 overflow-hidden">
           <div v-if="error" class="p-3 text-xs text-red-500">{{ error }}</div>
-          <div v-else-if="loading && !commits.length" class="p-3 text-xs text-muted-foreground">
-            {{ t('common.loading') }}
+          <div v-else-if="loading && !commits.length" class="space-y-2 p-3">
+            <div
+              v-for="i in 7"
+              :key="`history-commits-skeleton-${i}`"
+              class="space-y-2 rounded-sm border border-border/30 p-2.5"
+            >
+              <Skeleton class="h-3" :class="i % 3 === 0 ? 'w-4/5' : i % 2 === 0 ? 'w-3/5' : 'w-2/3'" />
+              <div class="flex items-center gap-2">
+                <Skeleton class="h-3 w-16" />
+                <Skeleton class="h-3 w-24" />
+                <Skeleton class="h-3 w-20" />
+              </div>
+            </div>
           </div>
           <ScrollArea v-else class="h-72">
             <div v-if="!commits.length" class="p-3 text-xs text-muted-foreground">

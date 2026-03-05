@@ -6,6 +6,7 @@ import { normalizeFsPath, trimTrailingFsSlashes } from '@/lib/path'
 import Button from '@/components/ui/Button.vue'
 import IconButton from '@/components/ui/IconButton.vue'
 import Input from '@/components/ui/Input.vue'
+import Skeleton from '@/components/ui/Skeleton.vue'
 import { useUiStore } from '@/stores/ui'
 import {
   RiArrowRightSLine,
@@ -517,7 +518,19 @@ watch(
         </div>
 
         <div class="flex-1 min-h-0 rounded-md border border-border overflow-hidden">
-          <div v-if="browserLoading" class="px-3 py-3 text-xs text-muted-foreground">{{ t('common.loading') }}</div>
+          <div v-if="browserLoading" class="space-y-1.5 px-2 py-2">
+            <div
+              v-for="i in 7"
+              :key="`path-picker-skeleton-${i}`"
+              class="flex items-center justify-between gap-2 px-1 py-1"
+            >
+              <div class="flex min-w-0 flex-1 items-center gap-2">
+                <Skeleton class="h-4 w-4 shrink-0 rounded-sm" />
+                <Skeleton class="h-3" :class="i % 3 === 0 ? 'w-1/3' : i % 2 === 0 ? 'w-2/5' : 'w-3/5'" />
+              </div>
+              <Skeleton v-if="i % 2 === 0" class="h-3 w-10 rounded-sm" />
+            </div>
+          </div>
           <div v-else-if="browserError" class="px-3 py-3 text-xs text-destructive">{{ browserError }}</div>
           <div v-else class="h-full overflow-auto">
             <button
