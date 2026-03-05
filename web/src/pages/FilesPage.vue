@@ -426,6 +426,9 @@ const activeDialog = ref<DialogKind>(null)
 const dialogData = ref<{ path: string; name?: string; type?: 'file' | 'directory' } | null>(null)
 const dialogInput = ref('')
 const dialogSubmitting = ref(false)
+const moveDialogOpen = ref(false)
+const moveDialogInput = ref('')
+const moveDialogSubmitting = ref(false)
 
 const deletingPaths = ref<Set<string>>(new Set())
 const selectedPaths = ref<Set<string>>(new Set())
@@ -753,6 +756,27 @@ function visibleTreePaths(): string[] {
 function clearSelectedPaths() {
   selectedPaths.value = new Set()
   selectionAnchorPath.value = ''
+}
+
+function normalizeSelectedTargets(paths: string[]): string[] {
+  const rootPath = root.value
+  if (!rootPath) return []
+
+  const unique = Array.from(
+    new Set(
+      paths
+        .map((path) => normalizePath(String(path || '').trim()))
+        .filter((path) => path && withinWorkspace(path, rootPath)),
+    ),
+  )
+
+  unique.sort((a, b) => a.length - b.length)
+  const pruned: string[] = []
+  for (const path of unique) {
+    if (pruned.some((base) => path === base || path.startsWith(`${base}/`))) continue
+    pruned.push(path)
+  }
+  return pruned
 }
 
 function selectOnlyPath(path: string) {
@@ -2151,6 +2175,139 @@ async function handleNodeClick(node: FileNode, options: ExplorerNodeClickOptions
   await requestFileSelect(node)
 }
 
+async function handleNodeLongPress(node: FileNode) {
+  const path = normalizePath(String(node.path || '').trim())
+  if (!path) return
+  const next = new Set(selectedPaths.value)
+  next.add(path)
+  selectedPaths.value = next
+  selectionAnchorPath.value = path
+}
+
+function resolveMoveDestinationPath(input: string): string {
+  const rootPath = root.value
+  if (!rootPath) return ''
+  const raw = normalizePath(String(input || '').trim())
+  if (!raw || raw === '.') return rootPath
+
+  const normalizedInput = raw.replace(/^\.\//, '')
+  const abs = normalizedInput.startsWith('/') ? normalizedInput : joinPath(rootPath, normalizedInput)
+  return trimTrailingSlashes(normalizePath(abs)) || rootPath
+}
+
+function openMoveSelectedDialog(paths?: string[]) {
+  const rootPath = root.value
+  if (!rootPath) return
+
+  const nextTargets = normalizeSelectedTargets(paths && paths.length ? paths : Array.from(selectedPaths.value))
+  if (!nextTargets.length) return
+
+  selectedPaths.value = new Set(nextTargets)
+  const fallbackTarget = activeCreateDir.value || rootPath
+  const rel = relativeToWorkspace(fallbackTarget)
+  moveDialogInput.value = rel && rel !== '.' ? rel : '.'
+  moveDialogOpen.value = true
+}
+
+function closeMoveDialog() {
+  if (moveDialogSubmitting.value) return
+  moveDialogOpen.value = false
+  moveDialogInput.value = ''
+}
+
+async function moveSelectedNodes(paths: string[], destinationInput: string) {
+  const rootPath = root.value
+  if (!rootPath) return
+
+  const targets = normalizeSelectedTargets(paths)
+  if (!targets.length) return
+
+  const destination = resolveMoveDestinationPath(destinationInput)
+  if (!destination || !withinWorkspace(destination, rootPath)) {
+    throw new Error(String(t('files.errors.moveTargetOutsideWorkspace')))
+  }
+
+  let successCount = 0
+  let failedCount = 0
+  let firstError = ''
+  let affectedCurrentSelection = false
+
+  for (const target of targets) {
+    if (destination === target || destination.startsWith(`${target}/`)) {
+      failedCount += 1
+      if (!firstError) firstError = String(t('files.errors.moveTargetInsideSelection'))
+      continue
+    }
+
+    const baseName = target.split('/').filter(Boolean).pop() || ''
+    if (!baseName) {
+      failedCount += 1
+      continue
+    }
+
+    const nextPath = joinPath(destination, baseName)
+    if (nextPath === target) continue
+
+    try {
+      await renamePath({ directory: rootPath, oldPath: target, newPath: nextPath })
+      successCount += 1
+
+      const selectedDir = normalizePath(String(selectedDirectoryPath.value || '').trim())
+      if (selectedDir && (selectedDir === target || selectedDir.startsWith(`${target}/`))) {
+        affectedCurrentSelection = true
+      }
+
+      const selectedFilePath = normalizePath(String(selectedFile.value?.path || '').trim())
+      if (selectedFilePath && (selectedFilePath === target || selectedFilePath.startsWith(`${target}/`))) {
+        affectedCurrentSelection = true
+      }
+    } catch (err) {
+      failedCount += 1
+      if (!firstError) {
+        firstError = err instanceof Error ? err.message : String(err)
+      }
+    }
+  }
+
+  if (successCount > 0) {
+    if (affectedCurrentSelection) {
+      resetViewerSelectionState()
+      selectedDirectoryPath.value = ''
+    }
+    clearSelectedPaths()
+    selectedDirectoryPath.value = destination
+    await ensureDirectoryExpanded(destination)
+    await refreshRoot()
+  }
+
+  if (successCount > 0 && failedCount === 0) {
+    toasts.push('success', t('files.toasts.movedCount', { count: successCount }))
+    return
+  }
+  if (successCount > 0 && failedCount > 0) {
+    toasts.push('info', t('files.toasts.movedPartial', { success: successCount, failed: failedCount }))
+    return
+  }
+  if (failedCount > 0) {
+    toasts.push('error', firstError || t('files.toasts.moveFailedCount', { count: failedCount }))
+  }
+}
+
+async function submitMoveDialog() {
+  if (moveDialogSubmitting.value) return
+  moveDialogSubmitting.value = true
+  try {
+    await moveSelectedNodes(Array.from(selectedPaths.value), moveDialogInput.value)
+    moveDialogOpen.value = false
+    moveDialogInput.value = ''
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    toasts.push('error', msg)
+  } finally {
+    moveDialogSubmitting.value = false
+  }
+}
+
 async function save(opts?: { silent?: boolean }): Promise<boolean> {
   const rootPath = root.value
   const path = selectedFile.value?.path
@@ -2732,6 +2889,33 @@ onMounted(async () => {
       </div>
     </FormDialog>
 
+    <FormDialog
+      :open="moveDialogOpen"
+      :title="String(t('files.explorer.selection.bulkMoveTitle'))"
+      :description="String(t('files.explorer.selection.bulkMoveDescription', { count: selectedPaths.size }))"
+      @update:open="
+        (v) => {
+          if (!v) closeMoveDialog()
+        }
+      "
+    >
+      <div class="space-y-3">
+        <Input
+          v-model="moveDialogInput"
+          :placeholder="String(t('files.explorer.selection.bulkMovePlaceholder'))"
+          class="h-9 font-mono"
+        />
+        <div class="flex items-center justify-end gap-2">
+          <Button variant="ghost" :disabled="moveDialogSubmitting" @click="closeMoveDialog">{{
+            t('common.cancel')
+          }}</Button>
+          <Button :disabled="moveDialogSubmitting || !moveDialogInput.trim()" @click="submitMoveDialog">
+            {{ moveDialogSubmitting ? t('common.working') : t('files.explorer.selection.bulkMove') }}
+          </Button>
+        </div>
+      </div>
+    </FormDialog>
+
     <div class="flex-1 min-h-0 m-0 p-0">
       <div v-if="!root" class="h-full">
         <div v-if="isMobile && ui.isSessionSwitcherOpen" class="h-full p-3">
@@ -2774,6 +2958,7 @@ onMounted(async () => {
                 :selected-paths="selectedPaths"
                 :uploading="uploading"
                 :handle-node-click="handleNodeClick"
+                :handle-node-long-press="handleNodeLongPress"
                 :refresh-root="refreshRoot"
                 :collapse-all="collapseAllDirectories"
                 :active-create-dir="activeCreateDir"
@@ -2784,6 +2969,7 @@ onMounted(async () => {
                 :open-dialog="openDialog"
                 :delete-node="deleteNode"
                 :delete-selected-nodes="deleteSelectedNodes"
+                :open-move-selected-dialog="openMoveSelectedDialog"
                 :clear-selected-paths="clearSelectedPaths"
                 :upload-files="uploadFilesToDirectory"
               >
