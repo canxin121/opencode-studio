@@ -13,13 +13,11 @@ import FileViewerPane from './files/components/FileViewerPane.vue'
 import FilesExplorerPane from './files/components/FilesExplorerPane.vue'
 
 import {
-  MAX_VIEW_CHARS,
   extensionFromPath,
   isHiddenName,
   languageForPath,
   shouldIgnoreEntryName,
   shouldIgnorePath,
-  truncateContent,
 } from './files/fileKinds'
 import { detectPreviewMode } from './files/previewKinds'
 import type {
@@ -63,7 +61,7 @@ import {
   replaceFileContent,
   listDirectory,
   makeDirectory,
-  readFileText,
+  readFileChunk,
   renamePath,
   searchFileContent,
   searchFiles,
@@ -74,6 +72,8 @@ import type { FsContentSearchFileResult, FsContentSearchMatch } from '@/features
 import { useDesktopSidebarResize } from '@/composables/useDesktopSidebarResize'
 import { localStorageKeys } from '@/lib/persistence/storageKeys'
 import { useChatStore } from '@/stores/chat'
+import { useSettingsStore } from '@/stores/settings'
+import type { Settings } from '@/stores/settings'
 import { useToastsStore } from '@/stores/toasts'
 import { useDirectoryStore } from '@/stores/directory'
 import { useUiStore } from '@/stores/ui'
@@ -89,9 +89,12 @@ const STORAGE_FILES_CONTENT_SCOPE_MODE = localStorageKeys.files.contentScopeMode
 const STORAGE_FILES_EXPLORER_UI_PREFIX = localStorageKeys.files.explorerUiPrefix
 const STORAGE_FILES_EXPLORER_CACHE_PREFIX = localStorageKeys.files.explorerCachePrefix
 const DIRECTORY_PAGE_SIZE = 400
+const FILE_CHUNK_BYTES = 256 * 1024
+const LARGE_FILE_WARNING_BYTES = 1024 * 1024
 const HIDDEN_FILE_RELATIVE_PATHS = new Set(['web/src/data/directorySessionSnapshotDb.ts'])
 
 const chat = useChatStore()
+const settings = useSettingsStore()
 const toasts = useToastsStore()
 const directoryStore = useDirectoryStore()
 const ui = useUiStore()
@@ -332,6 +335,12 @@ const selectedDirectoryPath = ref('')
 const highlightedPath = ref('')
 const fileContent = ref('')
 const draftContent = ref('')
+const fileChunkTotalBytes = ref(0)
+const fileChunkLoadedBytes = ref(0)
+const fileChunkNextOffset = ref(0)
+const fileChunkHasMore = ref(false)
+const fileChunkLoadingMore = ref(false)
+const pendingLargeFilePrompt = ref<{ path: string; totalBytes: number } | null>(null)
 const fileLoading = ref(false)
 const fileError = ref<string | null>(null)
 const viewerMode = ref<ViewerMode>('none')
@@ -425,8 +434,64 @@ const selectionAnchorPath = ref('')
 const confirmDiscardOpen = ref(false)
 const pendingSelect = ref<FileNode | null>(null)
 
+let syncingFilesVisibilityPreferencesFromSettings = false
+let filesVisibilityPreferencesInitialized = false
+
+function persistFilesVisibilityPreferencesToSettings() {
+  if (!filesVisibilityPreferencesInitialized) return
+  if (syncingFilesVisibilityPreferencesFromSettings) return
+  if (!settings.data) return
+
+  const showGitignored = !respectGitignore.value
+  const patch: Partial<Settings> = {}
+
+  if (settings.data.directoryShowHidden !== showHidden.value) {
+    patch.directoryShowHidden = showHidden.value
+  }
+  if (settings.data.filesViewShowGitignored !== showGitignored) {
+    patch.filesViewShowGitignored = showGitignored
+  }
+  if (Object.keys(patch).length === 0) return
+
+  void settings.save(patch)
+}
+
+function syncFilesVisibilityPreferencesFromSettings(next: Settings | null) {
+  if (!next) return
+
+  const hasShowHidden = typeof next.directoryShowHidden === 'boolean'
+  const hasShowGitignored = typeof next.filesViewShowGitignored === 'boolean'
+
+  syncingFilesVisibilityPreferencesFromSettings = true
+  if (hasShowHidden) {
+    showHidden.value = Boolean(next.directoryShowHidden)
+  }
+  if (hasShowGitignored) {
+    respectGitignore.value = !Boolean(next.filesViewShowGitignored)
+  }
+  syncingFilesVisibilityPreferencesFromSettings = false
+
+  filesVisibilityPreferencesInitialized = true
+
+  if (hasShowHidden && hasShowGitignored) return
+
+  const patch: Partial<Settings> = {}
+  if (!hasShowHidden) {
+    patch.directoryShowHidden = showHidden.value
+  }
+  if (!hasShowGitignored) {
+    patch.filesViewShowGitignored = !respectGitignore.value
+  }
+
+  void settings.save(patch)
+}
+
 watch(showHidden, (v) => localStorage.setItem(STORAGE_FILES_SHOW_HIDDEN, v ? 'true' : 'false'))
-watch(respectGitignore, (v) => localStorage.setItem(STORAGE_FILES_RESPECT_GITIGNORE, v ? 'true' : 'false'))
+watch(showHidden, () => persistFilesVisibilityPreferencesToSettings())
+watch(respectGitignore, (v) => {
+  localStorage.setItem(STORAGE_FILES_RESPECT_GITIGNORE, v ? 'true' : 'false')
+  persistFilesVisibilityPreferencesToSettings()
+})
 watch(autoSaveEnabled, (v) => {
   localStorage.setItem(STORAGE_FILES_AUTOSAVE, v ? 'true' : 'false')
   if (!v) {
@@ -440,6 +505,13 @@ watch(timelineVisibilityPreference, (v) =>
 watch(explorerSidebarMode, (v) => localStorage.setItem(STORAGE_FILES_SIDEBAR_MODE, v))
 watch(explorerSearchMode, (v) => localStorage.setItem(STORAGE_FILES_SEARCH_MODE, v))
 watch(contentSearchScopeMode, (v) => localStorage.setItem(STORAGE_FILES_CONTENT_SCOPE_MODE, v))
+watch(
+  () => settings.data,
+  (next) => {
+    syncFilesVisibilityPreferencesFromSettings(next)
+  },
+  { immediate: true },
+)
 
 watch(
   () => [blameEnabled.value, selectedFile.value?.path, viewerMode.value, root.value] as const,
@@ -473,6 +545,7 @@ watch(
     viewerMode.value = 'none'
     fileContent.value = ''
     draftContent.value = ''
+    resetFileChunkState()
     fileLoading.value = false
     fileError.value = null
     selection.value = null
@@ -489,6 +562,10 @@ let pageMounted = false
 
 function isStaleRootRestore(seq: number, rootPath: string): boolean {
   return seq !== rootRestoreSeq || root.value !== rootPath
+}
+
+function isStaleFileOpen(seq: number, rootPath: string, path: string): boolean {
+  return seq !== openFileSeq || root.value !== rootPath || selectedFile.value?.path !== path
 }
 
 watch(
@@ -555,10 +632,59 @@ watch(
 onBeforeUnmount(() => {
   revokeRawUrl()
 })
-const isTruncated = computed(() => fileContent.value.length > MAX_VIEW_CHARS)
-const displayedContent = computed(() => truncateContent(fileContent.value))
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB']
+  let value = bytes
+  let idx = 0
+  while (value >= 1024 && idx < units.length - 1) {
+    value /= 1024
+    idx += 1
+  }
+  return `${value >= 10 || idx === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[idx]}`
+}
+
+function resetFileChunkState() {
+  fileChunkTotalBytes.value = 0
+  fileChunkLoadedBytes.value = 0
+  fileChunkNextOffset.value = 0
+  fileChunkHasMore.value = false
+  fileChunkLoadingMore.value = false
+  pendingLargeFilePrompt.value = null
+}
+
+const displayedContent = computed(() => fileContent.value)
+const largeFilePrompt = computed(() => {
+  const prompt = pendingLargeFilePrompt.value
+  const selectedPath = selectedFile.value?.path || ''
+  if (!prompt || !selectedPath || prompt.path !== selectedPath) return null
+  return {
+    totalBytes: prompt.totalBytes,
+    totalLabel: formatBytes(prompt.totalBytes),
+    initialLoadLabel: formatBytes(FILE_CHUNK_BYTES),
+  }
+})
+const fileChunkUi = computed(() => {
+  const selectedPath = selectedFile.value?.path || ''
+  if (!selectedPath) return null
+  const totalBytes = fileChunkTotalBytes.value
+  if (totalBytes <= 0) return null
+  return {
+    loadedBytes: fileChunkLoadedBytes.value,
+    loadedLabel: formatBytes(fileChunkLoadedBytes.value),
+    totalBytes,
+    totalLabel: formatBytes(totalBytes),
+    hasMore: fileChunkHasMore.value,
+    loadingMore: fileChunkLoadingMore.value,
+  }
+})
 const canEdit = computed(() =>
-  Boolean(selectedFile.value && ['text', 'markdown'].includes(viewerMode.value) && !isTruncated.value),
+  Boolean(
+    selectedFile.value &&
+    ['text', 'markdown'].includes(viewerMode.value) &&
+    !fileChunkHasMore.value &&
+    !largeFilePrompt.value,
+  ),
 )
 const dirty = computed(() => canEdit.value && draftContent.value !== displayedContent.value)
 
@@ -570,6 +696,21 @@ const displaySelectedPath = computed(() => {
 
 const fileStatusLabel = computed(() => {
   if (!selectedFile.value?.path || !['text', 'markdown'].includes(viewerMode.value)) return ''
+  if (largeFilePrompt.value) {
+    return String(
+      t('files.viewer.largeFile.pendingStatus', {
+        size: largeFilePrompt.value.totalLabel,
+      }),
+    )
+  }
+  if (fileChunkHasMore.value) {
+    return String(
+      t('files.viewer.largeFile.partialLoadedStatus', {
+        loaded: formatBytes(fileChunkLoadedBytes.value),
+        total: formatBytes(fileChunkTotalBytes.value),
+      }),
+    )
+  }
   return dirty.value ? 'modified' : 'saved'
 })
 
@@ -1812,6 +1953,7 @@ async function openFile(node: FileNode) {
   fileError.value = null
   selection.value = null
   commentText.value = ''
+  resetFileChunkState()
   fileLoading.value = true
 
   if (isMobile.value) {
@@ -1830,22 +1972,106 @@ async function openFile(node: FileNode) {
   const shouldRestoreTimeline = timelineVisibilityPreference.value
   viewerMode.value = previewMode === 'markdown' ? 'markdown' : 'text'
   try {
-    const content = await readFileText({ directory: rootPath, path: node.path })
-    if (seq !== openFileSeq || root.value !== rootPath || selectedFile.value?.path !== node.path) return
-    fileContent.value = content
-    draftContent.value = truncateContent(content)
+    const meta = await readFileChunk({ directory: rootPath, path: node.path, offset: 0, limit: 0 })
+    if (isStaleFileOpen(seq, rootPath, node.path)) return
+
+    fileChunkTotalBytes.value = Math.max(0, Math.floor(meta.totalBytes || 0))
+    if (fileChunkTotalBytes.value > LARGE_FILE_WARNING_BYTES) {
+      pendingLargeFilePrompt.value = { path: node.path, totalBytes: fileChunkTotalBytes.value }
+      fileContent.value = ''
+      draftContent.value = ''
+      return
+    }
+
+    const chunk = await readFileChunk({ directory: rootPath, path: node.path, offset: 0, limit: FILE_CHUNK_BYTES })
+    if (isStaleFileOpen(seq, rootPath, node.path)) return
+    pendingLargeFilePrompt.value = null
+    fileContent.value = chunk.content
+    draftContent.value = chunk.content
+    fileChunkLoadedBytes.value = Math.max(0, Math.floor(chunk.loadedBytes || 0))
+    fileChunkNextOffset.value = Math.max(
+      fileChunkLoadedBytes.value,
+      Math.floor(chunk.nextOffset ?? chunk.loadedBytes ?? 0),
+    )
+    fileChunkHasMore.value = Boolean(chunk.hasMore)
+    fileChunkTotalBytes.value = Math.max(fileChunkTotalBytes.value, Math.floor(chunk.totalBytes || 0))
   } catch (err) {
-    if (seq !== openFileSeq || root.value !== rootPath || selectedFile.value?.path !== node.path) return
+    if (isStaleFileOpen(seq, rootPath, node.path)) return
     viewerMode.value = 'binary'
     fileContent.value = ''
     draftContent.value = ''
     fileError.value = err instanceof Error ? err.message : String(err)
   } finally {
-    if (seq === openFileSeq && root.value === rootPath && selectedFile.value?.path === node.path) {
+    if (!isStaleFileOpen(seq, rootPath, node.path)) {
       fileLoading.value = false
       if (shouldRestoreTimeline && viewerMode.value === 'text') {
         openFileTimeline()
       }
+    }
+  }
+}
+
+async function confirmLargeFileLoad() {
+  const selected = selectedFile.value
+  const rootPath = root.value
+  const prompt = largeFilePrompt.value
+  if (!selected || !rootPath || !prompt) return
+
+  const seq = ++openFileSeq
+  fileLoading.value = true
+  fileError.value = null
+  pendingLargeFilePrompt.value = null
+
+  try {
+    const chunk = await readFileChunk({ directory: rootPath, path: selected.path, offset: 0, limit: FILE_CHUNK_BYTES })
+    if (isStaleFileOpen(seq, rootPath, selected.path)) return
+    fileContent.value = chunk.content
+    draftContent.value = chunk.content
+    fileChunkLoadedBytes.value = Math.max(0, Math.floor(chunk.loadedBytes || 0))
+    fileChunkNextOffset.value = Math.max(
+      fileChunkLoadedBytes.value,
+      Math.floor(chunk.nextOffset ?? chunk.loadedBytes ?? 0),
+    )
+    fileChunkHasMore.value = Boolean(chunk.hasMore)
+    fileChunkTotalBytes.value = Math.max(fileChunkTotalBytes.value, Math.floor(chunk.totalBytes || 0))
+  } catch (err) {
+    if (isStaleFileOpen(seq, rootPath, selected.path)) return
+    fileError.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    if (!isStaleFileOpen(seq, rootPath, selected.path)) {
+      fileLoading.value = false
+    }
+  }
+}
+
+async function loadMoreFileContent() {
+  const selected = selectedFile.value
+  const rootPath = root.value
+  if (!selected || !rootPath || !fileChunkHasMore.value || fileChunkLoadingMore.value) return
+
+  const seq = openFileSeq
+  const offset = Math.max(0, Math.floor(fileChunkNextOffset.value || fileChunkLoadedBytes.value))
+  fileChunkLoadingMore.value = true
+  fileError.value = null
+
+  try {
+    const chunk = await readFileChunk({ directory: rootPath, path: selected.path, offset, limit: FILE_CHUNK_BYTES })
+    if (isStaleFileOpen(seq, rootPath, selected.path)) return
+    fileContent.value += chunk.content
+    draftContent.value = fileContent.value
+    fileChunkLoadedBytes.value = Math.max(0, Math.floor(chunk.loadedBytes || 0))
+    fileChunkNextOffset.value = Math.max(
+      fileChunkLoadedBytes.value,
+      Math.floor(chunk.nextOffset ?? chunk.loadedBytes ?? 0),
+    )
+    fileChunkHasMore.value = Boolean(chunk.hasMore)
+    fileChunkTotalBytes.value = Math.max(fileChunkTotalBytes.value, Math.floor(chunk.totalBytes || 0))
+  } catch (err) {
+    if (isStaleFileOpen(seq, rootPath, selected.path)) return
+    fileError.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    if (!isStaleFileOpen(seq, rootPath, selected.path)) {
+      fileChunkLoadingMore.value = false
     }
   }
 }
@@ -2106,6 +2332,7 @@ async function renameNodePath(oldPath: string, nextName: string) {
     viewerMode.value = 'none'
     fileContent.value = ''
     draftContent.value = ''
+    resetFileChunkState()
     fileError.value = null
     clearBlame()
     clearGitDiff()
@@ -2170,6 +2397,7 @@ function resetViewerSelectionState() {
   viewerMode.value = 'none'
   fileContent.value = ''
   draftContent.value = ''
+  resetFileChunkState()
   fileError.value = null
   clearBlame()
   clearGitDiff()
@@ -2345,6 +2573,7 @@ async function restoreForRoot(next: string) {
   viewerMode.value = 'none'
   fileContent.value = ''
   draftContent.value = ''
+  resetFileChunkState()
   fileLoading.value = false
   fileError.value = null
   selection.value = null
@@ -2868,6 +3097,8 @@ onMounted(async () => {
                 :file-loading="fileLoading"
                 :file-error="fileError"
                 :file-status-label="fileStatusLabel"
+                :large-file-prompt="largeFilePrompt"
+                :file-chunk-ui="fileChunkUi"
                 :blame-enabled="blameEnabled"
                 :blame-loading="blameLoading"
                 :blame-error="blameError"
@@ -2903,6 +3134,8 @@ onMounted(async () => {
                 :open-timeline="openFileTimeline"
                 :open-sidebar="() => ui.setSessionSwitcherOpen(true)"
                 :save="() => save()"
+                :confirm-large-file-load="confirmLargeFileLoad"
+                :load-more-file-content="loadMoreFileContent"
                 :copy-to-clipboard="copyToClipboard"
                 @insert-selection="insertSelectionIntoChatComposer"
               />

@@ -277,6 +277,24 @@ mod tests {
     }
 
     #[test]
+    fn sanitize_settings_update_accepts_files_visibility_settings() {
+        let input = serde_json::json!({
+            "directoryShowHidden": true,
+            "filesViewShowGitignored": true,
+        });
+        let out = sanitize_settings_update(&input);
+        let obj = out.as_object().expect("sanitized object");
+        assert_eq!(
+            obj.get("directoryShowHidden").and_then(|v| v.as_bool()),
+            Some(true)
+        );
+        assert_eq!(
+            obj.get("filesViewShowGitignored").and_then(|v| v.as_bool()),
+            Some(true)
+        );
+    }
+
+    #[test]
     fn sanitize_settings_update_accepts_chat_activity_item_prefs() {
         let input = serde_json::json!({
             "chatActivityAutoCollapseOnIdle": false,
@@ -535,6 +553,26 @@ mod tests {
                 "bash".to_string(),
                 "unknown".to_string()
             ]
+        );
+    }
+
+    #[test]
+    fn format_settings_response_round_trips_files_visibility_settings() {
+        let input = serde_json::json!({
+            "projects": [],
+            "directoryShowHidden": true,
+            "filesViewShowGitignored": false,
+        });
+        let out = format_settings_response(&input);
+        let obj = out.as_object().expect("settings object");
+
+        assert_eq!(
+            obj.get("directoryShowHidden").and_then(|v| v.as_bool()),
+            Some(true)
+        );
+        assert_eq!(
+            obj.get("filesViewShowGitignored").and_then(|v| v.as_bool()),
+            Some(false)
         );
     }
 }

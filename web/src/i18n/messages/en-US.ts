@@ -3251,6 +3251,16 @@ export default {
         copyContents: 'Copy contents',
         downloadRaw: 'Download raw',
       },
+      largeFile: {
+        title: 'Large file detected',
+        description: 'This file is {size}. Loading very large files may affect editor performance.',
+        initialLoadHint: 'Start by loading the first {size}, then load more as needed.',
+        continue: 'Continue loading',
+        loadMore: 'Load more',
+        partialLoadedBanner: 'Loaded {loaded} of {total}.',
+        pendingStatus: 'Large file: {size}. Continue loading to preview.',
+        partialLoadedStatus: 'Partially loaded {loaded}/{total}',
+      },
       status: {
         loadingTimelineCommits: 'Loading timeline commits...',
         loadingBlame: 'Loading blame...',

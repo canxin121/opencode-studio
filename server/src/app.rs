@@ -857,6 +857,7 @@ pub(crate) async fn run(args: crate::Args) {
         .route("/fs/home", get(crate::fs::fs_home))
         .route("/fs/mkdir", post(crate::fs::fs_mkdir))
         .route("/fs/read", get(crate::fs::fs_read))
+        .route("/fs/read-chunk", get(crate::fs::fs_read_chunk))
         .route("/fs/raw", get(crate::fs::fs_raw))
         .route("/fs/download", get(crate::fs::fs_download))
         .route("/fs/write", post(crate::fs::fs_write))
