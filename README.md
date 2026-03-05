@@ -2,57 +2,82 @@
 
 English | [简体中文](README.zh-CN.md)
 
-OpenCode Studio is a high-performance, all-in-one workspace for OpenCode that brings chat, files, terminal, Git, and settings into one interface. It supports plugin-customized UI and actions, runs on Windows, macOS, and Linux, and supports both desktop package install and service-mode deployment.
-
-> Note: This is a community project and is not built by the OpenCode team and is not affiliated with them. Upstream OpenCode: [anomalyco/opencode](https://github.com/anomalyco/opencode)
-
 <p align="center">
   <img src="web/public/apple-touch-icon-180x180.png" width="128" alt="OpenCode Studio desktop app icon" />
 </p>
 
-## UI Preview
-
-<details>
-<summary><strong>Screenshots</strong> (click to expand)</summary>
-
 <p align="center">
-  <a href="assets/studio-chat.png"><img src="assets/studio-chat.png" width="320" alt="Chat view" /></a>
-  <a href="assets/studio-files.png"><img src="assets/studio-files.png" width="320" alt="Files explorer + editor" /></a>
-  <a href="assets/studio-terminal.png"><img src="assets/studio-terminal.png" width="320" alt="Integrated terminal" /></a>
-  <a href="assets/studio-git.png"><img src="assets/studio-git.png" width="320" alt="Git status + diff" /></a>
-  <a href="assets/studio-settings.png"><img src="assets/studio-settings.png" width="320" alt="Settings" /></a>
+  <strong>OpenCode Studio for focused OpenCode workflows.</strong><br />
+  One workspace for chat, files, terminal, Git, and settings.<br />
+  Built for fast local usage and reliable always-on deployment.
 </p>
 
-</details>
+<p align="center">
+  <a href="https://github.com/canxin121/opencode-studio/releases/latest">Get Release</a>
+  ·
+  <a href="docs/technical-reference.md">Technical Docs</a>
+  ·
+  <a href="docs/service.md">Service Install</a>
+  ·
+  <a href="https://github.com/canxin121/opencode-studio/issues">Issue Tracker</a>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/github/actions/workflow/status/canxin121/opencode-studio/ci.yml?branch=master&style=flat-square&label=build" alt="Build status" />
+  <img src="https://img.shields.io/github/v/release/canxin121/opencode-studio?style=flat-square&label=release" alt="Latest release" />
+  <img src="https://img.shields.io/github/license/canxin121/opencode-studio?style=flat-square&label=license" alt="License" />
+  <img src="https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%7C%20Linux-2F855A?style=flat-square" alt="Supported platforms" />
+  <img src="https://img.shields.io/badge/modes-Desktop%20%7C%20Service-1f6feb?style=flat-square" alt="Run modes" />
+</p>
+
+> Note: This is a community project and is not built by the OpenCode team and is not affiliated with them. Upstream OpenCode: [anomalyco/opencode](https://github.com/anomalyco/opencode)
+
+<a id="contents"></a>
+## Contents
+
+- [Why OpenCode Studio](#why-opencode-studio)
+- [UI Preview](#ui-preview)
+- [Quick Start (2 minutes)](#quick-start)
+- [Installation Details](#installation-details)
+- [After Install](#after-install)
+- [Service Management](#service-management)
+- [Technical Details and Parameters](#technical-details-and-parameters)
+- [License](#license)
+
+<a id="why-opencode-studio"></a>
+## Why OpenCode Studio
+
+- Unified workflow across chat, files, terminal, and Git in one workspace.
+- OpenCode event-stream bridge with real-time updates and resume behavior.
+- Performance-focused proxy path with payload pruning and response shaping for long sessions.
+- Pagination-first data access (`offset`/`limit`) to reduce initial load pressure.
+- Lazy-loading strategy so heavier content is fetched and rendered on demand.
+- Studio-only plugin UI system: discovers plugins via `opencode.json`, loads `studio.manifest.json`, and exposes actions in UI.
+- Local-first plus ops-friendly deployment: package install for desktop use, or managed service install for always-on usage.
+
+<a id="ui-preview"></a>
+## UI Preview
+
+<p align="center">
+  <a href="assets/studio-chat.png"><img src="assets/studio-chat.png" width="300" alt="Chat view" /></a>
+  <a href="assets/studio-files.png"><img src="assets/studio-files.png" width="300" alt="Files explorer and editor" /></a>
+  <a href="assets/studio-terminal.png"><img src="assets/studio-terminal.png" width="300" alt="Integrated terminal" /></a>
+</p>
+<p align="center">
+  <a href="assets/studio-git.png"><img src="assets/studio-git.png" width="300" alt="Git status and diff" /></a>
+  <a href="assets/studio-settings.png"><img src="assets/studio-settings.png" width="300" alt="Settings" /></a>
+</p>
 
 - Chat view: sessions, streaming messages, and tool traces.
 - Files view: workspace browsing, editing, and search/replace.
 - Terminal view: integrated PTY session for command workflows.
 - Git view: status, diff, branch/worktree helpers.
-- Settings view: OpenCode config layers + Studio-local settings.
+- Settings view: OpenCode config layers plus Studio-local settings.
 
-## Functional Overview
+<a id="quick-start"></a>
+## Quick Start (2 minutes)
 
-- Unified workflow across chat, files, terminal, and Git in one workspace.
-- OpenCode event-stream bridge with real-time updates and resume behavior.
-- Visual configuration editing from the settings page.
-- Plugin action entry points rendered in the Studio UI.
-
-## Key Differentiators
-
-- Performance-focused proxy path: payload pruning and response shaping for long sessions.
-- Pagination-first data access: core lists use `offset`/`limit` to reduce initial load pressure.
-- Lazy-loading strategy: heavier content is fetched/rendered on demand.
-- Studio-only plugin UI system: discovers plugins via `opencode.json`, loads `studio.manifest.json`, and exposes actions in UI.
-- Local-first plus ops-friendly deployment: use desktop package install or managed service install.
-
-## Prerequisites
-
-- OpenCode CLI is required on all platforms; install it before installing/running Studio service.
-- Windows service install requires `sc.exe` (built into standard Windows) and an elevated PowerShell.
-- Linux service install requires `systemctl` when you want managed autostart/service control.
-
-Install OpenCode first (choose one method):
+1. Install OpenCode CLI first (choose one method).
 
 ```bash
 # macOS / Linux (official install script)
@@ -73,15 +98,25 @@ choco install opencode
 bun add -g opencode-ai@latest
 ```
 
-Verify before installing Studio service:
+2. Verify installation.
 
 ```bash
 opencode --version
 ```
 
-## Quick Install
+3. Choose an installation path.
 
-Choose one of two installation paths based on your scenario.
+| Scenario | Recommended path | What you get |
+| --- | --- | --- |
+| Local desktop usage | Package install | Native desktop app with bundled backend service |
+| Always-on host / server-like environment | Service install | Managed service via `systemd`, `launchd`, or Windows SCM |
+
+4. Open in browser:
+- Frontend-enabled install: `http://127.0.0.1:3210`
+- API-only install: `http://127.0.0.1:3210/health`
+
+<a id="installation-details"></a>
+## Installation Details
 
 ### Option 1: Package Install (Desktop App)
 
@@ -96,58 +131,57 @@ Best for local desktop usage.
 
 ### Option 2: Service Install
 
-Best for always-on hosts, server-like usage, or environments managed by `systemd` / `sc` (Windows uses an NSSM service wrapper under SCM).
+Best for always-on hosts, server-like usage, or environments managed by `systemd` / `launchd` / `sc` (Windows uses an NSSM service wrapper under SCM).
 
 On Windows, installer scripts register two services:
-
 - `OpenCodeStudio-OpenCode` (managed `opencode serve` on port `16000`)
 - `OpenCodeStudio` (web/API service depending on `OpenCodeStudio-OpenCode`)
 
 Unix (Linux/macOS):
 
 ```bash
-# service install with bundled UI
+# Service install with bundled UI
 curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/install-service.sh | bash -s -- --with-frontend
 
-# service install API-only (no bundled UI)
+# Service install API-only (no bundled UI)
 curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/install-service.sh | bash
 
-# service install with custom bind host/port/password
+# Service install with custom bind host/port/password
 curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/install-service.sh | bash -s -- --with-frontend --host 0.0.0.0 --port 3210 --ui-password "change-me"
 ```
 
 Windows PowerShell (run as Administrator):
 
 ```powershell
-# service install with bundled UI
+# Service install with bundled UI
 iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/install-service.ps1) } -WithFrontend"
 
-# service install API-only (no bundled UI)
+# Service install API-only (no bundled UI)
 iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/install-service.ps1) }"
 
-# service install with custom bind host/port/password
+# Service install with custom bind host/port/password
 iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/install-service.ps1) } -WithFrontend -Host 0.0.0.0 -Port 3210 -UiPassword 'change-me'"
 ```
 
-## After Install: Open in Browser
+<a id="after-install"></a>
+## After Install
+
+### Open in browser
 
 - Default service address is `http://127.0.0.1:3210` (from `host` + `port` in config).
-- Default generated auth password is empty (`ui_password = ""`), which keeps password login disabled.
+- Default generated auth password is empty (`ui_password = ""`), so password login is disabled.
 - If installed with frontend, open `http://127.0.0.1:3210` directly.
-- If installed API-only, use `http://127.0.0.1:3210/health` to verify service is running.
+- If installed API-only, use `http://127.0.0.1:3210/health` to verify service health.
 - To enable UI after API-only install, set `ui_dir` in `opencode-studio.toml` to a valid `dist` directory, or reinstall with `--with-frontend` / `-WithFrontend`.
 - For remote machine access, change `host` to `0.0.0.0`, restart service, then visit `http://<server-ip>:3210`.
 
-## After Install: Update Configuration
+### Update configuration
 
-### Service install
-
-The installer generates `opencode-studio.toml`:
-
+For service install, the installer generates `opencode-studio.toml`:
 - Unix: `~/opencode-studio/opencode-studio.toml`
 - Windows: `%USERPROFILE%\\opencode-studio\\opencode-studio.toml`
 
-Edit key values under `[backend]` to update host/port, UI serving path, or OpenCode connection mode:
+Edit key values under `[backend]`:
 
 ```toml
 [backend]
@@ -160,24 +194,22 @@ opencode_host = "127.0.0.1"
 # ui_dir = "/absolute/path/to/web/dist"
 ```
 
-Windows service installs default to `skip_opencode_start = true` so the service can start reliably under SCM.
-The installer also writes `opencode_port = 16000` and manages a companion `OpenCodeStudio-OpenCode` service.
+Windows service installs default to `skip_opencode_start = true` so the service can start reliably under SCM. The installer also writes `opencode_port = 16000` and manages a companion `OpenCodeStudio-OpenCode` service.
 
 Apply changes by restarting the service:
-
 - Linux user service: `systemctl --user restart opencode-studio`
 - Linux system service: `sudo systemctl restart opencode-studio`
 - Windows service: `sc stop OpenCodeStudio` then `sc start OpenCodeStudio`
 
-### Package install
+For package install, runtime config is stored in the app data directory. Use the tray menu action to open the config file directly.
 
-In package mode, runtime config is stored in the app data directory. Use the tray menu action to open the config file directly.
-
-## After Install: Manage Service (start/stop/restart/autostart/uninstall)
+<a id="service-management"></a>
+## Service Management
 
 The commands below apply to the service-install path.
 
-Linux (default user-mode install):
+<details>
+<summary><strong>Linux (default user-mode install)</strong></summary>
 
 ```bash
 # status / start / stop / restart
@@ -197,7 +229,10 @@ curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/sc
 curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/uninstall-service.sh | bash -s -- --remove-install-dir
 ```
 
-Linux (`--mode system` install):
+</details>
+
+<details>
+<summary><strong>Linux (--mode system install)</strong></summary>
 
 ```bash
 # status / start / stop / restart
@@ -217,7 +252,10 @@ curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/sc
 curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/uninstall-service.sh | bash -s -- --remove-install-dir
 ```
 
-macOS (launchd, label: `cn.cxits.opencode-studio`):
+</details>
+
+<details>
+<summary><strong>macOS (launchd, label: cn.cxits.opencode-studio)</strong></summary>
 
 ```bash
 # status
@@ -239,7 +277,10 @@ curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/sc
 curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/uninstall-service.sh | bash -s -- --remove-install-dir
 ```
 
-Windows (service names: `OpenCodeStudio-OpenCode`, `OpenCodeStudio`):
+</details>
+
+<details>
+<summary><strong>Windows (services: OpenCodeStudio-OpenCode, OpenCodeStudio)</strong></summary>
 
 ```powershell
 # status / start / stop / restart
@@ -266,6 +307,9 @@ iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/maste
 iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/uninstall-service.ps1) } -RemoveInstallDir"
 ```
 
+</details>
+
+<a id="technical-details-and-parameters"></a>
 ## Technical Details and Parameters
 
 All technical details, configuration parameters, and developer-centric references are consolidated in:
@@ -273,7 +317,6 @@ All technical details, configuration parameters, and developer-centric reference
 - [`docs/technical-reference.md`](docs/technical-reference.md)
 
 Related docs:
-
 - [`docs/service.md`](docs/service.md) (service install/uninstall details)
 - [`docs/packaging.md`](docs/packaging.md) (package artifacts and build outputs)
 - [`docs/opencode-studio.toml.example`](docs/opencode-studio.toml.example) (runtime config example)
@@ -282,6 +325,4 @@ Related docs:
 
 ## License
 
-MIT.
-
-See [`LICENSE`](LICENSE).
+MIT. See [`LICENSE`](LICENSE).
