@@ -674,6 +674,7 @@ void sessionActionsMenuRef
                         </IconButton>
 
                         <IconButton
+                          variant="outline"
                           class="h-8 w-8"
                           data-oc-keyboard-tap="blur"
                           :tooltip="t('chat.page.primary.send')"

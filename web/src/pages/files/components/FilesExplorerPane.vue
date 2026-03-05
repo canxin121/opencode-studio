@@ -60,6 +60,7 @@ const props = defineProps<{
   selectedPaths: Set<string>
   uploading: boolean
   handleNodeClick: (node: FileNode, modifiers: NodeClickModifiers) => void | Promise<void>
+  handleNodeLongPress: (node: FileNode) => void | Promise<void>
   refreshRoot: () => void | Promise<void>
   collapseAll: () => void
   expandDirectory: (dirPath: string) => void | Promise<void>
@@ -69,6 +70,7 @@ const props = defineProps<{
   openDialog: (kind: Exclude<DialogKind, null>, node?: FileNode) => void
   deleteNode: (node: FileNode) => void | Promise<void>
   deleteSelectedNodes: (paths: string[]) => void | Promise<void>
+  openMoveSelectedDialog: (paths: string[]) => void | Promise<void>
   clearSelectedPaths: () => void
   uploadFiles: (files: readonly File[], targetDir?: string) => void | Promise<void>
 }>()
@@ -91,6 +93,22 @@ const inlineRenamePath = ref('')
 const inlineRenameName = ref('')
 const inlineRenameBusy = ref(false)
 const inlineRenameInputRef = ref<HTMLInputElement | null>(null)
+const LONG_PRESS_DELAY_TOUCH_MS = 420
+const LONG_PRESS_DELAY_POINTER_MS = 540
+const LONG_PRESS_MOVE_TOLERANCE_PX = 8
+
+type LongPressState = {
+  pointerId: number
+  startX: number
+  startY: number
+  node: FileNode
+  triggered: boolean
+}
+
+const longPressState = ref<LongPressState | null>(null)
+const longPressTimer = ref<number | null>(null)
+const suppressClickPath = ref('')
+const suppressClickUntil = ref(0)
 
 async function setActionMenuOpen(next: boolean) {
   if (!next) {
@@ -341,6 +359,12 @@ async function submitInlineRename(node: FileNode) {
 }
 
 async function handleTreeNodeClick(ev: MouseEvent, node: FileNode) {
+  if (suppressClickPath.value === node.path && Date.now() < suppressClickUntil.value) {
+    ev.preventDefault()
+    ev.stopPropagation()
+    return
+  }
+
   if (inlineCreateKind.value && !inlineCreateBusy.value) {
     resetInlineCreate()
   }
@@ -354,6 +378,85 @@ async function handleTreeNodeClick(ev: MouseEvent, node: FileNode) {
     toggle: ev.metaKey || ev.ctrlKey,
     range: ev.shiftKey,
   })
+}
+
+function clearLongPressTimer() {
+  if (longPressTimer.value !== null) {
+    window.clearTimeout(longPressTimer.value)
+    longPressTimer.value = null
+  }
+}
+
+function removeLongPressListeners() {
+  window.removeEventListener('pointermove', onLongPressPointerMove, true)
+  window.removeEventListener('pointerup', onLongPressPointerUp, true)
+  window.removeEventListener('pointercancel', onLongPressPointerCancel, true)
+}
+
+function resetLongPressState() {
+  clearLongPressTimer()
+  removeLongPressListeners()
+  longPressState.value = null
+}
+
+function shouldIgnoreLongPressTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false
+  return Boolean(
+    target.closest(
+      'button, a, input, textarea, select, [role="button"], [data-file-action-root="true"], [data-inline-create-root="true"], [data-inline-rename-root="true"]',
+    ),
+  )
+}
+
+function onLongPressPointerMove(ev: PointerEvent) {
+  const state = longPressState.value
+  if (!state || state.pointerId !== ev.pointerId) return
+  const deltaX = ev.clientX - state.startX
+  const deltaY = ev.clientY - state.startY
+  if (Math.hypot(deltaX, deltaY) > LONG_PRESS_MOVE_TOLERANCE_PX) {
+    resetLongPressState()
+  }
+}
+
+function onLongPressPointerUp(ev: PointerEvent) {
+  const state = longPressState.value
+  if (!state || state.pointerId !== ev.pointerId) return
+  resetLongPressState()
+}
+
+function onLongPressPointerCancel(ev: PointerEvent) {
+  const state = longPressState.value
+  if (!state || state.pointerId !== ev.pointerId) return
+  resetLongPressState()
+}
+
+function onRowPointerDown(ev: PointerEvent, node: FileNode) {
+  if (ev.button !== 0) return
+  if (ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.altKey) return
+  if (shouldIgnoreLongPressTarget(ev.target)) return
+
+  resetLongPressState()
+  longPressState.value = {
+    pointerId: ev.pointerId,
+    startX: ev.clientX,
+    startY: ev.clientY,
+    node,
+    triggered: false,
+  }
+
+  const delay = ev.pointerType === 'touch' ? LONG_PRESS_DELAY_TOUCH_MS : LONG_PRESS_DELAY_POINTER_MS
+  longPressTimer.value = window.setTimeout(() => {
+    const state = longPressState.value
+    if (!state || state.pointerId !== ev.pointerId || state.triggered) return
+    state.triggered = true
+    suppressClickPath.value = state.node.path
+    suppressClickUntil.value = Date.now() + 650
+    void props.handleNodeLongPress(state.node)
+  }, delay)
+
+  window.addEventListener('pointermove', onLongPressPointerMove, true)
+  window.addEventListener('pointerup', onLongPressPointerUp, true)
+  window.addEventListener('pointercancel', onLongPressPointerCancel, true)
 }
 
 async function runDeleteSelected() {
@@ -667,6 +770,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  resetLongPressState()
   window.removeEventListener('pointerdown', handleGlobalPointerDown, true)
 })
 </script>
@@ -676,38 +780,6 @@ onBeforeUnmount(() => {
     <div class="oc-vscode-pane-header">
       <div class="oc-vscode-pane-title">{{ t('files.explorer.title') }}</div>
       <div class="flex items-center gap-1">
-        <div v-if="selectedCount > 0" class="mr-1 flex items-center gap-1">
-          <span
-            class="rounded-sm border border-sidebar-border/70 bg-sidebar-accent/50 px-1.5 py-[1px] text-[10px] font-medium"
-          >
-            {{ t('files.explorer.selection.selectedCount', { count: selectedCount }) }}
-          </span>
-          <ConfirmPopover
-            :title="t('files.explorer.selection.bulkDeleteTitle')"
-            :description="t('files.explorer.selection.bulkDeleteDescription', { count: selectedCount })"
-            :confirm-text="t('files.explorer.selection.bulkDelete')"
-            :cancel-text="t('common.cancel')"
-            variant="destructive"
-            @confirm="runDeleteSelected"
-          >
-            <SidebarIconButton
-              destructive
-              :title="t('files.explorer.selection.bulkDelete')"
-              :disabled="hasDeletingSelected"
-              @click.stop
-            >
-              <RiLoader4Line v-if="hasDeletingSelected" class="h-3.5 w-3.5 animate-spin" />
-              <RiDeleteBinLine v-else class="h-3.5 w-3.5" />
-            </SidebarIconButton>
-          </ConfirmPopover>
-          <SidebarIconButton
-            :title="t('files.explorer.selection.clearSelection')"
-            :aria-label="t('files.explorer.selection.clearSelection')"
-            @click="clearSelectedPaths"
-          >
-            <RiCloseLine class="h-3.5 w-3.5" />
-          </SidebarIconButton>
-        </div>
         <SidebarIconButton :title="t('files.explorer.toolbar.newFile')" @click="startCreate('createFile')">
           <RiFileAddLine class="h-3.5 w-3.5" />
         </SidebarIconButton>
@@ -750,6 +822,52 @@ onBeforeUnmount(() => {
             @select="runExplorerAction"
           />
         </div>
+      </div>
+    </div>
+
+    <div v-if="selectedCount > 0" class="border-b border-sidebar-border/60 px-1.5 py-1">
+      <div class="flex items-center gap-1">
+        <span
+          class="rounded-sm border border-sidebar-border/70 bg-sidebar-accent/50 px-1.5 py-[1px] text-[10px] font-medium"
+        >
+          {{ t('files.explorer.selection.selectedCount', { count: selectedCount }) }}
+        </span>
+        <span class="text-[10px] text-muted-foreground">{{ t('files.explorer.selection.longPressHint') }}</span>
+        <SidebarIconButton
+          size="sm"
+          :title="t('files.explorer.selection.bulkMove')"
+          :aria-label="t('files.explorer.selection.bulkMove')"
+          @click="openMoveSelectedDialog(Array.from(selectedPaths))"
+        >
+          <RiFolderOpenFill class="h-3 w-3" />
+        </SidebarIconButton>
+        <ConfirmPopover
+          :title="t('files.explorer.selection.bulkDeleteTitle')"
+          :description="t('files.explorer.selection.bulkDeleteDescription', { count: selectedCount })"
+          :confirm-text="t('files.explorer.selection.bulkDelete')"
+          :cancel-text="t('common.cancel')"
+          variant="destructive"
+          @confirm="runDeleteSelected"
+        >
+          <SidebarIconButton
+            size="sm"
+            destructive
+            :title="t('files.explorer.selection.bulkDelete')"
+            :disabled="hasDeletingSelected"
+            @click.stop
+          >
+            <RiLoader4Line v-if="hasDeletingSelected" class="h-3 w-3 animate-spin" />
+            <RiDeleteBinLine v-else class="h-3 w-3" />
+          </SidebarIconButton>
+        </ConfirmPopover>
+        <SidebarIconButton
+          size="sm"
+          :title="t('files.explorer.selection.clearSelection')"
+          :aria-label="t('files.explorer.selection.clearSelection')"
+          @click="clearSelectedPaths"
+        >
+          <RiCloseLine class="h-3 w-3" />
+        </SidebarIconButton>
       </div>
     </div>
 
@@ -861,6 +979,7 @@ onBeforeUnmount(() => {
                     dropTargetDir === entry.row.node.path ? '!border-primary/60 !bg-primary/12 !text-foreground' : '',
                   ]"
                   @click="handleTreeNodeClick($event, entry.row.node)"
+                  @pointerdown="onRowPointerDown($event, entry.row.node)"
                   @dragover="onRowDragOver($event, entry.row)"
                   @dragleave="onRowDragLeave($event, entry.row)"
                   @drop="onRowDrop($event, entry.row)"

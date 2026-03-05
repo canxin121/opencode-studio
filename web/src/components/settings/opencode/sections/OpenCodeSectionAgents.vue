@@ -32,10 +32,16 @@ export default defineComponent({
 </script>
 
 <template>
-  <section id="agents" class="scroll-mt-24 rounded-lg border border-border bg-background p-4 space-y-4">
-    <div class="flex items-start justify-between gap-3">
-      <div class="min-w-0">
+  <section
+    id="agents"
+    class="scroll-mt-24 rounded-lg border border-border bg-background p-4 lg:p-5 space-y-4 lg:space-y-5"
+  >
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <div class="min-w-0 space-y-1">
         <div class="text-base font-semibold leading-snug">{{ t('settings.opencodeConfig.sections.agents.title') }}</div>
+        <div class="text-xs text-muted-foreground">
+          {{ t('settings.opencodeConfig.sections.agents.picker.count', { count: filteredAgentsList.length }) }}
+        </div>
       </div>
       <div class="flex items-center gap-2">
         <IconButton
@@ -69,15 +75,19 @@ export default defineComponent({
     </div>
 
     <div v-if="isSectionOpen('agents')" class="space-y-4">
-      <div class="flex flex-wrap items-center gap-2">
-        <Input
-          v-model="newAgentName"
-          :placeholder="t('settings.opencodeConfig.sections.agents.placeholders.agentName')"
-          class="max-w-xs"
-        />
+      <div class="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:items-end">
+        <label class="grid gap-1">
+          <span class="text-xs text-muted-foreground">{{
+            t('settings.opencodeConfig.sections.agents.actions.addAgent')
+          }}</span>
+          <Input
+            v-model="newAgentName"
+            :placeholder="t('settings.opencodeConfig.sections.agents.placeholders.agentName')"
+          />
+        </label>
         <IconButton
           variant="outline"
-          class="h-9 w-9"
+          class="h-9 w-9 md:mb-[1px]"
           :title="t('settings.opencodeConfig.sections.agents.actions.addAgent')"
           :aria-label="t('settings.opencodeConfig.sections.agents.actions.addAgentAria')"
           @click="addAgent"
@@ -86,15 +96,18 @@ export default defineComponent({
         >
           <RiAddLine class="h-4 w-4" />
         </IconButton>
-        <div class="flex-1" />
-        <Input
-          v-model="agentFilter"
-          :placeholder="t('settings.opencodeConfig.sections.agents.placeholders.filterAgents')"
-          class="max-w-sm"
-        />
+        <label class="grid gap-1">
+          <span class="text-xs text-muted-foreground">{{
+            t('settings.opencodeConfig.sections.agents.placeholders.filterAgents')
+          }}</span>
+          <Input
+            v-model="agentFilter"
+            :placeholder="t('settings.opencodeConfig.sections.agents.placeholders.filterAgents')"
+          />
+        </label>
       </div>
 
-      <div class="grid gap-4 lg:grid-cols-[320px_1fr]">
+      <div class="grid gap-4 xl:grid-cols-[minmax(280px,30%)_1fr]">
         <AgentPickerPanel />
         <AgentEditorPanel />
       </div>

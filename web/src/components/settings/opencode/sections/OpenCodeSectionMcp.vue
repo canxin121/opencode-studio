@@ -62,6 +62,7 @@ export default defineComponent({
     }
 
     // Keep the injected context as the component instance surface area (it has a loose index signature).
+    ctx.ui = ui
     ctx.openMcpConnections = openMcpConnections
     ctx.mcpCommandSuggestions = mcpCommandSuggestions
     ctx.mcpTypePickerOptions = mcpTypePickerOptions

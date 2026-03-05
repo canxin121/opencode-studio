@@ -97,14 +97,14 @@ export default defineComponent({
 </script>
 
 <template>
-  <div class="rounded-md border border-border p-3 space-y-4">
-    <div v-if="!selectedAgentId" class="text-sm text-muted-foreground">
+  <div class="rounded-md border border-border p-3 lg:p-4 space-y-4 min-h-[360px]">
+    <div v-if="!effectiveSelectedAgentId" class="text-sm text-muted-foreground">
       {{ t('settings.opencodeConfig.sections.agents.editor.empty') }}
     </div>
 
     <div v-for="[agentId, agent] in selectedAgentRows" :key="`agent-edit:${agentId}`" class="space-y-4">
-      <div class="flex items-center justify-between gap-3">
-        <div>
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="min-w-0">
           <div class="font-mono text-sm break-all">@{{ agentId }}</div>
           <div class="text-[11px] text-muted-foreground">
             {{ t('settings.opencodeConfig.sections.agents.editor.help.singleEdit') }}
@@ -158,7 +158,7 @@ export default defineComponent({
             @click="
               () => {
                 removeEntry('agent', agentId)
-                selectedAgentId = null
+                selectAgent(null)
               }
             "
           >
@@ -167,7 +167,7 @@ export default defineComponent({
         </div>
       </div>
 
-      <div class="flex flex-wrap items-center gap-1">
+      <div class="flex flex-wrap items-center gap-1 rounded-md border border-border/60 bg-muted/20 p-1">
         <button
           type="button"
           class="px-3 py-1.5 text-xs font-medium rounded-full transition-colors border"
@@ -219,7 +219,7 @@ export default defineComponent({
       </div>
 
       <div v-if="agentEditorTab === 'basics'" class="space-y-4">
-        <div class="grid gap-4 lg:grid-cols-3">
+        <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <label class="grid gap-1">
             <span class="text-xs text-muted-foreground">{{
               t('settings.opencodeConfig.sections.agents.editor.fields.model')
@@ -396,7 +396,7 @@ export default defineComponent({
             </IconButton>
           </div>
         </div>
-        <div class="h-56 rounded-md border border-input overflow-hidden">
+        <div class="h-72 rounded-md border border-input overflow-hidden">
           <CodeMirrorEditor
             :ref="(el) => setAgentPromptEditorRef(agentId, el)"
             :model-value="agent.prompt || ''"
@@ -420,8 +420,8 @@ export default defineComponent({
           </div>
 
           <div class="grid gap-3">
-            <div class="flex items-center gap-2">
-              <div class="min-w-[220px] flex-1 max-w-[520px]">
+            <div class="flex flex-wrap items-center gap-2">
+              <div class="min-w-0 flex-1 basis-[260px]">
                 <OptionPicker
                   v-model="agentPermissionNewTool[agentId]"
                   :options="toolIdPickerOptions"
@@ -432,7 +432,7 @@ export default defineComponent({
                 />
               </div>
 
-              <div class="w-[160px]">
+              <div class="w-full sm:w-[160px]">
                 <OptionPicker
                   v-model="agentPermissionNewAction[agentId]"
                   :options="permissionActionPickerOptions"
@@ -458,7 +458,7 @@ export default defineComponent({
 
             <div class="grid gap-3">
               <div v-for="(group, gi) in permissionQuickGroups" :key="`apg:${agentId}:${gi}`" class="grid gap-3">
-                <div class="grid gap-3 lg:grid-cols-3">
+                <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                   <label v-for="item in group" :key="`ap:${agentId}:${item.key}`" class="grid gap-1">
                     <span class="text-xs text-muted-foreground">{{ item.label }}</span>
                     <OptionPicker
@@ -538,7 +538,7 @@ export default defineComponent({
                         <div
                           v-for="(row, idx) in agentPermissionPatternEditors[`${agentId}::${item.key}`]?.entries || []"
                           :key="`apr:${agentId}:${item.key}:${idx}`"
-                          class="grid gap-2 lg:grid-cols-[1fr_160px_auto] items-center"
+                          class="grid gap-2 md:grid-cols-[minmax(0,1fr)_160px_auto] items-center"
                         >
                           <Input
                             v-model="row.pattern"

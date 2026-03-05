@@ -23,7 +23,7 @@ export default defineComponent({
 </script>
 
 <template>
-  <div class="rounded-md border border-border bg-muted/10 p-3 space-y-2">
+  <div class="rounded-md border border-border bg-muted/10 p-3 lg:p-4 space-y-3 min-h-[360px]">
     <div class="flex items-center justify-between gap-2">
       <div class="text-[11px] text-muted-foreground">
         {{ t('settings.opencodeConfig.sections.agents.picker.count', { count: filteredAgentsList.length }) }}
@@ -35,8 +35,8 @@ export default defineComponent({
           class="h-8 w-8"
           :title="t('common.clear')"
           :aria-label="t('common.clear')"
-          @click="selectedAgentId = null"
-          :disabled="!selectedAgentId"
+          @click="selectAgent(filteredAgentsList[0]?.[0] || null)"
+          :disabled="filteredAgentsList.length === 0"
         >
           <RiCloseLine class="h-4 w-4" />
         </Button>
@@ -53,18 +53,18 @@ export default defineComponent({
       :items="filteredAgentsList"
       :get-key="(row) => `agent-row:${row[0]}`"
       :get-height="() => 44"
-      class="max-h-[420px] pr-1"
+      class="max-h-[60vh] min-h-[280px] pr-1"
     >
       <template #default="{ item: row }">
         <button
           type="button"
-          class="w-full h-11 px-2 rounded-md flex items-center justify-between gap-2 text-left border border-transparent hover:bg-muted/40"
-          :class="row[0] === selectedAgentId ? 'bg-muted/70 text-foreground border-border' : ''"
-          @click="selectedAgentId = row[0]"
+          class="w-full min-h-14 px-2.5 py-2 rounded-md flex items-center justify-between gap-2 text-left border border-transparent hover:bg-muted/40"
+          :class="row[0] === effectiveSelectedAgentId ? 'bg-background text-foreground border-border shadow-sm' : ''"
+          @click="selectAgent(row[0])"
         >
-          <div class="min-w-0">
+          <div class="min-w-0 space-y-1">
             <div class="font-mono text-xs truncate">@{{ row[0] }}</div>
-            <div class="text-[11px] text-muted-foreground truncate">
+            <div class="text-[11px] text-muted-foreground line-clamp-2 break-words">
               {{ row[1]?.description || row[1]?.model || row[1]?.mode || '' }}
             </div>
           </div>
