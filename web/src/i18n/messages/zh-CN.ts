@@ -3126,6 +3126,7 @@ export default {
     actions: {
       download: '下载',
       copyPath: '复制路径',
+      copyAbsolutePath: '复制绝对路径',
     },
     confirmDiscard: {
       title: '有未保存的更改',

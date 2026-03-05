@@ -38,7 +38,7 @@ import type { DialogKind, FileNode, FlatRow } from '../types'
 
 type ExplorerViewMode = 'tree' | 'search'
 type InlineCreateKind = 'createFile' | 'createFolder'
-type FileActionId = 'download' | 'copy-path'
+type FileActionId = 'download' | 'copy-path' | 'copy-absolute-path'
 type NodeClickModifiers = { toggle: boolean; range: boolean }
 type ExplorerTreeRow =
   | { kind: 'node'; key: string; row: FlatRow }
@@ -408,6 +408,17 @@ const fileActionGroups: OptionMenuGroup[] = [
     items: [
       { id: 'download', label: t('files.actions.download'), icon: RiDownload2Line },
       { id: 'copy-path', label: t('files.actions.copyPath'), icon: RiFileCopy2Line },
+      { id: 'copy-absolute-path', label: t('files.actions.copyAbsolutePath'), icon: RiFileCopy2Line },
+    ],
+  },
+]
+
+const folderActionGroups: OptionMenuGroup[] = [
+  {
+    id: 'folder-actions',
+    items: [
+      { id: 'copy-path', label: t('files.actions.copyPath'), icon: RiFileCopy2Line },
+      { id: 'copy-absolute-path', label: t('files.actions.copyAbsolutePath'), icon: RiFileCopy2Line },
     ],
   },
 ]
@@ -420,11 +431,13 @@ function rowActionMenuGroups(node: FileNode): OptionMenuGroup[] {
   const items: OptionMenuItem[] = []
 
   if (node.type === 'file') {
-    items.push(
-      { id: 'download', label: t('files.actions.download'), icon: RiDownload2Line },
-      { id: 'copy-path', label: t('files.actions.copyPath'), icon: RiFileCopy2Line },
-    )
+    items.push({ id: 'download', label: t('files.actions.download'), icon: RiDownload2Line })
   }
+
+  items.push(
+    { id: 'copy-path', label: t('files.actions.copyPath'), icon: RiFileCopy2Line },
+    { id: 'copy-absolute-path', label: t('files.actions.copyAbsolutePath'), icon: RiFileCopy2Line },
+  )
 
   items.push({ id: 'rename', label: t('files.explorer.actions.rename'), icon: RiEditLine })
   items.push({
@@ -511,7 +524,7 @@ function toggleFileActionMenu(path: string) {
 
 async function runFileActionMenu(node: FileNode, item: OptionMenuItem) {
   const action = item.id as FileActionId
-  if (action !== 'download' && action !== 'copy-path') return
+  if (action !== 'download' && action !== 'copy-path' && action !== 'copy-absolute-path') return
   await props.runFileAction(action, node)
   fileActionMenuPath.value = ''
 }
@@ -530,7 +543,7 @@ async function runTreeRowActionMenu(node: FileNode, item: OptionMenuItem) {
   }
 
   const action = item.id as FileActionId
-  if (action === 'download' || action === 'copy-path') {
+  if (action === 'download' || action === 'copy-path' || action === 'copy-absolute-path') {
     await props.runFileAction(action, node)
     fileActionMenuPath.value = ''
   }
@@ -890,10 +903,14 @@ onBeforeUnmount(() => {
                     </div>
 
                     <div v-else class="flex items-center gap-0.5">
-                      <div v-if="entry.row.node.type === 'file'" class="relative" data-file-action-root="true">
+                      <div class="relative" data-file-action-root="true">
                         <SidebarIconButton
                           size="sm"
-                          :title="t('files.explorer.actions.fileActions')"
+                          :title="
+                            entry.row.node.type === 'directory'
+                              ? t('files.explorer.actions.folderActions')
+                              : t('files.explorer.actions.fileActions')
+                          "
                           :active="fileActionMenuPath === entry.row.node.path"
                           @click.stop="void toggleFileActionMenu(entry.row.node.path)"
                         >
@@ -902,9 +919,9 @@ onBeforeUnmount(() => {
                         <OptionMenu
                           :open="fileActionMenuPath === entry.row.node.path"
                           :query="fileActionMenuQuery"
-                          :groups="fileActionGroups"
-                          :title="t('files.explorer.actions.fileActions')"
-                          :mobile-title="t('files.explorer.actions.fileActions')"
+                          :groups="entry.row.node.type === 'directory' ? folderActionGroups : fileActionGroups"
+                          :title="rowActionMenuTitle(entry.row.node)"
+                          :mobile-title="rowActionMenuTitle(entry.row.node)"
                           :searchable="true"
                           filter-mode="internal"
                           :is-mobile-pointer="isMobile"
