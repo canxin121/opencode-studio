@@ -3,7 +3,8 @@ Param(
   [string]$Version = "",
   [switch]$WithFrontend,
   [string]$InstallDir = "",
-  [string]$Host = "127.0.0.1",
+  [Alias("Host")]
+  [string]$BindHost = "127.0.0.1",
   [ValidateRange(1, 65535)]
   [int]$Port = 3210,
   [string]$UiPassword = ""
@@ -135,7 +136,7 @@ function Wait-HealthEndpoint([string]$Url, [int]$TimeoutSeconds = 45) {
 Assert-Administrator
 Require-Command "sc.exe" "Windows service management requires sc.exe."
 Require-Command "opencode" "Install OpenCode first (for example: scoop install opencode, choco install opencode, or bun add -g opencode-ai@latest)."
-if ([string]::IsNullOrWhiteSpace($Host)) {
+if ([string]::IsNullOrWhiteSpace($BindHost)) {
   throw "Host must be a non-empty hostname or IP address."
 }
 
@@ -368,7 +369,7 @@ try {
     "# Runtime configuration for opencode-studio.",
     "",
     "[backend]",
-    "host = $(Convert-ToTomlBasicString $Host)",
+    "host = $(Convert-ToTomlBasicString $BindHost)",
     "port = $Port",
     "# Optional UI session password. Keep empty to disable password login.",
     "ui_password = $(Convert-ToTomlBasicString $UiPassword)",
@@ -405,7 +406,7 @@ try {
   Invoke-ScCommand -Arguments @("start", $OpenCodeServiceName) -ErrorMessage "Failed to start service '$OpenCodeServiceName'"
   Invoke-ScCommand -Arguments @("start", $ServiceName) -ErrorMessage "Failed to start service '$ServiceName'"
 
-  $HealthHost = Resolve-HealthHost $Host
+  $HealthHost = Resolve-HealthHost $BindHost
   $HealthUrl = "$(Format-HttpUrl $HealthHost $Port)/health"
   Wait-HealthEndpoint -Url $HealthUrl
 

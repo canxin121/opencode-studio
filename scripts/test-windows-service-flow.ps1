@@ -187,7 +187,7 @@ try {
   $installParams = @{
     Repo = $Repo
     InstallDir = $InstallDir
-    Host = "127.0.0.1"
+    BindHost = "127.0.0.1"
     Port = $port
   }
   if ($Version) {

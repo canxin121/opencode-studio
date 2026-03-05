@@ -4,7 +4,8 @@ Param(
   [string]$Repo = "canxin121/opencode-studio",
   [string]$Version = "",
   [string]$InstallDir = "",
-  [string]$Host = "127.0.0.1",
+  [Alias("Host")]
+  [string]$BindHost = "127.0.0.1",
   [ValidateRange(1, 65535)]
   [int]$Port = 3210,
   [string]$ServiceName = "OpenCodeStudio",
@@ -161,7 +162,7 @@ function Download([string]$Url, [string]$OutFile) {
   Invoke-WebRequest -Uri $Url -OutFile $OutFile
 }
 
-if ([string]::IsNullOrWhiteSpace($Host)) {
+if ([string]::IsNullOrWhiteSpace($BindHost)) {
   throw "Host must be a non-empty hostname or IP address."
 }
 
@@ -355,7 +356,7 @@ try {
     "# CLI flags and environment variables can still override these values.",
     "",
     "[backend]",
-    "host = $(Convert-ToTomlBasicString $Host)",
+    "host = $(Convert-ToTomlBasicString $BindHost)",
     "port = $Port",
     "# Optional UI session password. Keep empty to disable password login.",
     "ui_password = $(Convert-ToTomlBasicString $UiPassword)",
@@ -394,7 +395,7 @@ try {
   Invoke-ScCommand -Arguments @("start", $OpenCodeServiceName) -ErrorMessage "Failed to start service '$OpenCodeServiceName'"
   Invoke-ScCommand -Arguments @("start", $ServiceName) -ErrorMessage "Failed to start service '$ServiceName'"
 
-  $HealthHost = Resolve-HealthHost $Host
+  $HealthHost = Resolve-HealthHost $BindHost
   $HealthUrl = "$(Format-HttpUrl $HealthHost $Port)/health"
   Wait-HealthEndpoint -Url $HealthUrl
 
