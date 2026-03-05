@@ -78,10 +78,16 @@ After installation:
 - Linux system service: `sudo systemctl status opencode-studio`
 - macOS launchd agent: `launchctl list | grep opencode`
 
-Uninstall service unit (keeps binary/data unless you delete them):
+Uninstall service unit only (keeps install files):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/uninstall-service.sh | bash
+```
+
+Uninstall service unit and also remove install files (`~/opencode-studio` by default):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/uninstall-service.sh | bash -s -- --remove-install-dir
 ```
 
 ## Windows (PowerShell)

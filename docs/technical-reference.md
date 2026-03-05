@@ -142,6 +142,13 @@ Windows installer notes:
   `LOCALAPPDATA`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, and optional `OPENCODE_CONFIG`) so
   OpenCode/Studio can resolve the same user config paths as desktop mode.
 
+### Unix uninstaller (`scripts/uninstall-service.sh`)
+
+| Parameter | Default | Description |
+| --- | --- | --- |
+| `--install-dir PATH` | `~/opencode-studio` | Install root used when `--remove-install-dir` is set |
+| `--remove-install-dir` | disabled | Also remove install directory after service units are deleted |
+
 ### Windows uninstaller (`scripts/uninstall-service.ps1`)
 
 | Parameter | Default | Description |

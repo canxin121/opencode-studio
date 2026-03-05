@@ -192,6 +192,9 @@ systemctl --user disable opencode-studio
 
 # uninstall service unit
 curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/uninstall-service.sh | bash
+
+# uninstall service unit + installed files
+curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/uninstall-service.sh | bash -s -- --remove-install-dir
 ```
 
 Linux (`--mode system` install):
@@ -209,6 +212,9 @@ sudo systemctl disable opencode-studio
 
 # uninstall service unit
 curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/uninstall-service.sh | bash
+
+# uninstall service unit + installed files
+curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/uninstall-service.sh | bash -s -- --remove-install-dir
 ```
 
 macOS (launchd, label: `cn.cxits.opencode-studio`):
@@ -228,6 +234,9 @@ launchctl load "$HOME/Library/LaunchAgents/cn.cxits.opencode-studio.plist"
 
 # uninstall service agent
 curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/uninstall-service.sh | bash
+
+# uninstall service agent + installed files
+curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/uninstall-service.sh | bash -s -- --remove-install-dir
 ```
 
 Windows (service names: `OpenCodeStudio-OpenCode`, `OpenCodeStudio`):

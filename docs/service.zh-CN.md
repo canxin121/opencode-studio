@@ -77,10 +77,16 @@ curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/sc
 - Linux systemd 系统服务：`sudo systemctl status opencode-studio`
 - macOS launchd agent：`launchctl list | grep opencode`
 
-卸载服务单元（不会自动删除二进制和数据，除非你手动删除）：
+仅卸载服务单元（保留安装文件）：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/uninstall-service.sh | bash
+```
+
+卸载服务单元并同时删除安装文件（默认 `~/opencode-studio`）：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/uninstall-service.sh | bash -s -- --remove-install-dir
 ```
 
 ## Windows（PowerShell）

@@ -142,6 +142,13 @@ Windows 安装补充说明：
   `LOCALAPPDATA`、`XDG_CONFIG_HOME`、`XDG_DATA_HOME`，以及可选 `OPENCODE_CONFIG`），
   以便 OpenCode/Studio 读取与桌面版一致的用户配置路径。
 
+### Unix 卸载脚本（`scripts/uninstall-service.sh`）
+
+| 参数 | 默认值 | 说明 |
+| --- | --- | --- |
+| `--install-dir PATH` | `~/opencode-studio` | 设置 `--remove-install-dir` 时用于指定安装目录 |
+| `--remove-install-dir` | disabled | 在删除服务单元后同时删除安装目录 |
+
 ### Windows 卸载脚本（`scripts/uninstall-service.ps1`）
 
 | 参数 | 默认值 | 说明 |

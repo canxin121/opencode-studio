@@ -192,6 +192,9 @@ systemctl --user disable opencode-studio
 
 # 卸载服务单元
 curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/uninstall-service.sh | bash
+
+# 卸载服务单元 + 删除安装文件
+curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/uninstall-service.sh | bash -s -- --remove-install-dir
 ```
 
 Linux（`--mode system` 安装）：
@@ -209,6 +212,9 @@ sudo systemctl disable opencode-studio
 
 # 卸载服务单元
 curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/uninstall-service.sh | bash
+
+# 卸载服务单元 + 删除安装文件
+curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/uninstall-service.sh | bash -s -- --remove-install-dir
 ```
 
 macOS（launchd，标签：`cn.cxits.opencode-studio`）：
@@ -228,6 +234,9 @@ launchctl load "$HOME/Library/LaunchAgents/cn.cxits.opencode-studio.plist"
 
 # 卸载服务 agent
 curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/uninstall-service.sh | bash
+
+# 卸载服务 agent + 删除安装文件
+curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/scripts/uninstall-service.sh | bash -s -- --remove-install-dir
 ```
 
 Windows（服务名：`OpenCodeStudio-OpenCode`、`OpenCodeStudio`）：
