@@ -65,6 +65,7 @@ const props = defineProps<{
   creatingSession: boolean
 
   directoryPageLoading: boolean
+  isDirectoryExpandLoading: (directoryId: string) => boolean
 
   isDirectoryCollapsed: (directoryId: string) => boolean
   toggleDirectoryCollapse: (directoryId: string, directoryPath: string) => void
@@ -209,6 +210,17 @@ function statusMeta(sessionId: string) {
               <div class="space-y-0.5">
                 <div
                   v-if="
+                    props.isDirectoryExpandLoading(directory.id) &&
+                    pinnedRows(directory.id).length === 0 &&
+                    props.pagedRowsForDirectory(directory.id).length === 0
+                  "
+                  class="px-1.5 py-1.5"
+                >
+                  <SidebarSectionSkeleton :rows="3" :with-header="false" compact />
+                </div>
+
+                <div
+                  v-else-if="
                     props.directoryPageLoading && props.sessionCountForDirectory(directory.id, directory.path) === 0
                   "
                   class="px-1.5 py-1.5"

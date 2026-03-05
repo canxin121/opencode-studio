@@ -110,6 +110,7 @@ const directoryPage = ref(initialPrefs.directoriesPage)
 const directoryPaging = ref(false)
 const pinCommandPendingIds = ref<Set<string>>(new Set())
 const collapseCommandPendingIds = ref<Set<string>>(new Set())
+const directoryExpandLoadingIds = ref<Set<string>>(new Set())
 const expandCommandPendingIds = ref<Set<string>>(new Set())
 
 // Directory entry type lives in '@/features/sessions/model/types'.
@@ -345,6 +346,11 @@ watch(
 function isDirectoryCollapsed(directoryId: string): boolean {
   const pid = (directoryId || '').trim()
   return collapsedDirectories.value.has(pid)
+}
+
+function isDirectoryExpandLoading(directoryId: string): boolean {
+  const pid = (directoryId || '').trim()
+  return directoryExpandLoadingIds.value.has(pid)
 }
 
 function dismissDeepLinkFocus() {
@@ -740,6 +746,11 @@ async function toggleDirectoryCollapse(directoryId: string, _directoryPath: stri
   const pending = new Set(collapseCommandPendingIds.value)
   pending.add(pid)
   collapseCommandPendingIds.value = pending
+  if (!nextCollapsed) {
+    const nextExpandLoading = new Set(directoryExpandLoadingIds.value)
+    nextExpandLoading.add(pid)
+    directoryExpandLoadingIds.value = nextExpandLoading
+  }
   try {
     const ok = await directorySessions.commandSetDirectoryCollapsed(pid, nextCollapsed, { silent: true })
     if (!ok) {
@@ -749,6 +760,10 @@ async function toggleDirectoryCollapse(directoryId: string, _directoryPath: stri
     const next = new Set(collapseCommandPendingIds.value)
     next.delete(pid)
     collapseCommandPendingIds.value = next
+
+    const nextExpandLoading = new Set(directoryExpandLoadingIds.value)
+    nextExpandLoading.delete(pid)
+    directoryExpandLoadingIds.value = nextExpandLoading
   }
 }
 
@@ -1506,6 +1521,7 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
           :creatingSession="creatingSession"
           :directoryPageLoading="directoryPageLoading"
           :isDirectoryCollapsed="isDirectoryCollapsed"
+          :isDirectoryExpandLoading="isDirectoryExpandLoading"
           :toggleDirectoryCollapse="toggleDirectoryCollapse"
           :isDirectoryFocused="isDirectoryFocused"
           :directoryHasActiveOrBlocked="directoryHasActiveOrBlocked"
