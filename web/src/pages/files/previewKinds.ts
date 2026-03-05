@@ -1,6 +1,51 @@
 export type PreviewMode = 'text' | 'markdown' | 'image' | 'pdf' | 'audio' | 'video'
 
 const MARKDOWN_EXTENSIONS = new Set(['md', 'mdx', 'markdown', 'mdown', 'mkd'])
+const MERMAID_EXTENSIONS = new Set(['mermaid', 'mmd'])
+const TEXT_EXTENSIONS = new Set([
+  'txt',
+  'text',
+  'log',
+  'ini',
+  'cfg',
+  'cnf',
+  'conf',
+  'config',
+  'env',
+  'properties',
+  'toml',
+  'yaml',
+  'yml',
+  'json',
+  'jsonc',
+  'json5',
+  'jsonl',
+  'ndjson',
+  'geojson',
+  'xml',
+  'xsl',
+  'xslt',
+  'xsd',
+  'dtd',
+  'csv',
+  'tsv',
+  'lock',
+  'editorconfig',
+  'gitignore',
+  'gitattributes',
+  'gitmodules',
+  'dockerignore',
+  'npmrc',
+  'yarnrc',
+  'npmignore',
+  'rst',
+  'adoc',
+  'asciidoc',
+  'org',
+  'tex',
+  'latex',
+  'bib',
+])
 const IMAGE_EXTENSIONS = new Set([
   'png',
   'jpg',
@@ -42,5 +87,12 @@ export function detectPreviewMode(path: string): PreviewMode {
   if (AUDIO_EXTENSIONS.has(ext)) return 'audio'
   if (VIDEO_EXTENSIONS.has(ext)) return 'video'
   if (MARKDOWN_EXTENSIONS.has(ext)) return 'markdown'
+  if (MERMAID_EXTENSIONS.has(ext)) return 'markdown'
+  if (TEXT_EXTENSIONS.has(ext)) return 'text'
   return 'text'
+}
+
+export function isMermaidPath(path: string): boolean {
+  const ext = extensionFromPath(path)
+  return ext ? MERMAID_EXTENSIONS.has(ext) : false
 }

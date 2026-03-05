@@ -19,7 +19,7 @@ import {
   shouldIgnoreEntryName,
   shouldIgnorePath,
 } from './files/fileKinds'
-import { detectPreviewMode } from './files/previewKinds'
+import { detectPreviewMode, isMermaidPath } from './files/previewKinds'
 import type {
   DialogKind,
   FileNode,
@@ -1980,6 +1980,9 @@ async function openFile(node: FileNode) {
 
   const shouldRestoreTimeline = timelineVisibilityPreference.value
   viewerMode.value = previewMode === 'markdown' ? 'markdown' : 'text'
+  if (previewMode === 'markdown') {
+    markdownViewMode.value = isMermaidPath(node.path) ? 'preview' : 'source'
+  }
   try {
     const meta = await readFileChunk({ directory: rootPath, path: node.path, offset: 0, limit: 0 })
     if (isStaleFileOpen(seq, rootPath, node.path)) return

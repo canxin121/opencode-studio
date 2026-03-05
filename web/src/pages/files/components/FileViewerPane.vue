@@ -30,6 +30,7 @@ import { buildUnifiedDiffModel } from '@/features/git/diff/unifiedDiff'
 import { formatDateTimeYMDHM, formatDateYMDShort2DigitYear } from '@/i18n/intl'
 
 import { isImagePath } from '../fileKinds'
+import { isMermaidPath } from '../previewKinds'
 import type { FileNode, MarkdownViewMode, SelectionRange, ViewerMode } from '../types'
 import type { GitBlameLine, GitDiffMeta, GitLogCommit } from '@/types/git'
 
@@ -134,6 +135,12 @@ const supportsSourceEditor = computed(
 const showMarkdownPreview = computed(() => props.viewerMode === 'markdown' && markdownViewMode.value !== 'source')
 const showMarkdownSource = computed(() => props.viewerMode === 'markdown' && markdownViewMode.value !== 'preview')
 const showMarkdownSplit = computed(() => props.viewerMode === 'markdown' && markdownViewMode.value === 'split')
+const markdownPreviewContent = computed(() => {
+  if (!isMermaidPath(props.selectedPath)) return draftContent.value
+  const source = draftContent.value.replace(/\r\n/g, '\n').trim()
+  if (!source) return ''
+  return ['```mermaid', source, '```'].join('\n')
+})
 const canShowViewMenu = computed(() => props.viewerMode === 'text' || props.viewerMode === 'markdown')
 
 const viewMenuGroups = computed<OptionMenuGroup[]>(() => [
@@ -1337,7 +1344,7 @@ function onSendSelection() {
           :class="showMarkdownSplit ? 'flex-1' : 'flex-1'"
         >
           <div class="mx-auto w-full max-w-4xl p-4">
-            <MarkdownRenderer :content="draftContent" mode="markdown" />
+            <MarkdownRenderer :content="markdownPreviewContent" mode="markdown" />
           </div>
         </div>
       </div>
