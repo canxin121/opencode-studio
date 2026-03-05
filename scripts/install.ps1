@@ -180,30 +180,30 @@ function Convert-ToTomlBasicString([string]$Value) {
 }
 
 function Resolve-HealthHost([string]$BindHost) {
-  $host = if ($null -eq $BindHost) { "" } else { $BindHost.Trim() }
-  if (-not $host) {
+  $resolvedHost = if ($null -eq $BindHost) { "" } else { $BindHost.Trim() }
+  if (-not $resolvedHost) {
     return "127.0.0.1"
   }
-  if ($host -eq "0.0.0.0") {
+  if ($resolvedHost -eq "0.0.0.0") {
     return "127.0.0.1"
   }
-  if ($host -eq "::" -or $host -eq "[::]") {
+  if ($resolvedHost -eq "::" -or $resolvedHost -eq "[::]") {
     return "::1"
   }
-  return $host
+  return $resolvedHost
 }
 
 function Format-HttpUrl([string]$Address, [int]$Port) {
-  $host = if ($null -eq $Address) { "" } else { $Address.Trim() }
-  if (-not $host) {
-    $host = "127.0.0.1"
+  $urlHost = if ($null -eq $Address) { "" } else { $Address.Trim() }
+  if (-not $urlHost) {
+    $urlHost = "127.0.0.1"
   }
-  if ($host.Contains(":")) {
-    if (-not ($host.StartsWith("[") -and $host.EndsWith("]"))) {
-      $host = "[$host]"
+  if ($urlHost.Contains(":")) {
+    if (-not ($urlHost.StartsWith("[") -and $urlHost.EndsWith("]"))) {
+      $urlHost = "[$urlHost]"
     }
   }
-  return "http://$host`:$Port"
+  return "http://$urlHost`:$Port"
 }
 
 function Resolve-InstallerProfileContext {
