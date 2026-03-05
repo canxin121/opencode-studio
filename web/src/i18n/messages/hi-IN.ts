@@ -1,0 +1,48 @@
+export default {
+  app: {
+    title: 'OpenCode Studio',
+  },
+  common: {
+    add: 'जोड़ें',
+    cancel: 'रद्द करें',
+    close: 'बंद करें',
+    clear: 'साफ़ करें',
+    create: 'बनाएं',
+    delete: 'हटाएं',
+    save: 'सहेजें',
+    saving: 'सहेजा जा रहा है...',
+    saveFailed: 'सहेजना विफल रहा',
+    edit: 'संपादित करें',
+    open: 'खोलें',
+    search: 'खोजें',
+    searching: 'खोजा जा रहा है...',
+    loading: 'लोड हो रहा है...',
+    retry: 'फिर से प्रयास करें',
+    refresh: 'रीफ्रेश करें',
+    reload: 'पुनः लोड करें',
+    reset: 'रीसेट करें',
+    confirm: 'पुष्टि करें',
+    remove: 'हटाएं',
+    next: 'अगला',
+    previous: 'पिछला',
+    yes: 'हाँ',
+    no: 'नहीं',
+  },
+  settings: {
+    appearance: {
+      language: {
+        label: 'भाषा',
+        help: 'यह Studio UI पर लागू होती है।',
+        options: {
+          enUS: 'अंग्रेज़ी',
+          zhCN: 'सरलीकृत चीनी',
+          esES: 'स्पेनिश',
+          hiIN: 'हिंदी',
+          arSA: 'अरबी',
+          ptBR: 'ब्राज़ीलियाई पुर्तगाली',
+          frFR: 'फ़्रेंच',
+        },
+      },
+    },
+  },
+}
