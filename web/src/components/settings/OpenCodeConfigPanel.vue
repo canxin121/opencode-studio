@@ -76,6 +76,7 @@ import { PERMISSION_QUICK_GROUPS } from './OpenCodeConfigPanelPermissionQuickGro
 import { useOpenCodeConfigPanelPersistence } from './OpenCodeConfigPanelPersistence'
 import type { RemoteModel } from './OpenCodeConfigPanelOptionTypes'
 import type { JsonValue as JsonLike } from '@/types/json'
+import { pickEffectiveAgentId } from './opencode/agentSelection'
 
 import { refDebounced } from '@vueuse/core'
 import { RiArrowGoBackLine, RiRefreshLine, RiRestartLine, RiSave3Line } from '@remixicon/vue'
@@ -248,13 +249,37 @@ const filteredAgentsList = computed(() => {
   })
 })
 
+const effectiveSelectedAgentId = computed<string | null>(() => {
+  return pickEffectiveAgentId(
+    selectedAgentId.value,
+    filteredAgentsList.value.map(([id]) => id),
+    agentsList.value.map(([id]) => id),
+  )
+})
+
+function selectAgent(id: string | null) {
+  if (!id) {
+    selectedAgentId.value = null
+    return
+  }
+  if (agentsList.value.some(([aid]) => aid === id)) {
+    selectedAgentId.value = id
+    return
+  }
+  selectedAgentId.value = null
+}
+
 const selectedAgentRows = computed(() => {
-  const id = selectedAgentId.value
+  const id = effectiveSelectedAgentId.value
   if (!id) return [] as AgentRow[]
   return [[id, getAgentEntry(id)] as AgentRow]
 })
 
-watch(selectedAgentId, () => {
+watch(effectiveSelectedAgentId, (nextId, prevId) => {
+  if (nextId && nextId !== selectedAgentId.value) {
+    selectedAgentId.value = nextId
+  }
+  if (nextId === prevId) return
   agentEditorTab.value = 'basics'
 })
 
@@ -851,7 +876,9 @@ const panelContext = reactive({
   filteredAgentsList,
   newAgentName,
   selectedAgentId,
+  effectiveSelectedAgentId,
   selectedAgentRows,
+  selectAgent,
   agentEditorTab,
   addAgent,
   PROMPT_SKELETON,
