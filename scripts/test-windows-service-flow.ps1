@@ -258,13 +258,19 @@ try {
   Wait-ServiceStatus -Name $ServiceName -Status "Running" -TimeoutSeconds $WaitTimeoutSeconds
   Wait-HealthUp -Url $baseUrl -TimeoutSeconds $WaitTimeoutSeconds
 
+  Invoke-Sc -Arguments @("stop", $ServiceName) -AllowedExitCodes @(0, 1062) -ErrorMessage "Failed to stop $ServiceName before $OpenCodeServiceName stop" | Out-Null
+  Wait-ServiceStatus -Name $ServiceName -Status "Stopped" -TimeoutSeconds $WaitTimeoutSeconds
+  Wait-HealthDown -Url $baseUrl -TimeoutSeconds $WaitTimeoutSeconds
+
   Invoke-Sc -Arguments @("stop", $OpenCodeServiceName) -AllowedExitCodes @(0, 1062) -ErrorMessage "Failed to stop $OpenCodeServiceName" | Out-Null
   Wait-ServiceStatus -Name $OpenCodeServiceName -Status "Stopped" -TimeoutSeconds $WaitTimeoutSeconds
-  Wait-OpenCodeRunningState -Url $baseUrl -Expected $false -TimeoutSeconds $WaitTimeoutSeconds
 
   Invoke-Sc -Arguments @("start", $OpenCodeServiceName) -ErrorMessage "Failed to start $OpenCodeServiceName" | Out-Null
   Wait-ServiceStatus -Name $OpenCodeServiceName -Status "Running" -TimeoutSeconds $WaitTimeoutSeconds
-  Wait-OpenCodeRunningState -Url $baseUrl -Expected $true -TimeoutSeconds $WaitTimeoutSeconds
+
+  Invoke-Sc -Arguments @("start", $ServiceName) -ErrorMessage "Failed to restart $ServiceName after $OpenCodeServiceName start" | Out-Null
+  Wait-ServiceStatus -Name $ServiceName -Status "Running" -TimeoutSeconds $WaitTimeoutSeconds
+  Wait-HealthUp -Url $baseUrl -TimeoutSeconds $WaitTimeoutSeconds
 
   Write-Log "Step 5/6: uninstall services but keep install files"
   & $UninstallScript -InstallDir $InstallDir
