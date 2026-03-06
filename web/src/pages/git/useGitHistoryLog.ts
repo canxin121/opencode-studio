@@ -26,8 +26,10 @@ export function useGitHistoryLog(opts: { repoRoot: { value: string | null }; git
   const historyError = ref<string | null>(null)
   const historyCommits = ref<GitLogCommit[]>([])
   const historyHasMore = ref(false)
-  const historyOffset = ref(0)
-  const historyLimit = 50
+  const historyCurrentPage = ref(1)
+  const historyKnownLastPage = ref(1)
+  const historyExactLastPage = ref<number | null>(null)
+  const historyLimit = 40
 
   const historySelected = ref<GitLogCommit | null>(null)
   const historyDiff = ref('')
@@ -50,9 +52,12 @@ export function useGitHistoryLog(opts: { repoRoot: { value: string | null }; git
 
   const COMMIT_DETAILS_CACHE_LIMIT = 80
   const COMMIT_FILE_DIFF_CACHE_LIMIT = 160
+  const HISTORY_PAGE_CACHE_LIMIT = 60
   type CommitDetailsCacheValue = { files: GitCommitFile[]; diff: string }
+  type HistoryPageCacheValue = { commits: GitLogCommit[]; hasMore: boolean }
   const commitDetailsCache = new Map<string, CommitDetailsCacheValue>()
   const commitFileDiffCache = new Map<string, string>()
+  const historyPageCache = new Map<string, HistoryPageCacheValue>()
 
   let historyLoadSeq = 0
   let selectCommitSeq = 0
@@ -85,29 +90,72 @@ export function useGitHistoryLog(opts: { repoRoot: { value: string | null }; git
     return `refs/heads/${raw}`
   }
 
-  async function loadHistory(reset = false) {
+  function historyPageKey(directory: string, page: number): string {
+    const path = (historyFilterPath.value || '').trim()
+    const author = historyFilterAuthor.value.trim()
+    const message = historyFilterMessage.value.trim()
+    const ref = normalizeRefInput() || ''
+    return `${directory}::${path}::${author}::${message}::${ref}::${page}`
+  }
+
+  function resetHistoryListState() {
+    activeHistoryAbort?.abort()
+    activeHistoryAbort = null
+    historyCommits.value = []
+    historyHasMore.value = false
+    historyError.value = null
+    historyCurrentPage.value = 1
+    historyKnownLastPage.value = 1
+    historyExactLastPage.value = null
+    historyPageCache.clear()
+  }
+
+  function clearHistorySelectionState() {
+    historySelected.value = null
+    historyDiff.value = ''
+    historyDiffError.value = null
+    historyFiles.value = []
+    historyFilesError.value = null
+    historyFileSelected.value = null
+    historyFileDiff.value = ''
+    historyFileDiffError.value = null
+    activeCommitAbort?.abort()
+    activeFileDiffAbort?.abort()
+  }
+
+  function updateHistoryPageBounds(page: number, hasMore: boolean) {
+    historyCurrentPage.value = page
+    if (hasMore) {
+      historyKnownLastPage.value = Math.max(historyKnownLastPage.value, page + 1)
+      historyExactLastPage.value = null
+      return
+    }
+    historyKnownLastPage.value = Math.max(historyKnownLastPage.value, page)
+    historyExactLastPage.value = page
+  }
+
+  async function loadHistoryPage(page = 1, force = false) {
     const dir = repoRoot.value
     if (!dir) return
-    if (historyLoading.value && !reset) return
 
-    if (reset) {
-      activeHistoryAbort?.abort()
-      activeHistoryAbort = null
-      historyOffset.value = 0
-      historyCommits.value = []
-      historyHasMore.value = false
-      historySelected.value = null
-      historyDiff.value = ''
-      historyDiffError.value = null
-      historyFiles.value = []
-      historyFilesError.value = null
-      historyFileSelected.value = null
-      historyFileDiff.value = ''
-      historyFileDiffError.value = null
-      activeCommitAbort?.abort()
-      activeFileDiffAbort?.abort()
+    const targetPage = Math.max(1, Math.floor(Number(page) || 1))
+    const cacheKey = historyPageKey(dir, targetPage)
+    if (!force) {
+      const cached = historyPageCache.get(cacheKey)
+      if (cached) {
+        activeHistoryAbort?.abort()
+        activeHistoryAbort = null
+        historyLoadSeq += 1
+        historyLoading.value = false
+        historyError.value = null
+        historyCommits.value = cached.commits
+        historyHasMore.value = cached.hasMore
+        updateHistoryPageBounds(targetPage, cached.hasMore)
+        return
+      }
     }
 
+    activeHistoryAbort?.abort()
     const requestSeq = ++historyLoadSeq
     const abortController = new AbortController()
     activeHistoryAbort = abortController
@@ -115,11 +163,12 @@ export function useGitHistoryLog(opts: { repoRoot: { value: string | null }; git
     historyLoading.value = true
     historyError.value = null
     try {
+      const offset = (targetPage - 1) * historyLimit
       const resp = await gitJson<GitLogResponse>(
         'log',
         dir,
         {
-          offset: historyOffset.value,
+          offset,
           limit: historyLimit,
           path: historyFilterPath.value || undefined,
           author: historyFilterAuthor.value.trim() || undefined,
@@ -133,15 +182,12 @@ export function useGitHistoryLog(opts: { repoRoot: { value: string | null }; git
       )
       if (requestSeq !== historyLoadSeq || abortController.signal.aborted) return
 
-      const next = Array.isArray(resp?.commits) ? resp.commits : []
-      historyCommits.value = reset ? next : [...historyCommits.value, ...next]
-      historyHasMore.value = Boolean(resp?.hasMore)
-      historyOffset.value = resp?.nextOffset ?? historyOffset.value + next.length
-
-      if (!historySelected.value && next.length) {
-        const first = next[0]
-        if (first) await selectCommit(first)
-      }
+      const commits = Array.isArray(resp?.commits) ? resp.commits : []
+      const hasMore = Boolean(resp?.hasMore)
+      historyCommits.value = commits
+      historyHasMore.value = hasMore
+      updateHistoryPageBounds(targetPage, hasMore)
+      setBoundedCache(historyPageCache, cacheKey, { commits, hasMore }, HISTORY_PAGE_CACHE_LIMIT)
     } catch (err) {
       if (requestSeq !== historyLoadSeq || isAbortError(err)) return
       historyError.value = err instanceof Error ? err.message : String(err)
@@ -156,8 +202,15 @@ export function useGitHistoryLog(opts: { repoRoot: { value: string | null }; git
   }
 
   async function loadMoreHistory() {
-    if (!historyHasMore.value) return
-    await loadHistory(false)
+    const nextPage = historyCurrentPage.value + 1
+    const hasKnownPage = nextPage <= historyKnownLastPage.value
+    if (!historyHasMore.value && !hasKnownPage) return
+    await loadHistoryPage(nextPage)
+  }
+
+  async function loadPreviousHistoryPage() {
+    if (historyCurrentPage.value <= 1) return
+    await loadHistoryPage(historyCurrentPage.value - 1)
   }
 
   async function selectCommit(commit: GitLogCommit) {
@@ -294,7 +347,9 @@ export function useGitHistoryLog(opts: { repoRoot: { value: string | null }; git
   function openHistoryDialog() {
     historyFilterPath.value = null
     historyOpen.value = true
-    void loadHistory(true)
+    clearHistorySelectionState()
+    resetHistoryListState()
+    void loadHistoryPage(1, true)
   }
 
   function openFileHistory(path: string) {
@@ -302,7 +357,9 @@ export function useGitHistoryLog(opts: { repoRoot: { value: string | null }; git
     if (!p) return
     historyFilterPath.value = p
     historyOpen.value = true
-    void loadHistory(true)
+    clearHistorySelectionState()
+    resetHistoryListState()
+    void loadHistoryPage(1, true)
   }
 
   function closeHistoryDialog() {
@@ -313,16 +370,20 @@ export function useGitHistoryLog(opts: { repoRoot: { value: string | null }; git
   }
 
   function refreshHistory() {
-    void loadHistory(true)
+    void loadHistoryPage(historyCurrentPage.value, true)
   }
 
   function clearHistoryFilter() {
     historyFilterPath.value = null
-    void loadHistory(true)
+    clearHistorySelectionState()
+    resetHistoryListState()
+    void loadHistoryPage(1, true)
   }
 
   function applyHistoryFilters() {
-    void loadHistory(true)
+    clearHistorySelectionState()
+    resetHistoryListState()
+    void loadHistoryPage(1, true)
   }
 
   function clearHistoryFilters() {
@@ -330,7 +391,9 @@ export function useGitHistoryLog(opts: { repoRoot: { value: string | null }; git
     historyFilterMessage.value = ''
     historyFilterRef.value = ''
     historyFilterRefType.value = 'branch'
-    void loadHistory(true)
+    clearHistorySelectionState()
+    resetHistoryListState()
+    void loadHistoryPage(1, true)
   }
 
   watch(
@@ -338,20 +401,10 @@ export function useGitHistoryLog(opts: { repoRoot: { value: string | null }; git
     () => {
       commitDetailsCache.clear()
       commitFileDiffCache.clear()
-      historyCommits.value = []
-      historyHasMore.value = false
-      historyOffset.value = 0
-      historyError.value = null
-      historySelected.value = null
-      historyDiff.value = ''
-      historyDiffError.value = null
-      historyFiles.value = []
-      historyFilesError.value = null
-      historyFileSelected.value = null
-      historyFileDiff.value = ''
-      historyFileDiffError.value = null
+      resetHistoryListState()
+      clearHistorySelectionState()
       if (!historyOpen.value) return
-      void loadHistory(true)
+      void loadHistoryPage(1, true)
     },
   )
 
@@ -361,6 +414,10 @@ export function useGitHistoryLog(opts: { repoRoot: { value: string | null }; git
     historyError,
     historyCommits,
     historyHasMore,
+    historyLimit,
+    historyCurrentPage,
+    historyKnownLastPage,
+    historyExactLastPage,
     historySelected,
     historyDiff,
     historyDiffLoading,
@@ -384,6 +441,8 @@ export function useGitHistoryLog(opts: { repoRoot: { value: string | null }; git
     clearHistoryFilter,
     applyHistoryFilters,
     clearHistoryFilters,
+    loadHistoryPage,
+    loadPreviousHistoryPage,
     loadMoreHistory,
     selectCommit,
     selectCommitFile,

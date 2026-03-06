@@ -13,17 +13,18 @@ import { useI18n } from 'vue-i18n'
 import MiniActionButton from '@/components/ui/MiniActionButton.vue'
 import MobileSidebarEmptyState from '@/components/ui/MobileSidebarEmptyState.vue'
 import IconButton from '@/components/ui/IconButton.vue'
+import Input from '@/components/ui/Input.vue'
 import OptionMenu from '@/components/ui/OptionMenu.vue'
 import type { OptionMenuGroup, OptionMenuItem } from '@/components/ui/optionMenu.types'
 import ScrollArea from '@/components/ui/ScrollArea.vue'
 import SidebarIconButton from '@/components/ui/SidebarIconButton.vue'
 import GitCommitBox from '@/components/git/GitCommitBox.vue'
 import GitDiffPane from '@/components/git/GitDiffPane.vue'
+import DiffViewer from '@/components/DiffViewer.vue'
 import GitMergeChangesSection from '@/components/git/GitMergeChangesSection.vue'
 import GitStagedChangesSection from '@/components/git/GitStagedChangesSection.vue'
 import GitChangesSection from '@/components/git/GitChangesSection.vue'
 import GitUntrackedSection from '@/components/git/GitUntrackedSection.vue'
-import GitHistorySection from '@/components/git/GitHistorySection.vue'
 import GitRepoPickerDialog from '@/components/git/GitRepoPickerDialog.vue'
 import GitCloneDialog from '@/components/git/GitCloneDialog.vue'
 import GitInitRepoDialog from '@/components/git/GitInitRepoDialog.vue'
@@ -34,7 +35,6 @@ import GitCompareDialog from '@/components/git/GitCompareDialog.vue'
 import GitSubmodulesDialog from '@/components/git/GitSubmodulesDialog.vue'
 import GitLfsDialog from '@/components/git/GitLfsDialog.vue'
 import GitAutoFetchDialog from '@/components/git/GitAutoFetchDialog.vue'
-import GitHistoryDialog from '@/components/git/GitHistoryDialog.vue'
 import GitRemotesDialog from '@/components/git/GitRemotesDialog.vue'
 import GitTagsDialog from '@/components/git/GitTagsDialog.vue'
 import GitWorktreesDialog from '@/components/git/GitWorktreesDialog.vue'
@@ -48,6 +48,7 @@ import { useDesktopSidebarResize } from '@/composables/useDesktopSidebarResize'
 import GitAuthDialogs from './components/GitAuthDialogs.vue'
 import GitRemoteTargetDialogs from './components/GitRemoteTargetDialogs.vue'
 import GitPageMiscDialogs from './components/GitPageMiscDialogs.vue'
+import { formatDateTimeYMDHM } from '@/i18n/intl'
 
 const props = defineProps({
   ctx: {
@@ -142,7 +143,6 @@ const {
   undoLastCommit,
   cherryPickCommit,
   revertCommit,
-  resetCommit,
   restoreCommitTemplate,
   discardCommitMessage,
   onCommitMessageKeydown,
@@ -183,7 +183,6 @@ const {
   isStagedExpanded,
   isChangesExpanded,
   isUntrackedExpanded,
-  isHistoryExpanded,
   mergeCount,
   stagedCount,
   changesCount,
@@ -453,11 +452,14 @@ const {
   dismissPostCommitPrompt,
 
   // History
-  historyOpen,
   historyLoading,
   historyError,
   historyCommits,
   historyHasMore,
+  historyLimit,
+  historyCurrentPage,
+  historyKnownLastPage,
+  historyExactLastPage,
   historySelected,
   historyDiff,
   historyDiffLoading,
@@ -474,22 +476,17 @@ const {
   historyFilterMessage,
   historyFilterRef,
   historyFilterRefType,
-  openHistoryDialog,
   openFileHistory,
-  closeHistoryDialog,
   refreshHistory,
   clearHistoryFilter,
   applyHistoryFilters,
   clearHistoryFilters,
+  loadHistoryPage,
+  loadPreviousHistoryPage,
   loadMoreHistory,
   selectCommit,
   selectCommitFile,
   clearSelectedFile,
-  historyCompareHash,
-  selectHistoryCompareCommit,
-  clearHistoryCompareCommit,
-  compareHistoryWithParent,
-  compareHistoryWithSelected,
 
   // Remotes
   remotesOpen,
@@ -681,44 +678,167 @@ function onRevertActionMenuSelect(item: OptionMenuItem) {
   }
 }
 
-function openHistoryWithRefs() {
-  openHistoryDialog()
-  void loadBranches()
-  void loadTags()
-}
+type SourceControlView = 'changes' | 'history' | 'historyCommit'
 
-function ensureSidebarHistoryLoaded() {
-  if (!isHistoryExpanded.value) return
+const sourceControlView = ref<SourceControlView>('changes')
+const historyDiffWrap = ref(true)
+
+const isHistoryListView = computed(() => sourceControlView.value === 'history')
+const isHistoryCommitView = computed(() => sourceControlView.value === 'historyCommit')
+const isHistoryView = computed(() => isHistoryListView.value || isHistoryCommitView.value)
+
+const historyPageNumbers = computed(() => {
+  const maxPage = Math.max(historyKnownLastPage.value, historyCurrentPage.value)
+  const start = Math.max(1, historyCurrentPage.value - 2)
+  const end = Math.min(maxPage, start + 4)
+  const pages: number[] = []
+  for (let page = start; page <= end; page += 1) {
+    pages.push(page)
+  }
+  return pages
+})
+
+const activeHistoryDiff = computed(() => {
+  if (historyFileSelected.value) return historyFileDiff.value
+  return historyDiff.value
+})
+
+const activeHistoryDiffLoading = computed(() => {
+  if (historyFileSelected.value) return historyFileDiffLoading.value
+  return historyDiffLoading.value
+})
+
+const activeHistoryDiffError = computed(() => {
+  if (historyFileSelected.value) return historyFileDiffError.value
+  return historyDiffError.value
+})
+
+const historySelectedMeta = computed(() => {
+  const commit = historySelected.value
+  if (!commit) return ''
+  const date = commit.authorDate ? formatDateTimeYMDHM(commit.authorDate) : ''
+  const author = (commit.authorName || '').trim() || t('common.unknown')
+  return date ? `${author} · ${date}` : author
+})
+
+const historySelectedSummary = computed(() => {
+  const files = Array.isArray(historyFiles.value) ? historyFiles.value : []
+  let insertions = 0
+  let deletions = 0
+  for (const file of files) {
+    insertions += Number(file.insertions || 0)
+    deletions += Number(file.deletions || 0)
+  }
+  return {
+    files: files.length,
+    insertions,
+    deletions,
+  }
+})
+
+const historyRefOptions = computed(() => {
+  if (historyFilterRefType.value === 'tag') return historyTagOptions.value
+  return historyBranchOptions.value
+})
+
+function ensureHistoryLoaded() {
   if (!gitReady.value || !repoRoot.value) return
   if (historyLoading.value || historyCommits.value.length > 0) return
-  refreshHistory()
+  void loadHistoryPage(1)
 }
 
-function openHistoryFromSidebar() {
-  historyOpen.value = true
+function openHistoryView() {
+  sourceControlView.value = 'history'
+  if (props.embedded) {
+    embeddedView.value = 'list'
+  }
   void loadBranches()
   void loadTags()
-  ensureSidebarHistoryLoaded()
+  ensureHistoryLoaded()
 }
 
-function onSelectSidebarHistoryCommit(commit: Parameters<typeof selectCommit>[0]) {
-  void selectCommit(commit)
-  openHistoryFromSidebar()
+function openChangesView() {
+  sourceControlView.value = 'changes'
+  if (props.embedded && embeddedView.value === 'diff' && !selectedFile.value) {
+    embeddedView.value = 'list'
+  }
 }
 
-watch(
-  () => [repoRoot.value, gitReady.value, isHistoryExpanded.value] as const,
-  () => {
-    ensureSidebarHistoryLoaded()
-  },
-  { immediate: true },
-)
+function openHistoryWithRefs() {
+  openHistoryView()
+}
 
 function openFileHistoryWithRefs(path: string) {
   openFileHistory(path)
+  sourceControlView.value = 'history'
+  if (props.embedded) {
+    embeddedView.value = 'list'
+  }
   void loadBranches()
   void loadTags()
 }
+
+function onSelectHistoryCommit(commit: Parameters<typeof selectCommit>[0]) {
+  sourceControlView.value = 'historyCommit'
+  if (props.embedded) {
+    embeddedView.value = 'diff'
+  }
+  void selectCommit(commit)
+}
+
+function backToHistoryList() {
+  sourceControlView.value = 'history'
+  if (props.embedded) {
+    embeddedView.value = 'list'
+  }
+}
+
+function jumpHistoryPage(page: number) {
+  const next = Math.max(1, Math.floor(page))
+  if (next === historyCurrentPage.value && historyCommits.value.length > 0) return
+  void loadHistoryPage(next)
+}
+
+function goPreviousHistoryPage() {
+  void loadPreviousHistoryPage()
+}
+
+function goNextHistoryPage() {
+  const nextPage = historyCurrentPage.value + 1
+  const known = nextPage <= historyKnownLastPage.value
+  if (!known && !historyHasMore.value) return
+  void loadMoreHistory()
+}
+
+function onApplyHistoryFilters() {
+  applyHistoryFilters()
+  sourceControlView.value = 'history'
+}
+
+function onClearHistoryFilters() {
+  clearHistoryFilters()
+  sourceControlView.value = 'history'
+}
+
+function onClearHistoryPathFilter() {
+  clearHistoryFilter()
+  sourceControlView.value = 'history'
+}
+
+watch(
+  () => repoRoot.value,
+  () => {
+    sourceControlView.value = 'changes'
+  },
+)
+
+watch(
+  () => gitReady.value,
+  (ready) => {
+    if (ready) return
+    sourceControlView.value = 'changes'
+  },
+)
 
 function openMergeDialogWithBranches() {
   openMergeDialog()
@@ -755,10 +875,6 @@ function onHistoryCherryPick(commit: HistoryCommitLike) {
 
 function onHistoryRevert(commit: HistoryCommitLike) {
   revertCommit(commit?.hash || '')
-}
-
-function onHistoryReset(payload: { commit: HistoryCommitLike; mode: 'soft' | 'mixed' | 'hard' }) {
-  resetCommit(payload.commit?.hash || '', payload.mode)
 }
 
 const mergeRebaseBranchOptions = computed(() => {
@@ -867,6 +983,14 @@ watch(
   () => props.embedded,
   (embedded) => {
     if (!embedded) return
+    if (sourceControlView.value === 'historyCommit') {
+      embeddedView.value = 'diff'
+      return
+    }
+    if (sourceControlView.value === 'history') {
+      embeddedView.value = 'list'
+      return
+    }
     embeddedView.value = selectedFile.value ? 'diff' : 'list'
   },
   { immediate: true },
@@ -876,12 +1000,28 @@ watch(
   () => selectedFile.value,
   (path) => {
     if (!props.embedded) return
+    if (sourceControlView.value !== 'changes') return
     embeddedView.value = path ? 'diff' : 'list'
+  },
+)
+
+watch(
+  () => sourceControlView.value,
+  (view) => {
+    if (!props.embedded) return
+    if (view === 'changes') {
+      embeddedView.value = selectedFile.value ? 'diff' : 'list'
+      return
+    }
+    embeddedView.value = view === 'historyCommit' ? 'diff' : 'list'
   },
 )
 
 function showEmbeddedList() {
   if (!props.embedded) return
+  if (sourceControlView.value === 'historyCommit') {
+    sourceControlView.value = 'history'
+  }
   embeddedView.value = 'list'
 }
 
@@ -917,6 +1057,7 @@ const sidebarStyle = computed(() => {
 
 const showDiffPane = computed(() => {
   if (props.embedded) return embeddedView.value === 'diff'
+  if (isHistoryView.value) return true
   return !ui.isMobile || !ui.isSessionSwitcherOpen
 })
 
@@ -1033,10 +1174,37 @@ void diffPaneRef
             />
           </div>
         </div>
+
+        <div v-if="gitReady" class="mt-1.5 flex items-center gap-1 rounded-sm border border-sidebar-border/60 p-0.5">
+          <button
+            type="button"
+            class="flex-1 rounded-sm px-2 py-1 text-[11px] font-medium transition-colors"
+            :class="
+              sourceControlView === 'changes'
+                ? 'bg-sidebar-accent/60 text-foreground'
+                : 'text-muted-foreground hover:bg-sidebar-accent/35 hover:text-foreground'
+            "
+            @click="openChangesView"
+          >
+            {{ t('git.ui.workingTree.sections.changes') }}
+          </button>
+          <button
+            type="button"
+            class="flex-1 rounded-sm px-2 py-1 text-[11px] font-medium transition-colors"
+            :class="
+              sourceControlView !== 'changes'
+                ? 'bg-sidebar-accent/60 text-foreground'
+                : 'text-muted-foreground hover:bg-sidebar-accent/35 hover:text-foreground'
+            "
+            @click="openHistoryView"
+          >
+            {{ t('git.ui.dialogs.history.title') }}
+          </button>
+        </div>
       </div>
 
       <ScrollArea class="flex-1 min-h-0">
-        <div class="space-y-2 p-1.5">
+        <div v-if="sourceControlView === 'changes'" class="space-y-2 p-1.5">
           <!-- Commit Section -->
           <div v-if="gitReady" class="space-y-2">
             <div
@@ -1341,6 +1509,7 @@ void diffPaneRef
               :is-mobile-pointer="ui.isMobilePointer"
               @select="(p: string) => selectFileFromSidebar(p, 'working')"
               @stageAll="stageAllTracked"
+              @discardAll="discardAllTracked"
               @stage="(p: string) => stagePaths([p])"
               @rename="openRenameDialog"
               @history="(p: string) => openFileHistoryWithRefs(p)"
@@ -1362,27 +1531,255 @@ void diffPaneRef
               :is-mobile-pointer="ui.isMobilePointer"
               @select="(p: string) => selectFileFromSidebar(p, 'working')"
               @stageAll="stageAllUntracked"
+              @discardAll="() => cleanUntracked(false)"
               @stage="(p: string) => stagePaths([p])"
               @rename="openRenameDialog"
               @discard="(p: string) => revertFile(p)"
               @ignore="(p: string) => ignorePath(p)"
               @showMore="showMoreUntracked"
             />
-
-            <GitHistorySection
-              v-model:expanded="isHistoryExpanded"
-              :commits="historyCommits"
-              :loading="historyLoading"
-              :error="historyError"
-              :has-more="historyHasMore"
-              :selected-hash="historySelected?.hash || null"
-              :is-mobile-pointer="ui.isMobilePointer"
-              @refresh="refreshHistory"
-              @showMore="loadMoreHistory"
-              @openHistory="openHistoryFromSidebar"
-              @select="onSelectSidebarHistoryCommit"
-            />
           </div>
+        </div>
+
+        <div v-else-if="sourceControlView === 'history'" class="space-y-2 p-1.5">
+          <div
+            v-if="!projectRoot"
+            class="mx-1 rounded-sm border border-sidebar-border/60 bg-sidebar-accent/10 p-3 text-center"
+          >
+            <div class="text-sm font-medium">{{ t('git.ui.noProjectSelectedTitle') }}</div>
+            <div class="text-xs text-muted-foreground mt-1">{{ t('git.ui.noProjectSelectedDescription') }}</div>
+          </div>
+
+          <div
+            v-else-if="!gitReady && !loading"
+            class="mx-1 rounded-sm border border-sidebar-border/60 bg-sidebar-accent/10 p-3 text-center"
+          >
+            <div class="text-sm font-medium">{{ t('git.ui.noGitRepositoryTitle') }}</div>
+            <div class="text-xs text-muted-foreground mt-1">{{ t('git.ui.noGitRepositoryDescription') }}</div>
+          </div>
+
+          <template v-else>
+            <div class="rounded-sm border border-sidebar-border/60 bg-sidebar-accent/10 p-2">
+              <div class="mb-1 text-[11px] font-medium text-muted-foreground">{{ t('common.search') }}</div>
+
+              <div v-if="historyFilterPath" class="mb-2 flex items-center justify-between gap-2">
+                <div class="truncate text-[10px] text-muted-foreground font-mono" :title="historyFilterPath">
+                  {{ historyFilterPath }}
+                </div>
+                <MiniActionButton size="xs" @click="onClearHistoryPathFilter">{{ t('common.clear') }}</MiniActionButton>
+              </div>
+
+              <div class="grid gap-2">
+                <div class="grid grid-cols-[86px_minmax(0,1fr)] gap-2">
+                  <select
+                    v-model="historyFilterRefType"
+                    class="h-8 rounded border border-input bg-background px-2 text-xs text-foreground"
+                  >
+                    <option value="branch">{{ t('git.ui.dialogs.history.refType.branch') }}</option>
+                    <option value="tag">{{ t('git.ui.dialogs.history.refType.tag') }}</option>
+                  </select>
+                  <input
+                    v-model="historyFilterRef"
+                    class="h-8 w-full rounded border border-input bg-transparent px-2 text-xs font-mono text-foreground placeholder:text-muted-foreground"
+                    list="git-history-ref-options"
+                    :placeholder="
+                      historyFilterRefType === 'tag'
+                        ? t('git.ui.dialogs.history.placeholders.tagName')
+                        : t('git.ui.dialogs.history.placeholders.branchName')
+                    "
+                  />
+                </div>
+                <datalist id="git-history-ref-options">
+                  <option v-for="name in historyRefOptions" :key="`history-ref-${name}`" :value="name" />
+                </datalist>
+
+                <Input
+                  v-model="historyFilterAuthor"
+                  class="h-8 font-mono text-xs"
+                  :placeholder="t('git.ui.dialogs.history.placeholders.authorContains')"
+                />
+
+                <Input
+                  v-model="historyFilterMessage"
+                  class="h-8 font-mono text-xs"
+                  :placeholder="t('git.ui.dialogs.history.placeholders.messageContains')"
+                  @keydown.enter="onApplyHistoryFilters"
+                />
+
+                <div class="flex items-center justify-end gap-2">
+                  <MiniActionButton size="xs" @click="refreshHistory">{{ t('common.refresh') }}</MiniActionButton>
+                  <MiniActionButton size="xs" @click="onClearHistoryFilters">{{ t('common.clear') }}</MiniActionButton>
+                  <MiniActionButton variant="default" size="xs" @click="onApplyHistoryFilters">{{
+                    t('common.search')
+                  }}</MiniActionButton>
+                </div>
+              </div>
+            </div>
+
+            <div class="rounded-sm border border-sidebar-border/60 overflow-hidden">
+              <div v-if="historyError" class="px-2 py-2 text-xs text-destructive">
+                {{ historyError }}
+              </div>
+              <div v-else-if="historyLoading && !historyCommits.length" class="px-2 py-2 text-xs text-muted-foreground">
+                {{ t('common.loading') }}
+              </div>
+              <div v-else-if="!historyCommits.length" class="px-2 py-2 text-xs text-muted-foreground">
+                {{ t('git.ui.dialogs.history.emptyCommits') }}
+              </div>
+              <div v-else class="divide-y divide-sidebar-border/50">
+                <button
+                  v-for="commit in historyCommits"
+                  :key="commit.hash"
+                  type="button"
+                  class="w-full px-2 py-1.5 text-left hover:bg-sidebar-accent/35"
+                  @click="onSelectHistoryCommit(commit)"
+                >
+                  <div class="truncate text-[11px] font-medium text-foreground">
+                    {{ commit.subject || t('git.ui.dialogs.history.noMessage') }}
+                  </div>
+                  <div class="mt-0.5 flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                    <span class="font-mono">{{ commit.shortHash }}</span>
+                    <span class="truncate">{{ commit.authorName || t('common.unknown') }}</span>
+                    <span v-if="commit.authorDate">{{ formatDateTimeYMDHM(commit.authorDate) }}</span>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between gap-2 px-1 py-0.5">
+              <MiniActionButton size="xs" :disabled="historyCurrentPage <= 1" @click="goPreviousHistoryPage">
+                {{ t('common.previous') }}
+              </MiniActionButton>
+
+              <div class="flex min-w-0 items-center gap-1">
+                <button
+                  v-for="page in historyPageNumbers"
+                  :key="`history-page-${page}`"
+                  type="button"
+                  class="rounded-sm px-1.5 py-0.5 text-[10px]"
+                  :class="
+                    page === historyCurrentPage
+                      ? 'bg-sidebar-accent/70 text-foreground'
+                      : 'text-muted-foreground hover:bg-sidebar-accent/40 hover:text-foreground'
+                  "
+                  @click="jumpHistoryPage(page)"
+                >
+                  {{ page }}
+                </button>
+                <span v-if="historyExactLastPage === null && historyHasMore" class="text-[10px] text-muted-foreground"
+                  >…</span
+                >
+              </div>
+
+              <MiniActionButton
+                size="xs"
+                :disabled="!historyHasMore && historyCurrentPage >= historyKnownLastPage"
+                @click="goNextHistoryPage"
+              >
+                {{ t('common.next') }}
+              </MiniActionButton>
+            </div>
+
+            <div class="px-1 text-[10px] text-muted-foreground">
+              {{ t('git.ui.dialogs.history.sections.commits') }} · {{ historyCommits.length }} / {{ historyLimit }}
+            </div>
+          </template>
+        </div>
+
+        <div v-else class="space-y-2 p-1.5">
+          <div class="flex items-center justify-between gap-2 rounded-sm border border-sidebar-border/60 px-2 py-1.5">
+            <button
+              type="button"
+              class="inline-flex items-center gap-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+              @click="backToHistoryList"
+            >
+              <RiArrowLeftSLine class="h-3.5 w-3.5" />
+              {{ t('git.ui.dialogs.history.title') }}
+            </button>
+            <MiniActionButton size="xs" :disabled="!historySelected" @click="openHistoryView">{{
+              t('common.back')
+            }}</MiniActionButton>
+          </div>
+
+          <div
+            v-if="!historySelected"
+            class="rounded-sm border border-sidebar-border/60 px-2 py-2 text-xs text-muted-foreground"
+          >
+            {{ t('git.ui.dialogs.history.selectCommitToViewDiff') }}
+          </div>
+
+          <template v-else>
+            <div class="rounded-sm border border-sidebar-border/60 bg-sidebar-accent/10 p-2">
+              <div class="truncate text-xs font-medium text-foreground" :title="historySelected.subject || ''">
+                {{ historySelected.subject || t('git.ui.dialogs.history.noMessage') }}
+              </div>
+              <div class="mt-1 text-[10px] text-muted-foreground">{{ historySelectedMeta }}</div>
+              <div class="mt-0.5 font-mono text-[10px] text-muted-foreground">{{ historySelected.hash }}</div>
+              <div class="mt-1 text-[10px] text-muted-foreground">
+                {{ t('common.files') }}: {{ historySelectedSummary.files }} · +{{
+                  historySelectedSummary.insertions
+                }}
+                -{{ historySelectedSummary.deletions }}
+              </div>
+
+              <div class="mt-2 flex flex-wrap gap-1">
+                <MiniActionButton size="xs" @click="copyCommitHash(historySelected.hash)">{{
+                  t('git.ui.dialogs.history.actions.copyHash')
+                }}</MiniActionButton>
+                <MiniActionButton size="xs" @click="onHistoryCheckout(historySelected)">{{
+                  t('git.ui.dialogs.history.actions.checkout')
+                }}</MiniActionButton>
+                <MiniActionButton size="xs" @click="onHistoryCreateBranch(historySelected)">{{
+                  t('git.ui.dialogs.history.actions.createBranch')
+                }}</MiniActionButton>
+                <MiniActionButton size="xs" @click="onHistoryCherryPick(historySelected)">{{
+                  t('git.ui.dialogs.history.actions.cherryPick')
+                }}</MiniActionButton>
+                <MiniActionButton size="xs" variant="destructive" @click="onHistoryRevert(historySelected)">{{
+                  t('git.ui.dialogs.history.actions.revert')
+                }}</MiniActionButton>
+              </div>
+            </div>
+
+            <div class="rounded-sm border border-sidebar-border/60 overflow-hidden">
+              <div class="flex items-center justify-between border-b border-sidebar-border/50 px-2 py-1">
+                <div class="text-[11px] font-medium text-muted-foreground">
+                  {{ t('git.ui.dialogs.history.sections.files') }}
+                </div>
+                <MiniActionButton size="xs" :disabled="!historyFileSelected" @click="clearSelectedFile">{{
+                  t('git.ui.dialogs.history.actions.allFiles')
+                }}</MiniActionButton>
+              </div>
+              <div v-if="historyFilesError" class="px-2 py-2 text-xs text-destructive">{{ historyFilesError }}</div>
+              <div v-else-if="historyFilesLoading" class="px-2 py-2 text-xs text-muted-foreground">
+                {{ t('git.ui.dialogs.history.loadingFiles') }}
+              </div>
+              <div v-else-if="!historyFiles.length" class="px-2 py-2 text-xs text-muted-foreground">
+                {{ t('git.ui.dialogs.history.emptyFiles') }}
+              </div>
+              <div v-else class="divide-y divide-sidebar-border/50">
+                <button
+                  v-for="file in historyFiles"
+                  :key="`${file.status}:${file.path}`"
+                  type="button"
+                  class="w-full px-2 py-1.5 text-left text-xs hover:bg-sidebar-accent/35"
+                  :class="historyFileSelected?.path === file.path ? 'bg-sidebar-accent/45' : ''"
+                  @click="selectCommitFile(file)"
+                >
+                  <div class="flex min-w-0 items-center gap-2">
+                    <span class="w-4 text-[10px] font-mono text-muted-foreground">{{ file.status }}</span>
+                    <span class="flex-1 truncate font-mono">{{ file.path }}</span>
+                    <span v-if="file.insertions > 0" class="text-[10px] font-mono text-emerald-500"
+                      >+{{ file.insertions }}</span
+                    >
+                    <span v-if="file.deletions > 0" class="text-[10px] font-mono text-rose-500"
+                      >-{{ file.deletions }}</span
+                    >
+                  </div>
+                </button>
+              </div>
+            </div>
+          </template>
         </div>
       </ScrollArea>
     </div>
@@ -1400,34 +1797,78 @@ void diffPaneRef
         <div class="truncate text-xs text-muted-foreground">{{ t('git.ui.sourceControl') }}</div>
       </div>
 
-      <MobileSidebarEmptyState
-        v-if="ui.isMobile && !selectedFile"
-        :title="t('git.ui.dialogs.selectChangedFileTitle')"
-        :description="t('git.ui.dialogs.selectChangedFileDescription')"
-        :action-label="t('git.ui.dialogs.openSourceControlPanel')"
-        :show-action="true"
-        @action="ui.setSessionSwitcherOpen(true)"
-      />
+      <div
+        v-if="sourceControlView === 'history'"
+        class="flex h-full items-center justify-center px-4 text-xs text-muted-foreground"
+      >
+        {{ t('git.ui.dialogs.history.selectCommitToViewDiff') }}
+      </div>
 
-      <GitDiffPane
-        v-else
-        ref="diffPaneRef"
-        :directory="root || ''"
-        v-model:selectedFile="selectedFile"
-        :diff-source="diffSource"
-        :is-mobile="ui.isMobile"
-        :selected-is-conflict="selectedIsConflict"
-        :conflict-paths="conflictPaths"
-        :stage-hunk="stageHunk"
-        :unstage-hunk="unstageHunk"
-        :discard-hunk="discardHunk"
-        :stage-selected="stageSelected"
-        :unstage-selected="unstageSelected"
-        :discard-selected="discardSelected"
-        :open-file="openFileInFiles"
-        :reveal-file="revealFileInFiles"
-        @resolved="load"
-      />
+      <div v-else-if="sourceControlView === 'historyCommit'" class="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div class="flex items-center justify-between gap-2 border-b border-sidebar-border/50 px-2 py-1.5">
+          <div class="truncate text-xs text-muted-foreground">
+            {{
+              historyFileSelected
+                ? t('git.ui.dialogs.history.diffTitleFile', { file: historyFileSelected.path })
+                : t('git.ui.dialogs.history.diffTitleAllFiles')
+            }}
+          </div>
+          <button
+            type="button"
+            class="rounded-sm border border-sidebar-border/60 px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-sidebar-accent/35 hover:text-foreground"
+            @click="historyDiffWrap = !historyDiffWrap"
+          >
+            {{ t('git.ui.dialogs.history.wrap.label') }}
+          </button>
+        </div>
+
+        <div v-if="activeHistoryDiffError" class="px-3 py-2 text-xs text-destructive">{{ activeHistoryDiffError }}</div>
+        <div v-else-if="activeHistoryDiffLoading" class="px-3 py-2 text-xs text-muted-foreground">
+          {{ t('git.ui.dialogs.history.loadingDiff') }}
+        </div>
+        <div v-else-if="!activeHistoryDiff" class="px-3 py-2 text-xs text-muted-foreground">
+          {{ t('git.ui.dialogs.history.emptyDiff') }}
+        </div>
+        <div v-else class="min-h-0 flex-1 overflow-hidden">
+          <DiffViewer
+            :diff="activeHistoryDiff"
+            output-format="side-by-side"
+            :draw-file-list="false"
+            :wrap="historyDiffWrap"
+          />
+        </div>
+      </div>
+
+      <template v-else>
+        <MobileSidebarEmptyState
+          v-if="ui.isMobile && !selectedFile"
+          :title="t('git.ui.dialogs.selectChangedFileTitle')"
+          :description="t('git.ui.dialogs.selectChangedFileDescription')"
+          :action-label="t('git.ui.dialogs.openSourceControlPanel')"
+          :show-action="true"
+          @action="ui.setSessionSwitcherOpen(true)"
+        />
+
+        <GitDiffPane
+          v-else
+          ref="diffPaneRef"
+          :directory="root || ''"
+          v-model:selectedFile="selectedFile"
+          :diff-source="diffSource"
+          :is-mobile="ui.isMobile"
+          :selected-is-conflict="selectedIsConflict"
+          :conflict-paths="conflictPaths"
+          :stage-hunk="stageHunk"
+          :unstage-hunk="unstageHunk"
+          :discard-hunk="discardHunk"
+          :stage-selected="stageSelected"
+          :unstage-selected="unstageSelected"
+          :discard-selected="discardSelected"
+          :open-file="openFileInFiles"
+          :reveal-file="revealFileInFiles"
+          @resolved="load"
+        />
+      </template>
     </div>
 
     <GitBranchesDialog
@@ -1775,56 +2216,6 @@ void diffPaneRef
       @migrate="migrateWorktreeChanges"
       @openWorktree="openWorktree"
       @copyPath="copyWorktreePath"
-    />
-
-    <GitHistoryDialog
-      :open="historyOpen"
-      :loading="historyLoading"
-      :error="historyError"
-      :commits="historyCommits"
-      :has-more="historyHasMore"
-      :selected="historySelected"
-      :branch-options="historyBranchOptions"
-      :tag-options="historyTagOptions"
-      :files="historyFiles"
-      :files-loading="historyFilesLoading"
-      :files-error="historyFilesError"
-      :selected-file="historyFileSelected"
-      :file-diff="historyFileDiff"
-      :file-diff-loading="historyFileDiffLoading"
-      :file-diff-error="historyFileDiffError"
-      :filter-path="historyFilterPath"
-      :filter-author="historyFilterAuthor"
-      :filter-message="historyFilterMessage"
-      :filter-ref="historyFilterRef"
-      :filter-ref-type="historyFilterRefType"
-      :compare-selected-hash="historyCompareHash"
-      :diff="historyDiff"
-      :diff-loading="historyDiffLoading"
-      :diff-error="historyDiffError"
-      @update:open="(v: boolean) => (v ? openHistoryWithRefs() : closeHistoryDialog())"
-      @update:filterAuthor="(v: string) => (historyFilterAuthor = v)"
-      @update:filterMessage="(v: string) => (historyFilterMessage = v)"
-      @update:filterRef="(v: string) => (historyFilterRef = v)"
-      @update:filterRefType="(v: 'branch' | 'tag') => (historyFilterRefType = v)"
-      @loadMore="loadMoreHistory"
-      @refresh="refreshHistory"
-      @clearFilter="clearHistoryFilter"
-      @applyFilters="applyHistoryFilters"
-      @clearFilters="clearHistoryFilters"
-      @select="selectCommit"
-      @checkout="onHistoryCheckout"
-      @createBranch="onHistoryCreateBranch"
-      @selectCompare="selectHistoryCompareCommit"
-      @clearCompare="clearHistoryCompareCommit"
-      @compareWithParent="compareHistoryWithParent"
-      @compareWithSelected="compareHistoryWithSelected"
-      @copyHash="(hash: string) => copyCommitHash(hash)"
-      @cherryPick="onHistoryCherryPick"
-      @revert="onHistoryRevert"
-      @reset="onHistoryReset"
-      @selectFile="selectCommitFile"
-      @clearFile="clearSelectedFile"
     />
 
     <GitCheckoutDetachedDialog

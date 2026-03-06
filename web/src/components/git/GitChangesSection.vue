@@ -29,6 +29,7 @@ const emit = defineEmits<{
   (e: 'update:expanded', value: boolean): void
   (e: 'select', path: string): void
   (e: 'stageAll'): void
+  (e: 'discardAll'): void
   (e: 'stage', path: string): void
   (e: 'history', path: string): void
   (e: 'rename', path: string): void
@@ -132,6 +133,26 @@ function runMobileAction(path: string, actionId: string) {
       @toggle="toggle"
     >
       <template #actions>
+        <ConfirmPopover
+          :title="t('git.actionsMenu.cleanup.discardAllTracked.confirmTitle')"
+          :description="t('git.actionsMenu.cleanup.discardAllTracked.confirmDescription')"
+          :confirm-text="t('common.discard')"
+          :cancel-text="t('common.cancel')"
+          variant="destructive"
+          @confirm="$emit('discardAll')"
+        >
+          <SidebarIconButton
+            size="sm"
+            destructive
+            :disabled="count === 0"
+            :tooltip="t('git.actionsMenu.cleanup.discardAllTracked.label')"
+            :is-mobile-pointer="isMobilePointer"
+            :aria-label="t('git.actionsMenu.cleanup.discardAllTracked.label')"
+            @click.stop
+          >
+            <RiArrowGoBackLine class="h-3.5 w-3.5" />
+          </SidebarIconButton>
+        </ConfirmPopover>
         <SidebarIconButton
           size="sm"
           :tooltip="t('git.ui.workingTree.actions.stageAll')"
