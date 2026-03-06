@@ -2737,7 +2737,7 @@ dependencies = [
 
 [[package]]
 name = "opencode-studio-desktop"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "flate2",
  "reqwest",
@@ -2749,6 +2749,7 @@ dependencies = [
  "tauri-plugin-autostart",
  "tauri-plugin-opener",
  "tauri-plugin-shell",
+ "tauri-plugin-single-instance",
  "thiserror 2.0.18",
  "tokio",
  "toml 1.0.3+spec-1.1.0",
@@ -4437,6 +4438,20 @@ dependencies = [
  "tauri-plugin",
  "thiserror 2.0.18",
  "tokio",
+]
+
+[[package]]
+name = "tauri-plugin-single-instance"
+version = "2.4.0"
+source = "git+https://github.com/tauri-apps/plugins-workspace?branch=feat%2Fcef#352381c6c6a26cb568ee0c254664947a513ff442"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tauri",
+ "thiserror 2.0.18",
+ "tracing",
+ "windows-sys 0.60.2",
+ "zbus",
 ]
 
 [[package]]

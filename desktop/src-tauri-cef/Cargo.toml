@@ -1,6 +1,6 @@
 [package]
 name = "opencode-studio-desktop"
-version = "0.1.6"
+version = "0.1.7"
 description = "OpenCode Studio Desktop (Tauri wrapper, CEF)"
 authors = ["OpenCode Studio Contributors"]
 edition = "2024"
@@ -32,6 +32,7 @@ tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-shell = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
 tauri-plugin-opener = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
 tauri-plugin-autostart = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
+tauri-plugin-single-instance = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
 
 [features]
 cef = ["tauri/cef"]
