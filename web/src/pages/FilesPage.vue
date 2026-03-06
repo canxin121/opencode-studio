@@ -2245,6 +2245,55 @@ function closeMoveDialog() {
   moveDialogInput.value = ''
 }
 
+async function moveNodeByDrag(sourcePath: string, targetDir: string): Promise<boolean> {
+  const rootPath = root.value
+  if (!rootPath) return false
+
+  const source = trimTrailingSlashes(normalizePath(String(sourcePath || '').trim()))
+  const destination = trimTrailingSlashes(normalizePath(String(targetDir || '').trim()))
+  if (!source || !destination) return false
+  if (!withinWorkspace(source, rootPath) || !withinWorkspace(destination, rootPath)) return false
+
+  const sourceParent = trimTrailingSlashes(source.split('/').slice(0, -1).join('/')) || rootPath
+  if (destination === sourceParent) return false
+  if (destination === source || destination.startsWith(`${source}/`)) return false
+
+  const baseName = source.split('/').filter(Boolean).pop() || ''
+  if (!baseName) return false
+
+  const nextPath = joinPath(destination, baseName)
+  if (nextPath === source) return false
+
+  try {
+    await renamePath({ directory: rootPath, oldPath: source, newPath: nextPath })
+
+    const selectedDir = normalizePath(String(selectedDirectoryPath.value || '').trim())
+    const selectedFilePath = normalizePath(String(selectedFile.value?.path || '').trim())
+    const affectedCurrentSelection =
+      (selectedDir && (selectedDir === source || selectedDir.startsWith(`${source}/`))) ||
+      (selectedFilePath && (selectedFilePath === source || selectedFilePath.startsWith(`${source}/`)))
+
+    if (affectedCurrentSelection) {
+      resetViewerSelectionState()
+      selectedDirectoryPath.value = ''
+    }
+
+    selectedPaths.value = new Set([nextPath])
+    selectionAnchorPath.value = nextPath
+    highlightedPath.value = nextPath
+    selectedDirectoryPath.value = destination
+
+    await ensureDirectoryExpanded(destination)
+    await refreshRoot()
+    toasts.push('success', t('files.toasts.movedCount', { count: 1 }))
+    return true
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    toasts.push('error', msg)
+    return false
+  }
+}
+
 async function moveSelectedNodes(paths: string[], destinationInput: string) {
   const rootPath = root.value
   if (!rootPath) return
@@ -2997,6 +3046,7 @@ onMounted(async () => {
                 :expand-directory="ensureDirectoryExpanded"
                 :create-node="createNodeFromExplorer"
                 :rename-node="renameNodeFromExplorer"
+                :move-node-by-drag="moveNodeByDrag"
                 :run-file-action="runExplorerFileAction"
                 :open-dialog="openDialog"
                 :delete-node="deleteNode"

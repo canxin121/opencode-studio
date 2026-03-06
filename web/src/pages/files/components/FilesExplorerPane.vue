@@ -66,6 +66,7 @@ const props = defineProps<{
   expandDirectory: (dirPath: string) => void | Promise<void>
   createNode: (kind: InlineCreateKind, basePath: string, name: string) => Promise<boolean>
   renameNode: (node: FileNode, name: string) => Promise<boolean>
+  moveNodeByDrag: (sourcePath: string, targetDir: string) => Promise<boolean>
   runFileAction: (action: FileActionId, node: FileNode) => void | Promise<void>
   openDialog: (kind: Exclude<DialogKind, null>, node?: FileNode) => void
   deleteNode: (node: FileNode) => void | Promise<void>
@@ -96,6 +97,9 @@ const inlineRenameInputRef = ref<HTMLInputElement | null>(null)
 const LONG_PRESS_DELAY_TOUCH_MS = 420
 const LONG_PRESS_DELAY_POINTER_MS = 540
 const LONG_PRESS_MOVE_TOLERANCE_PX = 8
+const DRAG_CANCEL_FEEDBACK_MS = 180
+const DRAG_SUCCESS_FEEDBACK_MS = 320
+const DRAG_AUTO_EXPAND_DELAY_MS = 680
 
 type LongPressState = {
   pointerId: number
@@ -109,6 +113,27 @@ const longPressState = ref<LongPressState | null>(null)
 const longPressTimer = ref<number | null>(null)
 const suppressClickPath = ref('')
 const suppressClickUntil = ref(0)
+const moveDropTargetDir = ref('')
+const moveRootDropActive = ref(false)
+const dragSourcePath = ref('')
+const dragFeedbackPath = ref('')
+const dragFeedbackKind = ref<'invalid' | 'success' | ''>('')
+const dragHoverExpandTimer = ref<number | null>(null)
+const dragHoverExpandPath = ref('')
+
+type DragSession = {
+  pointerId: number
+  node: FileNode
+  sourcePath: string
+  sourceParentDir: string
+  currentX: number
+  currentY: number
+  targetDir: string
+  targetDirectoryPath: string
+  validTarget: boolean
+}
+
+const dragSession = ref<DragSession | null>(null)
 
 async function setActionMenuOpen(next: boolean) {
   if (!next) {
@@ -220,6 +245,128 @@ function normalizePath(path: string): string {
   if (!raw) return ''
   if (raw === '/') return raw
   return raw.replace(/\/+$/g, '')
+}
+
+function dirname(path: string): string {
+  const normalized = normalizePath(path)
+  if (!normalized || normalized === '/') return ''
+  const index = normalized.lastIndexOf('/')
+  if (index <= 0) return ''
+  return normalized.slice(0, index)
+}
+
+function rowForPath(path: string): FlatRow | null {
+  return props.flattenedTree.find((row) => row.node.path === path) || null
+}
+
+function clearDragHoverExpandTimer() {
+  if (dragHoverExpandTimer.value !== null) {
+    window.clearTimeout(dragHoverExpandTimer.value)
+    dragHoverExpandTimer.value = null
+  }
+  dragHoverExpandPath.value = ''
+}
+
+function clearDragFeedback() {
+  dragFeedbackPath.value = ''
+  dragFeedbackKind.value = ''
+}
+
+function clearDragSession() {
+  dragSession.value = null
+  dragSourcePath.value = ''
+  moveDropTargetDir.value = ''
+  moveRootDropActive.value = false
+  clearDragHoverExpandTimer()
+}
+
+function queueDirectoryAutoExpand(path: string) {
+  const targetPath = normalizePath(path)
+  if (!targetPath || targetPath === dragHoverExpandPath.value) return
+
+  clearDragHoverExpandTimer()
+  dragHoverExpandPath.value = targetPath
+  dragHoverExpandTimer.value = window.setTimeout(() => {
+    const row = rowForPath(targetPath)
+    if (!row || row.node.type !== 'directory' || row.isExpanded || row.isLoading) return
+    void props.expandDirectory(targetPath)
+  }, DRAG_AUTO_EXPAND_DELAY_MS)
+}
+
+function resolveDragTarget(
+  clientX: number,
+  clientY: number,
+): {
+  targetDir: string
+  targetDirectoryPath: string
+  overExplorer: boolean
+} {
+  const target = document.elementFromPoint(clientX, clientY)
+  const element = target instanceof Element ? target : null
+  const overExplorer = Boolean(element?.closest('[data-explorer-tree="true"]'))
+  if (!overExplorer) {
+    return { targetDir: '', targetDirectoryPath: '', overExplorer: false }
+  }
+
+  const rowElement = element?.closest<HTMLElement>('[data-node-path]')
+  if (!rowElement) {
+    return { targetDir: props.root, targetDirectoryPath: '', overExplorer: true }
+  }
+
+  const rowPath = normalizePath(String(rowElement.dataset.nodePath || '').trim())
+  const rowType = String(rowElement.dataset.nodeType || '')
+  if (!rowPath) {
+    return { targetDir: props.root, targetDirectoryPath: '', overExplorer: true }
+  }
+
+  if (rowType === 'directory') {
+    return { targetDir: rowPath, targetDirectoryPath: rowPath, overExplorer: true }
+  }
+
+  const parent = dirname(rowPath)
+  const targetDir = parent || props.root
+  return { targetDir, targetDirectoryPath: targetDir, overExplorer: true }
+}
+
+function isValidMoveTarget(session: DragSession, targetDir: string): boolean {
+  const normalizedTarget = normalizePath(targetDir)
+  if (!normalizedTarget) return false
+  if (normalizedTarget === session.sourceParentDir) return false
+  if (normalizedTarget === session.sourcePath) return false
+  if (session.node.type === 'directory' && normalizedTarget.startsWith(`${session.sourcePath}/`)) return false
+  return true
+}
+
+function updateDragTarget(clientX: number, clientY: number) {
+  const session = dragSession.value
+  if (!session) return
+
+  const nextTarget = resolveDragTarget(clientX, clientY)
+  session.currentX = clientX
+  session.currentY = clientY
+  session.targetDir = nextTarget.targetDir
+  session.targetDirectoryPath = nextTarget.targetDirectoryPath
+  session.validTarget = nextTarget.overExplorer && isValidMoveTarget(session, nextTarget.targetDir)
+
+  moveDropTargetDir.value = session.validTarget ? session.targetDirectoryPath : ''
+  moveRootDropActive.value = session.validTarget && session.targetDir === props.root
+
+  if (session.validTarget && session.targetDirectoryPath && session.targetDirectoryPath !== session.sourcePath) {
+    queueDirectoryAutoExpand(session.targetDirectoryPath)
+  } else {
+    clearDragHoverExpandTimer()
+  }
+}
+
+function flashDragFeedback(kind: 'invalid' | 'success', path: string) {
+  dragFeedbackKind.value = kind
+  dragFeedbackPath.value = path
+  const duration = kind === 'success' ? DRAG_SUCCESS_FEEDBACK_MS : DRAG_CANCEL_FEEDBACK_MS
+  window.setTimeout(() => {
+    if (dragFeedbackPath.value === path && dragFeedbackKind.value === kind) {
+      clearDragFeedback()
+    }
+  }, duration)
 }
 
 function resetInlineCreate() {
@@ -411,6 +558,13 @@ function shouldIgnoreLongPressTarget(target: EventTarget | null): boolean {
 function onLongPressPointerMove(ev: PointerEvent) {
   const state = longPressState.value
   if (!state || state.pointerId !== ev.pointerId) return
+
+  if (state.triggered && dragSession.value?.pointerId === ev.pointerId) {
+    ev.preventDefault()
+    updateDragTarget(ev.clientX, ev.clientY)
+    return
+  }
+
   const deltaX = ev.clientX - state.startX
   const deltaY = ev.clientY - state.startY
   if (Math.hypot(deltaX, deltaY) > LONG_PRESS_MOVE_TOLERANCE_PX) {
@@ -418,15 +572,47 @@ function onLongPressPointerMove(ev: PointerEvent) {
   }
 }
 
-function onLongPressPointerUp(ev: PointerEvent) {
+async function onLongPressPointerUp(ev: PointerEvent) {
   const state = longPressState.value
   if (!state || state.pointerId !== ev.pointerId) return
+
+  const activeDrag = dragSession.value
+  if (state.triggered && activeDrag?.pointerId === ev.pointerId) {
+    const sourcePath = activeDrag.sourcePath
+    const targetDir = activeDrag.targetDir
+    const targetPath = activeDrag.targetDirectoryPath
+    const canDrop = activeDrag.validTarget && Boolean(targetDir)
+
+    resetLongPressState()
+
+    if (!canDrop) {
+      flashDragFeedback('invalid', targetPath || sourcePath)
+      clearDragSession()
+      return
+    }
+
+    const moved = await props.moveNodeByDrag(sourcePath, targetDir)
+    if (moved) {
+      flashDragFeedback('success', targetPath || targetDir)
+    } else {
+      flashDragFeedback('invalid', targetPath || sourcePath)
+    }
+    clearDragSession()
+    return
+  }
+
   resetLongPressState()
 }
 
 function onLongPressPointerCancel(ev: PointerEvent) {
   const state = longPressState.value
   if (!state || state.pointerId !== ev.pointerId) return
+
+  if (state.triggered && dragSession.value?.pointerId === ev.pointerId) {
+    flashDragFeedback('invalid', dragSession.value.targetDirectoryPath || dragSession.value.sourcePath)
+    clearDragSession()
+  }
+
   resetLongPressState()
 }
 
@@ -436,6 +622,7 @@ function onRowPointerDown(ev: PointerEvent, node: FileNode) {
   if (shouldIgnoreLongPressTarget(ev.target)) return
 
   resetLongPressState()
+  clearDragFeedback()
   longPressState.value = {
     pointerId: ev.pointerId,
     startX: ev.clientX,
@@ -452,6 +639,24 @@ function onRowPointerDown(ev: PointerEvent, node: FileNode) {
     suppressClickPath.value = state.node.path
     suppressClickUntil.value = Date.now() + 650
     void props.handleNodeLongPress(state.node)
+
+    if (!props.isMobile && ev.pointerType !== 'touch') {
+      const sourcePath = normalizePath(String(state.node.path || '').trim())
+      const sourceParentDir = dirname(sourcePath) || props.root
+      dragSourcePath.value = sourcePath
+      dragSession.value = {
+        pointerId: state.pointerId,
+        node: state.node,
+        sourcePath,
+        sourceParentDir,
+        currentX: ev.clientX,
+        currentY: ev.clientY,
+        targetDir: '',
+        targetDirectoryPath: '',
+        validTarget: false,
+      }
+      updateDragTarget(ev.clientX, ev.clientY)
+    }
   }, delay)
 
   window.addEventListener('pointermove', onLongPressPointerMove, true)
@@ -731,6 +936,15 @@ function handleGlobalPointerDown(ev: PointerEvent) {
   }
 }
 
+function handleGlobalKeydown(ev: KeyboardEvent) {
+  if (ev.key !== 'Escape') return
+  if (dragSession.value) {
+    flashDragFeedback('invalid', dragSession.value.targetDirectoryPath || dragSession.value.sourcePath)
+    clearDragSession()
+  }
+  resetLongPressState()
+}
+
 watch(
   () => viewMode.value,
   (mode) => {
@@ -767,11 +981,14 @@ watch(
 
 onMounted(() => {
   window.addEventListener('pointerdown', handleGlobalPointerDown, true)
+  window.addEventListener('keydown', handleGlobalKeydown, true)
 })
 
 onBeforeUnmount(() => {
   resetLongPressState()
+  clearDragSession()
   window.removeEventListener('pointerdown', handleGlobalPointerDown, true)
+  window.removeEventListener('keydown', handleGlobalKeydown, true)
 })
 </script>
 
@@ -887,12 +1104,16 @@ onBeforeUnmount(() => {
     <div v-if="viewMode === 'tree'" class="oc-vscode-section flex min-h-0 flex-1 flex-col border-b-0">
       <ScrollArea
         class="flex-1 min-h-0"
-        :class="rootDropActive ? 'bg-sidebar-accent/20' : ''"
+        :class="[
+          rootDropActive || moveRootDropActive ? 'bg-sidebar-accent/20' : '',
+          dragFeedbackPath === root && dragFeedbackKind === 'success' ? 'oc-tree-drop-success' : '',
+          dragFeedbackPath === root && dragFeedbackKind === 'invalid' ? 'oc-tree-drop-invalid' : '',
+        ]"
         @dragover="onExplorerDragOver"
         @dragleave="onExplorerDragLeave"
         @drop="onExplorerDrop"
       >
-        <div class="px-1 pb-2 pt-1">
+        <div data-explorer-tree="true" class="px-1 pb-2 pt-1">
           <div v-if="!hasRootChildren" class="space-y-1.5 px-1 py-1.5">
             <div v-for="i in 8" :key="`tree-skeleton-${i}`" class="rounded-sm px-1.5 py-1">
               <div class="flex items-center gap-2" :style="{ paddingLeft: `${((i - 1) % 3) * 14}px` }">
@@ -913,10 +1134,21 @@ onBeforeUnmount(() => {
                   :actions-always-visible="true"
                   data-inline-rename-root="true"
                   class="h-[22px] rounded-sm border border-sidebar-border/60 bg-sidebar-accent/40 !py-0 !pr-1 !text-[12px]"
+                  :data-node-path="entry.row.node.path"
+                  :data-node-type="entry.row.node.type"
                   :class="[
                     selectedFilePath === entry.row.node.path ? '!border-sidebar-border/70' : '',
                     isNodeSelected(entry.row.node.path) ? '!border-primary/60 !bg-primary/18 !text-foreground' : '',
-                    dropTargetDir === entry.row.node.path ? '!border-primary/60 !bg-primary/12 !text-foreground' : '',
+                    dropTargetDir === entry.row.node.path || moveDropTargetDir === entry.row.node.path
+                      ? '!border-primary/60 !bg-primary/12 !text-foreground'
+                      : '',
+                    dragSourcePath === entry.row.node.path ? 'oc-tree-drag-source' : '',
+                    dragFeedbackPath === entry.row.node.path && dragFeedbackKind === 'invalid'
+                      ? 'oc-tree-drop-invalid'
+                      : '',
+                    dragFeedbackPath === entry.row.node.path && dragFeedbackKind === 'success'
+                      ? 'oc-tree-drop-success'
+                      : '',
                   ]"
                 >
                   <template #icon>
@@ -973,13 +1205,25 @@ onBeforeUnmount(() => {
                   :indent="8 + entry.row.depth * 14"
                   :actions-always-visible="isMobile"
                   class="h-[22px] rounded-sm border border-transparent !py-0 !pr-1 !text-[12px]"
+                  :data-node-path="entry.row.node.path"
+                  :data-node-type="entry.row.node.type"
                   :class="[
                     selectedFilePath === entry.row.node.path ? '!border-sidebar-border/70' : '',
                     isNodeSelected(entry.row.node.path) ? '!border-primary/60 !bg-primary/18 !text-foreground' : '',
-                    dropTargetDir === entry.row.node.path ? '!border-primary/60 !bg-primary/12 !text-foreground' : '',
+                    dropTargetDir === entry.row.node.path || moveDropTargetDir === entry.row.node.path
+                      ? '!border-primary/60 !bg-primary/12 !text-foreground'
+                      : '',
+                    dragSourcePath === entry.row.node.path ? 'oc-tree-drag-source' : '',
+                    dragFeedbackPath === entry.row.node.path && dragFeedbackKind === 'invalid'
+                      ? 'oc-tree-drop-invalid'
+                      : '',
+                    dragFeedbackPath === entry.row.node.path && dragFeedbackKind === 'success'
+                      ? 'oc-tree-drop-success'
+                      : '',
                   ]"
                   @click="handleTreeNodeClick($event, entry.row.node)"
                   @pointerdown="onRowPointerDown($event, entry.row.node)"
+                  @dragstart.prevent
                   @dragover="onRowDragOver($event, entry.row)"
                   @dragleave="onRowDragLeave($event, entry.row)"
                   @drop="onRowDrop($event, entry.row)"
@@ -1158,5 +1402,81 @@ onBeforeUnmount(() => {
         <div class="oc-vscode-empty">{{ t('files.explorer.searchUnavailable') }}</div>
       </slot>
     </div>
+
+    <Teleport to="body">
+      <div
+        v-if="dragSession"
+        class="oc-tree-drag-ghost fixed left-0 top-0 z-[120] flex h-[24px] max-w-[260px] items-center gap-1.5 rounded-sm border border-primary/35 bg-sidebar px-2 text-[11px] text-foreground shadow-xl shadow-black/20"
+        :class="dragSession.validTarget ? 'opacity-100' : 'opacity-85 border-destructive/60 text-destructive'"
+        :style="{ transform: `translate3d(${dragSession.currentX + 12}px, ${dragSession.currentY + 10}px, 0)` }"
+      >
+        <RiFolder3Fill v-if="dragSession.node.type === 'directory'" class="h-3.5 w-3.5 shrink-0 text-primary/80" />
+        <component
+          :is="fileIconComponent(dragSession.node.extension)"
+          v-else
+          class="h-3.5 w-3.5 shrink-0"
+          :class="fileIconClass(dragSession.node.extension)"
+        />
+        <span class="truncate">{{ dragSession.node.name }}</span>
+      </div>
+    </Teleport>
   </section>
 </template>
+
+<style scoped>
+.oc-tree-drag-source {
+  transform: scale(0.985);
+  opacity: 0.7;
+}
+
+.oc-tree-drag-ghost {
+  pointer-events: none;
+  animation: oc-tree-drag-lift 120ms ease-out;
+}
+
+.oc-tree-drop-invalid {
+  animation: oc-tree-drop-invalid 170ms ease-out;
+}
+
+.oc-tree-drop-success {
+  animation: oc-tree-drop-success 220ms ease-out;
+}
+
+@keyframes oc-tree-drag-lift {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes oc-tree-drop-invalid {
+  0% {
+    transform: translateX(0);
+  }
+  33% {
+    transform: translateX(-2px);
+  }
+  66% {
+    transform: translateX(2px);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
+@keyframes oc-tree-drop-success {
+  0% {
+    box-shadow: 0 0 0 0 rgb(59 130 246 / 0);
+  }
+  40% {
+    box-shadow: 0 0 0 1px rgb(59 130 246 / 0.38);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgb(59 130 246 / 0);
+  }
+}
+</style>
