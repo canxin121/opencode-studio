@@ -9,6 +9,11 @@ export const localStorageKeys = {
     sidebarOpen: namespacedKey('ui.sidebar.open'),
     sidebarWidth: namespacedKey('ui.sidebar.width'),
     activeMainTab: namespacedKey('ui.active-main-tab'),
+    workspaceDockOpen: namespacedKey('ui.workspace-dock.open'),
+    workspaceDockPanel: namespacedKey('ui.workspace-dock.panel'),
+    workspaceDockPlacement: namespacedKey('ui.workspace-dock.placement'),
+    workspaceDockWidth: namespacedKey('ui.workspace-dock.width'),
+    workspaceDockHeight: namespacedKey('ui.workspace-dock.height'),
     locale: namespacedKey('ui.locale'),
   },
   directory: {

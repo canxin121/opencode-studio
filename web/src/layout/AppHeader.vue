@@ -6,6 +6,7 @@ import {
   RiArrowLeftSLine,
   RiArrowDownSLine,
   RiLayoutLeftLine,
+  RiLayoutRightLine,
   RiPlayListAddLine,
   RiChat4Line,
   RiFolder6Line,
@@ -198,6 +199,10 @@ const mobilePanelToggleLabel = computed(() => {
   return String(t('header.openSessions'))
 })
 
+const workspaceDockToggleLabel = computed(() => {
+  return ui.isWorkspaceDockOpen ? String(t('header.hideWorkspacePanel')) : String(t('header.showWorkspacePanel'))
+})
+
 // -- Keyboard Shortcuts (Cmd+1..4) --
 function hasModifier(e: KeyboardEvent): boolean {
   return e.metaKey || e.ctrlKey
@@ -262,6 +267,10 @@ function getRememberedSettingsRoute(): string {
 function openSettings() {
   ui.setSessionSwitcherOpen(false)
   router.push(getRememberedSettingsRoute())
+}
+
+function toggleWorkspaceDock() {
+  ui.toggleWorkspaceDock('git')
 }
 
 function locateCurrentSessionInSidebar() {
@@ -361,6 +370,18 @@ function openHelpDialog() {
         </span>
 
         <div class="flex items-center gap-1">
+          <IconButton
+            v-if="!ui.isMobile"
+            size="lg"
+            :tooltip="workspaceDockToggleLabel"
+            :is-mobile-pointer="ui.isMobilePointer"
+            :aria-label="workspaceDockToggleLabel"
+            :variant="ui.isWorkspaceDockOpen ? 'secondary' : 'ghost'"
+            @click="toggleWorkspaceDock"
+          >
+            <RiLayoutRightLine class="h-5 w-5" />
+          </IconButton>
+
           <IconButton
             size="lg"
             :tooltip="String(t('header.help'))"
