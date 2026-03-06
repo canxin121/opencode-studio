@@ -23,7 +23,7 @@ type TerminalStreamEvent =
   | { type: 'connected'; seq?: number }
   | { type: 'data'; data?: string; seq?: number }
   | { type: 'exit'; seq?: number }
-  | { type: string; seq?: number }
+  | { type: string; data?: unknown; seq?: number }
 
 type SessionBuffer = {
   chunks: string[]
