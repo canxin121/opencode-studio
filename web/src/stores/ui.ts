@@ -57,9 +57,7 @@ export const useUiStore = defineStore('ui', () => {
   )
   watch(workspaceDockPanel, (v) => setLocalString(STORAGE_WORKSPACE_DOCK_PANEL, v))
 
-  const workspaceDockPlacement = ref<WorkspaceDockPlacement>(
-    getLocalString(STORAGE_WORKSPACE_DOCK_PLACEMENT) === 'bottom' ? 'bottom' : 'right',
-  )
+  const workspaceDockPlacement = ref<WorkspaceDockPlacement>('right')
   watch(workspaceDockPlacement, (v) => setLocalString(STORAGE_WORKSPACE_DOCK_PLACEMENT, v))
 
   const workspaceDockWidth = ref<number>(
@@ -146,6 +144,9 @@ export const useUiStore = defineStore('ui', () => {
   }
 
   function setWorkspaceDockOpen(open: boolean) {
+    if (open) {
+      workspaceDockPlacement.value = 'right'
+    }
     isWorkspaceDockOpen.value = open
   }
 
@@ -155,6 +156,7 @@ export const useUiStore = defineStore('ui', () => {
       return
     }
     workspaceDockPanel.value = defaultPanel
+    workspaceDockPlacement.value = 'right'
     isWorkspaceDockOpen.value = true
   }
 
@@ -162,8 +164,8 @@ export const useUiStore = defineStore('ui', () => {
     workspaceDockPanel.value = panel
   }
 
-  function setWorkspaceDockPlacement(placement: WorkspaceDockPlacement) {
-    workspaceDockPlacement.value = placement
+  function setWorkspaceDockPlacement(_placement: WorkspaceDockPlacement) {
+    workspaceDockPlacement.value = 'right'
   }
 
   function openAndLocateSessionInSidebar(sessionId: string | null) {

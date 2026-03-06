@@ -2,7 +2,6 @@
 import HelpDialog from '@/components/HelpDialog.vue'
 import McpDialog from '@/components/McpDialog.vue'
 import HorizontalSplitPane from '@/components/ui/HorizontalSplitPane.vue'
-import VerticalSplitPane from '@/components/ui/VerticalSplitPane.vue'
 import AppHeader from '@/layout/AppHeader.vue'
 import ChatSidebar from '@/layout/ChatSidebar.vue'
 import BottomNav from '@/layout/BottomNav.vue'
@@ -89,12 +88,7 @@ watch(
 const mobileBottomNavInset =
   'calc(var(--oc-bottom-nav-height, 56px) + var(--oc-safe-area-bottom, 0px) - clamp(0px, var(--oc-keyboard-inset, 0px), var(--oc-bottom-nav-height, 56px)))'
 
-const showWorkspaceRightDock = computed(
-  () => !ui.isMobile && ui.isWorkspaceDockOpen && ui.workspaceDockPlacement === 'right',
-)
-const showWorkspaceBottomDock = computed(
-  () => !ui.isMobile && ui.isWorkspaceDockOpen && ui.workspaceDockPlacement === 'bottom',
-)
+const showWorkspaceRightDock = computed(() => !ui.isMobile && ui.isWorkspaceDockOpen)
 </script>
 
 <template>
@@ -156,20 +150,6 @@ const showWorkspaceBottomDock = computed(
                 <WorkspaceDockPanel />
               </template>
             </HorizontalSplitPane>
-
-            <VerticalSplitPane
-              v-else-if="showWorkspaceBottomDock"
-              v-model="ui.workspaceDockHeight"
-              :min-height="180"
-              :max-height="520"
-            >
-              <template #top>
-                <router-view />
-              </template>
-              <template #bottom>
-                <WorkspaceDockPanel />
-              </template>
-            </VerticalSplitPane>
 
             <router-view v-else />
           </main>

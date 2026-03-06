@@ -52,6 +52,15 @@ import { useUiStore } from '@/stores/ui'
 import { useToastsStore } from '@/stores/toasts'
 import { gitRepoScopedStorageKey, localStorageKeys } from '@/lib/persistence/storageKeys'
 
+const props = withDefaults(
+  defineProps<{
+    embedded?: boolean
+  }>(),
+  {
+    embedded: false,
+  },
+)
+
 // Stores & State
 const settings = useSettingsStore()
 const toasts = useToastsStore()
@@ -1218,6 +1227,10 @@ const viewCtx = composeGitPageViewContext([
   { label: 'stashOps', values: stashOps },
 ] as const)
 
+defineExpose({
+  refresh: load,
+})
+
 onMounted(() => {
   void repoSelection.loadRepos().then(() => load())
 })
@@ -1228,5 +1241,5 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <GitPageView :ctx="viewCtx" />
+  <GitPageView :ctx="viewCtx" :embedded="props.embedded" />
 </template>

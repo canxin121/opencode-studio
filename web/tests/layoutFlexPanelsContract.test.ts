@@ -9,10 +9,10 @@ test('main layout wires flexible dock panel regions', () => {
   const uiStoreSource = readFileSync(resolve(import.meta.dir, '../src/stores/ui.ts'), 'utf8')
 
   assert.ok(mainLayoutSource.includes('HorizontalSplitPane'))
-  assert.ok(mainLayoutSource.includes('VerticalSplitPane'))
+  assert.ok(!mainLayoutSource.includes('VerticalSplitPane'))
   assert.ok(mainLayoutSource.includes('WorkspaceDockPanel'))
   assert.ok(mainLayoutSource.includes('showWorkspaceRightDock'))
-  assert.ok(mainLayoutSource.includes('showWorkspaceBottomDock'))
+  assert.ok(!mainLayoutSource.includes('showWorkspaceBottomDock'))
 
   assert.ok(appHeaderSource.includes('toggleWorkspaceDock'))
   assert.ok(appHeaderSource.includes('RiLayoutRightLine'))

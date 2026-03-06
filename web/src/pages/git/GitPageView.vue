@@ -1,6 +1,13 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { RiArrowDownSLine, RiArrowRightSLine, RiGitBranchLine, RiMore2Line, RiRefreshLine } from '@remixicon/vue'
+import {
+  RiArrowDownSLine,
+  RiArrowLeftSLine,
+  RiArrowRightSLine,
+  RiGitBranchLine,
+  RiMore2Line,
+  RiRefreshLine,
+} from '@remixicon/vue'
 import { useI18n } from 'vue-i18n'
 
 import MiniActionButton from '@/components/ui/MiniActionButton.vue'
@@ -46,6 +53,10 @@ const props = defineProps({
   ctx: {
     type: Object,
     required: true,
+  },
+  embedded: {
+    type: Boolean,
+    default: false,
   },
 })
 const { startDesktopSidebarResize } = useDesktopSidebarResize()
@@ -543,7 +554,7 @@ function setRebaseActionMenuOpen(open: boolean) {
 
 function onRebaseActionMenuSelect(item: OptionMenuItem) {
   if (item.id === 'open-conflict') {
-    openFirstConflict()
+    openFirstConflictAndShowDiff()
     return
   }
   if (item.id === 'skip') {
@@ -580,7 +591,7 @@ function setMergeActionMenuOpen(open: boolean) {
 
 function onMergeActionMenuSelect(item: OptionMenuItem) {
   if (item.id === 'open-conflict') {
-    openFirstConflict()
+    openFirstConflictAndShowDiff()
     return
   }
   if (item.id === 'use-terminal') {
@@ -617,7 +628,7 @@ function setCherryPickActionMenuOpen(open: boolean) {
 
 function onCherryPickActionMenuSelect(item: OptionMenuItem) {
   if (item.id === 'open-conflict') {
-    openFirstConflict()
+    openFirstConflictAndShowDiff()
     return
   }
   if (item.id === 'skip') {
@@ -658,7 +669,7 @@ function setRevertActionMenuOpen(open: boolean) {
 
 function onRevertActionMenuSelect(item: OptionMenuItem) {
   if (item.id === 'open-conflict') {
-    openFirstConflict()
+    openFirstConflictAndShowDiff()
     return
   }
   if (item.id === 'skip') {
@@ -770,7 +781,64 @@ const mergeRebaseBranchOptions = computed(() => {
 
 const actionsMenuAnchorEl = ref<HTMLElement | null>(null)
 
-const useShellSidebar = computed(() => (ui.isMobile ? ui.isSessionSwitcherOpen : ui.isSidebarOpen))
+const embeddedView = ref<'list' | 'diff'>(props.embedded && selectedFile.value ? 'diff' : 'list')
+
+watch(
+  () => props.embedded,
+  (embedded) => {
+    if (!embedded) return
+    embeddedView.value = selectedFile.value ? 'diff' : 'list'
+  },
+  { immediate: true },
+)
+
+watch(
+  () => selectedFile.value,
+  (path) => {
+    if (!props.embedded) return
+    embeddedView.value = path ? 'diff' : 'list'
+  },
+)
+
+function showEmbeddedList() {
+  if (!props.embedded) return
+  embeddedView.value = 'list'
+}
+
+function selectFileFromSidebar(path: string, source: 'working' | 'staged') {
+  selectFile(path, source)
+  if (!props.embedded) return
+  embeddedView.value = 'diff'
+}
+
+function openFirstConflictAndShowDiff() {
+  openFirstConflict()
+  if (!props.embedded) return
+  if (!selectedFile.value) return
+  embeddedView.value = 'diff'
+}
+
+const useShellSidebar = computed(() => {
+  if (props.embedded) return embeddedView.value === 'list'
+  return ui.isMobile ? ui.isSessionSwitcherOpen : ui.isSidebarOpen
+})
+
+const canResizeSidebar = computed(() => !ui.isMobile && !props.embedded)
+
+const sidebarStyle = computed(() => {
+  if (ui.isMobile) return undefined
+  if (props.embedded) {
+    return {
+      width: '100%',
+    }
+  }
+  return { width: `${ui.sidebarWidth}px` }
+})
+
+const showDiffPane = computed(() => {
+  if (props.embedded) return embeddedView.value === 'diff'
+  return !ui.isMobile || !ui.isSessionSwitcherOpen
+})
 
 // Referenced only by template `ref=` and destructuring, silence noUnusedLocals.
 // vue-tsc does not count template-only usage.
@@ -784,10 +852,10 @@ void diffPaneRef
       v-if="useShellSidebar"
       class="oc-vscode-pane relative shrink-0"
       :class="ui.isMobile ? 'w-full' : 'border-r border-sidebar-border/60'"
-      :style="ui.isMobile ? undefined : { width: `${ui.sidebarWidth}px` }"
+      :style="sidebarStyle"
     >
       <div
-        v-if="!ui.isMobile"
+        v-if="canResizeSidebar"
         class="absolute right-0 top-0 z-10 h-full w-1 cursor-col-resize hover:bg-primary/40"
         @pointerdown="startDesktopSidebarResize"
       />
@@ -1129,7 +1197,7 @@ void diffPaneRef
               :loading="mergeListLoading"
               :can-operate="!!root"
               :is-mobile-pointer="ui.isMobilePointer"
-              @select="(p: string) => selectFile(p, 'working')"
+              @select="(p: string) => selectFileFromSidebar(p, 'working')"
               @unstage="(p: string) => unstagePaths([p])"
               @stage="(p: string) => stagePaths([p])"
               @rename="openRenameDialog"
@@ -1150,7 +1218,7 @@ void diffPaneRef
               :loading="stagedListLoading"
               :can-operate="!!root"
               :is-mobile-pointer="ui.isMobilePointer"
-              @select="(p: string) => selectFile(p, 'staged')"
+              @select="(p: string) => selectFileFromSidebar(p, 'staged')"
               @unstageAll="unstageAll"
               @unstage="(p: string) => unstagePaths([p])"
               @rename="openRenameDialog"
@@ -1171,7 +1239,7 @@ void diffPaneRef
               :loading="changesListLoading"
               :can-operate="!!root"
               :is-mobile-pointer="ui.isMobilePointer"
-              @select="(p: string) => selectFile(p, 'working')"
+              @select="(p: string) => selectFileFromSidebar(p, 'working')"
               @stageAll="stageAllTracked"
               @stage="(p: string) => stagePaths([p])"
               @rename="openRenameDialog"
@@ -1192,7 +1260,7 @@ void diffPaneRef
               :loading="untrackedListLoading"
               :can-operate="!!root"
               :is-mobile-pointer="ui.isMobilePointer"
-              @select="(p: string) => selectFile(p, 'working')"
+              @select="(p: string) => selectFileFromSidebar(p, 'working')"
               @stageAll="stageAllUntracked"
               @stage="(p: string) => stagePaths([p])"
               @rename="openRenameDialog"
@@ -1219,7 +1287,19 @@ void diffPaneRef
       </ScrollArea>
     </div>
 
-    <div class="min-w-0 flex-1 overflow-hidden" v-show="!ui.isMobile || !ui.isSessionSwitcherOpen">
+    <div class="min-w-0 flex-1 overflow-hidden" :class="props.embedded ? 'flex flex-col' : ''" v-show="showDiffPane">
+      <div v-if="props.embedded" class="flex items-center gap-2 border-b border-sidebar-border/50 px-2 py-1.5">
+        <IconButton
+          size="sm"
+          :tooltip="t('git.ui.sourceControl')"
+          :aria-label="t('git.ui.sourceControl')"
+          @click="showEmbeddedList"
+        >
+          <RiArrowLeftSLine class="h-4 w-4" />
+        </IconButton>
+        <div class="truncate text-xs text-muted-foreground">{{ t('git.ui.sourceControl') }}</div>
+      </div>
+
       <MobileSidebarEmptyState
         v-if="ui.isMobile && !selectedFile"
         :title="t('git.ui.dialogs.selectChangedFileTitle')"
