@@ -71,17 +71,60 @@ function toIdSet(input: string[]): Set<string> {
   return new Set(input.map((v) => String(v || '').trim()).filter(Boolean))
 }
 
+function stringArraysEquivalent(left: string[], right: string[]): boolean {
+  if (left === right) return true
+  if (left.length !== right.length) return false
+  for (let i = 0; i < left.length; i += 1) {
+    if (left[i] !== right[i]) return false
+  }
+  return true
+}
+
+function setsEquivalent(left: Set<string>, right: Set<string>): boolean {
+  if (left === right) return true
+  if (left.size !== right.size) return false
+  for (const value of left) {
+    if (!right.has(value)) return false
+  }
+  return true
+}
+
 function applyUiPrefsToLocal(prefsRaw: Parameters<typeof normalizeSidebarUiPrefsForUi>[0]) {
   const prefs = normalizeSidebarUiPrefsForUi(prefsRaw)
-  pinnedSessionIds.value = prefs.pinnedSessionIds.slice()
-  collapsedDirectories.value = toIdSet(prefs.collapsedDirectoryIds)
-  expandedParents.value = toIdSet(prefs.expandedParentSessionIds)
-  runningSessionsOpen.value = prefs.runningSessionsOpen
-  runningSessionsPage.value = prefs.runningSessionsPage
-  recentSessionsOpen.value = prefs.recentSessionsOpen
-  recentSessionsPage.value = prefs.recentSessionsPage
-  pinnedSessionsOpen.value = prefs.pinnedSessionsOpen
-  pinnedSessionsPage.value = prefs.pinnedSessionsPage
+  const nextPinnedSessionIds = prefs.pinnedSessionIds.slice()
+  if (!stringArraysEquivalent(pinnedSessionIds.value, nextPinnedSessionIds)) {
+    pinnedSessionIds.value = nextPinnedSessionIds
+  }
+
+  const nextCollapsedDirectories = toIdSet(prefs.collapsedDirectoryIds)
+  if (!setsEquivalent(collapsedDirectories.value, nextCollapsedDirectories)) {
+    collapsedDirectories.value = nextCollapsedDirectories
+  }
+
+  const nextExpandedParents = toIdSet(prefs.expandedParentSessionIds)
+  if (!setsEquivalent(expandedParents.value, nextExpandedParents)) {
+    expandedParents.value = nextExpandedParents
+  }
+
+  if (runningSessionsOpen.value !== prefs.runningSessionsOpen) {
+    runningSessionsOpen.value = prefs.runningSessionsOpen
+  }
+  if (runningSessionsPage.value !== prefs.runningSessionsPage) {
+    runningSessionsPage.value = prefs.runningSessionsPage
+  }
+  if (recentSessionsOpen.value !== prefs.recentSessionsOpen) {
+    recentSessionsOpen.value = prefs.recentSessionsOpen
+  }
+  if (recentSessionsPage.value !== prefs.recentSessionsPage) {
+    recentSessionsPage.value = prefs.recentSessionsPage
+  }
+  if (pinnedSessionsOpen.value !== prefs.pinnedSessionsOpen) {
+    pinnedSessionsOpen.value = prefs.pinnedSessionsOpen
+  }
+  if (pinnedSessionsPage.value !== prefs.pinnedSessionsPage) {
+    pinnedSessionsPage.value = prefs.pinnedSessionsPage
+  }
+
   const nextPage = Math.max(0, Math.floor(Number(prefs.directoriesPage || 0)))
   if (directoryPage.value !== nextPage) {
     skipDirectoryPageWatchOnce = true
