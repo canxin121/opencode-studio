@@ -113,7 +113,6 @@ const longPressState = ref<LongPressState | null>(null)
 const longPressTimer = ref<number | null>(null)
 const suppressClickPath = ref('')
 const suppressClickUntil = ref(0)
-const treeAreaRef = ref<HTMLElement | null>(null)
 const moveDropTargetDir = ref('')
 const moveRootDropActive = ref(false)
 const dragSourcePath = ref('')
@@ -1114,7 +1113,7 @@ onBeforeUnmount(() => {
         @dragleave="onExplorerDragLeave"
         @drop="onExplorerDrop"
       >
-        <div ref="treeAreaRef" data-explorer-tree="true" class="px-1 pb-2 pt-1">
+        <div data-explorer-tree="true" class="px-1 pb-2 pt-1">
           <div v-if="!hasRootChildren" class="space-y-1.5 px-1 py-1.5">
             <div v-for="i in 8" :key="`tree-skeleton-${i}`" class="rounded-sm px-1.5 py-1">
               <div class="flex items-center gap-2" :style="{ paddingLeft: `${((i - 1) % 3) * 14}px` }">
