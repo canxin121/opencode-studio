@@ -21,6 +21,9 @@ use backend::BackendManager;
 
 pub fn run() {
     let app = tauri::Builder::<AppRuntime>::new()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            reveal_main_window(app);
+        }))
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_autostart::init(
@@ -114,10 +117,7 @@ pub fn run() {
                     } = event
                     {
                         let app = tray.app_handle();
-                        if let Some(win) = app.get_webview_window("main") {
-                            let _ = win.show();
-                            let _ = win.set_focus();
-                        }
+                        reveal_main_window(&app);
                     }
                 })
                 .build(app)?;
@@ -369,10 +369,7 @@ fn runtime_target_triple() -> Option<String> {
 async fn handle_tray_menu(app: &AppHandle, id: &str) {
     match id {
         "open" => {
-            if let Some(win) = app.get_webview_window("main") {
-                let _ = win.show();
-                let _ = win.set_focus();
-            }
+            reveal_main_window(app);
         }
         "backend_start" => {
             let manager = app.state::<BackendManager>().inner().clone();
@@ -401,6 +398,14 @@ async fn handle_tray_menu(app: &AppHandle, id: &str) {
             app.exit(0);
         }
         _ => {}
+    }
+}
+
+fn reveal_main_window(app: &AppHandle) {
+    if let Some(win) = app.get_webview_window("main") {
+        let _ = win.show();
+        let _ = win.unminimize();
+        let _ = win.set_focus();
     }
 }
 
