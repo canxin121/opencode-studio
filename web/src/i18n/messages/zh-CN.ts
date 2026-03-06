@@ -2295,6 +2295,12 @@ export default {
       noGitRepositoryDescription: '选择一个仓库，或在该项目中初始化一个。',
       selectRepo: '选择仓库',
       initialize: '初始化',
+      historySidebar: {
+        title: '历史记录',
+        empty: '暂无提交记录',
+        loadMore: '加载更多提交（{count}）',
+        openDetails: '打开历史详情',
+      },
 
       branchAction: {
         branchNamePlaceholder: '分支名称',
