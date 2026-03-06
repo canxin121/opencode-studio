@@ -768,15 +768,9 @@ const sessionsLoading = computed(() => {
   return chat.sessionsLoading || directoryPageLoading.value
 })
 
-const pinnedFooterLoading = computed(
-  () => sessionsLoading.value || pinnedSessionsOpenUpdating.value || pinnedSessionsPaging.value,
-)
-const recentFooterLoading = computed(
-  () => sessionsLoading.value || recentSessionsOpenUpdating.value || recentSessionsPaging.value,
-)
-const runningFooterLoading = computed(
-  () => sessionsLoading.value || runningSessionsOpenUpdating.value || runningSessionsPaging.value,
-)
+const pinnedFooterLoading = computed(() => pinnedSessionsOpenUpdating.value)
+const recentFooterLoading = computed(() => recentSessionsOpenUpdating.value)
+const runningFooterLoading = computed(() => runningSessionsOpenUpdating.value)
 
 async function toggleDirectoryCollapse(directoryId: string, _directoryPath: string) {
   void _directoryPath
