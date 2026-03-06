@@ -2400,7 +2400,7 @@ dependencies = [
 
 [[package]]
 name = "opencode-studio-desktop"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "flate2",
  "reqwest",
