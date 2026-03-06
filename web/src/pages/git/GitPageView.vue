@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { RiArrowDownSLine, RiArrowRightSLine, RiGitBranchLine, RiMore2Line, RiRefreshLine } from '@remixicon/vue'
 import { useI18n } from 'vue-i18n'
 
@@ -16,6 +16,7 @@ import GitMergeChangesSection from '@/components/git/GitMergeChangesSection.vue'
 import GitStagedChangesSection from '@/components/git/GitStagedChangesSection.vue'
 import GitChangesSection from '@/components/git/GitChangesSection.vue'
 import GitUntrackedSection from '@/components/git/GitUntrackedSection.vue'
+import GitHistorySection from '@/components/git/GitHistorySection.vue'
 import GitRepoPickerDialog from '@/components/git/GitRepoPickerDialog.vue'
 import GitCloneDialog from '@/components/git/GitCloneDialog.vue'
 import GitInitRepoDialog from '@/components/git/GitInitRepoDialog.vue'
@@ -171,6 +172,7 @@ const {
   isStagedExpanded,
   isChangesExpanded,
   isUntrackedExpanded,
+  isHistoryExpanded,
   mergeCount,
   stagedCount,
   changesCount,
@@ -674,6 +676,33 @@ function openHistoryWithRefs() {
   void loadTags()
 }
 
+function ensureSidebarHistoryLoaded() {
+  if (!isHistoryExpanded.value) return
+  if (!gitReady.value || !repoRoot.value) return
+  if (historyLoading.value || historyCommits.value.length > 0) return
+  refreshHistory()
+}
+
+function openHistoryFromSidebar() {
+  historyOpen.value = true
+  void loadBranches()
+  void loadTags()
+  ensureSidebarHistoryLoaded()
+}
+
+function onSelectSidebarHistoryCommit(commit: Parameters<typeof selectCommit>[0]) {
+  void selectCommit(commit)
+  openHistoryFromSidebar()
+}
+
+watch(
+  () => [repoRoot.value, gitReady.value, isHistoryExpanded.value] as const,
+  () => {
+    ensureSidebarHistoryLoaded()
+  },
+  { immediate: true },
+)
+
 function openFileHistoryWithRefs(path: string) {
   openFileHistory(path)
   void loadBranches()
@@ -1170,6 +1199,20 @@ void diffPaneRef
               @discard="(p: string) => revertFile(p)"
               @ignore="(p: string) => ignorePath(p)"
               @showMore="showMoreUntracked"
+            />
+
+            <GitHistorySection
+              v-model:expanded="isHistoryExpanded"
+              :commits="historyCommits"
+              :loading="historyLoading"
+              :error="historyError"
+              :has-more="historyHasMore"
+              :selected-hash="historySelected?.hash || null"
+              :is-mobile-pointer="ui.isMobilePointer"
+              @refresh="refreshHistory"
+              @showMore="loadMoreHistory"
+              @openHistory="openHistoryFromSidebar"
+              @select="onSelectSidebarHistoryCommit"
             />
           </div>
         </div>

@@ -223,6 +223,7 @@ const isMergeExpanded = ref(true)
 const isStagedExpanded = ref(true)
 const isChangesExpanded = ref(true)
 const isUntrackedExpanded = ref(true)
+const isHistoryExpanded = ref(true)
 
 // File list paging (large repos can have thousands of changed files).
 // This is backed by server pagination to keep both network + UI responsive.
@@ -1139,6 +1140,7 @@ const viewCtx = composeGitPageViewContext([
       isStagedExpanded,
       isChangesExpanded,
       isUntrackedExpanded,
+      isHistoryExpanded,
 
       mergeList,
       stagedList,

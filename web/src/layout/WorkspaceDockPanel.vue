@@ -12,11 +12,11 @@ import {
 } from '@remixicon/vue'
 
 import { apiJson } from '@/lib/api'
-import { getTerminalUiState, type TerminalUiState } from '@/features/terminal/api/terminalApi'
 import type { GitStatusResponse, GitStatusFile } from '@/types/git'
 import { useDirectoryStore } from '@/stores/directory'
 import { useUiStore } from '@/stores/ui'
 import IconButton from '@/components/ui/IconButton.vue'
+import TerminalDockPanel from '@/features/terminal/components/TerminalDockPanel.vue'
 
 const router = useRouter()
 const { t } = useI18n()
@@ -27,12 +27,9 @@ const gitLoading = ref(false)
 const gitError = ref<string | null>(null)
 const gitStatus = ref<GitStatusResponse | null>(null)
 
-const terminalLoading = ref(false)
-const terminalError = ref<string | null>(null)
-const terminalState = ref<TerminalUiState | null>(null)
+const terminalDockRef = ref<{ refresh: () => Promise<void> | void } | null>(null)
 
 let gitTimer: number | null = null
-let terminalTimer: number | null = null
 
 const directoryPath = computed(() => String(directoryStore.currentDirectory || '').trim())
 const isGitPanel = computed(() => ui.workspaceDockPanel === 'git')
@@ -41,18 +38,6 @@ const gitFilesPreview = computed(() => (gitStatus.value?.files || []).slice(0, 8
 const gitBranchLabel = computed(() => {
   const branch = String(gitStatus.value?.current || '').trim()
   return branch || String(t('workspaceDock.git.noRepo'))
-})
-
-const terminalSessions = computed(() => terminalState.value?.sessionIds || [])
-const terminalSessionNames = computed(() => {
-  return terminalSessions.value.slice(0, 8).map((sid) => {
-    const customName = String(terminalState.value?.sessionMetaById?.[sid]?.name || '').trim()
-    return {
-      id: sid,
-      label: customName || sid.slice(0, 8),
-      active: terminalState.value?.activeSessionId === sid,
-    }
-  })
 })
 
 const panelEdgeClass = computed(() => {
@@ -92,28 +77,10 @@ async function refreshGit() {
   }
 }
 
-async function refreshTerminal() {
-  if (isGitPanel.value) return
-  terminalLoading.value = true
-  terminalError.value = null
-  try {
-    terminalState.value = await getTerminalUiState()
-  } catch (err) {
-    terminalState.value = null
-    terminalError.value = err instanceof Error ? err.message : String(err)
-  } finally {
-    terminalLoading.value = false
-  }
-}
-
 function clearTimers() {
   if (gitTimer !== null) {
     window.clearInterval(gitTimer)
     gitTimer = null
-  }
-  if (terminalTimer !== null) {
-    window.clearInterval(terminalTimer)
-    terminalTimer = null
   }
 }
 
@@ -122,18 +89,19 @@ function startPolling() {
   if (isGitPanel.value) {
     void refreshGit()
     gitTimer = window.setInterval(() => void refreshGit(), 4000)
-    return
   }
-  void refreshTerminal()
-  terminalTimer = window.setInterval(() => void refreshTerminal(), 5000)
 }
 
 function openGitPage() {
   void router.push('/git')
 }
 
-function openTerminalPage() {
-  void router.push('/terminal')
+function refreshActivePanel() {
+  if (ui.workspaceDockPanel === 'git') {
+    void refreshGit()
+    return
+  }
+  void terminalDockRef.value?.refresh()
 }
 
 watch(
@@ -209,7 +177,7 @@ onBeforeUnmount(() => {
               size="sm"
               :tooltip="t('workspaceDock.refresh')"
               :aria-label="t('workspaceDock.refresh')"
-              @click="ui.workspaceDockPanel === 'git' ? refreshGit() : refreshTerminal()"
+              @click="refreshActivePanel"
             >
               <RiRefreshLine class="h-4 w-4" />
             </IconButton>
@@ -274,44 +242,8 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <div v-else key="terminal" class="min-h-0 flex-1 overflow-auto p-3">
-          <div class="mb-3 rounded-md border border-border/60 bg-background/60 p-3">
-            <div class="text-xs text-muted-foreground">{{ t('workspaceDock.terminal.active') }}</div>
-            <div class="mt-1 truncate font-mono text-xs text-foreground">
-              {{ terminalState?.activeSessionId || t('workspaceDock.terminal.none') }}
-            </div>
-            <div class="mt-3 text-[11px] text-muted-foreground">
-              {{ t('workspaceDock.terminal.sessions') }} {{ terminalSessions.length }}
-            </div>
-          </div>
-
-          <div
-            v-if="terminalError"
-            class="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive"
-          >
-            {{ terminalError }}
-          </div>
-          <div v-else-if="terminalLoading" class="text-xs text-muted-foreground">{{ t('workspaceDock.loading') }}</div>
-          <div v-else-if="terminalSessionNames.length === 0" class="text-xs text-muted-foreground">
-            {{ t('workspaceDock.terminal.empty') }}
-          </div>
-          <div v-else class="space-y-1">
-            <button
-              v-for="session in terminalSessionNames"
-              :key="session.id"
-              type="button"
-              class="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs hover:bg-secondary/50"
-              @click="openTerminalPage"
-            >
-              <span class="truncate">{{ session.label }}</span>
-              <span v-if="session.active" class="rounded bg-primary/15 px-1.5 py-0.5 text-[10px] text-primary">
-                {{ t('workspaceDock.terminal.current') }}
-              </span>
-            </button>
-            <button type="button" class="mt-2 text-xs text-primary hover:underline" @click="openTerminalPage">
-              {{ t('workspaceDock.openTerminal') }}
-            </button>
-          </div>
+        <div v-else key="terminal" class="min-h-0 flex-1 overflow-hidden">
+          <TerminalDockPanel ref="terminalDockRef" />
         </div>
       </Transition>
     </div>

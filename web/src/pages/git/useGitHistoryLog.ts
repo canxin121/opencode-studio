@@ -338,6 +338,18 @@ export function useGitHistoryLog(opts: { repoRoot: { value: string | null }; git
     () => {
       commitDetailsCache.clear()
       commitFileDiffCache.clear()
+      historyCommits.value = []
+      historyHasMore.value = false
+      historyOffset.value = 0
+      historyError.value = null
+      historySelected.value = null
+      historyDiff.value = ''
+      historyDiffError.value = null
+      historyFiles.value = []
+      historyFilesError.value = null
+      historyFileSelected.value = null
+      historyFileDiff.value = ''
+      historyFileDiffError.value = null
       if (!historyOpen.value) return
       void loadHistory(true)
     },

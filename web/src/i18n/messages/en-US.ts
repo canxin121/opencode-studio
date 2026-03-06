@@ -2298,6 +2298,12 @@ export default {
       noGitRepositoryDescription: 'Select a repository, or initialize one in this project.',
       selectRepo: 'Select repo',
       initialize: 'Initialize',
+      historySidebar: {
+        title: 'History',
+        empty: 'No commits yet',
+        loadMore: 'Load more commits ({count})',
+        openDetails: 'Open History Details',
+      },
 
       branchAction: {
         branchNamePlaceholder: 'Branch name',
