@@ -10,7 +10,12 @@ import { normalizeDirForCompare } from '@/features/sessions/model/labels'
 import type { SseEvent } from '@/lib/sse'
 import { defaultChatSidebarUiPrefs, patchChatSidebarUiPrefs, type ChatSidebarUiPrefs } from '@/data/chatSidebarUiPrefs'
 
-import { normalizeRuntime, runtimeIsActive, runtimeStateEquivalent, type SessionRuntimeState } from './directorySessionRuntime'
+import {
+  normalizeRuntime,
+  runtimeIsActive,
+  runtimeStateEquivalent,
+  type SessionRuntimeState,
+} from './directorySessionRuntime'
 import type { JsonObject as UnknownRecord, JsonValue } from '@/types/json'
 
 type ChatSidebarStateWire = {
@@ -214,13 +219,19 @@ function jsonValueEquivalent(left: JsonValue | undefined, right: JsonValue | und
   return false
 }
 
-function directoryEntryEquivalent(left: DirectoryEntry | null | undefined, right: DirectoryEntry | null | undefined): boolean {
+function directoryEntryEquivalent(
+  left: DirectoryEntry | null | undefined,
+  right: DirectoryEntry | null | undefined,
+): boolean {
   if (!left && !right) return true
   if (!left || !right) return false
   return left.id === right.id && left.path === right.path && left.label === right.label
 }
 
-function sessionRowEquivalent(left: SidebarSessionRow | null | undefined, right: SidebarSessionRow | null | undefined): boolean {
+function sessionRowEquivalent(
+  left: SidebarSessionRow | null | undefined,
+  right: SidebarSessionRow | null | undefined,
+): boolean {
   if (!left && !right) return true
   if (!left || !right) return false
   return (
@@ -254,7 +265,10 @@ function stringArraysEquivalent(left: string[], right: string[]): boolean {
   return true
 }
 
-function nullableStringRecordEquivalent(left: Record<string, string | null>, right: Record<string, string | null>): boolean {
+function nullableStringRecordEquivalent(
+  left: Record<string, string | null>,
+  right: Record<string, string | null>,
+): boolean {
   const leftKeys = Object.keys(left)
   const rightKeys = Object.keys(right)
   if (leftKeys.length !== rightKeys.length) return false
