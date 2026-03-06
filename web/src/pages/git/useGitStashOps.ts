@@ -18,6 +18,12 @@ type GitJson = <T = JsonValue>(
 type ToastKind = 'info' | 'success' | 'error'
 type Toasts = { push: (kind: ToastKind, message: string, timeoutMs?: number) => void }
 
+function stashActionToastKey(action: 'apply' | 'pop' | 'drop'): string {
+  if (action === 'apply') return 'git.toasts.stashAppliedRef'
+  if (action === 'pop') return 'git.toasts.stashPoppedRef'
+  return 'git.toasts.stashDroppedRef'
+}
+
 export function useGitStashOps(opts: {
   repoRoot: Ref<string | null>
   toasts: Toasts
@@ -164,7 +170,7 @@ export function useGitStashOps(opts: {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ ref: r }),
         })
-        toasts.push('success', i18n.global.t('git.toasts.stashActionRef', { action, ref: r }))
+        toasts.push('success', i18n.global.t(stashActionToastKey(action), { ref: r }))
         await load()
       } catch (err) {
         if (handleGitBusy(err, `Stash ${action}`, () => stashAction(action, refStr))) return
