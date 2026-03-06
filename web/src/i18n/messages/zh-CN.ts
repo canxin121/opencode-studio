@@ -3272,6 +3272,13 @@ export default {
       discard: '丢弃',
       saveChanges: '保存更改',
     },
+    refreshConflict: {
+      title: '刷新冲突',
+      description: '磁盘上的文件已变化，但你仍有网页暂存修改（{path}）。请选择保留哪一个版本。',
+      keepLocalDraft: '保留网页暂存',
+      useRefreshedContent: '使用刷新内容',
+      remoteLargeHint: '刷新后的版本现在是大文件（{size}），将以分块模式重新打开。',
+    },
     dialog: {
       namePlaceholder: '名称',
       title: {
@@ -3384,6 +3391,8 @@ export default {
         titleSaved: '已保存',
       },
       actions: {
+        refreshContents: '刷新文件内容',
+        refreshingContents: '正在刷新文件内容...',
         copyContents: '复制内容',
         downloadRaw: '下载原始文件',
       },
@@ -3448,6 +3457,10 @@ export default {
       },
     },
     toasts: {
+      refreshFileFailed: '刷新文件失败',
+      fileRefreshed: '文件已刷新',
+      fileAlreadyLatest: '文件已是最新状态',
+      refreshKeptLocalDraft: '已保留网页暂存内容',
       saveFileBeforeGitHunkActions: '应用 Git hunk 操作前请先保存文件',
       hunkStaged: '已暂存 hunk',
       hunkUnstaged: '已取消暂存 hunk',

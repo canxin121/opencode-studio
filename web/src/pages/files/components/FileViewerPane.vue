@@ -10,6 +10,7 @@ import {
   RiHistoryLine,
   RiLoader4Line,
   RiMore2Line,
+  RiRefreshLine,
   RiSave3Line,
   RiTextWrap,
   RiUserLine,
@@ -68,6 +69,7 @@ const props = defineProps<{
   canEdit: boolean
   dirty: boolean
   isSaving: boolean
+  isRefreshingFile: boolean
   displayedContent: string
   rawUrl: string
   selectedPath: string
@@ -111,6 +113,7 @@ const props = defineProps<{
   openTimeline: () => boolean | void | Promise<boolean | void>
   openSidebar: () => boolean | void | Promise<boolean | void>
   openRaw: () => boolean | void | Promise<boolean | void>
+  refreshFile: () => boolean | void | Promise<boolean | void>
   save: () => boolean | void | Promise<boolean | void>
   confirmLargeFileLoad: () => boolean | void | Promise<boolean | void>
   loadMoreFileContent: () => boolean | void | Promise<boolean | void>
@@ -1090,6 +1093,25 @@ function onSendSelection() {
       />
 
       <div class="flex items-center gap-1">
+        <IconButton
+          v-if="selectedFile"
+          variant="ghost"
+          size="sm"
+          class="h-7 w-7"
+          :tooltip="
+            isRefreshingFile ? t('files.viewer.actions.refreshingContents') : t('files.viewer.actions.refreshContents')
+          "
+          :is-mobile-pointer="isMobile"
+          :disabled="fileLoading || isRefreshingFile"
+          :title="
+            isRefreshingFile ? t('files.viewer.actions.refreshingContents') : t('files.viewer.actions.refreshContents')
+          "
+          @click="() => refreshFile()"
+        >
+          <RiLoader4Line v-if="isRefreshingFile" class="h-4 w-4 animate-spin" />
+          <RiRefreshLine v-else class="h-4 w-4" />
+        </IconButton>
+
         <IconButton
           v-if="supportsSourceEditor && canEdit && !autoSaveEnabled"
           variant="ghost"

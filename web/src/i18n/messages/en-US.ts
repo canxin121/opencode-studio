@@ -3277,6 +3277,14 @@ export default {
       discard: 'Discard',
       saveChanges: 'Save changes',
     },
+    refreshConflict: {
+      title: 'Refresh conflict',
+      description:
+        'This file changed on disk while you still have web draft edits ({path}). Choose which version to keep.',
+      keepLocalDraft: 'Keep web draft',
+      useRefreshedContent: 'Use refreshed content',
+      remoteLargeHint: 'The refreshed version is now large ({size}) and will reopen in chunk mode.',
+    },
     dialog: {
       namePlaceholder: 'Name',
       title: {
@@ -3389,6 +3397,8 @@ export default {
         titleSaved: 'Saved',
       },
       actions: {
+        refreshContents: 'Refresh file contents',
+        refreshingContents: 'Refreshing file contents...',
         copyContents: 'Copy contents',
         downloadRaw: 'Download raw',
       },
@@ -3453,6 +3463,10 @@ export default {
       },
     },
     toasts: {
+      refreshFileFailed: 'Failed to refresh file',
+      fileRefreshed: 'File refreshed',
+      fileAlreadyLatest: 'File is already up to date',
+      refreshKeptLocalDraft: 'Kept your web draft',
       saveFileBeforeGitHunkActions: 'Save the file before applying git hunk actions',
       hunkStaged: 'Hunk staged',
       hunkUnstaged: 'Hunk unstaged',

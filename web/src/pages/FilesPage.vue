@@ -49,6 +49,25 @@ type ExplorerSidebarMode = 'tree' | 'search'
 type ExplorerSearchMode = 'files' | 'content'
 type ContentSearchScopeMode = 'workspace' | 'selected' | 'active-file'
 type ExplorerNodeClickOptions = { toggle: boolean; range: boolean }
+type FileRefreshSource = 'manual' | 'auto'
+type FileRefreshPayload =
+  | {
+      kind: 'text'
+      content: string
+      totalBytes: number
+      loadedBytes: number
+      nextOffset: number
+      hasMore: boolean
+    }
+  | {
+      kind: 'large'
+      totalBytes: number
+    }
+type FileRefreshConflictState = {
+  source: FileRefreshSource
+  path: string
+  remote: FileRefreshPayload
+}
 
 import { ApiError, apiBlob } from '@/lib/api'
 import { copyTextToClipboard } from '@/lib/clipboard'
@@ -91,6 +110,8 @@ const STORAGE_FILES_EXPLORER_CACHE_PREFIX = localStorageKeys.files.explorerCache
 const DIRECTORY_PAGE_SIZE = 400
 const FILE_CHUNK_BYTES = 256 * 1024
 const LARGE_FILE_WARNING_BYTES = 1024 * 1024
+const FILE_AUTO_REFRESH_INTERVAL_MS = 9_000
+const FILE_AUTO_REFRESH_EDIT_IDLE_MS = 4_500
 const HIDDEN_FILE_RELATIVE_PATHS = new Set(['web/src/data/directorySessionSnapshotDb.ts'])
 
 const chat = useChatStore()
@@ -350,6 +371,7 @@ const fileChunkLoadingMore = ref(false)
 const pendingLargeFilePrompt = ref<{ path: string; totalBytes: number } | null>(null)
 const fileLoading = ref(false)
 const fileError = ref<string | null>(null)
+const isRefreshingFile = ref(false)
 const viewerMode = ref<ViewerMode>('none')
 const markdownViewMode = ref<MarkdownViewMode>('source')
 const wrapLines = ref(true)
@@ -407,12 +429,29 @@ const fileTimelineContentCache = new Map<string, GitCommitFileContentResponse>()
 const fileTimelineContentInFlight = new Map<string, Promise<GitCommitFileContentResponse>>()
 
 let autoSaveTimer: number | null = null
+let fileAutoRefreshTimer: number | null = null
+let fileRefreshSeq = 0
+let lastDraftEditAt = 0
 
 function clearAutoSaveTimer() {
   if (autoSaveTimer !== null) {
     window.clearTimeout(autoSaveTimer)
     autoSaveTimer = null
   }
+}
+
+function clearFileAutoRefreshTimer() {
+  if (fileAutoRefreshTimer !== null) {
+    window.clearInterval(fileAutoRefreshTimer)
+    fileAutoRefreshTimer = null
+  }
+}
+
+function startFileAutoRefreshTimer() {
+  clearFileAutoRefreshTimer()
+  fileAutoRefreshTimer = window.setInterval(() => {
+    void runAutoFileRefreshTick()
+  }, FILE_AUTO_REFRESH_INTERVAL_MS)
 }
 
 function handleGlobalKeydown(e: KeyboardEvent) {
@@ -443,6 +482,7 @@ const selectionAnchorPath = ref('')
 
 const confirmDiscardOpen = ref(false)
 const pendingSelect = ref<FileNode | null>(null)
+const fileRefreshConflict = ref<FileRefreshConflictState | null>(null)
 
 let syncingFilesVisibilityPreferencesFromSettings = false
 let filesVisibilityPreferencesInitialized = false
@@ -506,7 +546,10 @@ watch(autoSaveEnabled, (v) => {
   localStorage.setItem(STORAGE_FILES_AUTOSAVE, v ? 'true' : 'false')
   if (!v) {
     clearAutoSaveTimer()
+    clearFileAutoRefreshTimer()
+    return
   }
+  startFileAutoRefreshTimer()
 })
 watch(blameEnabled, (v) => localStorage.setItem(STORAGE_FILES_VIEWER_BLAME_VISIBLE, v ? 'true' : 'false'))
 watch(timelineVisibilityPreference, (v) =>
@@ -551,6 +594,10 @@ watch(
     if (!mobile || showViewer) return
     if (!selectedFile.value) return
 
+    fileRefreshSeq += 1
+    isRefreshingFile.value = false
+    closeRefreshConflictDialog()
+    lastDraftEditAt = 0
     selectedFile.value = null
     viewerMode.value = 'none'
     fileContent.value = ''
@@ -702,6 +749,24 @@ const displaySelectedPath = computed(() => {
   if (!selectedFile.value?.path) return ''
   if (isPathHiddenInFiles(selectedFile.value.path)) return ''
   return relativeToWorkspace(selectedFile.value.path)
+})
+
+const refreshConflictPathLabel = computed(() => {
+  const path = fileRefreshConflict.value?.path || ''
+  if (!path) return ''
+  const rel = relativeToWorkspace(path)
+  if (rel && rel !== '.') return rel
+  return path
+})
+
+const refreshConflictLargeHint = computed(() => {
+  const conflict = fileRefreshConflict.value
+  if (!conflict || conflict.remote.kind !== 'large') return ''
+  return String(
+    t('files.refreshConflict.remoteLargeHint', {
+      size: formatBytes(conflict.remote.totalBytes),
+    }),
+  )
 })
 
 const fileStatusLabel = computed(() => {
@@ -1997,6 +2062,204 @@ function fuzzyScore(query: string, candidate: string): number | null {
   return score
 }
 
+function isRefreshRequestStale(seq: number, rootPath: string, path: string): boolean {
+  const current = normalizePath(String(selectedFile.value?.path || '').trim())
+  return seq !== fileRefreshSeq || root.value !== rootPath || current !== path
+}
+
+async function readRefreshPayload(rootPath: string, path: string): Promise<FileRefreshPayload> {
+  const meta = await readFileChunk({ directory: rootPath, path, offset: 0, limit: 0 })
+  const totalBytes = Math.max(0, Math.floor(meta.totalBytes || 0))
+
+  if (totalBytes > LARGE_FILE_WARNING_BYTES) {
+    return {
+      kind: 'large',
+      totalBytes,
+    }
+  }
+
+  const limit = Math.max(FILE_CHUNK_BYTES, totalBytes || 0)
+  const chunk = await readFileChunk({ directory: rootPath, path, offset: 0, limit })
+  const loadedBytes = Math.max(0, Math.floor(chunk.loadedBytes || 0))
+  const nextOffset = Math.max(loadedBytes, Math.floor(chunk.nextOffset ?? chunk.loadedBytes ?? 0))
+
+  return {
+    kind: 'text',
+    content: typeof chunk.content === 'string' ? chunk.content : '',
+    totalBytes: Math.max(totalBytes, Math.floor(chunk.totalBytes || 0), loadedBytes),
+    loadedBytes,
+    nextOffset,
+    hasMore: Boolean(chunk.hasMore),
+  }
+}
+
+function isRefreshPayloadEqualToCurrent(path: string, payload: FileRefreshPayload): boolean {
+  if (payload.kind === 'large') {
+    const prompt = pendingLargeFilePrompt.value
+    if (!prompt || prompt.path !== path) return false
+    if (Math.max(0, Math.floor(prompt.totalBytes || 0)) !== payload.totalBytes) return false
+    return fileContent.value === '' && draftContent.value === ''
+  }
+
+  if (pendingLargeFilePrompt.value) return false
+  return (
+    fileContent.value === payload.content &&
+    fileChunkTotalBytes.value === payload.totalBytes &&
+    fileChunkLoadedBytes.value === payload.loadedBytes &&
+    fileChunkHasMore.value === payload.hasMore
+  )
+}
+
+function applyRefreshPayload(path: string, payload: FileRefreshPayload) {
+  fileError.value = null
+  selection.value = null
+  commentText.value = ''
+  fileChunkLoadingMore.value = false
+  lastDraftEditAt = 0
+
+  if (payload.kind === 'large') {
+    pendingLargeFilePrompt.value = {
+      path,
+      totalBytes: payload.totalBytes,
+    }
+    fileContent.value = ''
+    draftContent.value = ''
+    fileChunkTotalBytes.value = payload.totalBytes
+    fileChunkLoadedBytes.value = 0
+    fileChunkNextOffset.value = 0
+    fileChunkHasMore.value = false
+    return
+  }
+
+  pendingLargeFilePrompt.value = null
+  fileContent.value = payload.content
+  draftContent.value = payload.content
+  fileChunkTotalBytes.value = payload.totalBytes
+  fileChunkLoadedBytes.value = payload.loadedBytes
+  fileChunkNextOffset.value = payload.nextOffset
+  fileChunkHasMore.value = payload.hasMore
+}
+
+function refreshAuxiliaryPanelsAfterFileRefresh() {
+  if (blameEnabled.value) {
+    invalidateCurrentBlameCache()
+    void loadBlame({ force: true })
+  }
+  if (gitInlineEnabled.value) {
+    void loadGitDiff()
+  }
+}
+
+async function refreshCurrentFile(opts?: { source?: FileRefreshSource; silent?: boolean }): Promise<boolean> {
+  const source = opts?.source || 'manual'
+  const silent = source === 'auto' || Boolean(opts?.silent)
+  const rootPath = root.value
+  const node = selectedFile.value
+  if (!rootPath || !node || node.type !== 'file') return false
+
+  const path = normalizePath(String(node.path || '').trim())
+  if (!path) return false
+  if (isRefreshingFile.value || fileLoading.value || fileChunkLoadingMore.value) return false
+
+  const inEditableMode = ['text', 'markdown'].includes(viewerMode.value) && canEdit.value
+  if (!inEditableMode) {
+    if (source === 'auto') return false
+    await openFile(node)
+    return true
+  }
+
+  if (source === 'auto' && dirty.value) return false
+
+  const seq = ++fileRefreshSeq
+  isRefreshingFile.value = true
+  try {
+    const payload = await readRefreshPayload(rootPath, path)
+    if (isRefreshRequestStale(seq, rootPath, path)) return false
+
+    if (isRefreshPayloadEqualToCurrent(path, payload)) {
+      if (!silent) {
+        toasts.push('info', t('files.toasts.fileAlreadyLatest'))
+      }
+      return true
+    }
+
+    if (dirty.value) {
+      const draftMatchesRemote = payload.kind === 'text' && draftContent.value === payload.content
+      if (!draftMatchesRemote) {
+        if (source === 'auto') return false
+        fileRefreshConflict.value = {
+          source,
+          path,
+          remote: payload,
+        }
+        return false
+      }
+    }
+
+    applyRefreshPayload(path, payload)
+    refreshAuxiliaryPanelsAfterFileRefresh()
+    if (!silent) {
+      toasts.push('success', t('files.toasts.fileRefreshed'))
+    }
+    return true
+  } catch (err) {
+    if (isRefreshRequestStale(seq, rootPath, path)) return false
+    const msg =
+      err instanceof ApiError ? err.message || err.bodyText || '' : err instanceof Error ? err.message : String(err)
+    if (!silent) {
+      toasts.push('error', msg || t('files.toasts.refreshFileFailed'))
+    }
+    return false
+  } finally {
+    if (seq === fileRefreshSeq) {
+      isRefreshingFile.value = false
+    }
+  }
+}
+
+function shouldPauseAutoFileRefresh(): boolean {
+  if (!autoSaveEnabled.value) return true
+  if (!root.value) return true
+  if (!selectedFile.value || selectedFile.value.type !== 'file') return true
+  if (!['text', 'markdown'].includes(viewerMode.value)) return true
+  if (!canEdit.value) return true
+  if (dirty.value) return true
+  if (autoSaveTimer !== null) return true
+  if (isSaving.value || fileLoading.value || fileChunkLoadingMore.value || isRefreshingFile.value) return true
+  if (fileRefreshConflict.value) return true
+  if (Date.now() - lastDraftEditAt < FILE_AUTO_REFRESH_EDIT_IDLE_MS) return true
+  return false
+}
+
+async function runAutoFileRefreshTick() {
+  if (shouldPauseAutoFileRefresh()) return
+  await refreshCurrentFile({ source: 'auto', silent: true })
+}
+
+function closeRefreshConflictDialog() {
+  fileRefreshConflict.value = null
+}
+
+function keepLocalDraftAfterRefreshConflict() {
+  if (!fileRefreshConflict.value) return
+  fileRefreshConflict.value = null
+  toasts.push('info', t('files.toasts.refreshKeptLocalDraft'))
+}
+
+function applyRefreshConflictRemote() {
+  const conflict = fileRefreshConflict.value
+  if (!conflict) return
+
+  fileRefreshConflict.value = null
+  const selectedPath = normalizePath(String(selectedFile.value?.path || '').trim())
+  const targetPath = normalizePath(String(conflict.path || '').trim())
+  if (!selectedPath || selectedPath !== targetPath || !root.value) return
+
+  applyRefreshPayload(targetPath, conflict.remote)
+  refreshAuxiliaryPanelsAfterFileRefresh()
+  toasts.push('success', t('files.toasts.fileRefreshed'))
+}
+
 async function openFile(node: FileNode) {
   if (node.type !== 'file') return
   if (isPathHiddenInFiles(node.path)) return
@@ -2006,6 +2269,9 @@ async function openFile(node: FileNode) {
     return
   }
   const seq = ++openFileSeq
+  fileRefreshSeq += 1
+  isRefreshingFile.value = false
+  closeRefreshConflictDialog()
   selectOnlyPath(node.path)
   highlightedPath.value = ''
   selectedDirectoryPath.value = ''
@@ -2482,6 +2748,15 @@ async function uploadFilesToDirectory(files: readonly File[] | FileList, targetD
 watch(
   () => draftContent.value,
   () => {
+    if (
+      selectedFile.value?.type === 'file' &&
+      ['text', 'markdown'].includes(viewerMode.value) &&
+      canEdit.value &&
+      draftContent.value !== fileContent.value
+    ) {
+      lastDraftEditAt = Date.now()
+    }
+
     clearAutoSaveTimer()
     if (!autoSaveEnabled.value) return
     if (!['text', 'markdown'].includes(viewerMode.value) || !canEdit.value) return
@@ -2498,13 +2773,20 @@ watch(
 
 onMounted(() => {
   window.addEventListener('keydown', handleGlobalKeydown)
+  if (autoSaveEnabled.value) {
+    startFileAutoRefreshTimer()
+  }
 })
 
 onBeforeUnmount(() => {
   pageMounted = false
   rootRestoreSeq += 1
   openFileSeq += 1
+  fileRefreshSeq += 1
+  isRefreshingFile.value = false
+  closeRefreshConflictDialog()
   clearAutoSaveTimer()
+  clearFileAutoRefreshTimer()
   if (persistExplorerTimer !== null) {
     window.clearTimeout(persistExplorerTimer)
     persistExplorerTimer = null
@@ -2641,6 +2923,10 @@ async function handleDialogSubmit() {
 }
 
 function resetViewerSelectionState() {
+  fileRefreshSeq += 1
+  isRefreshingFile.value = false
+  closeRefreshConflictDialog()
+  lastDraftEditAt = 0
   selectedFile.value = null
   viewerMode.value = 'none'
   fileContent.value = ''
@@ -2812,6 +3098,10 @@ async function restoreForRoot(next: string) {
 
   const seq = ++rootRestoreSeq
   openFileSeq += 1
+  fileRefreshSeq += 1
+  isRefreshingFile.value = false
+  closeRefreshConflictDialog()
+  lastDraftEditAt = 0
 
   closeFileTimeline()
 
@@ -2873,6 +3163,20 @@ watch(
   (next) => {
     if (!pageMounted) return
     void restoreForRoot(next)
+  },
+)
+
+watch(
+  () => [root.value, selectedFile.value?.path] as const,
+  ([rootPath, path]) => {
+    const conflict = fileRefreshConflict.value
+    if (!conflict) return
+
+    const currentPath = normalizePath(String(path || '').trim())
+    const conflictPath = normalizePath(String(conflict.path || '').trim())
+    if (!rootPath || !currentPath || currentPath !== conflictPath) {
+      closeRefreshConflictDialog()
+    }
   },
 )
 
@@ -2948,6 +3252,32 @@ onMounted(async () => {
       @cancel="saveAndContinue"
       @confirm="discardAndContinue"
     />
+
+    <FormDialog
+      :open="Boolean(fileRefreshConflict)"
+      :title="String(t('files.refreshConflict.title'))"
+      :description="String(t('files.refreshConflict.description', { path: refreshConflictPathLabel || '-' }))"
+      @update:open="
+        (v) => {
+          if (!v) closeRefreshConflictDialog()
+        }
+      "
+    >
+      <div class="space-y-3">
+        <div
+          v-if="refreshConflictLargeHint"
+          class="rounded-sm border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-xs text-muted-foreground"
+        >
+          {{ refreshConflictLargeHint }}
+        </div>
+        <div class="flex items-center justify-end gap-2">
+          <Button variant="ghost" @click="keepLocalDraftAfterRefreshConflict">{{
+            t('files.refreshConflict.keepLocalDraft')
+          }}</Button>
+          <Button @click="applyRefreshConflictRemote">{{ t('files.refreshConflict.useRefreshedContent') }}</Button>
+        </div>
+      </div>
+    </FormDialog>
 
     <FormDialog
       :open="activeDialog !== null"
@@ -3368,6 +3698,7 @@ onMounted(async () => {
                 :can-edit="canEdit"
                 :dirty="dirty"
                 :is-saving="isSaving"
+                :is-refreshing-file="isRefreshingFile"
                 :displayed-content="displayedContent"
                 :raw-url="rawUrl"
                 :open-raw="openSelectedFileRaw"
@@ -3411,6 +3742,7 @@ onMounted(async () => {
                 :select-timeline-commit="selectFileTimelineCommit"
                 :open-timeline="openFileTimeline"
                 :open-sidebar="() => ui.setSessionSwitcherOpen(true)"
+                :refresh-file="() => refreshCurrentFile({ source: 'manual' })"
                 :save="() => save()"
                 :confirm-large-file-load="confirmLargeFileLoad"
                 :load-more-file-content="loadMoreFileContent"
