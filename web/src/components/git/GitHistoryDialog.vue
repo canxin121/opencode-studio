@@ -324,8 +324,9 @@ function onFilterRefTypeChange(value: string | number) {
             <div class="text-[11px] text-muted-foreground">{{ selectedMeta }}</div>
             <div class="text-[11px] text-muted-foreground font-mono">{{ selected.hash }}</div>
             <div class="text-[11px] text-muted-foreground font-mono">
-              {{ t('common.files') }}: {{ selectedDiffSummary.files }} · +{{ selectedDiffSummary.insertions }}
-              -{{ selectedDiffSummary.deletions }}
+              {{ t('common.files') }}: {{ selectedDiffSummary.files }} · +{{ selectedDiffSummary.insertions }} -{{
+                selectedDiffSummary.deletions
+              }}
             </div>
             <div v-if="selected.body" class="text-[11px] text-muted-foreground whitespace-pre-wrap">
               {{ selected.body }}

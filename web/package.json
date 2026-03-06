@@ -8,10 +8,11 @@
     "build": "bun run check:imports && vue-tsc -b && vite build",
     "build:rust-debug": "bun run check:imports && vue-tsc -b && vite build --mode rust-debug",
     "check:imports": "node ./scripts/check-import-rules.mjs",
-    "fmt": "prettier -w .",
-    "fmt:check": "prettier -c .",
+    "fmt": "bun ./node_modules/prettier/bin/prettier.cjs -w .",
+    "fmt:check": "bun ./node_modules/prettier/bin/prettier.cjs -c .",
     "test": "bun test",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "vite": "bun ./node_modules/vite/bin/vite.js"
   },
   "dependencies": {
     "@fontsource/ibm-plex-mono": "^5.2.7",
