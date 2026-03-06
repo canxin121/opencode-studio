@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { RiCheckLine, RiPencilLine } from '@remixicon/vue'
 import { useI18n } from 'vue-i18n'
 
@@ -11,6 +11,7 @@ import ScrollArea from '@/components/ui/ScrollArea.vue'
 import Skeleton from '@/components/ui/Skeleton.vue'
 
 import type { GitBranchesResponse } from '@/types/git'
+import { filterBranchesForSwitch, pickQuickSwitchBranch } from '@/pages/git/gitViewModelUtils'
 
 const { t } = useI18n()
 
@@ -35,6 +36,8 @@ function onUpdateOpen(v: boolean) {
   emit('update:open', v)
 }
 
+const branchSearchQuery = ref('')
+
 function onUpdateName(v: string | number) {
   emit('update:newBranchName', String(v))
 }
@@ -48,11 +51,16 @@ const branchList = computed(() => {
       isRemoteHead: isRemote && (b.name || '').endsWith('/HEAD'),
     }
   })
-  return list.sort((a, b) => {
-    if (a.current !== b.current) return a.current ? -1 : 1
-    return a.name.localeCompare(b.name)
-  })
+  return filterBranchesForSwitch(list, branchSearchQuery.value)
 })
+
+const quickSwitchTarget = computed(() => pickQuickSwitchBranch(branchList.value))
+
+function onQuickSwitch() {
+  const target = quickSwitchTarget.value
+  if (!target) return
+  emit('checkout', target.name)
+}
 </script>
 
 <template>
@@ -71,6 +79,24 @@ const branchList = computed(() => {
           @update:model-value="onUpdateName"
         />
         <Button size="sm" @click="$emit('create')" :disabled="!newBranchName.trim()">{{ t('common.create') }}</Button>
+      </div>
+
+      <div class="space-y-2">
+        <Input
+          v-model="branchSearchQuery"
+          :placeholder="t('common.search')"
+          class="h-8 text-sm font-mono"
+          @keydown.enter.prevent="onQuickSwitch"
+        />
+        <Button
+          v-if="quickSwitchTarget"
+          variant="secondary"
+          size="sm"
+          class="w-full justify-start font-mono"
+          @click="onQuickSwitch"
+        >
+          {{ t('git.ui.dialogs.branches.actions.checkout') }} {{ quickSwitchTarget.name }}
+        </Button>
       </div>
 
       <div v-if="branchesLoading" class="py-3">
@@ -160,6 +186,9 @@ const branchList = computed(() => {
                 </Button>
               </ConfirmPopover>
             </div>
+          </div>
+          <div v-if="!branchList.length" class="px-3 py-4 text-xs text-muted-foreground">
+            {{ t('common.noActionsFound') }}
           </div>
         </div>
       </ScrollArea>

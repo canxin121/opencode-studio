@@ -78,6 +78,7 @@ const props = defineProps<{
 
   cleanUntracked: (includeIgnored: boolean) => void
   discardAllTracked: () => void
+  revertAllChanges: () => void
 
   openGitTerminalWithCommand: (repoDir: string, gitCmd: string) => void
   terminalCommandForCommit: (message: string) => string
@@ -452,6 +453,16 @@ const sourceControlActionGroups = computed<OptionMenuGroup[]>(() => [
         confirmText: t('common.discard'),
         cancelText: t('common.cancel'),
       },
+      {
+        id: 'revert-all-changes',
+        label: `${t('git.actionsMenu.cleanup.discardAllTracked.label')} + ${t('git.actionsMenu.cleanup.cleanUntracked.label')}`,
+        description: `${t('git.actionsMenu.cleanup.discardAllTracked.description')} + ${t('git.actionsMenu.cleanup.cleanUntracked.description')}`,
+        variant: 'destructive',
+        confirmTitle: t('git.actionsMenu.cleanup.cleanUntracked.confirmTitle'),
+        confirmDescription: `${t('git.actionsMenu.cleanup.discardAllTracked.confirmDescription')} ${t('git.actionsMenu.cleanup.cleanUntracked.confirmDescription')}`,
+        confirmText: t('common.discard'),
+        cancelText: t('common.cancel'),
+      },
     ],
   },
 ])
@@ -515,6 +526,7 @@ function runSourceControlAction(item: OptionMenuItem) {
   if (id === 'clean-untracked') return closeActionsThen(() => props.cleanUntracked(false))
   if (id === 'clean-all') return closeActionsThen(() => props.cleanUntracked(true))
   if (id === 'discard-all-tracked') return closeActionsThen(props.discardAllTracked)
+  if (id === 'revert-all-changes') return closeActionsThen(props.revertAllChanges)
 }
 </script>
 

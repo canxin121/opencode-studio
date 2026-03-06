@@ -203,6 +203,7 @@ const {
   ignorePath,
   cleanUntracked,
   discardAllTracked,
+  revertAllChanges,
   stageAll,
   stageAllTracked,
   stageAllUntracked,
@@ -1488,6 +1489,7 @@ void diffPaneRef
       :stashPushStagedQuick="stashPushStagedQuick"
       :cleanUntracked="cleanUntracked"
       :discardAllTracked="discardAllTracked"
+      :revertAllChanges="revertAllChanges"
       :openGitTerminalWithCommand="openGitTerminalWithCommand"
       :terminalCommandForCommit="terminalCommandForCommit"
     />
