@@ -10,7 +10,12 @@ import { normalizeDirForCompare } from '@/features/sessions/model/labels'
 import type { SseEvent } from '@/lib/sse'
 import { defaultChatSidebarUiPrefs, patchChatSidebarUiPrefs, type ChatSidebarUiPrefs } from '@/data/chatSidebarUiPrefs'
 
-import { normalizeRuntime, runtimeIsActive, type SessionRuntimeState } from './directorySessionRuntime'
+import {
+  normalizeRuntime,
+  runtimeIsActive,
+  runtimeStateEquivalent,
+  type SessionRuntimeState,
+} from './directorySessionRuntime'
 import type { JsonObject as UnknownRecord, JsonValue } from '@/types/json'
 
 type ChatSidebarStateWire = {
@@ -182,6 +187,180 @@ function isStaleAuthoritativePrefs(
 
 function normalizePath(path: string): string {
   return normalizeDirForCompare(path)
+}
+
+function jsonValueEquivalent(left: JsonValue | undefined, right: JsonValue | undefined): boolean {
+  if (Object.is(left, right)) return true
+  if (typeof left !== typeof right) return false
+  if (left === null || right === null) return left === right
+
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right)) return false
+    if (left.length !== right.length) return false
+    for (let i = 0; i < left.length; i += 1) {
+      if (!jsonValueEquivalent(left[i], right[i])) return false
+    }
+    return true
+  }
+
+  if (typeof left === 'object' && typeof right === 'object') {
+    const leftRecord = left as UnknownRecord
+    const rightRecord = right as UnknownRecord
+    const leftKeys = Object.keys(leftRecord)
+    const rightKeys = Object.keys(rightRecord)
+    if (leftKeys.length !== rightKeys.length) return false
+    for (const key of leftKeys) {
+      if (!hasOwn(rightRecord, key)) return false
+      if (!jsonValueEquivalent(leftRecord[key], rightRecord[key])) return false
+    }
+    return true
+  }
+
+  return false
+}
+
+function directoryEntryEquivalent(
+  left: DirectoryEntry | null | undefined,
+  right: DirectoryEntry | null | undefined,
+): boolean {
+  if (!left && !right) return true
+  if (!left || !right) return false
+  return left.id === right.id && left.path === right.path && left.label === right.label
+}
+
+function sessionRowEquivalent(
+  left: SidebarSessionRow | null | undefined,
+  right: SidebarSessionRow | null | undefined,
+): boolean {
+  if (!left && !right) return true
+  if (!left || !right) return false
+  return (
+    left.id === right.id &&
+    left.renderKey === right.renderKey &&
+    left.depth === right.depth &&
+    left.parentId === right.parentId &&
+    left.rootId === right.rootId &&
+    left.isParent === right.isParent &&
+    left.isExpanded === right.isExpanded &&
+    directoryEntryEquivalent(left.directory, right.directory) &&
+    jsonValueEquivalent(left.session as JsonValue | undefined, right.session as JsonValue | undefined)
+  )
+}
+
+function sessionRowsEquivalent(left: SidebarSessionRow[], right: SidebarSessionRow[]): boolean {
+  if (left === right) return true
+  if (left.length !== right.length) return false
+  for (let i = 0; i < left.length; i += 1) {
+    if (!sessionRowEquivalent(left[i], right[i])) return false
+  }
+  return true
+}
+
+function stringArraysEquivalent(left: string[], right: string[]): boolean {
+  if (left === right) return true
+  if (left.length !== right.length) return false
+  for (let i = 0; i < left.length; i += 1) {
+    if (left[i] !== right[i]) return false
+  }
+  return true
+}
+
+function nullableStringRecordEquivalent(
+  left: Record<string, string | null>,
+  right: Record<string, string | null>,
+): boolean {
+  const leftKeys = Object.keys(left)
+  const rightKeys = Object.keys(right)
+  if (leftKeys.length !== rightKeys.length) return false
+  for (const key of leftKeys) {
+    if (!hasOwn(right, key)) return false
+    if (left[key] !== right[key]) return false
+  }
+  return true
+}
+
+function footerViewEquivalent(left: SidebarFooterView, right: SidebarFooterView): boolean {
+  return (
+    left.total === right.total &&
+    left.page === right.page &&
+    left.pageCount === right.pageCount &&
+    sessionRowsEquivalent(left.rows, right.rows)
+  )
+}
+
+function directorySidebarViewEquivalent(left: DirectorySidebarView, right: DirectorySidebarView): boolean {
+  return (
+    left.sessionCount === right.sessionCount &&
+    left.rootPage === right.rootPage &&
+    left.rootPageCount === right.rootPageCount &&
+    left.hasActiveOrBlocked === right.hasActiveOrBlocked &&
+    sessionRowsEquivalent(left.pinnedRows, right.pinnedRows) &&
+    sessionRowsEquivalent(left.recentRows, right.recentRows) &&
+    nullableStringRecordEquivalent(left.recentParentById, right.recentParentById) &&
+    stringArraysEquivalent(left.recentRootIds, right.recentRootIds)
+  )
+}
+
+function directorySidebarByIdEquivalent(
+  left: Record<string, DirectorySidebarView>,
+  right: Record<string, DirectorySidebarView>,
+): boolean {
+  const leftKeys = Object.keys(left)
+  const rightKeys = Object.keys(right)
+  if (leftKeys.length !== rightKeys.length) return false
+  for (const key of leftKeys) {
+    if (!hasOwn(right, key)) return false
+    if (!directorySidebarViewEquivalent(left[key], right[key])) return false
+  }
+  return true
+}
+
+function runtimeMapEquivalent(
+  left: Record<string, SessionRuntimeState>,
+  right: Record<string, SessionRuntimeState>,
+): boolean {
+  const leftKeys = Object.keys(left)
+  const rightKeys = Object.keys(right)
+  if (leftKeys.length !== rightKeys.length) return false
+  for (const key of leftKeys) {
+    if (!hasOwn(right, key)) return false
+    if (!runtimeStateEquivalent(left[key], right[key])) return false
+    if (left[key].updatedAt !== right[key].updatedAt) return false
+  }
+  return true
+}
+
+function sidebarFocusEquivalent(left: SidebarFocusedSession | null, right: SidebarFocusedSession | null): boolean {
+  if (!left && !right) return true
+  if (!left || !right) return false
+  return (
+    left.sessionId === right.sessionId &&
+    left.directoryId === right.directoryId &&
+    left.directoryPath === right.directoryPath
+  )
+}
+
+function directoryEntriesEquivalent(left: DirectoryEntry[], right: DirectoryEntry[]): boolean {
+  if (left === right) return true
+  if (left.length !== right.length) return false
+  for (let i = 0; i < left.length; i += 1) {
+    if (!directoryEntryEquivalent(left[i], right[i])) return false
+  }
+  return true
+}
+
+function directoryEntriesByIdEquivalent(
+  left: Record<string, DirectoryEntry>,
+  right: Record<string, DirectoryEntry>,
+): boolean {
+  const leftKeys = Object.keys(left)
+  const rightKeys = Object.keys(right)
+  if (leftKeys.length !== rightKeys.length) return false
+  for (const key of leftKeys) {
+    if (!hasOwn(right, key)) return false
+    if (!directoryEntryEquivalent(left[key], right[key])) return false
+  }
+  return true
 }
 
 function directoryEntryByPath(path: string, directoriesById: Record<string, DirectoryEntry>): DirectoryEntry | null {
@@ -482,15 +661,23 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
       order.push(id)
     }
 
-    directoriesById.value = nextById
-    directoryOrder.value = order
+    if (!directoryEntriesByIdEquivalent(directoriesById.value, nextById)) {
+      directoriesById.value = nextById
+    }
+    if (!stringArraysEquivalent(directoryOrder.value, order)) {
+      directoryOrder.value = order
+    }
   }
 
   function applyAuthoritativeUiPrefs(incomingRaw: Partial<ChatSidebarUiPrefs> | null | undefined): boolean {
     if (isStaleAuthoritativePrefs(incomingRaw, uiPrefs.value)) {
       return false
     }
-    uiPrefs.value = normalizeUiPrefs(incomingRaw)
+    const next = normalizeUiPrefs(incomingRaw)
+    if (jsonValueEquivalent(uiPrefs.value as JsonValue, next as JsonValue)) {
+      return false
+    }
+    uiPrefs.value = next
     return true
   }
 
@@ -613,17 +800,25 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     const entries = normalizeDirectories((directoriesPage?.items as JsonValue) || [])
     setDirectoryEntries(entries)
 
-    directoryPageRows.value = entries
-    directoryPageTotal.value =
+    if (!directoryEntriesEquivalent(directoryPageRows.value, entries)) {
+      directoryPageRows.value = entries
+    }
+    const nextDirectoryPageTotal =
       typeof directoriesPage?.total === 'number' && Number.isFinite(directoriesPage.total)
         ? Math.max(0, Math.floor(directoriesPage.total))
         : entries.length
+    if (directoryPageTotal.value !== nextDirectoryPageTotal) {
+      directoryPageTotal.value = nextDirectoryPageTotal
+    }
 
     const offsetRaw = Number(directoriesPage?.offset)
     const limitRaw = Number(directoriesPage?.limit)
     const offset = Number.isFinite(offsetRaw) ? Math.max(0, Math.floor(offsetRaw)) : 0
     const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.max(1, Math.floor(limitRaw)) : 1
-    directoriesPageIndex.value = Math.max(0, Math.floor(offset / limit))
+    const nextPageIndex = Math.max(0, Math.floor(offset / limit))
+    if (directoriesPageIndex.value !== nextPageIndex) {
+      directoriesPageIndex.value = nextPageIndex
+    }
 
     return entries
   }
@@ -639,13 +834,24 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
 
     const normalizedView = normalizeSidebarView(stateRecord.view as JsonValue)
 
-    runtimeBySessionId.value = parseRuntimeMap(
+    const nextRuntimeBySessionId = parseRuntimeMap(
       (stateRecord.runtimeBySessionId ?? stateRecord.runtime_by_session_id) as JsonValue,
     )
-    directorySidebarById.value = normalizedView.directorySidebarById
-    pinnedFooterView.value = normalizedView.pinnedFooterView
-    recentFooterView.value = normalizedView.recentFooterView
-    runningFooterView.value = normalizedView.runningFooterView
+    if (!runtimeMapEquivalent(runtimeBySessionId.value, nextRuntimeBySessionId)) {
+      runtimeBySessionId.value = nextRuntimeBySessionId
+    }
+    if (!directorySidebarByIdEquivalent(directorySidebarById.value, normalizedView.directorySidebarById)) {
+      directorySidebarById.value = normalizedView.directorySidebarById
+    }
+    if (!footerViewEquivalent(pinnedFooterView.value, normalizedView.pinnedFooterView)) {
+      pinnedFooterView.value = normalizedView.pinnedFooterView
+    }
+    if (!footerViewEquivalent(recentFooterView.value, normalizedView.recentFooterView)) {
+      recentFooterView.value = normalizedView.recentFooterView
+    }
+    if (!footerViewEquivalent(runningFooterView.value, normalizedView.runningFooterView)) {
+      runningFooterView.value = normalizedView.runningFooterView
+    }
 
     const focusRecord = asRecord(stateRecord.focus as JsonValue)
     const focusSid =
@@ -666,7 +872,7 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
         : typeof focusRecord?.directory_path === 'string'
           ? focusRecord.directory_path.trim()
           : ''
-    sidebarStateFocus.value =
+    const nextFocus =
       focusSid && focusDid && focusPath
         ? {
             sessionId: focusSid,
@@ -674,6 +880,9 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
             directoryPath: focusPath,
           }
         : null
+    if (!sidebarFocusEquivalent(sidebarStateFocus.value, nextFocus)) {
+      sidebarStateFocus.value = nextFocus
+    }
   }
 
   async function revalidateFromStateApi(opts?: SidebarStateQuery): Promise<void> {
@@ -849,10 +1058,15 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     if (appliedDirectoryViews.size > 0) {
       const nextDirectoryRowsById = { ...directorySidebarById.value }
       const nextSessionRootPageByDirectoryId = { ...uiPrefs.value.sessionRootPageByDirectoryId }
+      let hasDirectoryViewChange = false
       let hasPrefsChange = false
 
       for (const [directoryId, section] of appliedDirectoryViews.entries()) {
-        nextDirectoryRowsById[directoryId] = section
+        const previousSection = directorySidebarById.value[directoryId]
+        if (!previousSection || !directorySidebarViewEquivalent(previousSection, section)) {
+          nextDirectoryRowsById[directoryId] = section
+          hasDirectoryViewChange = true
+        }
         const previousRootPage = Math.max(
           0,
           Math.floor(Number(uiPrefs.value.sessionRootPageByDirectoryId[directoryId] || 0)),
@@ -863,7 +1077,9 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
         }
       }
 
-      directorySidebarById.value = nextDirectoryRowsById
+      if (hasDirectoryViewChange) {
+        directorySidebarById.value = nextDirectoryRowsById
+      }
       if (hasPrefsChange) {
         uiPrefs.value = normalizeUiPrefs({
           ...uiPrefs.value,
