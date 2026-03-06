@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "bun run check:imports && vue-tsc -b && vite build",
-    "build:rust-debug": "bun run check:imports && vue-tsc -b && vite build --mode rust-debug",
+    "build": "bun run check:imports && bun run vue-tsc -b && vite build",
+    "build:rust-debug": "bun run check:imports && bun run vue-tsc -b && vite build --mode rust-debug",
     "check:imports": "node ./scripts/check-import-rules.mjs",
     "fmt": "bun ./node_modules/prettier/bin/prettier.cjs -w .",
     "fmt:check": "bun ./node_modules/prettier/bin/prettier.cjs -c .",

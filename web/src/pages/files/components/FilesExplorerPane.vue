@@ -294,7 +294,10 @@ function queueDirectoryAutoExpand(path: string) {
   }, DRAG_AUTO_EXPAND_DELAY_MS)
 }
 
-function resolveDragTarget(clientX: number, clientY: number): {
+function resolveDragTarget(
+  clientX: number,
+  clientY: number,
+): {
   targetDir: string
   targetDirectoryPath: string
   overExplorer: boolean
@@ -1141,8 +1144,12 @@ onBeforeUnmount(() => {
                       ? '!border-primary/60 !bg-primary/12 !text-foreground'
                       : '',
                     dragSourcePath === entry.row.node.path ? 'oc-tree-drag-source' : '',
-                    dragFeedbackPath === entry.row.node.path && dragFeedbackKind === 'invalid' ? 'oc-tree-drop-invalid' : '',
-                    dragFeedbackPath === entry.row.node.path && dragFeedbackKind === 'success' ? 'oc-tree-drop-success' : '',
+                    dragFeedbackPath === entry.row.node.path && dragFeedbackKind === 'invalid'
+                      ? 'oc-tree-drop-invalid'
+                      : '',
+                    dragFeedbackPath === entry.row.node.path && dragFeedbackKind === 'success'
+                      ? 'oc-tree-drop-success'
+                      : '',
                   ]"
                 >
                   <template #icon>
@@ -1208,8 +1215,12 @@ onBeforeUnmount(() => {
                       ? '!border-primary/60 !bg-primary/12 !text-foreground'
                       : '',
                     dragSourcePath === entry.row.node.path ? 'oc-tree-drag-source' : '',
-                    dragFeedbackPath === entry.row.node.path && dragFeedbackKind === 'invalid' ? 'oc-tree-drop-invalid' : '',
-                    dragFeedbackPath === entry.row.node.path && dragFeedbackKind === 'success' ? 'oc-tree-drop-success' : '',
+                    dragFeedbackPath === entry.row.node.path && dragFeedbackKind === 'invalid'
+                      ? 'oc-tree-drop-invalid'
+                      : '',
+                    dragFeedbackPath === entry.row.node.path && dragFeedbackKind === 'success'
+                      ? 'oc-tree-drop-success'
+                      : '',
                   ]"
                   @click="handleTreeNodeClick($event, entry.row.node)"
                   @pointerdown="onRowPointerDown($event, entry.row.node)"
