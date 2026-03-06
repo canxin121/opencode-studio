@@ -253,8 +253,6 @@ function Resolve-InstallerProfileContext {
     Home = $profileHome
     AppData = $appData
     LocalAppData = $localAppData
-    XdgConfigHome = $homeConfigDir
-    XdgDataHome = Join-Path (Join-Path $profileHome ".local") "share"
     StudioDataDir = Join-Path $appData "opencode-studio"
     OpenCodeConfig = $openCodeConfig
   }
@@ -266,8 +264,6 @@ function Get-ServiceEnvironmentPairs([hashtable]$ProfileContext) {
     "USERPROFILE=$($ProfileContext.Home)",
     "APPDATA=$($ProfileContext.AppData)",
     "LOCALAPPDATA=$($ProfileContext.LocalAppData)",
-    "XDG_CONFIG_HOME=$($ProfileContext.XdgConfigHome)",
-    "XDG_DATA_HOME=$($ProfileContext.XdgDataHome)",
     "OPENCODE_STUDIO_DATA_DIR=$($ProfileContext.StudioDataDir)"
   )
 

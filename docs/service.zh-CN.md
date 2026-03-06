@@ -162,8 +162,8 @@ iex "& { $(irm https://raw.githubusercontent.com/canxin121/opencode-studio/maste
 Windows 安装脚本会写入 `skip_opencode_start = true` 与 `opencode_port = 16000`，并通过
 `OpenCodeStudio-OpenCode` 伴随服务托管 OpenCode。
 为保证与桌面版一致，安装脚本还会向两个 Windows 服务注入用户目录相关环境变量
-（`HOME`、`APPDATA`、`LOCALAPPDATA`、`XDG_CONFIG_HOME`、`XDG_DATA_HOME`，以及可选的
-`OPENCODE_CONFIG`）。
+（`HOME`、`USERPROFILE`、`APPDATA`、`LOCALAPPDATA`、`OPENCODE_STUDIO_DATA_DIR`，以及可选
+的 `OPENCODE_CONFIG`）。
 
 安装脚本生成的服务单元会显式使用：
 `--config <install-root>/opencode-studio.toml`。

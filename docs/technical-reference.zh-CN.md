@@ -138,8 +138,8 @@ Windows 安装补充说明：
 - 首次运行若未检测到 NSSM，会自动下载并落地到 `<install-root>\\tools\\nssm.exe`。
 - 读取 GitHub Release 元数据时支持 `GITHUB_TOKEN` / `GH_TOKEN`，可降低 API 限流风险。
 - 生成的 Windows 配置默认 `skip_opencode_start = true` 且 `opencode_port = 16000`。
-- 安装器会向两个 Windows 服务注入用户目录相关环境变量（`HOME`、`APPDATA`、
-  `LOCALAPPDATA`、`XDG_CONFIG_HOME`、`XDG_DATA_HOME`，以及可选 `OPENCODE_CONFIG`），
+- 安装器会向两个 Windows 服务注入用户目录相关环境变量（`HOME`、`USERPROFILE`、
+  `APPDATA`、`LOCALAPPDATA`、`OPENCODE_STUDIO_DATA_DIR`，以及可选 `OPENCODE_CONFIG`），
   以便 OpenCode/Studio 读取与桌面版一致的用户配置路径。
 
 ### Unix 卸载脚本（`scripts/uninstall-service.sh`）

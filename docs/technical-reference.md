@@ -138,9 +138,9 @@ Windows installer notes:
 - First run downloads NSSM if absent, then persists it at `<install-root>\\tools\\nssm.exe`.
 - `GITHUB_TOKEN`/`GH_TOKEN` are honored for GitHub API calls to reduce rate-limit risk.
 - Generated Windows config defaults `skip_opencode_start = true` and `opencode_port = 16000`.
-- Installer injects user-profile environment variables into both Windows services (`HOME`, `APPDATA`,
-  `LOCALAPPDATA`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, and optional `OPENCODE_CONFIG`) so
-  OpenCode/Studio can resolve the same user config paths as desktop mode.
+- Installer injects user-profile environment variables into both Windows services (`HOME`,
+  `USERPROFILE`, `APPDATA`, `LOCALAPPDATA`, `OPENCODE_STUDIO_DATA_DIR`, and optional
+  `OPENCODE_CONFIG`) so OpenCode/Studio can resolve the same user config paths as desktop mode.
 
 ### Unix uninstaller (`scripts/uninstall-service.sh`)
 
