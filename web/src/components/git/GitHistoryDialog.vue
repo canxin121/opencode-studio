@@ -15,6 +15,7 @@ import DiffViewer from '@/components/DiffViewer.vue'
 import { formatDateTimeYMDHM } from '@/i18n/intl'
 
 import type { GitCommitFile, GitLogCommit } from '@/types/git'
+import { summarizeCommitFiles } from '@/pages/git/gitViewModelUtils'
 
 const { t } = useI18n()
 
@@ -91,6 +92,7 @@ const selectedMeta = computed(() => {
 const selectedRefs = computed(() => props.selected?.refs || [])
 const selectedFileLabel = computed(() => props.selectedFile?.path || '')
 const refOptions = computed(() => (props.filterRefType === 'tag' ? props.tagOptions : props.branchOptions))
+const selectedDiffSummary = computed(() => summarizeCommitFiles(props.files || []))
 
 const filterRefTypePickerOptions = computed<PickerOption[]>(() => [
   { value: 'branch', label: t('git.ui.dialogs.history.refType.branch') },
@@ -321,6 +323,11 @@ function onFilterRefTypeChange(value: string | number) {
             </div>
             <div class="text-[11px] text-muted-foreground">{{ selectedMeta }}</div>
             <div class="text-[11px] text-muted-foreground font-mono">{{ selected.hash }}</div>
+            <div class="text-[11px] text-muted-foreground font-mono">
+              {{ t('common.files') }}: {{ selectedDiffSummary.files }} · +{{ selectedDiffSummary.insertions }} -{{
+                selectedDiffSummary.deletions
+              }}
+            </div>
             <div v-if="selected.body" class="text-[11px] text-muted-foreground whitespace-pre-wrap">
               {{ selected.body }}
             </div>

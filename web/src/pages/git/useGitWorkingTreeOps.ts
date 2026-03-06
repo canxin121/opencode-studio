@@ -199,6 +199,31 @@ export function useGitWorkingTreeOps(opts: {
     })
   }
 
+  async function revertAllChanges() {
+    const dir = root.value
+    if (!dir) return
+    await withRepoBusy('Revert all changes', async () => {
+      try {
+        await gitJson('clean', dir, undefined, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ scope: 'tracked' }),
+        })
+        await gitJson('clean', dir, undefined, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ scope: 'untracked' }),
+        })
+        toasts.push('success', i18n.global.t('git.toasts.changesDiscarded'))
+        await load()
+        refreshDiff()
+      } catch (err) {
+        if (handleGitBusy(err, 'Revert all changes', revertAllChanges)) return
+        toasts.push('error', err instanceof Error ? err.message : String(err))
+      }
+    })
+  }
+
   async function revertFile(path: string) {
     const dir = root.value
     if (!dir) return
@@ -255,6 +280,7 @@ export function useGitWorkingTreeOps(opts: {
     unstageAll,
     cleanUntracked,
     discardAllTracked,
+    revertAllChanges,
     revertFile,
     ignorePath,
   }
