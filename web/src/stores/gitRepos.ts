@@ -8,7 +8,7 @@ const CLOSED_STORAGE_KEY = localStorageKeys.git.closedReposByProject
 
 type Map = Record<string, string>
 type GitDiffSource = 'working' | 'staged'
-type MobileGitOpenItem = { path: string; source: GitDiffSource }
+type GitOpenItem = { path: string; source: GitDiffSource }
 
 function isRecord(value: JsonLike): value is Record<string, JsonLike> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -34,7 +34,7 @@ function toStringMap(raw: Record<string, JsonLike>): Map {
 export const useGitReposStore = defineStore('gitRepos', () => {
   const selectedByProject = ref<Map>({})
   const closedByProject = ref<Record<string, string[]>>({})
-  const mobileOpenItemByRepo = ref<Record<string, MobileGitOpenItem>>({})
+  const openItemByRepo = ref<Record<string, GitOpenItem>>({})
 
   // Hydrate once on first use.
   try {
@@ -124,10 +124,10 @@ export const useGitReposStore = defineStore('gitRepos', () => {
     persistClosed()
   }
 
-  function getMobileOpenItem(repoRoot: string | null | undefined): MobileGitOpenItem | null {
+  function getOpenItem(repoRoot: string | null | undefined): GitOpenItem | null {
     const key = (repoRoot || '').trim()
     if (!key) return null
-    const state = mobileOpenItemByRepo.value[key]
+    const state = openItemByRepo.value[key]
     if (!state) return null
     const path = (state.path || '').trim()
     if (!path) return null
@@ -137,21 +137,29 @@ export const useGitReposStore = defineStore('gitRepos', () => {
     }
   }
 
-  function setMobileOpenItem(repoRoot: string | null | undefined, path: string | null, source: GitDiffSource) {
+  function setOpenItem(repoRoot: string | null | undefined, path: string | null, source: GitDiffSource) {
     const key = (repoRoot || '').trim()
     if (!key) return
     const nextPath = (path || '').trim()
     if (!nextPath) {
-      if (!mobileOpenItemByRepo.value[key]) return
-      const next = { ...mobileOpenItemByRepo.value }
+      if (!openItemByRepo.value[key]) return
+      const next = { ...openItemByRepo.value }
       delete next[key]
-      mobileOpenItemByRepo.value = next
+      openItemByRepo.value = next
       return
     }
-    mobileOpenItemByRepo.value = {
-      ...mobileOpenItemByRepo.value,
+    openItemByRepo.value = {
+      ...openItemByRepo.value,
       [key]: { path: nextPath, source: source === 'staged' ? 'staged' : 'working' },
     }
+  }
+
+  function getMobileOpenItem(repoRoot: string | null | undefined): GitOpenItem | null {
+    return getOpenItem(repoRoot)
+  }
+
+  function setMobileOpenItem(repoRoot: string | null | undefined, path: string | null, source: GitDiffSource) {
+    setOpenItem(repoRoot, path, source)
   }
 
   return {
@@ -160,6 +168,8 @@ export const useGitReposStore = defineStore('gitRepos', () => {
     getClosedRelatives,
     closeRepo,
     reopenRepo,
+    getOpenItem,
+    setOpenItem,
     getMobileOpenItem,
     setMobileOpenItem,
   }

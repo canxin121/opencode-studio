@@ -283,32 +283,29 @@ const { selectedFile, diffSource, selectedIsConflict, selectFile } = useGitDiffS
   refresh: refreshDiff,
 })
 
-const restoringMobileOpenItem = ref(false)
+const restoringOpenItem = ref(false)
 
 watch(
-  () => [ui.isMobile, repoRoot.value] as const,
-  (next, old) => {
-    const [isMobile, nextRepo] = next
-    const [prevIsMobile, prevRepo] = old ?? [null, null]
+  () => repoRoot.value,
+  (nextRepo, prevRepo) => {
     const nextKey = (nextRepo || '').trim()
     const prevKey = (prevRepo || '').trim()
-    if (isMobile === prevIsMobile && nextKey === prevKey) return
-    if (!isMobile || !nextKey) return
+    if (nextKey === prevKey || !nextKey) return
 
-    const saved = gitRepos.getMobileOpenItem(nextKey)
-    restoringMobileOpenItem.value = true
+    const saved = gitRepos.getOpenItem(nextKey)
+    restoringOpenItem.value = true
     selectedFile.value = saved?.path || null
     diffSource.value = saved?.source || 'working'
-    restoringMobileOpenItem.value = false
+    restoringOpenItem.value = false
   },
   { immediate: true },
 )
 
 watch(
-  () => [ui.isMobile, repoRoot.value, selectedFile.value, diffSource.value] as const,
-  ([isMobile, repo, path, source]) => {
-    if (!isMobile || restoringMobileOpenItem.value) return
-    gitRepos.setMobileOpenItem(repo, path, source)
+  () => [repoRoot.value, selectedFile.value, diffSource.value] as const,
+  ([repo, path, source]) => {
+    if (restoringOpenItem.value) return
+    gitRepos.setOpenItem(repo, path, source)
   },
 )
 

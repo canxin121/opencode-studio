@@ -1008,8 +1008,7 @@ function buildFileNode(path: string): FileNode {
   }
 }
 
-async function restoreMobileSelectedFile(rootPath: string, seq: number) {
-  if (!isMobile.value) return
+async function restoreSelectedFile(rootPath: string, seq: number) {
   if (isStaleRootRestore(seq, rootPath)) return
 
   const selectedPath = normalizePath(String(restoredSelectedFilePath.value || '').trim())
@@ -2817,7 +2816,7 @@ async function restoreForRoot(next: string) {
     if (isStaleRootRestore(seq, next)) return
   }
 
-  await restoreMobileSelectedFile(next, seq)
+  await restoreSelectedFile(next, seq)
 }
 
 watch(
