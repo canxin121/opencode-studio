@@ -6,10 +6,17 @@ import { getLocalString, setLocalString } from '@/lib/persist'
 import { localStorageKeys } from '@/lib/persistence/storageKeys'
 
 export type MainTab = MainTabId
+export type WorkspaceDockPanel = 'git' | 'terminal'
+export type WorkspaceDockPlacement = 'right' | 'bottom'
 
 const STORAGE_SIDEBAR_OPEN = localStorageKeys.ui.sidebarOpen
 const STORAGE_SIDEBAR_WIDTH = localStorageKeys.ui.sidebarWidth
 const STORAGE_ACTIVE_TAB = localStorageKeys.ui.activeMainTab
+const STORAGE_WORKSPACE_DOCK_OPEN = localStorageKeys.ui.workspaceDockOpen
+const STORAGE_WORKSPACE_DOCK_PANEL = localStorageKeys.ui.workspaceDockPanel
+const STORAGE_WORKSPACE_DOCK_PLACEMENT = localStorageKeys.ui.workspaceDockPlacement
+const STORAGE_WORKSPACE_DOCK_WIDTH = localStorageKeys.ui.workspaceDockWidth
+const STORAGE_WORKSPACE_DOCK_HEIGHT = localStorageKeys.ui.workspaceDockHeight
 
 export const useUiStore = defineStore('ui', () => {
   const isMobile = ref(false)
@@ -41,6 +48,41 @@ export const useUiStore = defineStore('ui', () => {
   const sidebarLocateSessionId = ref<string | null>(null)
 
   const effectiveSidebarWidth = computed(() => (isSidebarOpen.value && !isMobile.value ? sidebarWidth.value : 0))
+
+  const isWorkspaceDockOpen = ref(getLocalString(STORAGE_WORKSPACE_DOCK_OPEN) === 'true')
+  watch(isWorkspaceDockOpen, (v) => setLocalString(STORAGE_WORKSPACE_DOCK_OPEN, v ? 'true' : 'false'))
+
+  const workspaceDockPanel = ref<WorkspaceDockPanel>(
+    getLocalString(STORAGE_WORKSPACE_DOCK_PANEL) === 'terminal' ? 'terminal' : 'git',
+  )
+  watch(workspaceDockPanel, (v) => setLocalString(STORAGE_WORKSPACE_DOCK_PANEL, v))
+
+  const workspaceDockPlacement = ref<WorkspaceDockPlacement>(
+    getLocalString(STORAGE_WORKSPACE_DOCK_PLACEMENT) === 'bottom' ? 'bottom' : 'right',
+  )
+  watch(workspaceDockPlacement, (v) => setLocalString(STORAGE_WORKSPACE_DOCK_PLACEMENT, v))
+
+  const workspaceDockWidth = ref<number>(
+    (() => {
+      const raw = getLocalString(STORAGE_WORKSPACE_DOCK_WIDTH)
+      const n = raw ? Number(raw) : NaN
+      return Number.isFinite(n) ? Math.min(620, Math.max(280, n)) : 360
+    })(),
+  )
+  watch(workspaceDockWidth, (v) => {
+    setLocalString(STORAGE_WORKSPACE_DOCK_WIDTH, String(Math.min(620, Math.max(280, v))))
+  })
+
+  const workspaceDockHeight = ref<number>(
+    (() => {
+      const raw = getLocalString(STORAGE_WORKSPACE_DOCK_HEIGHT)
+      const n = raw ? Number(raw) : NaN
+      return Number.isFinite(n) ? Math.min(520, Math.max(180, n)) : 260
+    })(),
+  )
+  watch(workspaceDockHeight, (v) => {
+    setLocalString(STORAGE_WORKSPACE_DOCK_HEIGHT, String(Math.min(520, Math.max(180, v))))
+  })
 
   // Main tab state (kept in sync with router elsewhere)
   const activeMainTab = ref<MainTab>(
@@ -101,6 +143,27 @@ export const useUiStore = defineStore('ui', () => {
 
   function setSessionSwitcherOpen(open: boolean) {
     isSessionSwitcherOpen.value = open
+  }
+
+  function setWorkspaceDockOpen(open: boolean) {
+    isWorkspaceDockOpen.value = open
+  }
+
+  function toggleWorkspaceDock(defaultPanel: WorkspaceDockPanel = 'git') {
+    if (isWorkspaceDockOpen.value) {
+      isWorkspaceDockOpen.value = false
+      return
+    }
+    workspaceDockPanel.value = defaultPanel
+    isWorkspaceDockOpen.value = true
+  }
+
+  function setWorkspaceDockPanel(panel: WorkspaceDockPanel) {
+    workspaceDockPanel.value = panel
+  }
+
+  function setWorkspaceDockPlacement(placement: WorkspaceDockPlacement) {
+    workspaceDockPlacement.value = placement
   }
 
   function openAndLocateSessionInSidebar(sessionId: string | null) {
@@ -166,8 +229,13 @@ export const useUiStore = defineStore('ui', () => {
     sidebarWidth,
     effectiveSidebarWidth,
     isSessionSwitcherOpen,
+    isWorkspaceDockOpen,
     sidebarLocateSeq,
     sidebarLocateSessionId,
+    workspaceDockPanel,
+    workspaceDockPlacement,
+    workspaceDockWidth,
+    workspaceDockHeight,
     activeMainTab,
     isHelpDialogOpen,
     isMcpDialogOpen,
@@ -178,6 +246,10 @@ export const useUiStore = defineStore('ui', () => {
     setIsMobilePointer,
     toggleSidebar,
     setSessionSwitcherOpen,
+    setWorkspaceDockOpen,
+    toggleWorkspaceDock,
+    setWorkspaceDockPanel,
+    setWorkspaceDockPlacement,
     openAndLocateSessionInSidebar,
     clearSidebarLocateRequest,
     setActiveMainTab,

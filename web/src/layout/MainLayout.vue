@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import HelpDialog from '@/components/HelpDialog.vue'
 import McpDialog from '@/components/McpDialog.vue'
+import HorizontalSplitPane from '@/components/ui/HorizontalSplitPane.vue'
+import VerticalSplitPane from '@/components/ui/VerticalSplitPane.vue'
 import AppHeader from '@/layout/AppHeader.vue'
 import ChatSidebar from '@/layout/ChatSidebar.vue'
 import BottomNav from '@/layout/BottomNav.vue'
+import WorkspaceDockPanel from '@/layout/WorkspaceDockPanel.vue'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 
@@ -85,6 +88,13 @@ watch(
 
 const mobileBottomNavInset =
   'calc(var(--oc-bottom-nav-height, 56px) + var(--oc-safe-area-bottom, 0px) - clamp(0px, var(--oc-keyboard-inset, 0px), var(--oc-bottom-nav-height, 56px)))'
+
+const showWorkspaceRightDock = computed(
+  () => !ui.isMobile && ui.isWorkspaceDockOpen && ui.workspaceDockPlacement === 'right',
+)
+const showWorkspaceBottomDock = computed(
+  () => !ui.isMobile && ui.isWorkspaceDockOpen && ui.workspaceDockPlacement === 'bottom',
+)
 </script>
 
 <template>
@@ -133,7 +143,35 @@ const mobileBottomNavInset =
                 : undefined
             "
           >
-            <router-view />
+            <HorizontalSplitPane
+              v-if="showWorkspaceRightDock"
+              v-model="ui.workspaceDockWidth"
+              :min-width="280"
+              :max-width="620"
+            >
+              <template #left>
+                <router-view />
+              </template>
+              <template #right>
+                <WorkspaceDockPanel />
+              </template>
+            </HorizontalSplitPane>
+
+            <VerticalSplitPane
+              v-else-if="showWorkspaceBottomDock"
+              v-model="ui.workspaceDockHeight"
+              :min-height="180"
+              :max-height="520"
+            >
+              <template #top>
+                <router-view />
+              </template>
+              <template #bottom>
+                <WorkspaceDockPanel />
+              </template>
+            </VerticalSplitPane>
+
+            <router-view v-else />
           </main>
         </div>
       </div>
