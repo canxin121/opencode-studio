@@ -779,6 +779,86 @@ const mergeRebaseBranchOptions = computed(() => {
   return options
 })
 
+const branchMenuOpen = ref(false)
+const branchMenuQuery = ref('')
+
+const branchSwitcherOptions = computed<OptionMenuItem[]>(() => {
+  const map = (branches?.value?.branches ?? {}) as Record<string, { name?: string; current?: boolean }>
+  const options: OptionMenuItem[] = []
+
+  for (const branch of Object.values(map)) {
+    const name = String(branch?.name || '').trim()
+    if (!name || name.startsWith('remotes/') || name.endsWith('/HEAD')) continue
+    options.push({
+      id: name,
+      label: name,
+      checked: Boolean(branch?.current),
+      monospace: true,
+    })
+  }
+
+  if (options.length === 0) {
+    const current = String(status.value?.current || '').trim()
+    if (current) {
+      options.push({
+        id: current,
+        label: current,
+        checked: true,
+        monospace: true,
+      })
+    }
+  }
+
+  options.sort((a, b) => {
+    if (a.checked && !b.checked) return -1
+    if (!a.checked && b.checked) return 1
+    return a.label.localeCompare(b.label)
+  })
+
+  return options
+})
+
+const branchMenuGroups = computed<OptionMenuGroup[]>(() => {
+  return [
+    {
+      id: 'branches',
+      title: t('git.ui.dialogs.branches.sections.branches'),
+      items: branchSwitcherOptions.value,
+    },
+  ]
+})
+
+function toggleBranchMenu() {
+  const nextOpen = !branchMenuOpen.value
+  branchMenuOpen.value = nextOpen
+  if (!nextOpen) {
+    branchMenuQuery.value = ''
+    return
+  }
+  if (!branchesLoading.value) {
+    void loadBranches()
+  }
+}
+
+function setBranchMenuOpen(open: boolean) {
+  branchMenuOpen.value = open
+  if (!open) {
+    branchMenuQuery.value = ''
+    return
+  }
+  if (!branchesLoading.value) {
+    void loadBranches()
+  }
+}
+
+function onBranchMenuSelect(item: OptionMenuItem) {
+  const target = String(item.id || '').trim()
+  if (!target) return
+  const current = String(status.value?.current || '').trim()
+  if (current === target) return
+  void checkoutBranch(target)
+}
+
 const actionsMenuAnchorEl = ref<HTMLElement | null>(null)
 
 const embeddedView = ref<'list' | 'diff'>(props.embedded && selectedFile.value ? 'diff' : 'list')
@@ -904,34 +984,54 @@ void diffPaneRef
         <!-- Repository Selector -->
         <button
           type="button"
-          class="w-full flex items-center justify-between gap-2 rounded-sm border border-sidebar-border/60 bg-sidebar-accent/20 px-2 py-1.5 transition"
+          class="w-full flex items-center gap-2 rounded-sm border border-sidebar-border/60 bg-sidebar-accent/20 px-2 py-1.5 text-left transition"
           :class="projectRoot ? 'hover:bg-sidebar-accent/40' : 'opacity-70 cursor-not-allowed'"
           :disabled="!projectRoot"
           @click="repoPickerOpen = true"
         >
-          <div class="min-w-0 text-left">
-            <div class="text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
-              {{ t('git.ui.repository') }}
-            </div>
-            <div class="truncate font-mono text-[11px] text-foreground" :title="selectedRepoLabel">
-              {{ selectedRepoLabel }}
-            </div>
-          </div>
-          <div class="flex items-center gap-2">
-            <div v-if="reposLoading" class="text-[10px] text-muted-foreground">{{ t('common.scanning') }}</div>
-            <RiArrowDownSLine class="h-4 w-4 text-muted-foreground" />
-          </div>
+          <span class="shrink-0 text-[10px] uppercase tracking-[0.08em] text-muted-foreground">{{
+            t('git.ui.repository')
+          }}</span>
+          <span class="min-w-0 flex-1 truncate font-mono text-[11px] text-foreground" :title="selectedRepoLabel">{{
+            selectedRepoLabel
+          }}</span>
+          <span v-if="reposLoading" class="shrink-0 text-[10px] text-muted-foreground">{{ t('common.scanning') }}</span>
+          <RiArrowDownSLine class="h-4 w-4 shrink-0 text-muted-foreground" />
         </button>
 
         <div v-if="reposError" class="mt-1.5 text-xs text-destructive/90">
           {{ reposError }}
         </div>
 
-        <div v-if="gitReady" class="mt-1.5 flex items-center gap-1.5 px-0.5 text-[11px]">
-          <RiGitBranchLine class="h-3.5 w-3.5 shrink-0 text-primary" />
-          <span class="min-w-0 flex-1 truncate font-mono text-foreground/90" :title="status?.current">{{
-            headline
-          }}</span>
+        <div v-if="gitReady" class="mt-1.5">
+          <div class="relative">
+            <button
+              type="button"
+              class="w-full flex items-center gap-1.5 rounded-sm px-1 py-1 text-[11px] transition-colors hover:bg-sidebar-accent/40"
+              :disabled="repoBusy"
+              @click="toggleBranchMenu"
+            >
+              <RiGitBranchLine class="h-3.5 w-3.5 shrink-0 text-primary" />
+              <span class="min-w-0 flex-1 truncate text-left font-mono text-foreground/90" :title="status?.current">{{
+                headline
+              }}</span>
+              <RiArrowDownSLine class="h-4 w-4 shrink-0 text-muted-foreground" />
+            </button>
+
+            <OptionMenu
+              :open="branchMenuOpen"
+              :query="branchMenuQuery"
+              :groups="branchMenuGroups"
+              :title="t('git.ui.dialogs.branches.title')"
+              :mobile-title="t('git.ui.dialogs.branches.title')"
+              :is-mobile-pointer="ui.isMobilePointer"
+              desktop-placement="bottom-start"
+              desktop-class="w-72"
+              @update:open="setBranchMenuOpen"
+              @update:query="(v) => (branchMenuQuery = v)"
+              @select="onBranchMenuSelect"
+            />
+          </div>
         </div>
       </div>
 
