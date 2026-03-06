@@ -21,6 +21,17 @@ export function usePinnedScroll(opts: {
 
   const isAtBottom = ref(true)
 
+  function remainingToBottomPx(): number {
+    const el = scrollEl.value
+    if (!el) return Number.POSITIVE_INFINITY
+    return el.scrollHeight - el.scrollTop - el.clientHeight
+  }
+
+  function isNearBottomNow(extraThresholdPx = 0): boolean {
+    const threshold = Math.max(0, bottomThreshold + Math.max(0, Math.floor(extraThresholdPx)))
+    return remainingToBottomPx() < threshold
+  }
+
   // Used by the page to temporarily hide the list while performing a stable bottom landing.
   const pendingInitialScrollSessionId = ref<string | null>(null)
   let initialScrollNonce = 0
@@ -64,7 +75,10 @@ export function usePinnedScroll(opts: {
     if (scrollRaf) return
     scrollRaf = window.requestAnimationFrame(async () => {
       scrollRaf = null
-      if (!isAtBottom.value) return
+      // Preserve follow behavior when browser restores from background with a
+      // stale scroll flag but the viewport is still effectively at bottom.
+      if (!isAtBottom.value && !isNearBottomNow(48)) return
+      isAtBottom.value = true
       await nextTick()
       scrollToBottom('auto')
     })
@@ -139,10 +153,8 @@ export function usePinnedScroll(opts: {
   }
 
   function handleScroll() {
-    const el = scrollEl.value
-    if (!el) return
-    const remaining = el.scrollHeight - el.scrollTop - el.clientHeight
-    isAtBottom.value = remaining < bottomThreshold
+    if (!scrollEl.value) return
+    isAtBottom.value = isNearBottomNow()
     opts.onScroll?.()
     void maybeLoadOlder()
   }

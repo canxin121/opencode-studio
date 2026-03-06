@@ -1,4 +1,4 @@
-import { computed, nextTick, ref, type Ref } from 'vue'
+import { computed, nextTick, ref, watch, type Ref } from 'vue'
 
 import { usePinnedScroll } from '@/composables/chat/usePinnedScroll'
 
@@ -65,6 +65,41 @@ export function useChatScrollNav(opts: {
   const navIndex = ref(0)
   let navRaf: number | null = null
   let navLockUntil = 0
+  const pendingPrevAnchorId = ref('')
+  const pendingPrevSessionId = ref('')
+
+  function sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+      window.setTimeout(resolve, ms)
+    })
+  }
+
+  function clearPendingPrevNavigation() {
+    pendingPrevAnchorId.value = ''
+    pendingPrevSessionId.value = ''
+  }
+
+  async function waitForHistoryLoadToSettle(sessionId: string, maxWaitMs = 1400): Promise<boolean> {
+    const sid = String(sessionId || '').trim()
+    if (!sid) return false
+
+    const startedAt = Date.now()
+    let settledTicks = 0
+    while (Date.now() - startedAt < Math.max(80, Math.floor(maxWaitMs))) {
+      if (String(chat.selectedSessionId || '').trim() !== sid) return false
+      const loading = chat.selectedHistory.loading || loadingOlder.value
+      if (loading) {
+        settledTicks = 0
+      } else {
+        settledTicks += 1
+        if (settledTicks >= 2) return true
+      }
+      await nextTick()
+      await sleep(24)
+    }
+
+    return !chat.selectedHistory.loading && !loadingOlder.value
+  }
 
   function messageElId(messageId: string) {
     return `msg-${messageId}`
@@ -74,6 +109,43 @@ export function useChatScrollNav(opts: {
     const el = document.getElementById(messageElId(messageId))
     if (!el) return
     el.scrollIntoView({ behavior, block: 'center' })
+  }
+
+  async function tryResolvePendingPrevNavigation(behavior: ScrollBehavior = 'smooth'): Promise<boolean> {
+    const sid = String(pendingPrevSessionId.value || '').trim()
+    const anchorId = String(pendingPrevAnchorId.value || '').trim()
+    if (!sid || !anchorId) return false
+
+    if (String(chat.selectedSessionId || '').trim() !== sid) {
+      clearPendingPrevNavigation()
+      return false
+    }
+
+    if (chat.selectedHistory.loading || loadingOlder.value) return false
+
+    await nextTick()
+    const ids = navigableMessageIds.value
+    const idx = ids.indexOf(anchorId)
+    if (idx < 0) {
+      clearPendingPrevNavigation()
+      return false
+    }
+    if (idx <= 0) {
+      if (chat.selectedHistory.exhausted) {
+        clearPendingPrevNavigation()
+      }
+      return false
+    }
+
+    const target = ids[idx - 1]
+    if (!target) return false
+
+    clearPendingPrevNavigation()
+    navIndex.value = idx - 1
+    suppressAutoLoadOlderUntil.value = Date.now() + 1400
+    navLockUntil = Date.now() + 1200
+    scrollToMessageId(target, behavior)
+    return true
   }
 
   function updateNavIndexFromScroll(scrollEl: HTMLElement | null) {
@@ -173,26 +245,47 @@ export function useChatScrollNav(opts: {
 
         const currentId = ids[0] || ''
         if (!currentId) return
+
+        pendingPrevSessionId.value = sid
+        pendingPrevAnchorId.value = currentId
+
         navLockUntil = Date.now() + 1200
         suppressAutoLoadOlderUntil.value = Date.now() + 1600
 
-        const ok = await loadOlderAndPreserveViewport()
-        if (!ok) return
-        await nextTick()
+        const maxAutoLoads = 6
+        for (let i = 0; i < maxAutoLoads; i += 1) {
+          if (pendingPrevSessionId.value !== sid || pendingPrevAnchorId.value !== currentId) return
 
-        const ids2 = navigableMessageIds.value
-        const idx = ids2.indexOf(currentId)
-        if (idx > 0) {
-          const target = ids2[idx - 1]
-          if (!target) return
-          navIndex.value = idx - 1
-          suppressAutoLoadOlderUntil.value = Date.now() + 1400
-          navLockUntil = Date.now() + 1200
-          scrollToMessageId(target, 'smooth')
+          const ok = await loadOlderAndPreserveViewport()
+          await waitForHistoryLoadToSettle(sid, ok ? 900 : 1400)
+
+          if (await tryResolvePendingPrevNavigation('smooth')) return
+          if (chat.selectedHistory.exhausted) {
+            clearPendingPrevNavigation()
+            return
+          }
+
+          if (!ok) {
+            // Consistency-degraded responses can reconcile shortly after retry.
+            void (async () => {
+              await sleep(220)
+              await waitForHistoryLoadToSettle(sid, 1200)
+              await tryResolvePendingPrevNavigation('smooth')
+            })()
+            return
+          }
+
+          // `loadOlderAndPreserveViewport()` is throttled; pause before the next
+          // attempt so one click can advance across multiple sparse pages.
+          if (i + 1 < maxAutoLoads) {
+            await sleep(920)
+          }
         }
+
         return
       }
 
+      clearPendingPrevNavigation()
       const nextIdx = Math.max(0, navIndex.value - 1)
       const id = ids[nextIdx]
       if (!id) return
@@ -204,6 +297,7 @@ export function useChatScrollNav(opts: {
   }
 
   function navNext() {
+    clearPendingPrevNavigation()
     const ids = navigableMessageIds.value
     if (!ids.length) return
     const nextIdx = Math.min(ids.length - 1, navIndex.value + 1)
@@ -214,6 +308,22 @@ export function useChatScrollNav(opts: {
     suppressAutoLoadOlderUntil.value = Date.now() + 900
     scrollToMessageId(id, 'smooth')
   }
+
+  watch(
+    () => [
+      pendingPrevAnchorId.value,
+      pendingPrevSessionId.value,
+      chat.selectedSessionId,
+      navigableMessageIds.value.length,
+      chat.selectedHistory.loading,
+      chat.selectedHistory.exhausted,
+    ],
+    () => {
+      if (!pendingPrevAnchorId.value) return
+      void tryResolvePendingPrevNavigation('smooth')
+    },
+    { flush: 'post' },
+  )
 
   return {
     loadingOlder,

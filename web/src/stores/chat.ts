@@ -124,6 +124,7 @@ export const useChatStore = defineStore('chat', () => {
   let refreshTimer: number | null = null
   let refreshMessagesTimer: number | null = null
   const refreshMessagesRetryTimerBySession = new Map<string, number>()
+  const refreshMessagesRequestSeqBySession = new Map<string, number>()
   const refreshSessionDiffInvalidateTimerBySession = new Map<string, number>()
   let selectSeq = 0
   let lastGlobalErrorToastAt = 0
@@ -138,6 +139,20 @@ export const useChatStore = defineStore('chat', () => {
       window.clearTimeout(timer)
       refreshMessagesRetryTimerBySession.delete(sid)
     }
+  }
+
+  function nextRefreshMessagesRequestSeq(sessionId: string): number {
+    const sid = (sessionId || '').trim()
+    if (!sid) return 0
+    const next = (refreshMessagesRequestSeqBySession.get(sid) || 0) + 1
+    refreshMessagesRequestSeqBySession.set(sid, next)
+    return next
+  }
+
+  function isLatestRefreshMessagesRequest(sessionId: string, requestSeq: number): boolean {
+    const sid = (sessionId || '').trim()
+    if (!sid || requestSeq <= 0) return false
+    return refreshMessagesRequestSeqBySession.get(sid) === requestSeq
   }
 
   function scheduleMessageRefreshRetry(sessionId: string, delayMs: number, opts?: { limit?: number }) {
@@ -786,6 +801,8 @@ export const useChatStore = defineStore('chat', () => {
     const sid = (sessionId || '').trim()
     if (!sid) return
 
+    const requestSeq = nextRefreshMessagesRequestSeq(sid)
+
     const isSelected = selectedSessionId.value === sid
     const hasCache = (messagesBySession.value[sid]?.length ?? 0) > 0
 
@@ -809,6 +826,8 @@ export const useChatStore = defineStore('chat', () => {
       }
 
       const messagePage = await chatApi.listMessages(sessionId, limit, getDirectoryForSession(sessionId), 0)
+      if (!isLatestRefreshMessagesRequest(sid, requestSeq)) return
+
       const ordered = normalizeMessageList(messagePage.entries)
       const degraded = messagePage.consistency?.degraded === true
       const retryAfterMs =
@@ -858,6 +877,8 @@ export const useChatStore = defineStore('chat', () => {
       // Messages refresh is a good time to rehydrate pending prompts (page refresh / missed SSE).
       void refreshAttention(sid)
     } catch (err) {
+      if (!isLatestRefreshMessagesRequest(sid, requestSeq)) return
+
       const msg = err instanceof Error ? err.message : String(err)
       const authRequired =
         err instanceof ApiError && err.status === 401 && (err.code || '').trim().toLowerCase() === 'auth_required'
@@ -1273,6 +1294,7 @@ export const useChatStore = defineStore('chat', () => {
     if (!sid) return
 
     clearMessageRefreshRetry(sid)
+    refreshMessagesRequestSeqBySession.delete(sid)
 
     const dirHint = typeof opts?.directory === 'string' ? opts.directory.trim() : ''
     const cached = sessionsById.value[sid]
@@ -1550,6 +1572,7 @@ export const useChatStore = defineStore('chat', () => {
       clearMessagesHydrated(sid)
       clearComposerDraft(sid)
       clearSessionDiffCache(sid)
+      refreshMessagesRequestSeqBySession.delete(sid)
       if (selectedSessionId.value === sid) {
         selectedSessionId.value = null
       }

@@ -217,6 +217,12 @@ function getRecord(value: JsonValue, key: string): JsonObject {
   return typeof nested === 'object' && nested !== null ? (nested as JsonObject) : {}
 }
 
+function getSelectedSessionRevertId(): string {
+  const session = asRecord(chat.selectedSession)
+  const revert = getRecord(session, 'revert')
+  return typeof revert?.messageID === 'string' ? revert.messageID.trim() : ''
+}
+
 const chatCommands = useChatCommands({
   sessionDirectory,
   draft,
@@ -497,7 +503,7 @@ function handleComposerPickerSelect(item: OptionMenuItem) {
 const scrollNav = useChatScrollNav({
   chat,
   ui,
-  getRevertId: () => (revertState.value?.messageID ? String(revertState.value.messageID) : ''),
+  getRevertId: getSelectedSessionRevertId,
   composerFullscreenActive,
   composerShellHeight,
   composerDividerHitPx: COMPOSER_DIVIDER_HIT_PX,
@@ -1216,9 +1222,10 @@ const lastMessageKey = computed(() => {
 watch(
   () => lastMessageKey.value,
   () => {
-    // Preserve user scroll position if they scrolled up.
+    // Preserve user scroll position if they intentionally scrolled up.
+    // `scheduleScrollToBottom()` has an additional near-bottom guard to recover
+    // from stale bottom flags after background resume.
     if (pendingInitialScrollSessionId.value) return
-    if (!isAtBottom.value) return
     scheduleScrollToBottom()
   },
 )
