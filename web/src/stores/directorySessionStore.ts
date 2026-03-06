@@ -311,6 +311,7 @@ function runtimeMapEquivalent(
   for (const key of leftKeys) {
     if (!hasOwn(right, key)) return false
     if (!runtimeStateEquivalent(left[key], right[key])) return false
+    if (left[key].updatedAt !== right[key].updatedAt) return false
   }
   return true
 }
