@@ -1,6 +1,6 @@
 # Security
 
-[English](../../../SECURITY.md) | 简体中文 | [Español](../es/SECURITY.md)
+[English](../../../SECURITY.md) | 简体中文 | [Español](../es/SECURITY.md) | [हिंदी](../hi-IN/SECURITY.md) | [العربية](../ar-SA/SECURITY.md) | [Português (Brasil)](../pt-BR/SECURITY.md) | [Français](../fr-FR/SECURITY.md)
 
 ## 威胁模型
 

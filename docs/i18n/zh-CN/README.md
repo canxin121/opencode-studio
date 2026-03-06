@@ -1,6 +1,6 @@
 # OpenCode Studio
 
-[English](../../../README.md) | 简体中文 | [Español](../es/README.md)
+[English](../../../README.md) | 简体中文 | [Español](../es/README.md) | [हिंदी](../hi-IN/README.md) | [العربية](../ar-SA/README.md) | [Português (Brasil)](../pt-BR/README.md) | [Français](../fr-FR/README.md)
 
 <p align="center">
   <img src="../../../web/public/apple-touch-icon-180x180.png" width="128" alt="OpenCode Studio 桌面版图标" />
@@ -34,9 +34,25 @@
 
 > 说明：本项目为社区实现，非 OpenCode 团队官方项目，与其不存在官方隶属关系。OpenCode 上游项目：[anomalyco/opencode](https://github.com/anomalyco/opencode)
 
+<a id="language-support"></a>
+## 多语言支持
+
+OpenCode Studio 前端 i18n 与顶层文档目前支持以下语言：
+
+- `zh-CN`：简体中文
+- `en-US`：English
+- `es-ES`：Español (Spain)
+- `hi-IN`：हिंदी (India)
+- `ar-SA`：العربية (Saudi Arabia)
+- `pt-BR`：Português (Brasil)
+- `fr-FR`：Français (France)
+
+语言矩阵与互链见 [`docs/i18n/README.md`](../README.md)。
+
 <a id="contents"></a>
 ## 目录
 
+- [多语言支持](#language-support)
 - [为什么选择 OpenCode Studio](#why-opencode-studio)
 - [页面预览](#ui-preview)
 - [快速开始（2 分钟）](#quick-start)

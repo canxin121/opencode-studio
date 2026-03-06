@@ -1,6 +1,6 @@
 # Contributing
 
-[English](../../../CONTRIBUTING.md) | [简体中文](../zh-CN/CONTRIBUTING.md) | Español
+[English](../../../CONTRIBUTING.md) | [简体中文](../zh-CN/CONTRIBUTING.md) | Español | [हिंदी](../hi-IN/CONTRIBUTING.md) | [العربية](../ar-SA/CONTRIBUTING.md) | [Português (Brasil)](../pt-BR/CONTRIBUTING.md) | [Français](../fr-FR/CONTRIBUTING.md)
 
 Gracias por tu interes en mejorar OpenCode Studio.
 

@@ -1,6 +1,6 @@
 # OpenCode Studio
 
-English | [简体中文](docs/i18n/zh-CN/README.md) | [Español](docs/i18n/es/README.md)
+English | [简体中文](docs/i18n/zh-CN/README.md) | [Español](docs/i18n/es/README.md) | [हिंदी](docs/i18n/hi-IN/README.md) | [العربية](docs/i18n/ar-SA/README.md) | [Português (Brasil)](docs/i18n/pt-BR/README.md) | [Français](docs/i18n/fr-FR/README.md)
 
 <p align="center">
   <img src="web/public/apple-touch-icon-180x180.png" width="128" alt="OpenCode Studio desktop app icon" />
@@ -34,9 +34,25 @@ English | [简体中文](docs/i18n/zh-CN/README.md) | [Español](docs/i18n/es/RE
 
 > Note: This is a community project and is not built by the OpenCode team and is not affiliated with them. Upstream OpenCode: [anomalyco/opencode](https://github.com/anomalyco/opencode)
 
+<a id="language-support"></a>
+## Language Support
+
+OpenCode Studio frontend i18n and top-level docs support the following locales:
+
+- `zh-CN`: Simplified Chinese
+- `en-US`: English
+- `es-ES`: Spanish (Spain)
+- `hi-IN`: Hindi (India)
+- `ar-SA`: Arabic (Saudi Arabia)
+- `pt-BR`: Portuguese (Brazil)
+- `fr-FR`: French (France)
+
+See [`docs/i18n/README.md`](docs/i18n/README.md) for the language matrix and cross-links.
+
 <a id="contents"></a>
 ## Contents
 
+- [Language Support](#language-support)
 - [Why OpenCode Studio](#why-opencode-studio)
 - [UI Preview](#ui-preview)
 - [Quick Start (2 minutes)](#quick-start)

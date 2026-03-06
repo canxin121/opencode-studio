@@ -1,6 +1,6 @@
 # Security
 
-[English](../../../SECURITY.md) | [简体中文](../zh-CN/SECURITY.md) | Español
+[English](../../../SECURITY.md) | [简体中文](../zh-CN/SECURITY.md) | Español | [हिंदी](../hi-IN/SECURITY.md) | [العربية](../ar-SA/SECURITY.md) | [Português (Brasil)](../pt-BR/SECURITY.md) | [Français](../fr-FR/SECURITY.md)
 
 ## Modelo de amenazas
 

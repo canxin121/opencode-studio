@@ -1,6 +1,6 @@
 # OpenCode Studio
 
-[English](../../../README.md) | [简体中文](../zh-CN/README.md) | Español
+[English](../../../README.md) | [简体中文](../zh-CN/README.md) | Español | [हिंदी](../hi-IN/README.md) | [العربية](../ar-SA/README.md) | [Português (Brasil)](../pt-BR/README.md) | [Français](../fr-FR/README.md)
 
 <p align="center">
   <img src="../../../web/public/apple-touch-icon-180x180.png" width="128" alt="Icono de OpenCode Studio" />
@@ -26,8 +26,23 @@
 
 > Nota: Este es un proyecto de la comunidad. No esta creado por el equipo de OpenCode ni afiliado oficialmente. Proyecto upstream: [anomalyco/opencode](https://github.com/anomalyco/opencode)
 
+## Soporte de idiomas
+
+El frontend i18n y la documentacion principal de OpenCode Studio soportan:
+
+- `zh-CN`: Chino simplificado
+- `en-US`: Ingles
+- `es-ES`: Espanol (Espana)
+- `hi-IN`: Hindi (India)
+- `ar-SA`: Arabe (Arabia Saudita)
+- `pt-BR`: Portugues (Brasil)
+- `fr-FR`: Frances (Francia)
+
+Consulta la matriz y enlaces cruzados en [`docs/i18n/README.md`](../README.md).
+
 ## Contenido
 
+- [Soporte de idiomas](#soporte-de-idiomas)
 - [Resumen](#resumen)
 - [Vista de interfaz](#vista-de-interfaz)
 - [Inicio rapido (2 minutos)](#inicio-rapido-2-minutos)
