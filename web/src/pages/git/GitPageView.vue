@@ -914,6 +914,10 @@ async function requestRepoMenuPage(page: number, query = repoMenuQuery.value) {
   await loadRepoPickerPage({ page, pageSize: REPO_MENU_PAGE_SIZE, search: query })
 }
 
+function refreshRepoMenuOptions() {
+  void requestRepoMenuPage(1, repoMenuQuery.value)
+}
+
 function toggleRepoMenu() {
   const nextOpen = !repoMenuOpen.value
   repoMenuOpen.value = nextOpen
@@ -1008,6 +1012,10 @@ const branchMenuGroups = computed<OptionMenuGroup[]>(() => {
 
 async function requestBranchMenuPage(page: number, query = branchMenuQuery.value) {
   await loadBranchPicker({ page, pageSize: 40, search: query })
+}
+
+function refreshBranchMenuOptions() {
+  void requestBranchMenuPage(1, branchMenuQuery.value)
 }
 
 function toggleBranchMenu() {
@@ -1229,6 +1237,9 @@ void diffPaneRef
             :external-page="repoPickerPage"
             :external-page-count="repoPickerTotalPages"
             :external-pager-loading="repoPickerLoading"
+            :loading="repoPickerLoading || reposLoading"
+            :refreshable="true"
+            :on-refresh="refreshRepoMenuOptions"
             desktop-placement="bottom-start"
             desktop-class="w-[26rem] max-w-[calc(100vw-1rem)]"
             @update:open="setRepoMenuOpen"
@@ -1273,6 +1284,9 @@ void diffPaneRef
               :external-page="branchPickerPage"
               :external-page-count="branchPickerTotalPages"
               :external-pager-loading="branchPickerLoading"
+              :loading="branchPickerLoading"
+              :refreshable="true"
+              :on-refresh="refreshBranchMenuOptions"
               desktop-placement="bottom-start"
               desktop-class="w-72"
               @update:open="setBranchMenuOpen"

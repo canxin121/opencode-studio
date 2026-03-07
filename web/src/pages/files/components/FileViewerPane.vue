@@ -109,6 +109,7 @@ const props = defineProps<{
   toggleGitDiffMode: () => boolean | void | Promise<boolean | void>
   applyGitPatch: (patch: string, mode: GitPatchMode) => boolean | void | Promise<boolean | void>
   loadMoreTimeline: () => boolean | void | Promise<boolean | void>
+  refreshTimeline?: () => boolean | void | Promise<boolean | void>
   selectTimelineCommit: (side: TimelineSide, commit: GitLogCommit) => boolean | void | Promise<boolean | void>
   openTimeline: () => boolean | void | Promise<boolean | void>
   openSidebar: () => boolean | void | Promise<boolean | void>
@@ -507,6 +508,10 @@ function handleTimelineMenuSelect(side: TimelineSide, item: OptionMenuItem) {
 
   void props.selectTimelineCommit(side, commit)
   void setTimelineMenuOpen(side, false)
+}
+
+function refreshTimelineMenus() {
+  void props.refreshTimeline?.()
 }
 
 type BlameColorRegistry = {
@@ -1506,6 +1511,9 @@ function onSendSelection() {
               :external-page="timelineLeftMenuDisplayPage"
               :external-page-count="timelineLeftMenuExternalPageCount"
               :external-pager-loading="timelineLoading"
+              :loading="timelineLoading"
+              :refreshable="true"
+              :on-refresh="refreshTimelineMenus"
               @update:open="(v) => void setTimelineMenuOpen('left', v)"
               @update:query="(v) => setTimelineMenuQuery('left', v)"
               @request-page="(page) => void requestTimelineMenuPage('left', page)"
@@ -1529,6 +1537,9 @@ function onSendSelection() {
               :external-page="timelineRightMenuDisplayPage"
               :external-page-count="timelineRightMenuExternalPageCount"
               :external-pager-loading="timelineLoading"
+              :loading="timelineLoading"
+              :refreshable="true"
+              :on-refresh="refreshTimelineMenus"
               @update:open="(v) => void setTimelineMenuOpen('right', v)"
               @update:query="(v) => setTimelineMenuQuery('right', v)"
               @request-page="(page) => void requestTimelineMenuPage('right', page)"

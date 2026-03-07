@@ -177,6 +177,9 @@ export type ChatPageViewContext = {
   composerPickerHelperText: MaybeRef<string>
   composerPickerEmptyText: MaybeRef<string>
   composerPickerGroups: MaybeRef<OptionMenuGroup[]>
+  composerPickerLoading: MaybeRef<boolean>
+  composerPickerRefreshable: MaybeRef<boolean>
+  refreshComposerPickerOptions: () => void
   setComposerPickerOpen: (open: boolean) => void
   handleComposerPickerSelect: (item: OptionMenuItem) => void
   hasVariantsForSelection: MaybeRef<boolean>

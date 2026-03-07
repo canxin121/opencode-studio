@@ -76,6 +76,7 @@ export function useChatModelSelection(opts: {
   const {
     providers,
     agents,
+    catalogLoading,
     shareDisabled,
     projectConfigDefaults,
     userConfigDefaults,
@@ -465,6 +466,7 @@ export function useChatModelSelection(opts: {
   return {
     providers,
     agents,
+    catalogLoading,
     selectedProviderId,
     selectedModelId,
     selectedAgent,
