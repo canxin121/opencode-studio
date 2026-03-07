@@ -15,9 +15,11 @@ const props = withDefaults(
     drawFileList?: boolean
     highlight?: boolean
     wrap?: boolean
+    autoRevealFirstChange?: boolean
   }>(),
   {
     wrap: false,
+    autoRevealFirstChange: true,
   },
 )
 
@@ -29,6 +31,7 @@ const error = ref<string | null>(null)
 const MIN_LINE_NUMBER_DIGITS = 1
 const DEFAULT_LINE_NUMBER_DIGITS = 2
 const MAX_LINE_NUMBER_DIGITS = 6
+const AUTO_REVEAL_TOP_PADDING = 24
 
 function applyAdaptiveLineNumberWidth(target: HTMLElement) {
   const lineNumberCells = target.querySelectorAll<HTMLElement>('.line-num1, .line-num2, .d2h-code-side-linenumber')
@@ -73,6 +76,26 @@ onBeforeUnmount(() => {
 const trimmed = computed(() => (props.diff || '').trim())
 
 let pendingFrame: number | null = null
+let lastRevealKey = ''
+
+function buildRevealKey(diff: string): string {
+  return `${props.outputFormat || 'side-by-side'}:${diff.length}:${diff.slice(0, 160)}:${diff.slice(-160)}`
+}
+
+function revealFirstDiffChange(target: HTMLElement) {
+  if (props.autoRevealFirstChange === false) return
+
+  const firstChangedElement = target.querySelector<HTMLElement>(
+    '.d2h-ins, .d2h-del, .d2h-change, .d2h-code-line ins, .d2h-code-line del',
+  )
+  if (!firstChangedElement) return
+
+  const containerRect = target.getBoundingClientRect()
+  const changeRect = firstChangedElement.getBoundingClientRect()
+  const nextScrollTop = Math.max(0, target.scrollTop + (changeRect.top - containerRect.top) - AUTO_REVEAL_TOP_PADDING)
+
+  target.scrollTo({ top: nextScrollTop, behavior: 'auto' })
+}
 
 watchEffect(() => {
   const target = container.value
@@ -86,6 +109,7 @@ watchEffect(() => {
   const diff = trimmed.value
   if (!diff) {
     target.innerHTML = ''
+    lastRevealKey = ''
     return
   }
 
@@ -121,6 +145,12 @@ watchEffect(() => {
       )
       ui.draw()
       applyAdaptiveLineNumberWidth(target)
+
+      const revealKey = buildRevealKey(diff)
+      if (props.autoRevealFirstChange !== false && revealKey !== lastRevealKey) {
+        lastRevealKey = revealKey
+        window.requestAnimationFrame(() => revealFirstDiffChange(target))
+      }
     } catch (e) {
       console.error(e)
       error.value = String(t('ui.diffViewer.renderFailed'))
