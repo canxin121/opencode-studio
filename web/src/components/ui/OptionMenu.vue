@@ -334,6 +334,15 @@ function resolveViewportHeight(): number {
   return window.innerHeight
 }
 
+function resolveViewportTop(): number {
+  if (typeof window === 'undefined') return 0
+  const vvTop = window.visualViewport?.offsetTop
+  if (typeof vvTop === 'number' && Number.isFinite(vvTop) && vvTop > 0) {
+    return vvTop
+  }
+  return 0
+}
+
 async function syncDesktopFixedPosition() {
   if (!props.desktopFixed || !props.open || isMobileSheet.value) return
   if (typeof window === 'undefined') return
@@ -362,17 +371,18 @@ async function syncMobileSheetPosition() {
 
   const viewportHeight = resolveViewportHeight()
   if (!viewportHeight) return
+  const viewportTop = resolveViewportTop()
 
   const safeTop = cssVarPx('--oc-safe-area-top', 0)
   const safeBottom = cssVarPx('--oc-safe-area-bottom', 0)
 
-  const topInset = safeTop + MOBILE_SHEET_MARGIN_PX
-  const bottomInset = safeBottom + MOBILE_SHEET_MARGIN_PX
-  const maxHeight = Math.max(180, viewportHeight - topInset - bottomInset)
+  const topInset = viewportTop + safeTop + MOBILE_SHEET_MARGIN_PX
+  const bottomEdge = viewportTop + viewportHeight - safeBottom - MOBILE_SHEET_MARGIN_PX
+  const maxHeight = Math.max(0, bottomEdge - topInset)
   const panelHeight = Math.min(maxHeight, Math.max(0, panel.scrollHeight))
 
   const centeredOffset = Math.max(0, Math.round((maxHeight - panelHeight) / 2))
-  const top = topInset + centeredOffset
+  const top = Math.max(topInset, bottomEdge - panelHeight, topInset + centeredOffset)
 
   mobileSheetStyle.value = {
     top: `${Math.round(top)}px`,

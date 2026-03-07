@@ -14,7 +14,15 @@ test('plugin OptionMenu captures pointer/click and avoids click-through', () => 
   assert.ok(optionMenuSource.includes('@pointerdown.stop'))
   assert.ok(optionMenuSource.includes('@click.stop'))
   assert.match(optionMenuSource, /<Teleport to="body">[\s\S]*v-if="open && isMobileSheet"/)
-  assert.ok(optionMenuSource.includes('const bottomInset = safeBottom + MOBILE_SHEET_MARGIN_PX'))
+  assert.ok(optionMenuSource.includes('const viewportTop = resolveViewportTop()'))
+  assert.ok(
+    optionMenuSource.includes('const bottomEdge = viewportTop + viewportHeight - safeBottom - MOBILE_SHEET_MARGIN_PX'),
+  )
+  assert.ok(optionMenuSource.includes('const maxHeight = Math.max(0, bottomEdge - topInset)'))
+  assert.ok(
+    optionMenuSource.includes('const top = Math.max(topInset, bottomEdge - panelHeight, topInset + centeredOffset)'),
+  )
+  assert.ok(optionMenuSource.includes('class="flex-1 min-h-0 overflow-auto px-2 py-1.5"'))
   assert.ok(!optionMenuSource.includes('--oc-bottom-nav-height'))
 
   assert.ok(overlaySource.includes('desktop-class="pointer-events-auto w-[min(420px,calc(100%-1rem))]"'))
