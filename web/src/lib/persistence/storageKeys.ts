@@ -8,6 +8,7 @@ export const localStorageKeys = {
   ui: {
     sidebarOpen: namespacedKey('ui.sidebar.open'),
     sidebarWidth: namespacedKey('ui.sidebar.width'),
+    gitHistorySearchExpanded: namespacedKey('ui.git-history.search.expanded'),
     activeMainTab: namespacedKey('ui.active-main-tab'),
     workspaceDockOpen: namespacedKey('ui.workspace-dock.open'),
     workspaceDockPanel: namespacedKey('ui.workspace-dock.panel'),

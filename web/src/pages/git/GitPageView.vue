@@ -816,6 +816,10 @@ function onClearHistoryPathFilter() {
   sourceControlView.value = 'history'
 }
 
+function toggleHistorySearchExpanded() {
+  ui.gitHistorySearchExpanded = !ui.gitHistorySearchExpanded
+}
+
 watch(
   () => repoRoot.value,
   () => {
@@ -828,6 +832,14 @@ watch(
   (ready) => {
     if (ready) return
     sourceControlView.value = 'changes'
+  },
+)
+
+watch(
+  () => ui.gitHistorySearchExpanded,
+  (expanded) => {
+    if (expanded) return
+    historyFilterRefType.value = 'branch'
   },
 )
 
@@ -1552,7 +1564,16 @@ void diffPaneRef
 
           <template v-else>
             <div class="rounded-sm border border-sidebar-border/60 bg-sidebar-accent/10 p-2">
-              <div class="mb-1 text-[11px] font-medium text-muted-foreground">{{ t('common.search') }}</div>
+              <div class="mb-1 flex items-center justify-between gap-2">
+                <div class="text-[11px] font-medium text-muted-foreground">{{ t('common.search') }}</div>
+                <button
+                  type="button"
+                  class="rounded-sm px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-sidebar-accent/40 hover:text-foreground"
+                  @click="toggleHistorySearchExpanded"
+                >
+                  {{ ui.gitHistorySearchExpanded ? t('common.collapse') : t('common.expand') }}
+                </button>
+              </div>
 
               <div v-if="historyFilterPath" class="mb-2 flex items-center justify-between gap-2">
                 <div class="truncate text-[10px] text-muted-foreground font-mono" :title="historyFilterPath">
@@ -1562,7 +1583,7 @@ void diffPaneRef
               </div>
 
               <div class="grid gap-2">
-                <div class="grid grid-cols-[86px_minmax(0,1fr)] gap-2">
+                <div v-if="ui.gitHistorySearchExpanded" class="grid grid-cols-[86px_minmax(0,1fr)] gap-2">
                   <select
                     v-model="historyFilterRefType"
                     class="h-8 rounded border border-input bg-background px-2 text-xs text-foreground"
@@ -1581,17 +1602,26 @@ void diffPaneRef
                     "
                   />
                 </div>
+                <input
+                  v-else
+                  v-model="historyFilterRef"
+                  class="h-8 w-full rounded border border-input bg-transparent px-2 text-xs font-mono text-foreground placeholder:text-muted-foreground"
+                  list="git-history-ref-options"
+                  :placeholder="t('git.ui.dialogs.history.placeholders.branchName')"
+                />
                 <datalist id="git-history-ref-options">
                   <option v-for="name in historyRefOptions" :key="`history-ref-${name}`" :value="name" />
                 </datalist>
 
                 <Input
+                  v-if="ui.gitHistorySearchExpanded"
                   v-model="historyFilterAuthor"
                   class="h-8 font-mono text-xs"
                   :placeholder="t('git.ui.dialogs.history.placeholders.authorContains')"
                 />
 
                 <Input
+                  v-if="ui.gitHistorySearchExpanded"
                   v-model="historyFilterMessage"
                   class="h-8 font-mono text-xs"
                   :placeholder="t('git.ui.dialogs.history.placeholders.messageContains')"
