@@ -48,6 +48,13 @@ import {
   terminalUiStateEventsUrl,
   type TerminalUiState,
 } from '@/features/terminal/api/terminalApi'
+import {
+  createUniqueTerminalSessionName,
+  ensureTerminalSessionNames,
+  normalizeTerminalSessionName,
+  resolveSessionIdByName,
+  type TerminalSessionMeta as NameKeyedTerminalSessionMeta,
+} from '@/features/terminal/lib/sessionNameKey'
 import { handleTerminalKeyboardShortcut } from '@/features/terminal/lib/terminalKeyboardShortcuts'
 import { useDesktopSidebarResize } from '@/composables/useDesktopSidebarResize'
 import { useDirectoryStore } from '@/stores/directory'
@@ -80,27 +87,20 @@ type TerminalUiStateEvent =
       }
     }
 
-const STORAGE_GIT_HANDOFF_SESSION = localStorageKeys.terminal.gitHandoffSessionId
+const STORAGE_GIT_HANDOFF_SESSION_NAME = localStorageKeys.terminal.gitHandoffSessionName
+const STORAGE_GIT_HANDOFF_SESSION_ID_LEGACY = localStorageKeys.terminal.legacyGitHandoffSessionId
 
 const TERMINAL_STATE_REMOTE_SAVE_DEBOUNCE_MS = 250
 
 const DEFAULT_TERMINAL_CWD = '/home'
+const DEFAULT_TERMINAL_SESSION_NAME = 'Terminal'
 
 const GIT_HANDOFF_SESSION_NAME = String(t('terminal.defaults.gitTerminal'))
 
-type TerminalSessionMeta = {
-  name?: string
-  pinned?: boolean
-  folderId?: string
-  lastUsedAt?: number
-}
+type TerminalSessionMeta = NameKeyedTerminalSessionMeta
 
 function normalizeSessionMetaName(input: unknown): string {
-  const collapsed = String(input || '')
-    .replace(/\s+/g, ' ')
-    .trim()
-  if (!collapsed) return ''
-  return collapsed.slice(0, 80)
+  return normalizeTerminalSessionName(input)
 }
 
 function normalizeFolderId(input: unknown): string {
@@ -151,17 +151,23 @@ function normalizeSessionList(input: unknown): string[] {
   return out
 }
 
-function readStoredGitHandoffSessionId(): string {
-  return normalizeSessionId(getLocalString(STORAGE_GIT_HANDOFF_SESSION) || '')
+function readStoredGitHandoffSessionName(): string {
+  return normalizeSessionMetaName(getLocalString(STORAGE_GIT_HANDOFF_SESSION_NAME) || '')
 }
 
-function persistGitHandoffSessionId(next: string | null) {
-  const sid = normalizeSessionId(next || '')
-  if (!sid) {
-    removeLocalKey(STORAGE_GIT_HANDOFF_SESSION)
+function readLegacyGitHandoffSessionId(): string {
+  return normalizeSessionId(getLocalString(STORAGE_GIT_HANDOFF_SESSION_ID_LEGACY) || '')
+}
+
+function persistGitHandoffSessionName(next: string | null) {
+  const name = normalizeSessionMetaName(next || '')
+  if (!name) {
+    removeLocalKey(STORAGE_GIT_HANDOFF_SESSION_NAME)
+    removeLocalKey(STORAGE_GIT_HANDOFF_SESSION_ID_LEGACY)
     return
   }
-  setLocalString(STORAGE_GIT_HANDOFF_SESSION, sid)
+  setLocalString(STORAGE_GIT_HANDOFF_SESSION_NAME, name)
+  removeLocalKey(STORAGE_GIT_HANDOFF_SESSION_ID_LEGACY)
 }
 
 const ui = useUiStore()
@@ -243,6 +249,37 @@ function sessionMetaFor(id: string): TerminalSessionMeta {
   return sessionMetaById.value[sid] || {}
 }
 
+function ensureUniqueSessionNames(opts?: { remote?: boolean }) {
+  const normalizedSessionIds = normalizeSessionList(sessionList.value)
+  const ensured = ensureTerminalSessionNames(normalizedSessionIds, sessionMetaById.value, {
+    fallbackBase: DEFAULT_TERMINAL_SESSION_NAME,
+  })
+  if (!ensured.changed) return
+  sessionMetaById.value = ensured.sessionMetaById
+  if (opts?.remote !== false) {
+    scheduleTerminalStateRemotePersist()
+  }
+}
+
+function resolveUniqueSessionName(name: string, opts?: { excludeSid?: string | null }): string {
+  const excludeSid = normalizeSessionId(opts?.excludeSid || '')
+  const used = new Set<string>()
+  for (const rawSid of sessionList.value) {
+    const sid = normalizeSessionId(rawSid)
+    if (!sid || sid === excludeSid) continue
+    const existing = normalizeSessionMetaName(sessionMetaFor(sid).name)
+    if (!existing) continue
+    used.add(existing.toLowerCase())
+  }
+  return createUniqueTerminalSessionName(name, used, {
+    fallbackBase: DEFAULT_TERMINAL_SESSION_NAME,
+  })
+}
+
+function resolveSessionIdByStoredName(name: string): string | null {
+  return resolveSessionIdByName(sessionList.value, sessionMetaById.value, name)
+}
+
 function buildTerminalUiStatePayload(): TerminalUiState {
   const normalizedSessionIds = normalizeSessionList(sessionList.value)
   const allowedSessionIds = new Set(normalizedSessionIds)
@@ -256,6 +293,10 @@ function buildTerminalUiStatePayload(): TerminalUiState {
     normalizedMetaById[sid] = compact
   }
 
+  const ensured = ensureTerminalSessionNames(normalizedSessionIds, normalizedMetaById, {
+    fallbackBase: DEFAULT_TERMINAL_SESSION_NAME,
+  })
+
   const active = normalizeSessionId(sessionId.value || '')
 
   return {
@@ -263,7 +304,7 @@ function buildTerminalUiStatePayload(): TerminalUiState {
     updatedAt: Math.max(0, Math.floor(Number(terminalStateUpdatedAt.value) || 0)),
     activeSessionId: active || null,
     sessionIds: normalizedSessionIds,
-    sessionMetaById: normalizedMetaById,
+    sessionMetaById: ensured.sessionMetaById,
     folders: [],
   }
 }
@@ -309,16 +350,21 @@ async function persistTerminalStateRemote() {
 function isGitHandoffSession(id: string): boolean {
   const sid = normalizeSessionId(id)
   if (!sid) return false
-  if (readStoredGitHandoffSessionId() === sid) return true
+  const storedName = readStoredGitHandoffSessionName()
+  const legacyStoredSid = readLegacyGitHandoffSessionId()
+  if (legacyStoredSid && sid === legacyStoredSid) return true
 
   const meta = sessionMetaFor(sid)
   const name = normalizeSessionMetaName(meta.name)
+  if (storedName && name === storedName) return true
   return name === GIT_HANDOFF_SESSION_NAME
 }
 
 function gitHandoffSessionCandidates(): string[] {
   const out: string[] = []
   const seen = new Set<string>()
+  const storedName = readStoredGitHandoffSessionName()
+  const legacySid = readLegacyGitHandoffSessionId()
 
   function push(rawId: string | null | undefined) {
     const sid = normalizeSessionId(rawId || '')
@@ -327,7 +373,15 @@ function gitHandoffSessionCandidates(): string[] {
     out.push(sid)
   }
 
-  push(readStoredGitHandoffSessionId())
+  push(resolveSessionIdByStoredName(storedName))
+  push(legacySid)
+
+  if (!storedName && legacySid) {
+    const legacyName = normalizeSessionMetaName(sessionMetaFor(legacySid).name)
+    if (legacyName) {
+      persistGitHandoffSessionName(legacyName)
+    }
+  }
   for (const sid of sessionList.value) {
     if (isGitHandoffSession(sid)) {
       push(sid)
@@ -348,7 +402,7 @@ async function ensureGitHandoffSessionExists(): Promise<string> {
     patchSessionMeta(sid, {
       name: GIT_HANDOFF_SESSION_NAME,
     })
-    persistGitHandoffSessionId(sid)
+    persistGitHandoffSessionName(GIT_HANDOFF_SESSION_NAME)
     return sid
   }
 
@@ -362,22 +416,25 @@ async function ensureGitHandoffSessionExists(): Promise<string> {
     pinned: undefined,
     lastUsedAt: Date.now(),
   })
-  persistGitHandoffSessionId(json.sessionId)
+  persistGitHandoffSessionName(GIT_HANDOFF_SESSION_NAME)
   clearSessionOutput(json.sessionId)
   setStreamStatusForSession(json.sessionId, 'disconnected')
   return json.sessionId
 }
 
 function persistSessionMetaById(opts?: { remote?: boolean }) {
-  const next: Record<string, TerminalSessionMeta> = {}
+  const compacted: Record<string, TerminalSessionMeta> = {}
   for (const [key, value] of Object.entries(sessionMetaById.value)) {
     const sid = normalizeSessionId(key)
     if (!sid) continue
     const compact = compactSessionMeta(value)
     if (!compact) continue
-    next[sid] = compact
+    compacted[sid] = compact
   }
-  sessionMetaById.value = next
+  const ensured = ensureTerminalSessionNames(normalizeSessionList(sessionList.value), compacted, {
+    fallbackBase: DEFAULT_TERMINAL_SESSION_NAME,
+  })
+  sessionMetaById.value = ensured.sessionMetaById
   if (opts?.remote !== false) {
     scheduleTerminalStateRemotePersist()
   }
@@ -386,10 +443,14 @@ function persistSessionMetaById(opts?: { remote?: boolean }) {
 function patchSessionMeta(id: string, patch: Partial<TerminalSessionMeta>, opts?: { remote?: boolean }) {
   const sid = normalizeSessionId(id)
   if (!sid) return
+  const nextPatch: Partial<TerminalSessionMeta> = { ...patch }
+  if (typeof patch.name === 'string') {
+    nextPatch.name = resolveUniqueSessionName(patch.name, { excludeSid: sid })
+  }
   const current = sessionMetaById.value[sid] || {}
   const merged = {
     ...current,
-    ...patch,
+    ...nextPatch,
   }
   const compact = compactSessionMeta(merged)
   if (!compact) {
@@ -471,6 +532,7 @@ function persistSessionList(opts?: { remote?: boolean }) {
   const normalized = normalizeSessionList(sessionList.value)
   sessionList.value = normalized
   pruneSessionMetaToTrackedSessions({ remote: false })
+  ensureUniqueSessionNames({ remote: false })
   if (opts?.remote !== false) {
     scheduleTerminalStateRemotePersist()
   }
@@ -531,14 +593,18 @@ function applyTerminalUiStateSnapshot(snapshot: TerminalUiState) {
   const normalizedSessionIds = normalizeSessionList(snapshot.sessionIds)
   const allowedSessionIds = new Set(normalizedSessionIds)
 
-  const nextSessionMetaById: Record<string, TerminalSessionMeta> = {}
+  const compactedSessionMetaById: Record<string, TerminalSessionMeta> = {}
   for (const [rawSid, rawMeta] of Object.entries(snapshot.sessionMetaById || {})) {
     const sid = normalizeSessionId(rawSid)
     if (!sid || !allowedSessionIds.has(sid)) continue
     const compact = compactSessionMeta(rawMeta)
     if (!compact) continue
-    nextSessionMetaById[sid] = compact
+    compactedSessionMetaById[sid] = compact
   }
+
+  const ensured = ensureTerminalSessionNames(normalizedSessionIds, compactedSessionMetaById, {
+    fallbackBase: DEFAULT_TERMINAL_SESSION_NAME,
+  })
 
   const requestedActive = normalizeSessionId(snapshot.activeSessionId || '')
   const nextActive =
@@ -548,7 +614,7 @@ function applyTerminalUiStateSnapshot(snapshot: TerminalUiState) {
 
   terminalStateApplyInProgress = true
   try {
-    sessionMetaById.value = nextSessionMetaById
+    sessionMetaById.value = ensured.sessionMetaById
     sessionList.value = normalizedSessionIds
     seedSessionRecencyFromList({ remote: false })
 
@@ -562,6 +628,14 @@ function applyTerminalUiStateSnapshot(snapshot: TerminalUiState) {
     terminalStateUpdatedAt.value = incomingUpdatedAt
   } finally {
     terminalStateApplyInProgress = false
+  }
+
+  if (ensured.changed) {
+    if (terminalStateHydrated.value) {
+      scheduleTerminalStateRemotePersist()
+    } else {
+      terminalStatePersistQueued = true
+    }
   }
 
   if (!sessionId.value) {
@@ -701,8 +775,9 @@ function removeTrackedSession(id: string, opts?: { persist?: boolean }) {
   clearStreamStatusForSession(sid)
   clearSessionOutput(sid)
   dropStreamSeq(sid)
-  if (readStoredGitHandoffSessionId() === sid) {
-    persistGitHandoffSessionId(null)
+  const removedName = normalizeSessionMetaName(sessionMetaFor(sid).name)
+  if (removedName && removedName === readStoredGitHandoffSessionName()) {
+    persistGitHandoffSessionName(null)
   }
   removeSessionMeta(sid, { remote: shouldPersist })
   if (sessionRenamingId.value === sid) cancelSessionRename()
@@ -728,6 +803,7 @@ function removeTrackedSession(id: string, opts?: { persist?: boolean }) {
 }
 
 seedSessionRecencyFromList()
+ensureUniqueSessionNames()
 
 const sidebarQuery = ref('')
 const sidebarQueryNorm = computed(() => sidebarQuery.value.trim().toLowerCase())
@@ -748,7 +824,7 @@ const mobileSessionRenameDialogOpen = computed(
 )
 
 function sidebarSessionLabel(item: TerminalSidebarSession): string {
-  return item.name || item.id.slice(0, 8)
+  return item.name || DEFAULT_TERMINAL_SESSION_NAME
 }
 
 function compareSidebarSessionOrder(a: TerminalSidebarSession, b: TerminalSidebarSession): number {
@@ -758,9 +834,8 @@ function compareSidebarSessionOrder(a: TerminalSidebarSession, b: TerminalSideba
 }
 
 function sessionMatchesQuery(item: TerminalSidebarSession, q: string): boolean {
-  const sid = item.id.toLowerCase()
   const label = sidebarSessionLabel(item).toLowerCase()
-  return sid.includes(q) || label.includes(q)
+  return label.includes(q)
 }
 
 const sidebarSessions = computed<TerminalSidebarSession[]>(() => {
@@ -770,7 +845,7 @@ const sidebarSessions = computed<TerminalSidebarSession[]>(() => {
       typeof meta.lastUsedAt === 'number' && Number.isFinite(meta.lastUsedAt) ? Math.floor(meta.lastUsedAt) : 0
     return {
       id,
-      name: normalizeSessionMetaName(meta.name),
+      name: normalizeSessionMetaName(meta.name) || DEFAULT_TERMINAL_SESSION_NAME,
       pinned: meta.pinned === true,
       lastUsedAt,
     }
@@ -807,7 +882,7 @@ function cancelSessionCreate() {
 }
 
 async function createSessionWithName(name: string) {
-  const sessionName = normalizeSessionMetaName(name)
+  const sessionName = resolveUniqueSessionName(name)
   if (!sessionName) return
   const createCwd = sessionStartCwd()
 
@@ -852,7 +927,7 @@ function startSessionRename(id: string) {
   if (!sid) return
   cancelSessionCreate()
   sessionRenamingId.value = sid
-  sessionRenameDraft.value = normalizeSessionMetaName(sessionMetaFor(sid).name) || sid.slice(0, 8)
+  sessionRenameDraft.value = normalizeSessionMetaName(sessionMetaFor(sid).name) || DEFAULT_TERMINAL_SESSION_NAME
 }
 
 function cancelSessionRename() {
@@ -865,7 +940,7 @@ function saveSessionRename() {
   if (!sid) return
   const name = normalizeSessionMetaName(sessionRenameDraft.value)
   if (!name) return
-  patchSessionMeta(sid, { name })
+  patchSessionMeta(sid, { name: resolveUniqueSessionName(name, { excludeSid: sid }) })
   cancelSessionRename()
 }
 
@@ -888,7 +963,7 @@ const activeSessionName = computed(() => {
   if (!sid) return String(t('terminal.active.noneSelected'))
   const customName = normalizeSessionMetaName(sessionMetaFor(sid).name)
   if (customName) return customName
-  return sid.slice(0, 8)
+  return DEFAULT_TERMINAL_SESSION_NAME
 })
 
 function openTerminalSidebar() {
@@ -932,7 +1007,7 @@ function mobileSessionActionTitle(id: string): string {
   const sid = normalizeSessionId(id)
   if (!sid) return String(t('terminal.actions.title'))
   const customName = normalizeSessionMetaName(sessionMetaFor(sid).name)
-  const label = customName || sid.slice(0, 8)
+  const label = customName || DEFAULT_TERMINAL_SESSION_NAME
   return String(t('terminal.actions.titleWithName', { name: label }))
 }
 

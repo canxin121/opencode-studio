@@ -369,6 +369,7 @@ pub struct GitCommitFilesQuery {
 }
 
 fn normalize_numstat_path(raw: &str) -> String {
+    let raw = decode_git_quoted_path(raw.trim());
     let raw = raw.trim();
     if raw.is_empty() {
         return "".to_string();
@@ -387,6 +388,66 @@ fn normalize_numstat_path(raw: &str) -> String {
         return new.trim().to_string();
     }
     raw.to_string()
+}
+
+fn decode_git_quoted_path(raw: &str) -> String {
+    let trimmed = raw.trim();
+    if trimmed.len() < 2 || !trimmed.starts_with('"') || !trimmed.ends_with('"') {
+        return trimmed.to_string();
+    }
+
+    let inner = &trimmed[1..trimmed.len() - 1];
+    let mut bytes: Vec<u8> = Vec::with_capacity(inner.len());
+    let mut chars = inner.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if ch != '\\' {
+            let mut utf8 = [0u8; 4];
+            let encoded = ch.encode_utf8(&mut utf8);
+            bytes.extend_from_slice(encoded.as_bytes());
+            continue;
+        }
+
+        let Some(next) = chars.next() else {
+            bytes.push(b'\\');
+            break;
+        };
+
+        match next {
+            'a' => bytes.push(0x07),
+            'b' => bytes.push(0x08),
+            'f' => bytes.push(0x0c),
+            'n' => bytes.push(b'\n'),
+            'r' => bytes.push(b'\r'),
+            't' => bytes.push(b'\t'),
+            'v' => bytes.push(0x0b),
+            '\\' => bytes.push(b'\\'),
+            '"' => bytes.push(b'"'),
+            '0'..='7' => {
+                let mut oct = String::new();
+                oct.push(next);
+                for _ in 0..2 {
+                    match chars.peek().copied() {
+                        Some(d @ '0'..='7') => {
+                            oct.push(d);
+                            chars.next();
+                        }
+                        _ => break,
+                    }
+                }
+                if let Ok(value) = u8::from_str_radix(&oct, 8) {
+                    bytes.push(value);
+                }
+            }
+            other => {
+                let mut utf8 = [0u8; 4];
+                let encoded = other.encode_utf8(&mut utf8);
+                bytes.extend_from_slice(encoded.as_bytes());
+            }
+        }
+    }
+
+    String::from_utf8_lossy(&bytes).to_string()
 }
 
 fn parse_numstat_line(line: &str) -> Option<(String, i32, i32)> {
@@ -497,11 +558,11 @@ pub async fn git_commit_files(Query(q): Query<GitCommitFilesQuery>) -> Response 
             let old = parts.next().unwrap_or("").trim();
             let new = parts.next().unwrap_or("").trim();
             if !old.is_empty() {
-                old_path = Some(old.to_string());
+                old_path = Some(decode_git_quoted_path(old));
             }
-            new.to_string()
+            decode_git_quoted_path(new)
         } else {
-            parts.next().unwrap_or("").trim().to_string()
+            decode_git_quoted_path(parts.next().unwrap_or("").trim())
         };
         if path.is_empty() {
             continue;
@@ -826,4 +887,43 @@ pub async fn git_revert_commit(
     }
 
     Json(serde_json::json!({"success": true})).into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{decode_git_quoted_path, normalize_numstat_path, parse_numstat_line};
+
+    #[test]
+    fn decode_git_quoted_path_decodes_octal_utf8_sequences() {
+        let input = "\"src/\\344\\270\\255\\346\\226\\207.txt\"";
+        assert_eq!(
+            decode_git_quoted_path(input),
+            format!("src/{}{}.txt", '\u{4e2d}', '\u{6587}')
+        );
+    }
+
+    #[test]
+    fn decode_git_quoted_path_keeps_unquoted_path() {
+        let input = "src/plain.txt";
+        assert_eq!(decode_git_quoted_path(input), input);
+    }
+
+    #[test]
+    fn normalize_numstat_path_decodes_quoted_rename_expression() {
+        let input = "\"src/{\\344\\270\\247 => \\344\\270\\255}\\346\\226\\207.txt\"";
+        assert_eq!(
+            normalize_numstat_path(input),
+            format!("src/{}{}.txt", '\u{4e2d}', '\u{6587}')
+        );
+    }
+
+    #[test]
+    fn parse_numstat_line_uses_decoded_path() {
+        let line = "12\t3\t\"src/\\344\\270\\255\\346\\226\\207.txt\"";
+        let parsed = parse_numstat_line(line);
+        assert_eq!(
+            parsed,
+            Some((format!("src/{}{}.txt", '\u{4e2d}', '\u{6587}'), 12, 3))
+        );
+    }
 }
