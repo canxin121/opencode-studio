@@ -238,6 +238,10 @@ const KEY_CLASSES = 'oc-terminal-keybar__key select-none font-mono text-[12px] l
 }
 
 /* Hide scrollbars on mobile without removing scrollability. */
+.oc-terminal-keybar__scroller {
+  scrollbar-width: none;
+}
+
 .oc-terminal-keybar__scroller::-webkit-scrollbar {
   height: 0;
 }
