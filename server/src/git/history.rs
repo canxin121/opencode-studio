@@ -896,7 +896,10 @@ mod tests {
     #[test]
     fn decode_git_quoted_path_decodes_octal_utf8_sequences() {
         let input = "\"src/\\344\\270\\255\\346\\226\\207.txt\"";
-        assert_eq!(decode_git_quoted_path(input), format!("src/{}{}.txt", '\u{4e2d}', '\u{6587}'));
+        assert_eq!(
+            decode_git_quoted_path(input),
+            format!("src/{}{}.txt", '\u{4e2d}', '\u{6587}')
+        );
     }
 
     #[test]
@@ -908,7 +911,10 @@ mod tests {
     #[test]
     fn normalize_numstat_path_decodes_quoted_rename_expression() {
         let input = "\"src/{\\344\\270\\247 => \\344\\270\\255}\\346\\226\\207.txt\"";
-        assert_eq!(normalize_numstat_path(input), format!("src/{}{}.txt", '\u{4e2d}', '\u{6587}'));
+        assert_eq!(
+            normalize_numstat_path(input),
+            format!("src/{}{}.txt", '\u{4e2d}', '\u{6587}')
+        );
     }
 
     #[test]
