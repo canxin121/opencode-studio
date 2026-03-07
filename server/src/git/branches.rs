@@ -11,10 +11,10 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     DirectoryQuery, GitAuthInput, TempGitAskpass, git_http_auth_env, lock_repo, map_git_failure,
-    normalize_http_auth, require_directory, run_git, run_git_env,
+    normalize_http_auth, require_directory, require_directory_raw, run_git, run_git_env,
 };
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GitBranchDetails {
     pub current: bool,
@@ -30,10 +30,27 @@ pub struct GitBranchDetails {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GitBranchesResponse {
     pub all: Vec<String>,
     pub current: String,
     pub branches: BTreeMap<String, GitBranchDetails>,
+    pub page: usize,
+    pub page_size: usize,
+    pub total: usize,
+    pub total_pages: usize,
+    pub has_more: bool,
+    pub search: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitBranchesQuery {
+    pub directory: Option<String>,
+    pub page: Option<usize>,
+    pub page_size: Option<usize>,
+    pub search: Option<String>,
+    pub local_only: Option<bool>,
 }
 
 fn parse_track_counts(track: &str) -> (Option<i32>, Option<i32>) {
@@ -95,11 +112,16 @@ async fn local_branch_exists(dir: &Path, name: &str) -> bool {
     code == 0
 }
 
-pub async fn git_branches(Query(q): Query<DirectoryQuery>) -> Response {
-    let dir = match require_directory(&q) {
+pub async fn git_branches(Query(q): Query<GitBranchesQuery>) -> Response {
+    let dir = match require_directory_raw(q.directory.as_deref()) {
         Ok(d) => d,
         Err(resp) => return *resp,
     };
+    let search = q.search.as_deref().map(str::trim).unwrap_or("").to_string();
+    let normalized_search = search.to_lowercase();
+    let page_size = q.page_size.unwrap_or(40).clamp(1, 200);
+    let local_only = q.local_only.unwrap_or(false);
+    let page_requested = q.page.is_some() || q.page_size.is_some() || !normalized_search.is_empty();
 
     // Determine current branch.
     let current = run_git(&dir, &["rev-parse", "--abbrev-ref", "HEAD"])
@@ -222,10 +244,63 @@ pub async fn git_branches(Query(q): Query<DirectoryQuery>) -> Response {
         }
     }
 
+    let mut branch_names: Vec<String> = branches.keys().cloned().collect();
+    if local_only {
+        branch_names.retain(|name| !name.starts_with("remotes/") && !name.ends_with("/HEAD"));
+    }
+    if !normalized_search.is_empty() {
+        branch_names.retain(|name| name.to_lowercase().contains(&normalized_search));
+    }
+    branch_names.sort_by(|a, b| {
+        let a_cur = a == &current;
+        let b_cur = b == &current;
+        b_cur.cmp(&a_cur).then(a.cmp(b))
+    });
+
+    let total = branch_names.len();
+    let total_pages = if total == 0 {
+        1
+    } else {
+        total.div_ceil(page_size)
+    };
+    let page = q.page.unwrap_or(1).clamp(1, total_pages);
+
+    let names_for_output = if page_requested {
+        let start = (page - 1) * page_size;
+        let end = (start + page_size).min(total);
+        if start < end {
+            branch_names[start..end].to_vec()
+        } else {
+            Vec::new()
+        }
+    } else {
+        all.clone()
+    };
+
+    let branches_for_output: BTreeMap<String, GitBranchDetails> = if page_requested {
+        names_for_output
+            .iter()
+            .filter_map(|name| {
+                branches
+                    .get(name)
+                    .cloned()
+                    .map(|details| (name.clone(), details))
+            })
+            .collect()
+    } else {
+        branches
+    };
+
     Json(GitBranchesResponse {
-        all,
+        all: names_for_output,
         current,
-        branches,
+        branches: branches_for_output,
+        page,
+        page_size,
+        total,
+        total_pages,
+        has_more: page < total_pages,
+        search,
     })
     .into_response()
 }

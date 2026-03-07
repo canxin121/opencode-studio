@@ -12,8 +12,17 @@ use walkdir::WalkDir;
 
 use super::{
     DirectoryQuery, is_safe_repo_rel_path, map_git_failure, path_slash, rel_path_slash,
-    require_directory, run_git,
+    require_directory, require_directory_raw, run_git,
 };
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitReposQuery {
+    pub directory: Option<String>,
+    pub page: Option<usize>,
+    pub page_size: Option<usize>,
+    pub search: Option<String>,
+}
 
 #[derive(Debug, Serialize)]
 pub struct GitCheckResponse {
@@ -73,11 +82,16 @@ async fn discover_parent_repos(base: &Path) -> Vec<String> {
     out
 }
 
-pub async fn git_repos(Query(q): Query<DirectoryQuery>) -> Response {
-    let base = match require_directory(&q) {
+pub async fn git_repos(Query(q): Query<GitReposQuery>) -> Response {
+    let base = match require_directory_raw(q.directory.as_deref()) {
         Ok(d) => d,
         Err(resp) => return *resp,
     };
+
+    let search = q.search.as_deref().map(str::trim).unwrap_or("").to_string();
+    let normalized_search = search.to_lowercase();
+    let page_size = q.page_size.unwrap_or(30).clamp(1, 200);
+    let page_requested = q.page.is_some() || q.page_size.is_some() || !normalized_search.is_empty();
 
     // Rough parity with VS Code behavior: scan for nested repos, but avoid heavy dirs.
     let max_depth = 8usize;
@@ -151,6 +165,31 @@ pub async fn git_repos(Query(q): Query<DirectoryQuery>) -> Response {
             .then(a.relative.cmp(&b.relative))
     });
 
+    if !normalized_search.is_empty() {
+        repos.retain(|repo| {
+            repo.relative.to_lowercase().contains(&normalized_search)
+                || repo.root.to_lowercase().contains(&normalized_search)
+        });
+    }
+
+    let total = repos.len();
+    let total_pages = if total == 0 {
+        1
+    } else {
+        total.div_ceil(page_size)
+    };
+    let page = q.page.unwrap_or(1).clamp(1, total_pages);
+
+    if page_requested {
+        let start = (page - 1) * page_size;
+        let end = (start + page_size).min(total);
+        repos = if start < end {
+            repos[start..end].to_vec()
+        } else {
+            Vec::new()
+        };
+    }
+
     let parent_repos = discover_parent_repos(&base).await;
 
     Json(serde_json::json!({
@@ -159,6 +198,12 @@ pub async fn git_repos(Query(q): Query<DirectoryQuery>) -> Response {
         "base": path_slash(&base),
         "parentRepos": parent_repos,
         "parentCount": parent_repos.len(),
+        "page": page,
+        "pageSize": page_size,
+        "total": total,
+        "totalPages": total_pages,
+        "hasMore": page < total_pages,
+        "search": search,
     }))
     .into_response()
 }

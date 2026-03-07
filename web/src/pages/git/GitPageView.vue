@@ -7,6 +7,7 @@ import {
   RiGitBranchLine,
   RiMore2Line,
   RiRefreshLine,
+  RiSearchLine,
 } from '@remixicon/vue'
 import { useI18n } from 'vue-i18n'
 
@@ -25,7 +26,6 @@ import GitMergeChangesSection from '@/components/git/GitMergeChangesSection.vue'
 import GitStagedChangesSection from '@/components/git/GitStagedChangesSection.vue'
 import GitChangesSection from '@/components/git/GitChangesSection.vue'
 import GitUntrackedSection from '@/components/git/GitUntrackedSection.vue'
-import GitRepoPickerDialog from '@/components/git/GitRepoPickerDialog.vue'
 import GitCloneDialog from '@/components/git/GitCloneDialog.vue'
 import GitInitRepoDialog from '@/components/git/GitInitRepoDialog.vue'
 import GitBranchesDialog from '@/components/git/GitBranchesDialog.vue'
@@ -90,17 +90,19 @@ const {
   selectedRepoRelative,
 
   // Repo list/picker
-  repos,
-  closedRepos,
+  repoPickerRepos,
   parentRepos,
   reposLoading,
+  repoPickerLoading,
   reposError,
-  repoPickerOpen,
+  repoPickerPage,
+  repoPickerTotalPages,
+  repoPickerTotal,
   initRepoOpen,
   initRepoPath,
   initRepoDefaultBranch,
   initRepoBusy,
-  loadRepos,
+  loadRepoPickerPage,
   initRepo,
   cloneRepoOpen,
   cloneRepoUrl,
@@ -111,8 +113,6 @@ const {
   cloneRepo,
   selectRepo,
   openParentRepo,
-  closeRepo,
-  reopenRepo,
 
   // Unsafe repository trust flow
   unsafeRepoDetected,
@@ -241,8 +241,6 @@ const {
   stageSelected,
   unstageSelected,
   discardSelected,
-  historyBranchOptions,
-  historyTagOptions,
 
   // Merge/Rebase
   mergeDialogOpen,
@@ -307,6 +305,10 @@ const {
   isBranchDialogOpen,
   branchesLoading,
   branches,
+  branchPicker,
+  branchPickerLoading,
+  branchPickerPage,
+  branchPickerTotalPages,
   newBranchName,
   renameBranchOpen,
   renameBranchFrom,
@@ -318,6 +320,7 @@ const {
   openRenameBranch,
   submitRenameBranch,
   loadBranches,
+  loadBranchPicker,
 
   // Tags
   tagsOpen,
@@ -466,10 +469,7 @@ const {
   historyFilesError,
   historyFileSelected,
   historyFilterPath,
-  historyFilterAuthor,
-  historyFilterMessage,
-  historyFilterRef,
-  historyFilterRefType,
+  historySearchDraft,
   openFileHistory,
   refreshHistory,
   clearHistoryFilter,
@@ -721,11 +721,6 @@ const historyParentCommitHash = computed(() => {
   return String(parents[0] || '').trim()
 })
 
-const historyRefOptions = computed(() => {
-  if (historyFilterRefType.value === 'tag') return historyTagOptions.value
-  return historyBranchOptions.value
-})
-
 function ensureHistoryLoaded() {
   if (!gitReady.value || !repoRoot.value) return
   if (historyLoading.value || historyCommits.value.length > 0) return
@@ -816,10 +811,6 @@ function onClearHistoryPathFilter() {
   sourceControlView.value = 'history'
 }
 
-function toggleHistorySearchExpanded() {
-  ui.gitHistorySearchExpanded = !ui.gitHistorySearchExpanded
-}
-
 watch(
   () => repoRoot.value,
   () => {
@@ -832,14 +823,6 @@ watch(
   (ready) => {
     if (ready) return
     sourceControlView.value = 'changes'
-  },
-)
-
-watch(
-  () => ui.gitHistorySearchExpanded,
-  (expanded) => {
-    if (expanded) return
-    historyFilterRefType.value = 'branch'
   },
 )
 
@@ -898,11 +881,131 @@ const mergeRebaseBranchOptions = computed(() => {
   return options
 })
 
+const REPO_MENU_PAGE_SIZE = 30
+const repoMenuOpen = ref(false)
+const repoMenuQuery = ref('')
+
+const repoMenuGroups = computed<OptionMenuGroup[]>(() => {
+  const selected = String(selectedRepoRelative.value || '.').trim() || '.'
+  const repoItems: OptionMenuItem[] = (repoPickerRepos.value || []).map(
+    (repo: { relative?: string; root?: string }) => {
+      const relative = String(repo.relative || '.').trim() || '.'
+      return {
+        id: `repo:${relative}`,
+        label: relative,
+        description: repo.root,
+        checked: relative === selected,
+        monospace: true,
+      }
+    },
+  )
+
+  const groups: OptionMenuGroup[] = [
+    {
+      id: 'repos',
+      title: t('git.ui.repository'),
+      subtitle:
+        repoPickerTotalPages.value > 1
+          ? `${repoPickerPage.value}/${repoPickerTotalPages.value} · ${repoPickerTotal.value}`
+          : undefined,
+      items: repoItems,
+    },
+  ]
+
+  if (repoPickerTotalPages.value > 1) {
+    groups.push({
+      id: 'repo-pager',
+      items: [
+        {
+          id: '__repo_prev',
+          label: t('common.previousPage'),
+          disabled: repoPickerLoading.value || repoPickerPage.value <= 1,
+        },
+        {
+          id: '__repo_next',
+          label: t('common.nextPage'),
+          disabled: repoPickerLoading.value || repoPickerPage.value >= repoPickerTotalPages.value,
+        },
+      ],
+    })
+  }
+
+  const parentItems: OptionMenuItem[] = (parentRepos.value || []).map((rootPath: string) => ({
+    id: `parent:${rootPath}`,
+    label: rootPath,
+    monospace: true,
+  }))
+
+  if (parentItems.length > 0) {
+    groups.push({
+      id: 'parent-repos',
+      title: t('git.ui.dialogs.repoPicker.sections.parentRepos'),
+      items: parentItems,
+    })
+  }
+
+  return groups
+})
+
+async function requestRepoMenuPage(page: number, query = repoMenuQuery.value) {
+  await loadRepoPickerPage({ page, pageSize: REPO_MENU_PAGE_SIZE, search: query })
+}
+
+function toggleRepoMenu() {
+  const nextOpen = !repoMenuOpen.value
+  repoMenuOpen.value = nextOpen
+  if (!nextOpen) {
+    repoMenuQuery.value = ''
+    return
+  }
+  void requestRepoMenuPage(1, repoMenuQuery.value)
+}
+
+function setRepoMenuOpen(open: boolean) {
+  repoMenuOpen.value = open
+  if (!open) {
+    repoMenuQuery.value = ''
+    return
+  }
+  void requestRepoMenuPage(1, repoMenuQuery.value)
+}
+
+function onRepoMenuQueryChange(value: string) {
+  repoMenuQuery.value = value
+  void requestRepoMenuPage(1, value)
+}
+
+function onRepoMenuSelect(item: OptionMenuItem) {
+  const id = String(item.id || '')
+  if (id === '__repo_prev') {
+    if (repoPickerPage.value > 1) {
+      void requestRepoMenuPage(repoPickerPage.value - 1)
+    }
+    return
+  }
+  if (id === '__repo_next') {
+    if (repoPickerPage.value < repoPickerTotalPages.value) {
+      void requestRepoMenuPage(repoPickerPage.value + 1)
+    }
+    return
+  }
+  if (id.startsWith('parent:')) {
+    void openParentRepo(id.slice('parent:'.length))
+    repoMenuOpen.value = false
+    return
+  }
+  if (id.startsWith('repo:')) {
+    const target = id.slice('repo:'.length).trim() || '.'
+    selectRepo(target)
+    repoMenuOpen.value = false
+  }
+}
+
 const branchMenuOpen = ref(false)
 const branchMenuQuery = ref('')
 
 const branchSwitcherOptions = computed<OptionMenuItem[]>(() => {
-  const map = (branches?.value?.branches ?? {}) as Record<string, { name?: string; current?: boolean }>
+  const map = (branchPicker.value?.branches ?? {}) as Record<string, { name?: string; current?: boolean }>
   const options: OptionMenuItem[] = []
 
   for (const branch of Object.values(map)) {
@@ -938,14 +1041,40 @@ const branchSwitcherOptions = computed<OptionMenuItem[]>(() => {
 })
 
 const branchMenuGroups = computed<OptionMenuGroup[]>(() => {
-  return [
+  const groups: OptionMenuGroup[] = [
     {
       id: 'branches',
       title: t('git.ui.dialogs.branches.sections.branches'),
+      subtitle:
+        branchPickerTotalPages.value > 1 ? `${branchPickerPage.value}/${branchPickerTotalPages.value}` : undefined,
       items: branchSwitcherOptions.value,
     },
   ]
+
+  if (branchPickerTotalPages.value > 1) {
+    groups.push({
+      id: 'branch-pager',
+      items: [
+        {
+          id: '__branch_prev',
+          label: t('common.previousPage'),
+          disabled: branchPickerLoading.value || branchPickerPage.value <= 1,
+        },
+        {
+          id: '__branch_next',
+          label: t('common.nextPage'),
+          disabled: branchPickerLoading.value || branchPickerPage.value >= branchPickerTotalPages.value,
+        },
+      ],
+    })
+  }
+
+  return groups
 })
+
+async function requestBranchMenuPage(page: number, query = branchMenuQuery.value) {
+  await loadBranchPicker({ page, pageSize: 40, search: query })
+}
 
 function toggleBranchMenu() {
   const nextOpen = !branchMenuOpen.value
@@ -954,9 +1083,7 @@ function toggleBranchMenu() {
     branchMenuQuery.value = ''
     return
   }
-  if (!branchesLoading.value) {
-    void loadBranches()
-  }
+  void requestBranchMenuPage(1, branchMenuQuery.value)
 }
 
 function setBranchMenuOpen(open: boolean) {
@@ -965,17 +1092,34 @@ function setBranchMenuOpen(open: boolean) {
     branchMenuQuery.value = ''
     return
   }
-  if (!branchesLoading.value) {
-    void loadBranches()
-  }
+  void requestBranchMenuPage(1, branchMenuQuery.value)
+}
+
+function onBranchMenuQueryChange(value: string) {
+  branchMenuQuery.value = value
+  void requestBranchMenuPage(1, value)
 }
 
 function onBranchMenuSelect(item: OptionMenuItem) {
-  const target = String(item.id || '').trim()
+  const id = String(item.id || '').trim()
+  if (id === '__branch_prev') {
+    if (branchPickerPage.value > 1) {
+      void requestBranchMenuPage(branchPickerPage.value - 1)
+    }
+    return
+  }
+  if (id === '__branch_next') {
+    if (branchPickerPage.value < branchPickerTotalPages.value) {
+      void requestBranchMenuPage(branchPickerPage.value + 1)
+    }
+    return
+  }
+  const target = id
   if (!target) return
   const current = String(status.value?.current || '').trim()
   if (current === target) return
   void checkoutBranch(target)
+  branchMenuOpen.value = false
 }
 
 const actionsMenuAnchorEl = ref<HTMLElement | null>(null)
@@ -1127,22 +1271,43 @@ void diffPaneRef
 
       <div class="border-b border-sidebar-border/50 px-2 py-1.5">
         <!-- Repository Selector -->
-        <button
-          type="button"
-          class="w-full flex items-center gap-2 rounded-sm border border-sidebar-border/60 bg-sidebar-accent/20 px-2 py-1.5 text-left transition"
-          :class="projectRoot ? 'hover:bg-sidebar-accent/40' : 'opacity-70 cursor-not-allowed'"
-          :disabled="!projectRoot"
-          @click="repoPickerOpen = true"
-        >
-          <span class="shrink-0 text-[10px] uppercase tracking-[0.08em] text-muted-foreground">{{
-            t('git.ui.repository')
-          }}</span>
-          <span class="min-w-0 flex-1 truncate font-mono text-[11px] text-foreground" :title="selectedRepoLabel">{{
-            selectedRepoLabel
-          }}</span>
-          <span v-if="reposLoading" class="shrink-0 text-[10px] text-muted-foreground">{{ t('common.scanning') }}</span>
-          <RiArrowDownSLine class="h-4 w-4 shrink-0 text-muted-foreground" />
-        </button>
+        <div class="relative">
+          <button
+            type="button"
+            class="w-full flex items-center gap-2 rounded-sm border border-sidebar-border/60 bg-sidebar-accent/20 px-2 py-1.5 text-left transition"
+            :class="projectRoot ? 'hover:bg-sidebar-accent/40' : 'opacity-70 cursor-not-allowed'"
+            :disabled="!projectRoot"
+            @click="toggleRepoMenu"
+          >
+            <span class="shrink-0 text-[10px] uppercase tracking-[0.08em] text-muted-foreground">{{
+              t('git.ui.repository')
+            }}</span>
+            <span class="min-w-0 flex-1 truncate font-mono text-[11px] text-foreground" :title="selectedRepoLabel">{{
+              selectedRepoLabel
+            }}</span>
+            <span v-if="repoPickerLoading || reposLoading" class="shrink-0 text-[10px] text-muted-foreground">{{
+              t('common.scanning')
+            }}</span>
+            <RiArrowDownSLine class="h-4 w-4 shrink-0 text-muted-foreground" />
+          </button>
+
+          <OptionMenu
+            :open="repoMenuOpen"
+            :query="repoMenuQuery"
+            :groups="repoMenuGroups"
+            :title="t('git.ui.dialogs.repoPicker.title')"
+            :mobile-title="t('git.ui.dialogs.repoPicker.title')"
+            :is-mobile-pointer="ui.isMobilePointer"
+            :filter-mode="'external'"
+            :close-on-select="false"
+            :desktop-fixed="true"
+            desktop-placement="bottom-start"
+            desktop-class="w-[26rem] max-w-[calc(100vw-1rem)]"
+            @update:open="setRepoMenuOpen"
+            @update:query="onRepoMenuQueryChange"
+            @select="onRepoMenuSelect"
+          />
+        </div>
 
         <div v-if="reposError" class="mt-1.5 text-xs text-destructive/90">
           {{ reposError }}
@@ -1170,10 +1335,13 @@ void diffPaneRef
               :title="t('git.ui.dialogs.branches.title')"
               :mobile-title="t('git.ui.dialogs.branches.title')"
               :is-mobile-pointer="ui.isMobilePointer"
+              :filter-mode="'external'"
+              :close-on-select="false"
+              :desktop-fixed="true"
               desktop-placement="bottom-start"
               desktop-class="w-72"
               @update:open="setBranchMenuOpen"
-              @update:query="(v) => (branchMenuQuery = v)"
+              @update:query="onBranchMenuQueryChange"
               @select="onBranchMenuSelect"
             />
           </div>
@@ -1450,7 +1618,7 @@ void diffPaneRef
               </div>
             </div>
             <div class="mt-3 flex items-center justify-center gap-2">
-              <MiniActionButton size="xs" @click="repoPickerOpen = true">{{ t('git.ui.selectRepo') }}</MiniActionButton>
+              <MiniActionButton size="xs" @click="toggleRepoMenu">{{ t('git.ui.selectRepo') }}</MiniActionButton>
               <MiniActionButton variant="default" size="xs" @click="initRepoOpen = true">{{
                 t('git.ui.initialize')
               }}</MiniActionButton>
@@ -1566,13 +1734,6 @@ void diffPaneRef
             <div class="rounded-sm border border-sidebar-border/60 bg-sidebar-accent/10 p-2">
               <div class="mb-1 flex items-center justify-between gap-2">
                 <div class="text-[11px] font-medium text-muted-foreground">{{ t('common.search') }}</div>
-                <button
-                  type="button"
-                  class="rounded-sm px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-sidebar-accent/40 hover:text-foreground"
-                  @click="toggleHistorySearchExpanded"
-                >
-                  {{ ui.gitHistorySearchExpanded ? t('common.collapse') : t('common.expand') }}
-                </button>
               </div>
 
               <div v-if="historyFilterPath" class="mb-2 flex items-center justify-between gap-2">
@@ -1583,57 +1744,27 @@ void diffPaneRef
               </div>
 
               <div class="grid gap-2">
-                <div v-if="ui.gitHistorySearchExpanded" class="grid grid-cols-[86px_minmax(0,1fr)] gap-2">
-                  <select
-                    v-model="historyFilterRefType"
-                    class="h-8 rounded border border-input bg-background px-2 text-xs text-foreground"
-                  >
-                    <option value="branch">{{ t('git.ui.dialogs.history.refType.branch') }}</option>
-                    <option value="tag">{{ t('git.ui.dialogs.history.refType.tag') }}</option>
-                  </select>
-                  <input
-                    v-model="historyFilterRef"
-                    class="h-8 w-full rounded border border-input bg-transparent px-2 text-xs font-mono text-foreground placeholder:text-muted-foreground"
-                    list="git-history-ref-options"
-                    :placeholder="
-                      historyFilterRefType === 'tag'
-                        ? t('git.ui.dialogs.history.placeholders.tagName')
-                        : t('git.ui.dialogs.history.placeholders.branchName')
-                    "
+                <div class="flex items-center gap-1.5">
+                  <Input
+                    v-model="historySearchDraft"
+                    class="h-8 flex-1 font-mono text-xs"
+                    :placeholder="t('git.ui.dialogs.history.placeholders.commitMetaContains')"
+                    @keydown.enter="onApplyHistoryFilters"
                   />
+                  <SidebarIconButton
+                    size="sm"
+                    :tooltip="t('common.search')"
+                    :is-mobile-pointer="ui.isMobilePointer"
+                    :aria-label="t('common.search')"
+                    @click="onApplyHistoryFilters"
+                  >
+                    <RiSearchLine class="h-3.5 w-3.5" />
+                  </SidebarIconButton>
                 </div>
-                <input
-                  v-else
-                  v-model="historyFilterRef"
-                  class="h-8 w-full rounded border border-input bg-transparent px-2 text-xs font-mono text-foreground placeholder:text-muted-foreground"
-                  list="git-history-ref-options"
-                  :placeholder="t('git.ui.dialogs.history.placeholders.branchName')"
-                />
-                <datalist id="git-history-ref-options">
-                  <option v-for="name in historyRefOptions" :key="`history-ref-${name}`" :value="name" />
-                </datalist>
-
-                <Input
-                  v-if="ui.gitHistorySearchExpanded"
-                  v-model="historyFilterAuthor"
-                  class="h-8 font-mono text-xs"
-                  :placeholder="t('git.ui.dialogs.history.placeholders.authorContains')"
-                />
-
-                <Input
-                  v-if="ui.gitHistorySearchExpanded"
-                  v-model="historyFilterMessage"
-                  class="h-8 font-mono text-xs"
-                  :placeholder="t('git.ui.dialogs.history.placeholders.messageContains')"
-                  @keydown.enter="onApplyHistoryFilters"
-                />
 
                 <div class="flex items-center justify-end gap-2">
                   <MiniActionButton size="xs" @click="refreshHistory">{{ t('common.refresh') }}</MiniActionButton>
                   <MiniActionButton size="xs" @click="onClearHistoryFilters">{{ t('common.clear') }}</MiniActionButton>
-                  <MiniActionButton variant="default" size="xs" @click="onApplyHistoryFilters">{{
-                    t('common.search')
-                  }}</MiniActionButton>
                 </div>
               </div>
             </div>
@@ -2000,35 +2131,6 @@ void diffPaneRef
       @update:autoSyncEnabled="(v: boolean) => (autoSyncEnabled = v)"
       @update:autoSyncInterval="(v: number) => (autoSyncIntervalMinutes = v)"
       @update:postCommitCommand="(v: 'none' | 'push' | 'sync') => (gitPostCommitCommand = v)"
-    />
-
-    <GitRepoPickerDialog
-      :open="repoPickerOpen"
-      :project-root="projectRoot || ''"
-      :repos="repos"
-      :closed-repos="closedRepos"
-      :parent-repos="parentRepos"
-      :repos-loading="reposLoading"
-      :repos-error="reposError"
-      :selected-repo-relative="selectedRepoRelative"
-      @update:open="
-        (v: boolean) => {
-          repoPickerOpen = v
-          if (v) void loadRepos()
-        }
-      "
-      @refresh="loadRepos"
-      @openInit="initRepoOpen = true"
-      @openClone="
-        () => {
-          repoPickerOpen = false
-          cloneRepoOpen = true
-        }
-      "
-      @select="selectRepo"
-      @openParent="openParentRepo"
-      @closeRepo="closeRepo"
-      @reopenRepo="reopenRepo"
     />
 
     <GitCloneDialog
