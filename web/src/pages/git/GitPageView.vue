@@ -1526,20 +1526,6 @@ void diffPaneRef
               @messageKeydown="onCommitMessageKeydown"
               @commit="commitStaged"
             />
-
-            <GitStashPanel
-              v-model:expanded="isStashExpanded"
-              :stashes="stashList"
-              :loading="stashLoading"
-              :can-operate="!!repoRoot"
-              @openCreate="stashDialogOpen = true"
-              @dropAll="stashDropAll"
-              @view="stashView"
-              @apply="(ref: string) => stashAction('apply', ref)"
-              @pop="(ref: string) => stashAction('pop', ref)"
-              @branch="stashBranchFrom"
-              @drop="(ref: string) => stashAction('drop', ref)"
-            />
           </div>
 
           <div
@@ -1582,6 +1568,21 @@ void diffPaneRef
           </div>
 
           <div v-if="gitReady" class="space-y-0">
+            <GitStashPanel
+              v-model:expanded="isStashExpanded"
+              :stashes="stashList"
+              :loading="stashLoading"
+              :can-operate="!!repoRoot"
+              :is-mobile-pointer="ui.isMobilePointer"
+              @openCreate="stashDialogOpen = true"
+              @dropAll="stashDropAll"
+              @view="stashView"
+              @apply="(ref: string) => stashAction('apply', ref)"
+              @pop="(ref: string) => stashAction('pop', ref)"
+              @branch="stashBranchFrom"
+              @drop="(ref: string) => stashAction('drop', ref)"
+            />
+
             <GitMergeChangesSection
               v-if="mergeCount > 0"
               v-model:expanded="isMergeExpanded"

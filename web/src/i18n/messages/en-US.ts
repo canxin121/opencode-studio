@@ -2810,6 +2810,7 @@ export default {
           stagedChanges: 'Staged Changes',
           untracked: 'Untracked',
           mergeChanges: 'Merge Changes',
+          stashChanges: 'Stash Changes',
         },
         actions: {
           stageAll: 'Stage all',
