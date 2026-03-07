@@ -41,6 +41,20 @@ type SidebarFooterKind = 'pinned' | 'recent' | 'running'
 const SIDEBAR_STATE_ENDPOINT = '/api/chat-sidebar/state'
 const SIDEBAR_COMMAND_ENDPOINT = '/api/chat-sidebar/commands'
 const SIDEBAR_RECOVERY_THROTTLE_MS = 1500
+const SIDEBAR_RECOVERY_EVENT_TYPES = new Set([
+  'session.created',
+  'session.updated',
+  'session.deleted',
+  'session.status',
+  'session.idle',
+  'session.error',
+  'permission.asked',
+  'permission.replied',
+  'question.asked',
+  'question.replied',
+  'question.rejected',
+  'opencode-studio:session-activity',
+])
 
 type SidebarSessionSummary = UnknownRecord & {
   id: string
@@ -63,6 +77,8 @@ type DirectorySidebarView = {
   rootPage: number
   rootPageCount: number
   hasActiveOrBlocked: boolean
+  hasRunningSessions: boolean
+  hasBlockedSessions: boolean
   pinnedRows: SidebarSessionRow[]
   recentRows: SidebarSessionRow[]
   recentParentById: Record<string, string | null>
@@ -294,6 +310,8 @@ function directorySidebarViewEquivalent(left: DirectorySidebarView, right: Direc
     left.rootPage === right.rootPage &&
     left.rootPageCount === right.rootPageCount &&
     left.hasActiveOrBlocked === right.hasActiveOrBlocked &&
+    left.hasRunningSessions === right.hasRunningSessions &&
+    left.hasBlockedSessions === right.hasBlockedSessions &&
     sessionRowsEquivalent(left.pinnedRows, right.pinnedRows) &&
     sessionRowsEquivalent(left.recentRows, right.recentRows) &&
     nullableStringRecordEquivalent(left.recentParentById, right.recentParentById) &&
@@ -479,13 +497,21 @@ function normalizeDirectorySidebarSection(raw: JsonValue, directoryId: string): 
       : []
   const recentRootIds = recentRootIdsRaw.map((value) => String(value || '').trim()).filter(Boolean)
 
-  const hasActiveOrBlocked = section.hasActiveOrBlocked === true || section.has_active_or_blocked === true
+  const hasRunningSessions = section.hasRunningSessions === true || section.has_running_sessions === true
+  const hasBlockedSessions = section.hasBlockedSessions === true || section.has_blocked_sessions === true
+  const hasActiveOrBlocked =
+    section.hasActiveOrBlocked === true ||
+    section.has_active_or_blocked === true ||
+    hasRunningSessions ||
+    hasBlockedSessions
 
   return {
     sessionCount,
     rootPage,
     rootPageCount,
     hasActiveOrBlocked,
+    hasRunningSessions,
+    hasBlockedSessions,
     pinnedRows,
     recentRows,
     recentParentById,
@@ -1143,12 +1169,24 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
   function applyGlobalEvent(evt: SseEvent) {
     const type = readEventType(evt)
     if (!type) return
-    if (type === 'chat-sidebar.delta') {
+    const normalizedType = type.toLowerCase()
+
+    if (normalizedType === 'chat-sidebar.delta') {
       applyChatSidebarDeltaEvent(evt)
       return
     }
-    if (type === 'chat-sidebar.patch' || type === 'chat-sidebar.state' || type === 'opencode-studio:replay-gap') {
-      scheduleSidebarRecoverySync(type, 140)
+
+    if (
+      normalizedType === 'chat-sidebar.patch' ||
+      normalizedType === 'chat-sidebar.state' ||
+      normalizedType === 'opencode-studio:replay-gap'
+    ) {
+      scheduleSidebarRecoverySync(normalizedType, 140)
+      return
+    }
+
+    if (SIDEBAR_RECOVERY_EVENT_TYPES.has(normalizedType)) {
+      scheduleSidebarRecoverySync(`event:${normalizedType}`, 90)
     }
   }
 

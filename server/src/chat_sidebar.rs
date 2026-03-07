@@ -525,6 +525,8 @@ pub(crate) struct DirectorySidebarViewWire {
     root_page: usize,
     root_page_count: usize,
     has_active_or_blocked: bool,
+    has_running_sessions: bool,
+    has_blocked_sessions: bool,
     pinned_rows: Vec<SidebarSessionRowWire>,
     recent_rows: Vec<SidebarSessionRowWire>,
     recent_parent_by_id: BTreeMap<String, Option<String>>,
@@ -1415,12 +1417,18 @@ fn page_session_root_ids(
     roots
 }
 
-fn collect_active_directory_ids(
+#[derive(Debug, Default, Clone)]
+struct DirectoryActivityIds {
+    running: HashSet<String>,
+    blocked: HashSet<String>,
+}
+
+fn collect_directory_activity_ids(
     state: &Arc<crate::AppState>,
     runtime_by_session_id: &Value,
     directory_id_by_path: &BTreeMap<String, String>,
-) -> HashSet<String> {
-    let mut out = HashSet::<String>::new();
+) -> DirectoryActivityIds {
+    let mut out = DirectoryActivityIds::default();
     let Some(runtime_map) = runtime_by_session_id.as_object() else {
         return out;
     };
@@ -1430,8 +1438,54 @@ fn collect_active_directory_ids(
             .get("type")
             .and_then(|v| v.as_str())
             .unwrap_or("idle")
-            .trim();
-        if effective.eq_ignore_ascii_case("idle") {
+            .trim()
+            .to_ascii_lowercase();
+        let status_type = runtime
+            .get("statusType")
+            .or_else(|| runtime.get("status_type"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("idle")
+            .trim()
+            .to_ascii_lowercase();
+        let phase = runtime
+            .get("phase")
+            .and_then(|v| v.as_str())
+            .unwrap_or("idle")
+            .trim()
+            .to_ascii_lowercase();
+        let attention = runtime
+            .get("attention")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_ascii_lowercase();
+        let display_state = runtime
+            .get("displayState")
+            .or_else(|| runtime.get("display_state"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_ascii_lowercase();
+
+        let is_blocked = matches!(attention.as_str(), "permission" | "question")
+            || matches!(display_state.as_str(), "needspermission" | "needsreply");
+        let mut is_running = matches!(
+            display_state.as_str(),
+            "running" | "retrying" | "coolingdown"
+        ) || matches!(status_type.as_str(), "busy" | "retry")
+            || matches!(phase.as_str(), "busy" | "cooldown")
+            || matches!(effective.as_str(), "busy" | "cooldown");
+
+        if !is_blocked
+            && !is_running
+            && !effective.is_empty()
+            && effective != "idle"
+            && effective != "attention"
+        {
+            is_running = true;
+        }
+
+        if !is_running && !is_blocked {
             continue;
         }
 
@@ -1447,7 +1501,12 @@ fn collect_active_directory_ids(
         let Some(directory_id) = directory_id_by_path.get(&path_key) else {
             continue;
         };
-        out.insert(directory_id.clone());
+        if is_running {
+            out.running.insert(directory_id.clone());
+        }
+        if is_blocked {
+            out.blocked.insert(directory_id.clone());
+        }
     }
 
     out
@@ -1636,7 +1695,8 @@ struct DirectorySidebarBuildCtx<'a> {
     expanded_parent_ids: &'a HashSet<String>,
     directories_by_id: &'a BTreeMap<String, DirectoryWire>,
     directory_id_by_path: &'a BTreeMap<String, String>,
-    active_directory_ids: &'a HashSet<String>,
+    running_directory_ids: &'a HashSet<String>,
+    blocked_directory_ids: &'a HashSet<String>,
     directory_sessions_page_size: usize,
 }
 
@@ -1756,11 +1816,16 @@ fn build_directory_sidebar_view(
         }
     }
 
+    let has_running_sessions = ctx.running_directory_ids.contains(&directory_id);
+    let has_blocked_sessions = ctx.blocked_directory_ids.contains(&directory_id);
+
     DirectorySidebarViewWire {
         session_count,
         root_page,
         root_page_count,
-        has_active_or_blocked: ctx.active_directory_ids.contains(&directory_id),
+        has_active_or_blocked: has_running_sessions || has_blocked_sessions,
+        has_running_sessions,
+        has_blocked_sessions,
         pinned_rows,
         recent_rows,
         recent_parent_by_id,
@@ -1979,8 +2044,8 @@ fn build_directory_rows_by_id_for_visible_directories(
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
         .collect::<HashSet<_>>();
-    let active_directory_ids =
-        collect_active_directory_ids(state, runtime_by_session_id, &directory_id_by_path);
+    let activity_directory_ids =
+        collect_directory_activity_ids(state, runtime_by_session_id, &directory_id_by_path);
 
     let directory_ctx = DirectorySidebarBuildCtx {
         state,
@@ -1988,7 +2053,8 @@ fn build_directory_rows_by_id_for_visible_directories(
         expanded_parent_ids: &expanded_parent_ids,
         directories_by_id: &directories_by_id,
         directory_id_by_path: &directory_id_by_path,
-        active_directory_ids: &active_directory_ids,
+        running_directory_ids: &activity_directory_ids.running,
+        blocked_directory_ids: &activity_directory_ids.blocked,
         directory_sessions_page_size,
     };
 
@@ -2316,8 +2382,8 @@ pub(crate) async fn directory_sessions_by_id_get(
     let directories_by_id = normalize_directory_wires_by_id(&configured);
     let directory_id_by_path = normalize_directory_id_by_path(&configured);
     let runtime_by_session_id = state.directory_session_index.runtime_snapshot_json();
-    let active_directory_ids =
-        collect_active_directory_ids(&state, &runtime_by_session_id, &directory_id_by_path);
+    let activity_directory_ids =
+        collect_directory_activity_ids(&state, &runtime_by_session_id, &directory_id_by_path);
     let expanded_parent_ids = preferences
         .expanded_parent_session_ids
         .iter()
@@ -2339,7 +2405,8 @@ pub(crate) async fn directory_sessions_by_id_get(
         expanded_parent_ids: &expanded_parent_ids,
         directories_by_id: &directories_by_id,
         directory_id_by_path: &directory_id_by_path,
-        active_directory_ids: &active_directory_ids,
+        running_directory_ids: &activity_directory_ids.running,
+        blocked_directory_ids: &activity_directory_ids.blocked,
         directory_sessions_page_size: limit_per_directory,
     };
     let section = build_directory_sidebar_view(&directory_ctx, &directory_wire, Some(&payload));

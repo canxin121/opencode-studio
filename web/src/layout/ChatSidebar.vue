@@ -808,7 +808,16 @@ function hasAttention(sessionId: string): 'permission' | 'question' | null {
   const sid = (sessionId || '').trim()
   const runtime = directorySessions.runtimeBySessionId?.[sid]
   const value = runtime?.attention
-  return value === 'permission' || value === 'question' ? value : null
+  if (value === 'permission' || value === 'question') {
+    return value
+  }
+  if (runtime?.displayState === 'needsPermission') {
+    return 'permission'
+  }
+  if (runtime?.displayState === 'needsReply') {
+    return 'question'
+  }
+  return null
 }
 
 type ThreadSessionRow = {
@@ -830,11 +839,15 @@ type DirectorySidebarView = {
   rootPage: number
   rootPageCount: number
   hasActiveOrBlocked: boolean
+  hasRunningSessions: boolean
+  hasBlockedSessions: boolean
   pinnedRows: ThreadSessionRow[]
   recentRows: ThreadSessionRow[]
   recentParentById: Record<string, string | null>
   recentRootIds: string[]
 }
+
+type DirectoryActivityState = 'running' | 'blocked' | 'mixed' | null
 
 const flattenedTreeCacheByDirectoryId = new Map<
   string,
@@ -1084,11 +1097,17 @@ async function openRecentSession(sessionId: string) {
   await selectSession(sid)
 }
 
-function directoryHasActiveOrBlocked(p: DirectoryEntry): boolean {
+function directoryActivityState(p: DirectoryEntry): DirectoryActivityState {
   const pid = (p.id || '').trim()
   const section = directorySidebarById.value[pid]
-  if (!section) return false
-  return section.hasActiveOrBlocked === true
+  if (!section) return null
+
+  const hasRunning = section.hasRunningSessions === true
+  const hasBlocked = section.hasBlockedSessions === true
+  if (hasRunning && hasBlocked) return 'mixed'
+  if (hasBlocked) return 'blocked'
+  if (hasRunning || section.hasActiveOrBlocked === true) return 'running'
+  return null
 }
 
 async function ensureDirectorySidebarLoaded(
@@ -1561,7 +1580,7 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
           :isDirectoryExpandLoading="isDirectoryExpandLoading"
           :toggleDirectoryCollapse="toggleDirectoryCollapse"
           :isDirectoryFocused="isDirectoryFocused"
-          :directoryHasActiveOrBlocked="directoryHasActiveOrBlocked"
+          :directoryActivityState="directoryActivityState"
           :openDirectoryActions="openDirectoryActions"
           :refreshDirectoryInline="refreshDirectoryInline"
           :newSessionInline="newSessionInline"

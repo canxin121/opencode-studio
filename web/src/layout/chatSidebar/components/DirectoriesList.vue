@@ -43,6 +43,8 @@ type ThreadSessionRow = {
   isExpanded: boolean
 }
 
+type DirectoryActivityState = 'running' | 'blocked' | 'mixed' | null
+
 type SessionMenuTarget = { directory: DirectoryEntry; session: SessionLike }
 type MenuRefEl = Element | ComponentPublicInstance | null
 
@@ -70,7 +72,7 @@ const props = defineProps<{
   isDirectoryCollapsed: (directoryId: string) => boolean
   toggleDirectoryCollapse: (directoryId: string, directoryPath: string) => void
   isDirectoryFocused: (directory: DirectoryEntry) => boolean
-  directoryHasActiveOrBlocked: (directory: DirectoryEntry) => boolean
+  directoryActivityState: (directory: DirectoryEntry) => DirectoryActivityState
 
   openDirectoryActions: (directory: DirectoryEntry) => void
   refreshDirectoryInline: (directory: DirectoryEntry) => Promise<void>
@@ -195,7 +197,7 @@ function statusMeta(sessionId: string) {
                 :ui-is-mobile="uiIsMobile"
                 :collapsed="props.isDirectoryCollapsed(directory.id)"
                 :focused="props.isDirectoryFocused(directory)"
-                :has-active-or-blocked="props.directoryHasActiveOrBlocked(directory)"
+                :activity-state="props.directoryActivityState(directory)"
                 :loading="props.directoryPageLoading"
                 :creating-session="props.creatingSession"
                 @toggle-collapse="props.toggleDirectoryCollapse(directory.id, directory.path)"

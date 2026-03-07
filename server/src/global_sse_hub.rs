@@ -535,6 +535,8 @@ pub(crate) fn start_global_sse_hub_if_needed(state: Arc<crate::AppState>) {
                             };
                             GLOBAL_HUB.publish_json(&payload_json);
 
+                            let mut sidebar_needs_state_invalidate = false;
+
                             if let Some(payload) = sse_event_payload(&raw)
                                 && let Some(event_type) = payload.get("type").and_then(|v| v.as_str())
                             {
@@ -562,11 +564,13 @@ pub(crate) fn start_global_sse_hub_if_needed(state: Arc<crate::AppState>) {
                                                 state
                                                     .directory_session_index
                                                     .upsert_summary_from_value(session);
+                                                sidebar_needs_state_invalidate = true;
                                             }
                                     }
                                     "session.deleted" => {
                                         if let Some(sid) = read_session_id(props) {
                                             state.directory_session_index.remove_summary(&sid);
+                                            sidebar_needs_state_invalidate = true;
                                         }
                                     }
                                     "session.status" => {
@@ -583,6 +587,7 @@ pub(crate) fn start_global_sse_hub_if_needed(state: Arc<crate::AppState>) {
                                                     state
                                                         .directory_session_index
                                                         .upsert_runtime_status(&sid, status);
+                                                    sidebar_needs_state_invalidate = true;
                                                 }
                                         }
                                     }
@@ -591,6 +596,7 @@ pub(crate) fn start_global_sse_hub_if_needed(state: Arc<crate::AppState>) {
                                             state.directory_session_index.upsert_runtime_status(&sid, "idle");
                                             state.directory_session_index.upsert_runtime_phase(&sid, "idle");
                                             state.directory_session_index.upsert_runtime_attention(&sid, None);
+                                            sidebar_needs_state_invalidate = true;
                                         }
                                     }
                                     "session.error" => {
@@ -598,6 +604,7 @@ pub(crate) fn start_global_sse_hub_if_needed(state: Arc<crate::AppState>) {
                                             state.directory_session_index.upsert_runtime_status(&sid, "idle");
                                             state.directory_session_index.upsert_runtime_phase(&sid, "idle");
                                             state.directory_session_index.upsert_runtime_attention(&sid, None);
+                                            sidebar_needs_state_invalidate = true;
                                         }
                                     }
                                     "permission.asked" => {
@@ -605,6 +612,7 @@ pub(crate) fn start_global_sse_hub_if_needed(state: Arc<crate::AppState>) {
                                             state
                                                 .directory_session_index
                                                 .upsert_runtime_attention(&sid, Some("permission"));
+                                            sidebar_needs_state_invalidate = true;
                                         }
                                     }
                                     "question.asked" => {
@@ -612,11 +620,13 @@ pub(crate) fn start_global_sse_hub_if_needed(state: Arc<crate::AppState>) {
                                             state
                                                 .directory_session_index
                                                 .upsert_runtime_attention(&sid, Some("question"));
+                                            sidebar_needs_state_invalidate = true;
                                         }
                                     }
                                     "permission.replied" | "question.replied" | "question.rejected" => {
                                         if let Some(sid) = read_session_id(props) {
                                             state.directory_session_index.upsert_runtime_attention(&sid, None);
+                                            sidebar_needs_state_invalidate = true;
                                         }
                                     }
                                     _ => {}
@@ -630,6 +640,7 @@ pub(crate) fn start_global_sse_hub_if_needed(state: Arc<crate::AppState>) {
                                 state
                                     .directory_session_index
                                     .upsert_runtime_phase(&session_id, phase.as_str());
+                                sidebar_needs_state_invalidate = true;
 
                                 let injected = serde_json::json!({
                                     "type": "opencode-studio:session-activity",
@@ -641,6 +652,12 @@ pub(crate) fn start_global_sse_hub_if_needed(state: Arc<crate::AppState>) {
                                 if let Ok(encoded) = serde_json::to_string(&injected) {
                                     GLOBAL_HUB.publish_json(&encoded);
                                 }
+                            }
+
+                            if sidebar_needs_state_invalidate {
+                                let _ = crate::chat_sidebar::publish_chat_sidebar_delta_event(vec![
+                                    crate::chat_sidebar::ChatSidebarPatchOp::State,
+                                ]);
                             }
                         }
                     }

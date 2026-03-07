@@ -16,14 +16,14 @@ const props = withDefaults(
     uiIsMobile: boolean
     collapsed?: boolean
     focused?: boolean
-    hasActiveOrBlocked?: boolean
+    activityState?: 'running' | 'blocked' | 'mixed' | null
     loading?: boolean
     creatingSession?: boolean
   }>(),
   {
     collapsed: false,
     focused: false,
-    hasActiveOrBlocked: false,
+    activityState: null,
     loading: false,
     creatingSession: false,
   },
@@ -40,6 +40,58 @@ const emit = defineEmits<{
 const { t } = useI18n()
 
 const actionsAlwaysVisible = computed(() => props.uiIsMobile)
+
+const activityLabel = computed(() => {
+  if (props.activityState === 'running') {
+    return String(t('chat.sidebar.directoriesList.activity.running'))
+  }
+  if (props.activityState === 'blocked') {
+    return String(t('chat.sidebar.directoriesList.activity.blocked'))
+  }
+  if (props.activityState === 'mixed') {
+    return String(t('chat.sidebar.directoriesList.activity.mixed'))
+  }
+  return ''
+})
+
+const activityTitle = computed(() => {
+  if (props.activityState === 'running') {
+    return String(t('chat.sidebar.directoriesList.activity.runningTooltip'))
+  }
+  if (props.activityState === 'blocked') {
+    return String(t('chat.sidebar.directoriesList.activity.blockedTooltip'))
+  }
+  if (props.activityState === 'mixed') {
+    return String(t('chat.sidebar.directoriesList.activity.mixedTooltip'))
+  }
+  return ''
+})
+
+const activityBadgeClass = computed(() => {
+  if (props.activityState === 'running') {
+    return 'bg-primary/10 text-primary'
+  }
+  if (props.activityState === 'blocked') {
+    return 'bg-amber-500/12 text-amber-700 dark:text-amber-400'
+  }
+  if (props.activityState === 'mixed') {
+    return 'bg-orange-500/12 text-orange-700 dark:text-orange-400'
+  }
+  return ''
+})
+
+const activityDotClass = computed(() => {
+  if (props.activityState === 'running') {
+    return 'bg-primary animate-pulse'
+  }
+  if (props.activityState === 'blocked') {
+    return 'bg-amber-500'
+  }
+  if (props.activityState === 'mixed') {
+    return 'bg-orange-500 animate-pulse'
+  }
+  return ''
+})
 
 function handleMobileOpenActionsClick() {
   emit('open-actions')
@@ -77,11 +129,15 @@ function handleMobileOpenActionsClick() {
         <div class="flex min-w-0 items-center gap-2">
           <div class="min-w-0 flex-1 truncate">{{ directoryEntryLabel(directory) }}</div>
           <span
-            v-if="hasActiveOrBlocked"
-            class="inline-flex h-1.5 w-1.5 rounded-full bg-primary animate-pulse flex-shrink-0"
-            :title="String(t('chat.sidebar.directoriesList.activeSessions'))"
-            :aria-label="String(t('chat.sidebar.directoriesList.activeSessions'))"
-          />
+            v-if="activityState"
+            class="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium flex-shrink-0"
+            :class="activityBadgeClass"
+            :title="activityTitle"
+            :aria-label="activityTitle"
+          >
+            <span class="inline-flex h-1.5 w-1.5 rounded-full" :class="activityDotClass" />
+            <span class="max-w-[6rem] truncate">{{ activityLabel }}</span>
+          </span>
         </div>
       </div>
       <div class="typography-micro min-w-0 truncate pb-px font-mono text-left leading-tight text-muted-foreground/60">

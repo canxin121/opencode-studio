@@ -542,6 +542,56 @@ fn session_directory_id(
     directory_id_by_path.get(&path_key).cloned()
 }
 
+fn session_parent_id(session: &Value) -> Option<String> {
+    session
+        .get("parentID")
+        .or_else(|| session.get("parentId"))
+        .or_else(|| session.get("parent_id"))
+        .and_then(|v| v.as_str())
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+}
+
+fn session_value_for_id<'a>(
+    session_id: &str,
+    prev: &'a SidebarSnapshot,
+    next: &'a SidebarSnapshot,
+) -> Option<&'a Value> {
+    next.sessions
+        .get(session_id)
+        .or_else(|| prev.sessions.get(session_id))
+}
+
+fn collect_affected_session_lineage_ids(
+    prev: &SidebarSnapshot,
+    next: &SidebarSnapshot,
+    seed_session_ids: impl IntoIterator<Item = String>,
+) -> HashSet<String> {
+    const MAX_LINEAGE_IDS: usize = 4096;
+
+    let mut lineage_ids = HashSet::<String>::new();
+    let mut pending = seed_session_ids.into_iter().collect::<Vec<_>>();
+
+    while let Some(session_id) = pending.pop() {
+        let sid = session_id.trim();
+        if sid.is_empty() {
+            continue;
+        }
+        if !lineage_ids.insert(sid.to_string()) {
+            continue;
+        }
+        if lineage_ids.len() > MAX_LINEAGE_IDS {
+            break;
+        }
+
+        if let Some(parent_id) = session_value_for_id(sid, prev, next).and_then(session_parent_id) {
+            pending.push(parent_id);
+        }
+    }
+
+    lineage_ids
+}
+
 fn chat_sidebar_patch_ops_for_delta(
     prev: &SidebarSnapshot,
     next: &SidebarSnapshot,
@@ -569,16 +619,21 @@ fn chat_sidebar_patch_ops_for_delta(
         .filter(|id| !id.is_empty())
         .collect::<HashSet<_>>();
 
-    for session_id in delta
-        .changed_session_ids
-        .iter()
-        .chain(delta.removed_session_ids.iter())
-    {
+    let lineage_ids = collect_affected_session_lineage_ids(
+        prev,
+        next,
+        delta
+            .changed_session_ids
+            .iter()
+            .chain(delta.removed_session_ids.iter())
+            .cloned(),
+    );
+    for session_id in lineage_ids {
         let sid = session_id.trim();
         if sid.is_empty() {
             continue;
         }
-        let session = next.sessions.get(sid).or_else(|| prev.sessions.get(sid));
+        let session = session_value_for_id(sid, prev, next);
         let Some(session) = session else {
             continue;
         };
@@ -916,5 +971,68 @@ mod tests {
             ops[0],
             crate::chat_sidebar::ChatSidebarPatchOp::State
         ));
+    }
+
+    #[test]
+    fn session_delta_invalidates_ancestor_directories_for_cross_directory_children() {
+        let mut prev = SidebarSnapshot::default();
+        prev.directories.insert(
+            "dir_parent".to_string(),
+            json!({
+                "id": "dir_parent",
+                "path": "/tmp/root"
+            }),
+        );
+        prev.directories.insert(
+            "dir_child".to_string(),
+            json!({
+                "id": "dir_child",
+                "path": "/tmp/worktree"
+            }),
+        );
+        prev.sessions.insert(
+            "parent_1".to_string(),
+            json!({
+                "id": "parent_1",
+                "directory": "/tmp/root"
+            }),
+        );
+
+        let mut next = prev.clone();
+        next.sessions.insert(
+            "child_1".to_string(),
+            json!({
+                "id": "child_1",
+                "parentID": "parent_1",
+                "directory": "/tmp/worktree"
+            }),
+        );
+
+        let delta = SnapshotDelta {
+            changed_count: 1,
+            removed_session_ids: Vec::new(),
+            changed_directory_ids: Vec::new(),
+            changed_session_ids: vec!["child_1".to_string()],
+            changed_runtime_session_ids: Vec::new(),
+        };
+
+        let ops = chat_sidebar_patch_ops_for_delta(&prev, &next, &delta);
+
+        let invalidated_dirs = ops
+            .iter()
+            .filter_map(|op| match op {
+                crate::chat_sidebar::ChatSidebarPatchOp::Directory { directory_id } => {
+                    Some(directory_id.clone())
+                }
+                _ => None,
+            })
+            .collect::<HashSet<_>>();
+
+        assert!(invalidated_dirs.contains("dir_parent"));
+        assert!(invalidated_dirs.contains("dir_child"));
+        assert!(ops.iter().any(|op| matches!(
+            op,
+            crate::chat_sidebar::ChatSidebarPatchOp::Footer { kind } if kind == "recent"
+        )));
     }
 }
