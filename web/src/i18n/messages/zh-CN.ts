@@ -2474,6 +2474,7 @@ export default {
           noMessage: '（无提交信息）',
           emptyCommits: '没有提交',
           selectCommitToViewDiff: '请选择提交以查看 diff。',
+          selectFileToViewDiff: '请选择变更文件以查看 diff。',
           fields: {
             refType: '引用类型',
             ref: '引用',

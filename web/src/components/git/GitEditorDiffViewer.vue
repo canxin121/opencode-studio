@@ -7,7 +7,7 @@ import MonacoDiffEditor from '@/components/MonacoDiffEditor.vue'
 import { apiJson } from '@/lib/api'
 import Button from '@/components/ui/Button.vue'
 import { buildUnifiedDiffModel } from '@/features/git/diff/unifiedDiff'
-import type { GitDiffMeta, GitDiffResponse } from '@/types/git'
+import type { GitCommitDiffResponse, GitCommitFileContentResponse, GitDiffMeta, GitDiffResponse } from '@/types/git'
 
 const { t } = useI18n()
 
@@ -47,6 +47,8 @@ const props = defineProps<{
   directory: string | null
   path: string | null
   staged?: boolean
+  commit?: string | null
+  parentCommit?: string | null
   onStageHunk?: (patch: string) => void | Promise<void>
   onUnstageHunk?: (patch: string) => void | Promise<void>
   onDiscardHunk?: (patch: string) => void | Promise<void>
@@ -199,7 +201,15 @@ function handleEditorHunkAction(payload: { id: string; kind: HunkActionMode }) {
   void runHunkAction(hunk, payload.kind)
 }
 
-async function load(opts: { directory: string; path: string; staged: boolean; signal: AbortSignal; seq: number }) {
+async function load(opts: {
+  directory: string
+  path: string
+  staged: boolean
+  commit?: string
+  parentCommit?: string
+  signal: AbortSignal
+  seq: number
+}) {
   staleDiffText.value = diffText.value
   staleDiffMeta.value = diffMeta.value
   staleOriginal.value = original.value
@@ -209,6 +219,49 @@ async function load(opts: { directory: string; path: string; staged: boolean; si
   error.value = null
 
   try {
+    if (opts.commit) {
+      const parentRequest = opts.parentCommit
+        ? apiJson<GitCommitFileContentResponse>(
+            `/api/git/commit-file-content?directory=${encodeURIComponent(opts.directory)}&commit=${encodeURIComponent(opts.parentCommit)}&path=${encodeURIComponent(opts.path)}`,
+            { signal: opts.signal },
+          )
+        : Promise.resolve<GitCommitFileContentResponse>({
+            content: '',
+            exists: false,
+            binary: false,
+            truncated: false,
+          })
+
+      const [diffResponse, originalResponse, modifiedResponse] = await Promise.all([
+        apiJson<GitCommitDiffResponse>(
+          `/api/git/commit-file-diff?directory=${encodeURIComponent(opts.directory)}&commit=${encodeURIComponent(opts.commit)}&path=${encodeURIComponent(opts.path)}&contextLines=3`,
+          { signal: opts.signal },
+        ),
+        parentRequest,
+        apiJson<GitCommitFileContentResponse>(
+          `/api/git/commit-file-content?directory=${encodeURIComponent(opts.directory)}&commit=${encodeURIComponent(opts.commit)}&path=${encodeURIComponent(opts.path)}`,
+          { signal: opts.signal },
+        ),
+      ])
+
+      if (opts.signal.aborted || opts.seq !== loadSeq) return
+
+      if (originalResponse?.binary || modifiedResponse?.binary) {
+        error.value = t('files.timeline.errors.binaryUnavailable')
+        diffText.value = ''
+        diffMeta.value = null
+        original.value = ''
+        modified.value = ''
+        return
+      }
+
+      diffText.value = diffResponse?.diff || ''
+      diffMeta.value = null
+      original.value = originalResponse?.exists ? originalResponse.content || '' : ''
+      modified.value = modifiedResponse?.exists ? modifiedResponse.content || '' : ''
+      return
+    }
+
     const [diffResponse, fileResponse] = await Promise.all([
       apiJson<GitDiffResponse>(
         `/api/git/diff?directory=${encodeURIComponent(opts.directory)}&path=${encodeURIComponent(opts.path)}&staged=${opts.staged ? 'true' : 'false'}&contextLines=3&includeMeta=true`,
@@ -266,6 +319,8 @@ function refresh() {
     directory,
     path,
     staged: Boolean(props.staged),
+    commit: (props.commit || '').trim(),
+    parentCommit: (props.parentCommit || '').trim(),
     signal: ac.signal,
     seq,
   })
@@ -278,6 +333,8 @@ watch(
     directory: props.directory,
     path: props.path,
     staged: props.staged,
+    commit: props.commit,
+    parentCommit: props.parentCommit,
   }),
   (next, _prev, onInvalidate) => {
     const directory = (next.directory || '').trim()
@@ -301,6 +358,8 @@ watch(
       directory,
       path,
       staged: Boolean(next.staged),
+      commit: (next.commit || '').trim(),
+      parentCommit: (next.parentCommit || '').trim(),
       signal: ac.signal,
       seq,
     })

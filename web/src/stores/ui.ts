@@ -11,6 +11,7 @@ export type WorkspaceDockPlacement = 'right' | 'bottom'
 
 const STORAGE_SIDEBAR_OPEN = localStorageKeys.ui.sidebarOpen
 const STORAGE_SIDEBAR_WIDTH = localStorageKeys.ui.sidebarWidth
+const STORAGE_GIT_HISTORY_SEARCH_EXPANDED = localStorageKeys.ui.gitHistorySearchExpanded
 const STORAGE_ACTIVE_TAB = localStorageKeys.ui.activeMainTab
 const STORAGE_WORKSPACE_DOCK_OPEN = localStorageKeys.ui.workspaceDockOpen
 const STORAGE_WORKSPACE_DOCK_PANEL = localStorageKeys.ui.workspaceDockPanel
@@ -48,6 +49,9 @@ export const useUiStore = defineStore('ui', () => {
   const sidebarLocateSessionId = ref<string | null>(null)
 
   const effectiveSidebarWidth = computed(() => (isSidebarOpen.value && !isMobile.value ? sidebarWidth.value : 0))
+
+  const gitHistorySearchExpanded = ref(getLocalString(STORAGE_GIT_HISTORY_SEARCH_EXPANDED) === 'true')
+  watch(gitHistorySearchExpanded, (v) => setLocalString(STORAGE_GIT_HISTORY_SEARCH_EXPANDED, v ? 'true' : 'false'))
 
   const isWorkspaceDockOpen = ref(getLocalString(STORAGE_WORKSPACE_DOCK_OPEN) === 'true')
   watch(isWorkspaceDockOpen, (v) => setLocalString(STORAGE_WORKSPACE_DOCK_OPEN, v ? 'true' : 'false'))
@@ -232,6 +236,7 @@ export const useUiStore = defineStore('ui', () => {
     effectiveSidebarWidth,
     isSessionSwitcherOpen,
     isWorkspaceDockOpen,
+    gitHistorySearchExpanded,
     sidebarLocateSeq,
     sidebarLocateSessionId,
     workspaceDockPanel,
