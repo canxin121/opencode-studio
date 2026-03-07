@@ -5,20 +5,20 @@ import {
   RiArrowLeftSLine,
   RiArrowRightSLine,
   RiGitBranchLine,
+  RiClipboardLine,
   RiMore2Line,
   RiRefreshLine,
-  RiSearchLine,
 } from '@remixicon/vue'
 import { useI18n } from 'vue-i18n'
 
 import MiniActionButton from '@/components/ui/MiniActionButton.vue'
 import MobileSidebarEmptyState from '@/components/ui/MobileSidebarEmptyState.vue'
 import IconButton from '@/components/ui/IconButton.vue'
-import Input from '@/components/ui/Input.vue'
 import OptionMenu from '@/components/ui/OptionMenu.vue'
 import PaginationControls from '@/components/ui/PaginationControls.vue'
 import type { OptionMenuGroup, OptionMenuItem } from '@/components/ui/optionMenu.types'
 import ScrollArea from '@/components/ui/ScrollArea.vue'
+import SearchInput from '@/components/ui/SearchInput.vue'
 import SidebarIconButton from '@/components/ui/SidebarIconButton.vue'
 import GitCommitBox from '@/components/git/GitCommitBox.vue'
 import GitDiffPane from '@/components/git/GitDiffPane.vue'
@@ -142,7 +142,6 @@ const {
   commitAll,
   commitEmpty,
   undoLastCommit,
-  cherryPickCommit,
   revertCommit,
   restoreCommitTemplate,
   discardCommitMessage,
@@ -838,10 +837,6 @@ function onHistoryCheckout(commit: HistoryCommitLike) {
 function onHistoryCreateBranch(commit: HistoryCommitLike) {
   branchFromRef.value = commit?.hash || ''
   branchFromOpen.value = true
-}
-
-function onHistoryCherryPick(commit: HistoryCommitLike) {
-  cherryPickCommit(commit?.hash || '')
 }
 
 function onHistoryRevert(commit: HistoryCommitLike) {
@@ -1686,23 +1681,20 @@ void diffPaneRef
               </div>
 
               <div class="grid gap-2">
-                <div class="flex items-center gap-1.5">
-                  <Input
-                    v-model="historySearchDraft"
-                    class="h-8 flex-1 font-mono text-xs"
-                    :placeholder="t('git.ui.dialogs.history.placeholders.commitMetaContains')"
-                    @keydown.enter="onApplyHistoryFilters"
-                  />
-                  <SidebarIconButton
-                    size="sm"
-                    :tooltip="t('common.search')"
-                    :is-mobile-pointer="ui.isMobilePointer"
-                    :aria-label="t('common.search')"
-                    @click="onApplyHistoryFilters"
-                  >
-                    <RiSearchLine class="h-3.5 w-3.5" />
-                  </SidebarIconButton>
-                </div>
+                <SearchInput
+                  v-model="historySearchDraft"
+                  class="flex-1 text-xs"
+                  input-class="h-8 font-mono text-xs"
+                  :placeholder="t('git.ui.dialogs.history.placeholders.commitMetaContains')"
+                  :input-aria-label="t('common.search')"
+                  :input-title="t('common.search')"
+                  :search-aria-label="t('common.search')"
+                  :search-title="t('common.search')"
+                  :clear-aria-label="t('common.clear')"
+                  :clear-title="t('common.clear')"
+                  :is-mobile-pointer="ui.isMobilePointer"
+                  @search="onApplyHistoryFilters"
+                />
 
                 <div class="flex items-center justify-end gap-2">
                   <MiniActionButton size="xs" @click="refreshHistory">{{ t('common.refresh') }}</MiniActionButton>
@@ -1783,9 +1775,6 @@ void diffPaneRef
               <RiArrowLeftSLine class="h-3.5 w-3.5" />
               {{ t('git.ui.dialogs.history.title') }}
             </button>
-            <MiniActionButton size="xs" :disabled="!historySelected" @click="openHistoryView">{{
-              t('common.back')
-            }}</MiniActionButton>
           </div>
 
           <div
@@ -1801,7 +1790,19 @@ void diffPaneRef
                 {{ historySelected.subject || t('git.ui.dialogs.history.noMessage') }}
               </div>
               <div class="mt-1 text-[10px] text-muted-foreground">{{ historySelectedMeta }}</div>
-              <div class="mt-0.5 font-mono text-[10px] text-muted-foreground">{{ historySelected.hash }}</div>
+              <div class="mt-0.5 flex items-center gap-1">
+                <div class="min-w-0 flex-1 truncate font-mono text-[10px] text-muted-foreground">
+                  {{ historySelected.hash }}
+                </div>
+                <IconButton
+                  size="sm"
+                  :tooltip="t('git.ui.dialogs.history.actions.copyHash')"
+                  :aria-label="t('git.ui.dialogs.history.actions.copyHash')"
+                  @click="copyCommitHash(historySelected.hash)"
+                >
+                  <RiClipboardLine class="h-3.5 w-3.5" />
+                </IconButton>
+              </div>
               <div class="mt-1 text-[10px] text-muted-foreground">
                 {{ t('common.files') }}: {{ historySelectedSummary.files }} · +{{
                   historySelectedSummary.insertions
@@ -1810,17 +1811,11 @@ void diffPaneRef
               </div>
 
               <div class="mt-2 flex flex-wrap gap-1">
-                <MiniActionButton size="xs" @click="copyCommitHash(historySelected.hash)">{{
-                  t('git.ui.dialogs.history.actions.copyHash')
-                }}</MiniActionButton>
                 <MiniActionButton size="xs" @click="onHistoryCheckout(historySelected)">{{
                   t('git.ui.dialogs.history.actions.checkout')
                 }}</MiniActionButton>
                 <MiniActionButton size="xs" @click="onHistoryCreateBranch(historySelected)">{{
                   t('git.ui.dialogs.history.actions.createBranch')
-                }}</MiniActionButton>
-                <MiniActionButton size="xs" @click="onHistoryCherryPick(historySelected)">{{
-                  t('git.ui.dialogs.history.actions.cherryPick')
                 }}</MiniActionButton>
                 <MiniActionButton size="xs" variant="destructive" @click="onHistoryRevert(historySelected)">{{
                   t('git.ui.dialogs.history.actions.revert')
@@ -1892,14 +1887,6 @@ void diffPaneRef
       </div>
 
       <div v-else-if="sourceControlView === 'historyCommit'" class="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div class="flex items-center justify-between gap-2 border-b border-sidebar-border/50 px-2 py-1.5">
-          <div class="truncate text-xs text-muted-foreground">
-            {{
-              historyFileSelected ? t('git.ui.dialogs.history.diffTitleFile', { file: historyFileSelected.path }) : ''
-            }}
-          </div>
-        </div>
-
         <div
           v-if="!historyFileSelected"
           class="flex min-h-0 flex-1 items-center justify-center px-4 text-xs text-muted-foreground"

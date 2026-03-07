@@ -8,6 +8,7 @@ test('branch dialog provides searchable quick-switch flow', () => {
   const source = readFileSync(file, 'utf8')
 
   assert.ok(source.includes('branchSearchQuery'))
-  assert.ok(source.includes('@keydown.enter.prevent="onQuickSwitch"'))
+  assert.ok(source.includes('<SearchInput'))
+  assert.ok(source.includes('@search="onQuickSwitch"'))
   assert.ok(source.includes('quickSwitchTarget'))
 })

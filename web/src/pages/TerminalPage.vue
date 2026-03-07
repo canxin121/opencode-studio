@@ -13,7 +13,6 @@ import {
   RiRefreshLine,
   RiDeleteBinLine,
   RiCloseLine,
-  RiSearchLine,
   RiStarFill,
   RiStarLine,
   RiEditLine,
@@ -28,6 +27,7 @@ import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import FormDialog from '@/components/ui/FormDialog.vue'
 import Input from '@/components/ui/Input.vue'
 import OptionMenu from '@/components/ui/OptionMenu.vue'
+import SearchInput from '@/components/ui/SearchInput.vue'
 import type { OptionMenuGroup, OptionMenuItem } from '@/components/ui/optionMenu.types'
 import TerminalKeybar from '@/components/TerminalKeybar.vue'
 import { consumeTrustedTerminalHandoffPayload, type TerminalHandoffTarget } from '@/lib/terminalHandoff'
@@ -1879,27 +1879,18 @@ watch(el, () => {
       </div>
 
       <div class="flex-shrink-0 px-3 py-2">
-        <div class="relative">
-          <RiSearchLine
-            class="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/60"
-          />
-          <Input
-            v-model="sidebarQuery"
-            :placeholder="String(t('terminal.sidebar.searchPlaceholder'))"
-            class="h-8 pl-7 pr-7 text-xs"
-            :aria-label="String(t('terminal.sidebar.searchAria'))"
-          />
-          <IconButton
-            v-if="sidebarQueryNorm"
-            size="xs"
-            class="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
-            :aria-label="String(t('terminal.sidebar.clearSearch'))"
-            :title="String(t('common.clear'))"
-            @click="sidebarQuery = ''"
-          >
-            <RiCloseLine class="h-4 w-4" />
-          </IconButton>
-        </div>
+        <SearchInput
+          v-model="sidebarQuery"
+          :placeholder="String(t('terminal.sidebar.searchPlaceholder'))"
+          class="text-xs"
+          input-class="h-8 text-xs"
+          :input-aria-label="String(t('terminal.sidebar.searchAria'))"
+          :input-title="String(t('terminal.sidebar.searchAria'))"
+          :search-title="String(t('terminal.sidebar.searchAria'))"
+          :clear-aria-label="String(t('terminal.sidebar.clearSearch'))"
+          :clear-title="String(t('common.clear'))"
+          :is-mobile-pointer="ui.isMobilePointer"
+        />
       </div>
 
       <div v-if="!ui.isMobilePointer && sessionCreateOpen" class="flex-shrink-0 px-3 pb-2">

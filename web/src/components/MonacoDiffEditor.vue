@@ -60,6 +60,7 @@ let hunkZoneIds: string[] = []
 let pendingHunkZoneRefresh = false
 let pendingFirstChangeReveal = true
 let lastRevealModelKey = ''
+let lastRevealContentKey = ''
 let disposed = false
 
 function extname(path: string): string {
@@ -338,6 +339,18 @@ function maybeRevealFirstDiffChange() {
   modifiedEditor.revealLineNearTop(revealLine)
 }
 
+function buildRevealContentKey(): string {
+  const original = props.originalValue ?? ''
+  const modified = props.modifiedValue ?? ''
+  return `${original.length}:${modified.length}:${original.slice(0, 160)}:${original.slice(-160)}:${modified.slice(0, 160)}:${modified.slice(-160)}`
+}
+
+function requestFirstChangeReveal() {
+  if (props.autoRevealFirstChange === false) return
+  pendingFirstChangeReveal = true
+  queueMicrotask(() => maybeRevealFirstDiffChange())
+}
+
 function syncModels() {
   if (disposed) return
   const monaco = monacoRef.value
@@ -544,7 +557,18 @@ watch(
   (nextKey) => {
     if (!nextKey || nextKey === lastRevealModelKey) return
     lastRevealModelKey = nextKey
-    pendingFirstChangeReveal = props.autoRevealFirstChange !== false
+    requestFirstChangeReveal()
+  },
+  { immediate: true },
+)
+
+watch(
+  () => [props.originalValue, props.modifiedValue, props.autoRevealFirstChange],
+  () => {
+    const nextKey = buildRevealContentKey()
+    if (nextKey === lastRevealContentKey) return
+    lastRevealContentKey = nextKey
+    requestFirstChangeReveal()
   },
   { immediate: true },
 )

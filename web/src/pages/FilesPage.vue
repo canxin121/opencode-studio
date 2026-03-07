@@ -5,9 +5,9 @@ import Button from '@/components/ui/Button.vue'
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import FormDialog from '@/components/ui/FormDialog.vue'
 import Input from '@/components/ui/Input.vue'
+import SearchInput from '@/components/ui/SearchInput.vue'
 import SegmentedButton from '@/components/ui/SegmentedButton.vue'
 import SegmentedControl from '@/components/ui/SegmentedControl.vue'
-import SidebarIconButton from '@/components/ui/SidebarIconButton.vue'
 
 import FileViewerPane from './files/components/FileViewerPane.vue'
 import FilesExplorerPane from './files/components/FilesExplorerPane.vue'
@@ -3410,28 +3410,23 @@ onMounted(async () => {
                       <div class="mt-2 space-y-1.5">
                         <template v-if="explorerSearchMode === 'files'">
                           <div class="flex items-center gap-1">
-                            <Input
+                            <SearchInput
                               v-model="searchQuery"
                               :placeholder="String(t('files.search.files.placeholder'))"
-                              class="oc-vscode-subtle-input h-[26px] flex-1 font-mono text-[12px]"
-                              @keydown.enter.prevent="runSearch"
+                              class="flex-1"
+                              input-class="oc-vscode-subtle-input h-[26px] font-mono text-[12px]"
+                              :search-disabled="searching || !hasFileSearch"
+                              :clear-disabled="!hasFileSearch"
+                              :input-aria-label="String(t('files.search.files.placeholder'))"
+                              :input-title="String(t('files.search.files.placeholder'))"
+                              :search-aria-label="String(t('common.search'))"
+                              :search-title="String(searching ? t('common.loading') : t('common.search'))"
+                              :clear-aria-label="String(t('common.clear'))"
+                              :clear-title="String(t('common.clear'))"
+                              :is-mobile-pointer="ui.isMobilePointer"
+                              @search="runSearch"
+                              @clear="clearFileSearch"
                             />
-                            <Button
-                              size="sm"
-                              class="h-[26px] px-2 text-[11px]"
-                              :disabled="searching || !hasFileSearch"
-                              @click="runSearch"
-                            >
-                              {{ searching ? t('common.loading') : t('common.search') }}
-                            </Button>
-                            <SidebarIconButton
-                              :title="String(t('common.clear'))"
-                              :aria-label="String(t('common.clear'))"
-                              :disabled="!hasFileSearch"
-                              @click="clearFileSearch"
-                            >
-                              x
-                            </SidebarIconButton>
                           </div>
                           <div class="px-0.5 text-[11px] text-muted-foreground">
                             <span v-if="!hasFileSearch">{{ t('files.search.files.hint') }}</span>
@@ -3461,28 +3456,23 @@ onMounted(async () => {
                             </button>
 
                             <div class="ml-[18px] flex items-center gap-1">
-                              <Input
+                              <SearchInput
                                 v-model="contentSearchQuery"
                                 :placeholder="String(t('files.search.content.placeholder'))"
-                                class="oc-vscode-subtle-input h-[26px] flex-1 font-mono text-[12px]"
-                                @keydown.enter.prevent="runContentSearch"
+                                class="flex-1"
+                                input-class="oc-vscode-subtle-input h-[26px] font-mono text-[12px]"
+                                :search-disabled="contentSearchLoading || contentSearchReplacing || !hasContentSearch"
+                                :clear-disabled="!hasContentSearch"
+                                :input-aria-label="String(t('files.search.content.placeholder'))"
+                                :input-title="String(t('files.search.content.placeholder'))"
+                                :search-aria-label="String(t('common.search'))"
+                                :search-title="String(contentSearchLoading ? t('common.loading') : t('common.search'))"
+                                :clear-aria-label="String(t('common.clear'))"
+                                :clear-title="String(t('common.clear'))"
+                                :is-mobile-pointer="ui.isMobilePointer"
+                                @search="runContentSearch"
+                                @clear="clearContentSearch"
                               />
-                              <Button
-                                size="sm"
-                                class="h-[26px] px-2 text-[11px]"
-                                :disabled="contentSearchLoading || contentSearchReplacing || !hasContentSearch"
-                                @click="runContentSearch"
-                              >
-                                {{ contentSearchLoading ? t('common.loading') : t('common.search') }}
-                              </Button>
-                              <SidebarIconButton
-                                :title="String(t('common.clear'))"
-                                :aria-label="String(t('common.clear'))"
-                                :disabled="!hasContentSearch"
-                                @click="clearContentSearch"
-                              >
-                                x
-                              </SidebarIconButton>
                               <button
                                 type="button"
                                 class="h-6 w-6 rounded-sm border text-[10px] font-mono transition"

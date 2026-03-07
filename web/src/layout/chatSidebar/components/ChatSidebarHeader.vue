@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { RiAddLine, RiCloseLine, RiRefreshLine, RiSearchLine } from '@remixicon/vue'
+import { RiAddLine, RiRefreshLine } from '@remixicon/vue'
 import { useI18n } from 'vue-i18n'
 
 import IconButton from '@/components/ui/IconButton.vue'
-import Input from '@/components/ui/Input.vue'
+import SearchInput from '@/components/ui/SearchInput.vue'
 import SidebarPager from '@/layout/chatSidebar/components/SidebarPager.vue'
 
 const { t } = useI18n()
@@ -70,41 +70,21 @@ const emit = defineEmits<{
   </div>
 
   <div class="px-3 py-2 flex-shrink-0">
-    <div class="relative">
-      <button
-        type="button"
-        class="absolute left-1 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded text-muted-foreground/60 transition hover:bg-primary/6 hover:text-foreground dark:hover:bg-accent/40"
-        :aria-label="String(t('common.search'))"
-        :title="String(t('common.search'))"
-        @click="emit('submit-query')"
-      >
-        <RiSearchLine class="h-4 w-4" />
-      </button>
-      <Input
-        :model-value="query"
-        @update:model-value="(v) => emit('update:query', String(v || ''))"
-        @keydown.enter.prevent="emit('submit-query')"
-        :placeholder="String(t('chat.sidebar.header.searchPlaceholder'))"
-        class="h-8 pl-8 pr-7 text-xs"
-        :aria-label="String(t('chat.sidebar.header.searchAria'))"
-      />
-      <IconButton
-        v-if="query.trim()"
-        size="xs"
-        class="absolute right-1 top-1/2 -translate-y-1/2"
-        :tooltip="String(t('common.clear'))"
-        :is-mobile-pointer="Boolean(props.isMobilePointer)"
-        :aria-label="String(t('chat.sidebar.header.clearSearch'))"
-        :title="String(t('common.clear'))"
-        @click="
-          () => {
-            emit('update:query', '')
-            emit('submit-query')
-          }
-        "
-      >
-        <RiCloseLine class="h-4 w-4" />
-      </IconButton>
-    </div>
+    <SearchInput
+      :model-value="query"
+      @update:model-value="(v) => emit('update:query', String(v || ''))"
+      @search="emit('submit-query')"
+      @clear="emit('submit-query')"
+      :placeholder="String(t('chat.sidebar.header.searchPlaceholder'))"
+      class="text-xs"
+      input-class="h-8 text-xs"
+      :input-aria-label="String(t('chat.sidebar.header.searchAria'))"
+      :input-title="String(t('chat.sidebar.header.searchAria'))"
+      :search-aria-label="String(t('common.search'))"
+      :search-title="String(t('common.search'))"
+      :clear-aria-label="String(t('chat.sidebar.header.clearSearch'))"
+      :clear-title="String(t('common.clear'))"
+      :is-mobile-pointer="Boolean(props.isMobilePointer)"
+    />
   </div>
 </template>
