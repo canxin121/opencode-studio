@@ -727,7 +727,7 @@ watch(modelPath, () => {
 </script>
 
 <template>
-  <div class="monaco-host" :data-files-theme="props.useFilesTheme ? '1' : '0'">
+  <div class="monaco-host" data-oc-text-editor-root="true" :data-files-theme="props.useFilesTheme ? '1' : '0'">
     <div v-if="!ready" class="monaco-loading">{{ t('ui.codeEditor.loading') }}</div>
     <VueMonacoEditor
       v-else
@@ -764,6 +764,14 @@ watch(modelPath, () => {
   justify-content: center;
   text-transform: uppercase;
   letter-spacing: 0.08em;
+}
+
+:global(:root.mobile-pointer .monaco-host .monaco-editor .lines-content),
+:global(:root.mobile-pointer .monaco-host .monaco-editor .view-line),
+:global(:root.mobile-pointer .monaco-host .monaco-editor .view-lines) {
+  -webkit-touch-callout: default;
+  -webkit-user-select: text !important;
+  user-select: text !important;
 }
 
 :global(.oc-inline-blame) {

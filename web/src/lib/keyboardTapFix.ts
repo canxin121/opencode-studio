@@ -30,6 +30,14 @@ function isTextInputLike(el: HTMLElement | null): el is HTMLElement {
   return Boolean(el.isContentEditable)
 }
 
+function isTextEditorSurface(start: Element): boolean {
+  const el = start instanceof HTMLElement ? start : null
+  if (!el) return false
+  if (el.closest('[data-oc-text-editor-root="true"]')) return true
+  // Fallback for Monaco roots mounted by third-party wrappers.
+  return Boolean(el.closest('.monaco-editor, .monaco-diff-editor'))
+}
+
 function resolveInteractiveTarget(start: Element): HTMLElement | null {
   const el = start instanceof HTMLElement ? start : null
   if (!el) return null
@@ -109,6 +117,7 @@ export function installKeyboardTapFix(options: Options): () => void {
 
     const eventTarget = e.target instanceof Element ? e.target : null
     if (!eventTarget) return
+    if (isTextEditorSurface(eventTarget)) return
 
     const active = document.activeElement as HTMLElement | null
     if (!isTextInputLike(active)) return

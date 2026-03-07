@@ -522,7 +522,7 @@ watch(
 </script>
 
 <template>
-  <div class="monaco-diff-host" :data-files-theme="props.useFilesTheme ? '1' : '0'">
+  <div class="monaco-diff-host" data-oc-text-editor-root="true" :data-files-theme="props.useFilesTheme ? '1' : '0'">
     <div v-if="!ready" class="monaco-loading">Loading diff editor...</div>
     <div v-show="ready" ref="containerRef" class="monaco-diff-container" />
   </div>
@@ -550,6 +550,14 @@ watch(
   justify-content: center;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+:global(:root.mobile-pointer .monaco-diff-host .monaco-editor .lines-content),
+:global(:root.mobile-pointer .monaco-diff-host .monaco-editor .view-line),
+:global(:root.mobile-pointer .monaco-diff-host .monaco-editor .view-lines) {
+  -webkit-touch-callout: default;
+  -webkit-user-select: text !important;
+  user-select: text !important;
 }
 
 :global(.monaco-diff-host[data-files-theme='1'] .monaco-editor),

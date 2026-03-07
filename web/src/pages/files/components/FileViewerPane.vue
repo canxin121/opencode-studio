@@ -1346,7 +1346,7 @@ function onSendSelection() {
                 : 'flex-1 border-r border-border/30'
               : 'flex-1'
           "
-          @mouseup="updateSelectionFromEditor"
+          @pointerup="updateSelectionFromEditor"
           @keyup="updateSelectionFromEditor"
         >
           <CodeMirrorEditor
@@ -1490,7 +1490,7 @@ function onSendSelection() {
           v-else
           class="flex-1 min-w-0 relative"
           :class="!timelineEnabled && fileChunkUi && (fileChunkUi.hasMore || fileChunkUi.loadingMore) ? 'pt-11' : ''"
-          @mouseup="updateSelectionFromEditor"
+          @pointerup="updateSelectionFromEditor"
           @keyup="updateSelectionFromEditor"
         >
           <CodeMirrorEditor
