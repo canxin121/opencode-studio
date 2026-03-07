@@ -8,8 +8,6 @@ import '@xterm/xterm/css/xterm.css'
 import {
   RiPlugLine,
   RiAddLine,
-  RiArrowDownSLine,
-  RiArrowRightSLine,
   RiCheckLine,
   RiStopCircleLine,
   RiRefreshLine,
@@ -26,8 +24,6 @@ import Button from '@/components/ui/Button.vue'
 import IconButton from '@/components/ui/IconButton.vue'
 import SidebarListItem from '@/components/ui/SidebarListItem.vue'
 import MobileSidebarEmptyState from '@/components/ui/MobileSidebarEmptyState.vue'
-import SidebarTextButton from '@/components/ui/SidebarTextButton.vue'
-import TextActionButton from '@/components/ui/TextActionButton.vue'
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import FormDialog from '@/components/ui/FormDialog.vue'
 import Input from '@/components/ui/Input.vue'
@@ -88,18 +84,9 @@ const STORAGE_GIT_HANDOFF_SESSION = localStorageKeys.terminal.gitHandoffSessionI
 
 const TERMINAL_STATE_REMOTE_SAVE_DEBOUNCE_MS = 250
 
-const DEFAULT_FOLDER_ID = 'terminal-default'
-const DEFAULT_FOLDER_NAME = String(t('terminal.defaults.defaultFolder'))
 const DEFAULT_TERMINAL_CWD = '/home'
 
-const GIT_HANDOFF_FOLDER_ID = 'terminal-folder-git'
-const GIT_HANDOFF_FOLDER_NAME = String(t('terminal.defaults.gitFolder'))
 const GIT_HANDOFF_SESSION_NAME = String(t('terminal.defaults.gitTerminal'))
-
-type TerminalFolder = {
-  id: string
-  name: string
-}
 
 type TerminalSessionMeta = {
   name?: string
@@ -114,14 +101,6 @@ function normalizeSessionMetaName(input: unknown): string {
     .trim()
   if (!collapsed) return ''
   return collapsed.slice(0, 80)
-}
-
-function normalizeFolderName(input: unknown): string {
-  const collapsed = String(input || '')
-    .replace(/\s+/g, ' ')
-    .trim()
-  if (!collapsed) return ''
-  return collapsed.slice(0, 40)
 }
 
 function normalizeFolderId(input: unknown): string {
@@ -148,53 +127,11 @@ function compactSessionMeta(input: unknown): TerminalSessionMeta | null {
   return Object.keys(out).length > 0 ? out : null
 }
 
-function normalizeFolder(input: unknown): TerminalFolder | null {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) return null
-  const raw = input as Record<string, unknown>
-  const id = normalizeFolderId(raw.id)
-  const name = normalizeFolderName(raw.name)
-  if (!id || !name) return null
-  return { id, name }
-}
-
-function normalizeFolderList(input: unknown): TerminalFolder[] {
-  if (!Array.isArray(input)) return []
-  const seen = new Set<string>()
-  const out: TerminalFolder[] = []
-  for (const item of input) {
-    const folder = normalizeFolder(item)
-    if (!folder) continue
-    if (seen.has(folder.id)) continue
-    seen.add(folder.id)
-    out.push(folder)
-  }
-  return out
-}
-
-function generateFolderId(name: string): string {
-  const slug = normalizeFolderName(name)
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 24)
-  const suffix = Math.random().toString(36).slice(2, 8)
-  const seed = slug || 'folder'
-  return `terminal-folder-${seed}-${suffix}`
-}
-
 type TerminalSidebarSession = {
   id: string
   name: string
-  folderId: string
   pinned: boolean
   lastUsedAt: number
-}
-
-type TerminalSidebarFolder = {
-  id: string
-  name: string
-  pinnedSessions: TerminalSidebarSession[]
-  recentSessions: TerminalSidebarSession[]
 }
 
 function normalizeSessionId(input: string | null | undefined): string {
@@ -274,7 +211,6 @@ function hydratePendingSendFromQuery() {
 const useShellSidebar = computed(() => (ui.isMobile ? ui.isSessionSwitcherOpen : ui.isSidebarOpen))
 const sessionId = ref<string | null>(null)
 const sessionList = ref<string[]>([])
-const folders = ref<TerminalFolder[]>([{ id: DEFAULT_FOLDER_ID, name: DEFAULT_FOLDER_NAME }])
 const sessionMetaById = ref<Record<string, TerminalSessionMeta>>({})
 const streamSeqById = ref<Record<string, number>>({})
 const sessionListRefreshing = ref(false)
@@ -307,12 +243,6 @@ function sessionMetaFor(id: string): TerminalSessionMeta {
   return sessionMetaById.value[sid] || {}
 }
 
-function folderFor(id: string): TerminalFolder | null {
-  const fid = normalizeFolderId(id)
-  if (!fid) return null
-  return folders.value.find((item) => item.id === fid) || null
-}
-
 function buildTerminalUiStatePayload(): TerminalUiState {
   const normalizedSessionIds = normalizeSessionList(sessionList.value)
   const allowedSessionIds = new Set(normalizedSessionIds)
@@ -326,10 +256,6 @@ function buildTerminalUiStatePayload(): TerminalUiState {
     normalizedMetaById[sid] = compact
   }
 
-  const normalizedFolders = normalizeFolderList(folders.value)
-  const withDefaultFolders =
-    normalizedFolders.length > 0 ? normalizedFolders : [{ id: DEFAULT_FOLDER_ID, name: DEFAULT_FOLDER_NAME }]
-
   const active = normalizeSessionId(sessionId.value || '')
 
   return {
@@ -338,7 +264,7 @@ function buildTerminalUiStatePayload(): TerminalUiState {
     activeSessionId: active || null,
     sessionIds: normalizedSessionIds,
     sessionMetaById: normalizedMetaById,
-    folders: withDefaultFolders,
+    folders: [],
   }
 }
 
@@ -380,77 +306,6 @@ async function persistTerminalStateRemote() {
   }
 }
 
-function persistFolderList(opts?: { remote?: boolean }) {
-  const normalized = normalizeFolderList(folders.value)
-  folders.value = normalized.length > 0 ? normalized : [{ id: DEFAULT_FOLDER_ID, name: DEFAULT_FOLDER_NAME }]
-  if (opts?.remote !== false) {
-    scheduleTerminalStateRemotePersist()
-  }
-}
-
-function ensureDefaultFolderExists(): string {
-  if (folders.value.length === 0) {
-    folders.value = [{ id: DEFAULT_FOLDER_ID, name: DEFAULT_FOLDER_NAME }]
-    persistFolderList()
-    return DEFAULT_FOLDER_ID
-  }
-
-  const existingDefault = folderFor(DEFAULT_FOLDER_ID)
-  if (!existingDefault) {
-    folders.value = [{ id: DEFAULT_FOLDER_ID, name: DEFAULT_FOLDER_NAME }, ...folders.value]
-    persistFolderList()
-  }
-  return DEFAULT_FOLDER_ID
-}
-
-function ensureFolderExists(id: string, preferredName?: string): string {
-  const fid = normalizeFolderId(id)
-  if (!fid) return ensureDefaultFolderExists()
-  if (folderFor(fid)) return fid
-
-  const fallbackName = normalizeFolderName(preferredName || fid) || DEFAULT_FOLDER_NAME
-  folders.value = [...folders.value, { id: fid, name: fallbackName }]
-  persistFolderList()
-  return fid
-}
-
-function syncFoldersWithSessionMeta() {
-  ensureDefaultFolderExists()
-
-  const existing = new Set(folders.value.map((folder) => folder.id))
-  let changed = false
-
-  for (const meta of Object.values(sessionMetaById.value)) {
-    const folderId = normalizeFolderId(meta.folderId)
-    if (!folderId) continue
-    if (existing.has(folderId)) continue
-    existing.add(folderId)
-    folders.value = [...folders.value, { id: folderId, name: normalizeFolderName(folderId) || folderId }]
-    changed = true
-  }
-
-  if (changed) {
-    persistFolderList()
-  }
-}
-
-function fallbackFolderId(): string {
-  const defaultFolder = folderFor(DEFAULT_FOLDER_ID)
-  if (defaultFolder) return defaultFolder.id
-  const first = folders.value[0]
-  if (first) return first.id
-  return DEFAULT_FOLDER_ID
-}
-
-function sessionFolderId(id: string): string {
-  const sid = normalizeSessionId(id)
-  if (!sid) return fallbackFolderId()
-  const folderId = normalizeFolderId(sessionMetaFor(sid).folderId)
-  if (!folderId) return fallbackFolderId()
-  if (folderFor(folderId)) return folderId
-  return fallbackFolderId()
-}
-
 function isGitHandoffSession(id: string): boolean {
   const sid = normalizeSessionId(id)
   if (!sid) return false
@@ -458,8 +313,7 @@ function isGitHandoffSession(id: string): boolean {
 
   const meta = sessionMetaFor(sid)
   const name = normalizeSessionMetaName(meta.name)
-  const folderId = normalizeFolderId(meta.folderId)
-  return name === GIT_HANDOFF_SESSION_NAME && folderId === GIT_HANDOFF_FOLDER_ID
+  return name === GIT_HANDOFF_SESSION_NAME
 }
 
 function gitHandoffSessionCandidates(): string[] {
@@ -484,8 +338,6 @@ function gitHandoffSessionCandidates(): string[] {
 }
 
 async function ensureGitHandoffSessionExists(): Promise<string> {
-  const folderId = ensureFolderExists(GIT_HANDOFF_FOLDER_ID, GIT_HANDOFF_FOLDER_NAME)
-
   for (const sid of gitHandoffSessionCandidates()) {
     const exists = await getSessionInfo(sid)
     if (!exists) {
@@ -495,7 +347,6 @@ async function ensureGitHandoffSessionExists(): Promise<string> {
 
     patchSessionMeta(sid, {
       name: GIT_HANDOFF_SESSION_NAME,
-      folderId,
     })
     persistGitHandoffSessionId(sid)
     return sid
@@ -508,7 +359,6 @@ async function ensureGitHandoffSessionExists(): Promise<string> {
   const json = await createTerminalSession({ cwd: createCwd, cols: 80, rows: 24 })
   patchSessionMeta(json.sessionId, {
     name: GIT_HANDOFF_SESSION_NAME,
-    folderId,
     pinned: undefined,
     lastUsedAt: Date.now(),
   })
@@ -555,10 +405,6 @@ function patchSessionMeta(id: string, patch: Partial<TerminalSessionMeta>, opts?
   sessionMetaById.value = {
     ...sessionMetaById.value,
     [sid]: compact,
-  }
-  const folderId = normalizeFolderId(compact.folderId)
-  if (folderId) {
-    ensureFolderExists(folderId)
   }
   persistSessionMetaById(opts)
 }
@@ -662,7 +508,7 @@ function defaultTerminalUiState(): TerminalUiState {
     activeSessionId: null,
     sessionIds: [],
     sessionMetaById: {},
-    folders: [{ id: DEFAULT_FOLDER_ID, name: DEFAULT_FOLDER_NAME }],
+    folders: [],
   }
 }
 
@@ -694,10 +540,6 @@ function applyTerminalUiStateSnapshot(snapshot: TerminalUiState) {
     nextSessionMetaById[sid] = compact
   }
 
-  const normalizedFolders = normalizeFolderList(snapshot.folders)
-  const nextFolders =
-    normalizedFolders.length > 0 ? normalizedFolders : [{ id: DEFAULT_FOLDER_ID, name: DEFAULT_FOLDER_NAME }]
-
   const requestedActive = normalizeSessionId(snapshot.activeSessionId || '')
   const nextActive =
     requestedActive && allowedSessionIds.has(requestedActive) ? requestedActive : normalizedSessionIds[0] || ''
@@ -706,11 +548,9 @@ function applyTerminalUiStateSnapshot(snapshot: TerminalUiState) {
 
   terminalStateApplyInProgress = true
   try {
-    folders.value = nextFolders
     sessionMetaById.value = nextSessionMetaById
     sessionList.value = normalizedSessionIds
     seedSessionRecencyFromList({ remote: false })
-    syncFoldersWithSessionMeta()
 
     for (const sid of previousSessionIds) {
       if (allowedSessionIds.has(sid)) continue
@@ -888,19 +728,11 @@ function removeTrackedSession(id: string, opts?: { persist?: boolean }) {
 }
 
 seedSessionRecencyFromList()
-syncFoldersWithSessionMeta()
-ensureDefaultFolderExists()
 
 const sidebarQuery = ref('')
 const sidebarQueryNorm = computed(() => sidebarQuery.value.trim().toLowerCase())
 
-const folderCollapsedById = ref<Record<string, boolean>>({})
-const folderCreateOpen = ref(false)
-const folderCreateDraft = ref('')
-const folderRenamingId = ref<string | null>(null)
-const folderRenameDraft = ref('')
-
-const sessionCreatingFolderId = ref<string | null>(null)
+const sessionCreateOpen = ref(false)
 const sessionCreateDraft = ref('')
 const sessionCreateBusy = ref(false)
 
@@ -910,24 +742,17 @@ const mobileSessionActionTargetId = ref<string | null>(null)
 const mobileSessionActionOpen = ref(false)
 const mobileSessionActionQuery = ref('')
 
-const mobileSessionCreateDialogOpen = computed(
-  () => ui.isMobilePointer && Boolean(normalizeFolderId(sessionCreatingFolderId.value)),
-)
+const mobileSessionCreateDialogOpen = computed(() => ui.isMobilePointer && sessionCreateOpen.value)
 const mobileSessionRenameDialogOpen = computed(
   () => ui.isMobilePointer && Boolean(normalizeSessionId(sessionRenamingId.value)),
 )
-
-const sessionCreateTargetFolderName = computed(() => {
-  const fid = normalizeFolderId(sessionCreatingFolderId.value)
-  const folder = folderFor(fid)
-  return folder?.name || DEFAULT_FOLDER_NAME
-})
 
 function sidebarSessionLabel(item: TerminalSidebarSession): string {
   return item.name || item.id.slice(0, 8)
 }
 
-function compareSidebarSessionRecency(a: TerminalSidebarSession, b: TerminalSidebarSession): number {
+function compareSidebarSessionOrder(a: TerminalSidebarSession, b: TerminalSidebarSession): number {
+  if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
   if (a.lastUsedAt !== b.lastUsedAt) return b.lastUsedAt - a.lastUsedAt
   return a.id.localeCompare(b.id)
 }
@@ -941,13 +766,11 @@ function sessionMatchesQuery(item: TerminalSidebarSession, q: string): boolean {
 const sidebarSessions = computed<TerminalSidebarSession[]>(() => {
   return sessionList.value.map((id) => {
     const meta = sessionMetaFor(id)
-    const folderId = sessionFolderId(id)
     const lastUsedAt =
       typeof meta.lastUsedAt === 'number' && Number.isFinite(meta.lastUsedAt) ? Math.floor(meta.lastUsedAt) : 0
     return {
       id,
       name: normalizeSessionMetaName(meta.name),
-      folderId,
       pinned: meta.pinned === true,
       lastUsedAt,
     }
@@ -956,153 +779,17 @@ const sidebarSessions = computed<TerminalSidebarSession[]>(() => {
 
 const totalSessionCount = computed(() => sidebarSessions.value.length)
 
-const visibleSidebarFolders = computed<TerminalSidebarFolder[]>(() => {
+const visibleSidebarSessions = computed<TerminalSidebarSession[]>(() => {
   const q = sidebarQueryNorm.value
-  const out: TerminalSidebarFolder[] = []
-
-  for (const folder of folders.value) {
-    const all = sidebarSessions.value
-      .filter((item) => item.folderId === folder.id)
-      .slice()
-      .sort(compareSidebarSessionRecency)
-
-    const folderMatch = folder.name.toLowerCase().includes(q)
-    const filtered = !q || folderMatch ? all : all.filter((item) => sessionMatchesQuery(item, q))
-    const pinnedSessions = filtered.filter((item) => item.pinned)
-    const recentSessions = filtered.filter((item) => !item.pinned)
-
-    const shouldShow =
-      !q ||
-      folderMatch ||
-      filtered.length > 0 ||
-      folderRenamingId.value === folder.id ||
-      sessionCreatingFolderId.value === folder.id
-
-    if (!shouldShow) continue
-
-    out.push({
-      id: folder.id,
-      name: folder.name,
-      pinnedSessions,
-      recentSessions,
-    })
-  }
-
-  return out
+  const filtered = !q
+    ? sidebarSessions.value.slice()
+    : sidebarSessions.value.filter((item) => sessionMatchesQuery(item, q))
+  return filtered.sort(compareSidebarSessionOrder)
 })
 
-function isFolderCollapsed(folderId: string): boolean {
-  const fid = normalizeFolderId(folderId)
-  if (!fid) return false
-  return Boolean(folderCollapsedById.value[fid])
-}
-
-function toggleFolderCollapsed(folderId: string) {
-  const fid = normalizeFolderId(folderId)
-  if (!fid) return
-  folderCollapsedById.value = {
-    ...folderCollapsedById.value,
-    [fid]: !isFolderCollapsed(fid),
-  }
-}
-
-function stopFolderCreate() {
-  folderCreateOpen.value = false
-  folderCreateDraft.value = ''
-}
-
-function startFolderCreate() {
-  folderRenamingId.value = null
-  folderRenameDraft.value = ''
-  folderCreateOpen.value = true
-  folderCreateDraft.value = ''
-}
-
-function saveFolderCreate() {
-  const name = normalizeFolderName(folderCreateDraft.value)
-  if (!name) return
-
-  const existing = folders.value.find((folder) => folder.name.toLowerCase() === name.toLowerCase())
-  if (existing) {
-    stopFolderCreate()
-    sessionCreatingFolderId.value = existing.id
-    sessionCreateDraft.value = ''
-    return
-  }
-
-  const folderId = generateFolderId(name)
-  folders.value = [...folders.value, { id: folderId, name }]
-  persistFolderList()
-  stopFolderCreate()
-}
-
-function startFolderRename(folderId: string) {
-  const fid = normalizeFolderId(folderId)
-  const folder = folderFor(fid)
-  if (!folder) return
-  stopFolderCreate()
-  cancelSessionCreate()
-  folderRenamingId.value = folder.id
-  folderRenameDraft.value = folder.name
-}
-
-function cancelFolderRename() {
-  folderRenamingId.value = null
-  folderRenameDraft.value = ''
-}
-
-function saveFolderRename() {
-  const fid = normalizeFolderId(folderRenamingId.value)
-  if (!fid) return
-  const name = normalizeFolderName(folderRenameDraft.value)
-  if (!name) return
-
-  folders.value = folders.value.map((folder) => (folder.id === fid ? { ...folder, name } : folder))
-  persistFolderList()
-  cancelFolderRename()
-}
-
-async function removeFolder(folderId: string) {
-  const fid = normalizeFolderId(folderId)
-  if (!fid) return
-  if (!folderFor(fid)) return
-
-  const sessionIds = sidebarSessions.value.filter((item) => item.folderId === fid).map((item) => item.id)
-  for (const sid of sessionIds) {
-    await closeTrackedSession(sid)
-  }
-
-  const stillHasSessions = sidebarSessions.value.some((item) => item.folderId === fid)
-  if (stillHasSessions) {
-    setError(String(t('terminal.errors.deleteAllInFolder')))
-    return
-  }
-
-  let nextFolders = folders.value.filter((folder) => folder.id !== fid)
-  if (nextFolders.length === 0) {
-    nextFolders = [{ id: DEFAULT_FOLDER_ID, name: DEFAULT_FOLDER_NAME }]
-  }
-  if (!nextFolders.some((folder) => folder.id === DEFAULT_FOLDER_ID)) {
-    nextFolders = [{ id: DEFAULT_FOLDER_ID, name: DEFAULT_FOLDER_NAME }, ...nextFolders]
-  }
-
-  folders.value = nextFolders
-  persistFolderList()
-
-  if (sessionCreatingFolderId.value === fid) {
-    cancelSessionCreate()
-  }
-  if (folderRenamingId.value === fid) {
-    cancelFolderRename()
-  }
-}
-
-function startSessionCreate(folderId: string) {
-  const fid = ensureFolderExists(folderId)
-  stopFolderCreate()
-  cancelFolderRename()
+function startSessionCreate() {
   cancelSessionRename()
-  sessionCreatingFolderId.value = fid
+  sessionCreateOpen.value = true
   sessionCreateDraft.value = ''
   sessionCreateBusy.value = false
 }
@@ -1114,13 +801,12 @@ function sessionStartCwd(): string {
 }
 
 function cancelSessionCreate() {
-  sessionCreatingFolderId.value = null
+  sessionCreateOpen.value = false
   sessionCreateDraft.value = ''
   sessionCreateBusy.value = false
 }
 
-async function createSessionWithName(folderId: string, name: string) {
-  const fid = ensureFolderExists(folderId)
+async function createSessionWithName(name: string) {
   const sessionName = normalizeSessionMetaName(name)
   if (!sessionName) return
   const createCwd = sessionStartCwd()
@@ -1131,7 +817,6 @@ async function createSessionWithName(folderId: string, name: string) {
   const json = await createTerminalSession({ cwd: createCwd, cols: 80, rows: 24 })
   patchSessionMeta(json.sessionId, {
     name: sessionName,
-    folderId: fid,
     pinned: undefined,
     lastUsedAt: Date.now(),
   })
@@ -1145,14 +830,13 @@ async function createSessionWithName(folderId: string, name: string) {
 }
 
 async function saveSessionCreate() {
-  const fid = normalizeFolderId(sessionCreatingFolderId.value)
-  if (!fid) return
+  if (!sessionCreateOpen.value) return
   const name = normalizeSessionMetaName(sessionCreateDraft.value)
   if (!name || sessionCreateBusy.value) return
 
   sessionCreateBusy.value = true
   try {
-    await createSessionWithName(fid, name)
+    await createSessionWithName(name)
     cancelSessionCreate()
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
@@ -1188,11 +872,6 @@ function saveSessionRename() {
 function isSessionRenaming(id: string): boolean {
   const sid = normalizeSessionId(id)
   return Boolean(sid) && sessionRenamingId.value === sid
-}
-
-function isFolderRenaming(id: string): boolean {
-  const fid = normalizeFolderId(id)
-  return Boolean(fid) && folderRenamingId.value === fid
 }
 
 function toggleSessionPinned(id: string) {
@@ -1989,7 +1668,6 @@ async function openSessionFromSidebar(id: string) {
   const switchToken = nextSessionSwitchToken()
   cancelSessionRename()
   cancelSessionCreate()
-  cancelFolderRename()
 
   if (sessionId.value === sid) {
     if (!hasSessionStreamSource(sid) || streamStatusForSession(sid) === 'disconnected') {
@@ -2170,11 +1848,11 @@ watch(el, () => {
               variant="ghost"
               size="md"
               class="h-8 w-8"
-              :tooltip="String(t('terminal.sidebar.newFolder'))"
+              :tooltip="String(t('terminal.session.create'))"
               :is-mobile-pointer="ui.isMobilePointer"
-              :title="String(t('terminal.sidebar.newFolder'))"
-              :aria-label="String(t('terminal.sidebar.newFolder'))"
-              @click="startFolderCreate"
+              :title="String(t('terminal.session.create'))"
+              :aria-label="String(t('terminal.session.create'))"
+              @click="startSessionCreate"
             >
               <RiAddLine class="h-4 w-4" />
             </IconButton>
@@ -2220,34 +1898,33 @@ watch(el, () => {
         </div>
       </div>
 
-      <div v-if="folderCreateOpen" class="flex-shrink-0 px-3 pb-2">
+      <div v-if="!ui.isMobilePointer && sessionCreateOpen" class="flex-shrink-0 px-3 pb-2">
         <div class="rounded-md border border-sidebar-border/70 bg-sidebar/95 p-2">
-          <div class="text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
-            {{ t('terminal.folder.new') }}
-          </div>
           <div class="mt-1 flex items-center gap-1">
             <Input
-              v-model="folderCreateDraft"
+              v-model="sessionCreateDraft"
               class="h-7 min-w-0 flex-1 text-xs"
-              :placeholder="String(t('terminal.folder.namePlaceholder'))"
-              @keydown.enter.prevent="saveFolderCreate"
-              @keydown.esc.prevent="stopFolderCreate"
+              :placeholder="String(t('terminal.session.namePlaceholder'))"
+              @keydown.enter.prevent="saveSessionCreate"
+              @keydown.esc.prevent="cancelSessionCreate"
             />
             <IconButton
               size="sm"
               class="text-muted-foreground hover:bg-primary/6"
               :title="String(t('common.cancel'))"
               :aria-label="String(t('common.cancel'))"
-              @click="stopFolderCreate"
+              :disabled="sessionCreateBusy"
+              @click="cancelSessionCreate"
             >
               <RiCloseLine class="h-4 w-4" />
             </IconButton>
             <IconButton
               size="sm"
               class="text-primary hover:bg-primary/10"
-              :title="String(t('terminal.folder.create'))"
-              :aria-label="String(t('terminal.folder.create'))"
-              @click="saveFolderCreate"
+              :title="String(t('terminal.session.create'))"
+              :aria-label="String(t('terminal.session.create'))"
+              :disabled="sessionCreateBusy || !sessionCreateDraft.trim()"
+              @click="saveSessionCreate"
             >
               <RiCheckLine class="h-4 w-4" />
             </IconButton>
@@ -2256,491 +1933,161 @@ watch(el, () => {
       </div>
 
       <div class="flex-1 min-h-0 overflow-x-hidden overflow-y-auto">
-        <div class="space-y-2 pb-1 pl-2.5 pr-1">
-          <div v-if="!visibleSidebarFolders.length" class="px-2 py-6 text-center text-muted-foreground">
+        <div class="space-y-1 pb-1 pl-2.5 pr-1">
+          <div v-if="!visibleSidebarSessions.length" class="px-2 py-6 text-center text-muted-foreground">
             <div class="typography-ui-label font-semibold">{{ t('terminal.sidebar.emptyTitle') }}</div>
             <div class="typography-meta mt-1">{{ t('terminal.sidebar.emptyHint') }}</div>
           </div>
 
-          <div v-else class="space-y-1">
-            <div v-for="folder in visibleSidebarFolders" :key="folder.id" class="relative">
-              <div class="sticky top-0 z-20 pt-2 pb-1.5 w-full border-b bg-sidebar border-sidebar-border/60">
-                <div v-if="isFolderRenaming(folder.id)" class="flex items-center gap-1 px-1">
-                  <Input
-                    v-model="folderRenameDraft"
-                    class="h-7 min-w-0 flex-1 text-xs"
-                    :placeholder="String(t('terminal.folder.namePlaceholder'))"
-                    @keydown.enter.prevent="saveFolderRename"
-                    @keydown.esc.prevent="cancelFolderRename"
-                  />
+          <div v-for="item in visibleSidebarSessions" :key="item.id" class="relative">
+            <SidebarListItem
+              :active="sessionId === item.id"
+              :as="isSessionRenaming(item.id) ? 'div' : 'button'"
+              @click="!isSessionRenaming(item.id) && openSessionFromSidebar(item.id)"
+            >
+              <template #icon>
+                <span
+                  class="inline-flex h-1.5 w-1.5 flex-shrink-0 rounded-full"
+                  :class="statusDotClassForSession(item.id)"
+                />
+              </template>
+
+              <template v-if="!ui.isMobilePointer && isSessionRenaming(item.id)">
+                <Input
+                  v-model="sessionRenameDraft"
+                  class="h-7 min-w-0 flex-1 text-xs"
+                  :placeholder="String(t('terminal.session.namePlaceholder'))"
+                  @keydown.enter.prevent="saveSessionRename"
+                  @keydown.esc.prevent="cancelSessionRename"
+                  @click.stop
+                />
+              </template>
+
+              <template v-else>
+                <div class="flex w-full min-w-0 items-center gap-1">
+                  <span
+                    class="block min-w-0 flex-1 truncate typography-ui-label text-left"
+                    :class="item.name ? 'font-medium' : 'font-mono'"
+                  >
+                    {{ sidebarSessionLabel(item) }}
+                  </span>
+
+                  <template v-if="ui.isMobilePointer">
+                    <IconButton
+                      size="sm"
+                      class="text-muted-foreground hover:text-foreground hover:bg-primary/6"
+                      :title="String(t('terminal.actions.title'))"
+                      :aria-label="String(t('terminal.actions.title'))"
+                      @click.stop="openMobileSessionActionMenu(item.id)"
+                    >
+                      <RiMore2Line class="h-4 w-4" />
+                    </IconButton>
+
+                    <OptionMenu
+                      :open="isMobileSessionActionMenuOpen(item.id)"
+                      :query="mobileSessionActionQuery"
+                      :groups="mobileSessionActionGroups(item.id)"
+                      :title="mobileSessionActionTitle(item.id)"
+                      :mobile-title="mobileSessionActionTitle(item.id)"
+                      :searchable="true"
+                      :is-mobile-pointer="ui.isMobilePointer"
+                      @update:open="(v) => setMobileSessionActionMenuOpen(item.id, v)"
+                      @update:query="(v) => (mobileSessionActionQuery = v)"
+                      @select="(action) => runMobileSessionAction(item.id, action)"
+                    />
+                  </template>
+                </div>
+              </template>
+
+              <template #actions>
+                <template v-if="!ui.isMobilePointer && isSessionRenaming(item.id)">
                   <IconButton
                     size="sm"
                     class="text-muted-foreground hover:bg-primary/6"
-                    :title="String(t('common.cancel'))"
-                    :aria-label="String(t('common.cancel'))"
-                    @click="cancelFolderRename"
+                    :title="String(t('terminal.session.cancelRename'))"
+                    :aria-label="String(t('terminal.session.cancelRename'))"
+                    @click.stop="cancelSessionRename"
                   >
                     <RiCloseLine class="h-4 w-4" />
                   </IconButton>
                   <IconButton
                     size="sm"
                     class="text-primary hover:bg-primary/10"
-                    :title="String(t('terminal.folder.saveName'))"
-                    :aria-label="String(t('terminal.folder.saveName'))"
-                    @click="saveFolderRename"
+                    :title="String(t('terminal.session.saveRename'))"
+                    :aria-label="String(t('terminal.session.saveRename'))"
+                    @click.stop="saveSessionRename"
                   >
                     <RiCheckLine class="h-4 w-4" />
                   </IconButton>
-                </div>
+                </template>
 
-                <div v-else class="group flex items-center gap-1 px-1">
+                <template v-else-if="!ui.isMobilePointer">
                   <IconButton
-                    size="xs"
-                    class="text-muted-foreground hover:text-foreground"
-                    :aria-label="
-                      isFolderCollapsed(folder.id)
-                        ? String(t('terminal.sidebar.expandFolder'))
-                        : String(t('terminal.sidebar.collapseFolder'))
-                    "
-                    @click="toggleFolderCollapsed(folder.id)"
+                    size="sm"
+                    class="text-muted-foreground hover:text-foreground hover:bg-primary/6"
+                    :title="String(t('terminal.actions.rename'))"
+                    :aria-label="String(t('terminal.actions.rename'))"
+                    @click.stop="startSessionRename(item.id)"
                   >
-                    <RiArrowRightSLine v-if="isFolderCollapsed(folder.id)" class="h-4 w-4" />
-                    <RiArrowDownSLine v-else class="h-4 w-4" />
+                    <RiEditLine class="h-4 w-4" />
                   </IconButton>
-
-                  <SidebarTextButton class="flex-1 rounded-sm" @click="toggleFolderCollapsed(folder.id)">
-                    <div class="typography-ui font-semibold truncate">{{ folder.name }}</div>
-                  </SidebarTextButton>
-
-                  <span class="font-mono text-[10px] text-muted-foreground/70">
-                    {{ folder.pinnedSessions.length + folder.recentSessions.length }}
-                  </span>
-
-                  <div
-                    class="flex items-center gap-1 w-0 overflow-hidden opacity-0 pointer-events-none transition-opacity group-hover:w-20 group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:w-20 group-focus-within:opacity-100 group-focus-within:pointer-events-auto"
+                  <ConfirmPopover
+                    :title="String(t('terminal.actions.disconnectConfirmTitle'))"
+                    :description="String(t('terminal.actions.disconnectConfirmDescription'))"
+                    :confirm-text="String(t('terminal.actions.disconnect'))"
+                    :cancel-text="String(t('common.cancel'))"
+                    variant="destructive"
+                    :anchor-to-cursor="false"
+                    :confirm-disabled="!canDisconnectSession(item.id)"
+                    @confirm="disconnectSessionFromSidebar(item.id)"
                   >
                     <IconButton
-                      size="xs"
-                      class="text-muted-foreground hover:text-foreground hover:bg-primary/6"
-                      :title="String(t('terminal.folder.newTerminalInFolder'))"
-                      :aria-label="String(t('terminal.folder.newTerminalInFolder'))"
-                      @click.stop="startSessionCreate(folder.id)"
+                      size="sm"
+                      class="transition"
+                      :class="
+                        canDisconnectSession(item.id)
+                          ? 'text-destructive hover:bg-destructive/10'
+                          : 'text-muted-foreground/45'
+                      "
+                      :title="String(t('terminal.actions.disconnectStream'))"
+                      :aria-label="String(t('terminal.actions.disconnectStream'))"
+                      :disabled="!canDisconnectSession(item.id)"
+                      @click.stop
                     >
-                      <RiAddLine class="h-4 w-4" />
+                      <RiStopCircleLine class="h-4 w-4" />
                     </IconButton>
-
+                  </ConfirmPopover>
+                  <IconButton
+                    size="sm"
+                    class="transition hover:bg-primary/6"
+                    :class="item.pinned ? 'text-amber-500' : 'text-muted-foreground hover:text-amber-500'"
+                    :title="item.pinned ? String(t('terminal.actions.unpin')) : String(t('terminal.actions.pin'))"
+                    :aria-label="item.pinned ? String(t('terminal.actions.unpin')) : String(t('terminal.actions.pin'))"
+                    @click.stop="toggleSessionPinned(item.id)"
+                  >
+                    <component :is="item.pinned ? RiStarFill : RiStarLine" class="h-4 w-4" />
+                  </IconButton>
+                  <ConfirmPopover
+                    :title="String(t('terminal.actions.deleteConfirmTitle'))"
+                    :description="String(t('terminal.actions.deleteConfirmDescription'))"
+                    :confirm-text="String(t('terminal.actions.deleteConfirmText'))"
+                    :cancel-text="String(t('common.cancel'))"
+                    variant="destructive"
+                    @confirm="closeTrackedSession(item.id)"
+                  >
                     <IconButton
-                      size="xs"
-                      class="text-muted-foreground hover:text-foreground hover:bg-primary/6"
-                      :title="String(t('terminal.folder.rename'))"
-                      :aria-label="String(t('terminal.folder.rename'))"
-                      @click.stop="startFolderRename(folder.id)"
+                      size="sm"
+                      class="text-muted-foreground hover:text-destructive hover:bg-primary/6"
+                      :title="String(t('terminal.actions.delete'))"
+                      :aria-label="String(t('terminal.actions.delete'))"
+                      @click.stop
                     >
-                      <RiEditLine class="h-4 w-4" />
+                      <RiDeleteBinLine class="h-4 w-4" />
                     </IconButton>
-
-                    <ConfirmPopover
-                      :title="String(t('terminal.folder.deleteConfirmTitle'))"
-                      :description="String(t('terminal.folder.deleteConfirmDescription'))"
-                      :confirm-text="String(t('terminal.folder.deleteConfirmText'))"
-                      :cancel-text="String(t('common.cancel'))"
-                      variant="destructive"
-                      @confirm="removeFolder(folder.id)"
-                    >
-                      <IconButton
-                        size="xs"
-                        class="text-muted-foreground hover:text-destructive hover:bg-primary/6"
-                        :title="String(t('terminal.folder.delete'))"
-                        :aria-label="String(t('terminal.folder.delete'))"
-                        @click.stop
-                      >
-                        <RiDeleteBinLine class="h-4 w-4" />
-                      </IconButton>
-                    </ConfirmPopover>
-                  </div>
-                </div>
-              </div>
-
-              <div v-if="!isFolderCollapsed(folder.id)" class="py-1 pl-1 space-y-1">
-                <template v-if="folder.pinnedSessions.length">
-                  <div class="px-1.5 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
-                    {{ t('terminal.sidebar.pinned') }}
-                  </div>
-                  <div v-for="item in folder.pinnedSessions" :key="`pin:${item.id}`" class="relative">
-                    <SidebarListItem
-                      :active="sessionId === item.id"
-                      :as="isSessionRenaming(item.id) ? 'div' : 'button'"
-                      @click="!isSessionRenaming(item.id) && openSessionFromSidebar(item.id)"
-                    >
-                      <template #icon>
-                        <span
-                          class="inline-flex h-1.5 w-1.5 flex-shrink-0 rounded-full"
-                          :class="statusDotClassForSession(item.id)"
-                        />
-                      </template>
-
-                      <template v-if="!ui.isMobilePointer && isSessionRenaming(item.id)">
-                        <Input
-                          v-model="sessionRenameDraft"
-                          class="h-7 min-w-0 flex-1 text-xs"
-                          :placeholder="String(t('terminal.session.namePlaceholder'))"
-                          @keydown.enter.prevent="saveSessionRename"
-                          @keydown.esc.prevent="cancelSessionRename"
-                          @click.stop
-                        />
-                      </template>
-
-                      <template v-else>
-                        <div class="flex w-full min-w-0 items-center gap-1">
-                          <span
-                            class="block min-w-0 flex-1 truncate typography-ui-label text-left"
-                            :class="item.name ? 'font-medium' : 'font-mono'"
-                          >
-                            {{ sidebarSessionLabel(item) }}
-                          </span>
-
-                          <template v-if="ui.isMobilePointer">
-                            <IconButton
-                              size="sm"
-                              class="text-muted-foreground hover:text-foreground hover:bg-primary/6"
-                              :title="String(t('terminal.actions.title'))"
-                              :aria-label="String(t('terminal.actions.title'))"
-                              @click.stop="openMobileSessionActionMenu(item.id)"
-                            >
-                              <RiMore2Line class="h-4 w-4" />
-                            </IconButton>
-
-                            <OptionMenu
-                              :open="isMobileSessionActionMenuOpen(item.id)"
-                              :query="mobileSessionActionQuery"
-                              :groups="mobileSessionActionGroups(item.id)"
-                              :title="mobileSessionActionTitle(item.id)"
-                              :mobile-title="mobileSessionActionTitle(item.id)"
-                              :searchable="true"
-                              :is-mobile-pointer="ui.isMobilePointer"
-                              @update:open="(v) => setMobileSessionActionMenuOpen(item.id, v)"
-                              @update:query="(v) => (mobileSessionActionQuery = v)"
-                              @select="(action) => runMobileSessionAction(item.id, action)"
-                            />
-                          </template>
-                        </div>
-                      </template>
-
-                      <template #actions>
-                        <template v-if="!ui.isMobilePointer && isSessionRenaming(item.id)">
-                          <IconButton
-                            size="sm"
-                            class="text-muted-foreground hover:bg-primary/6"
-                            :title="String(t('terminal.session.cancelRename'))"
-                            :aria-label="String(t('terminal.session.cancelRename'))"
-                            @click.stop="cancelSessionRename"
-                          >
-                            <RiCloseLine class="h-4 w-4" />
-                          </IconButton>
-                          <IconButton
-                            size="sm"
-                            class="text-primary hover:bg-primary/10"
-                            :title="String(t('terminal.session.saveRename'))"
-                            :aria-label="String(t('terminal.session.saveRename'))"
-                            @click.stop="saveSessionRename"
-                          >
-                            <RiCheckLine class="h-4 w-4" />
-                          </IconButton>
-                        </template>
-
-                        <template v-else-if="!ui.isMobilePointer">
-                          <IconButton
-                            size="sm"
-                            class="text-muted-foreground hover:text-foreground hover:bg-primary/6"
-                            :title="String(t('terminal.actions.rename'))"
-                            :aria-label="String(t('terminal.actions.rename'))"
-                            @click.stop="startSessionRename(item.id)"
-                          >
-                            <RiEditLine class="h-4 w-4" />
-                          </IconButton>
-                          <ConfirmPopover
-                            :title="String(t('terminal.actions.disconnectConfirmTitle'))"
-                            :description="String(t('terminal.actions.disconnectConfirmDescription'))"
-                            :confirm-text="String(t('terminal.actions.disconnect'))"
-                            :cancel-text="String(t('common.cancel'))"
-                            variant="destructive"
-                            :anchor-to-cursor="false"
-                            :confirm-disabled="!canDisconnectSession(item.id)"
-                            @confirm="disconnectSessionFromSidebar(item.id)"
-                          >
-                            <IconButton
-                              size="sm"
-                              class="transition"
-                              :class="
-                                canDisconnectSession(item.id)
-                                  ? 'text-destructive hover:bg-destructive/10'
-                                  : 'text-muted-foreground/45'
-                              "
-                              :title="String(t('terminal.actions.disconnectStream'))"
-                              :aria-label="String(t('terminal.actions.disconnectStream'))"
-                              :disabled="!canDisconnectSession(item.id)"
-                              @click.stop
-                            >
-                              <RiStopCircleLine class="h-4 w-4" />
-                            </IconButton>
-                          </ConfirmPopover>
-                          <IconButton
-                            size="sm"
-                            class="transition hover:bg-primary/6"
-                            :class="item.pinned ? 'text-amber-500' : 'text-muted-foreground hover:text-amber-500'"
-                            :title="
-                              item.pinned ? String(t('terminal.actions.unpin')) : String(t('terminal.actions.pin'))
-                            "
-                            :aria-label="
-                              item.pinned ? String(t('terminal.actions.unpin')) : String(t('terminal.actions.pin'))
-                            "
-                            @click.stop="toggleSessionPinned(item.id)"
-                          >
-                            <component :is="item.pinned ? RiStarFill : RiStarLine" class="h-4 w-4" />
-                          </IconButton>
-                          <ConfirmPopover
-                            :title="String(t('terminal.actions.deleteConfirmTitle'))"
-                            :description="String(t('terminal.actions.deleteConfirmDescription'))"
-                            :confirm-text="String(t('terminal.actions.deleteConfirmText'))"
-                            :cancel-text="String(t('common.cancel'))"
-                            variant="destructive"
-                            @confirm="closeTrackedSession(item.id)"
-                          >
-                            <IconButton
-                              size="sm"
-                              class="text-muted-foreground hover:text-destructive hover:bg-primary/6"
-                              :title="String(t('terminal.actions.delete'))"
-                              :aria-label="String(t('terminal.actions.delete'))"
-                              @click.stop
-                            >
-                              <RiDeleteBinLine class="h-4 w-4" />
-                            </IconButton>
-                          </ConfirmPopover>
-                        </template>
-                      </template>
-                    </SidebarListItem>
-                  </div>
+                  </ConfirmPopover>
                 </template>
-
-                <template
-                  v-if="folder.recentSessions.length || (!ui.isMobilePointer && sessionCreatingFolderId === folder.id)"
-                >
-                  <div class="px-1.5 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
-                    {{ t('terminal.sidebar.recent') }}
-                  </div>
-
-                  <div v-if="!ui.isMobilePointer && sessionCreatingFolderId === folder.id" class="group relative">
-                    <div
-                      class="flex items-center gap-1 rounded-md transition-colors text-foreground hover:bg-primary/6"
-                    >
-                      <div class="flex-1 min-w-0 py-1 pl-2 pr-1.5">
-                        <div class="flex min-w-0 items-center gap-2">
-                          <span class="inline-flex h-1.5 w-1.5 flex-shrink-0 rounded-full opacity-0" />
-                          <Input
-                            v-model="sessionCreateDraft"
-                            class="h-7 min-w-0 flex-1 text-xs"
-                            :placeholder="String(t('terminal.session.namePlaceholder'))"
-                            @keydown.enter.prevent="saveSessionCreate"
-                            @keydown.esc.prevent="cancelSessionCreate"
-                          />
-                        </div>
-                      </div>
-
-                      <div class="flex items-center gap-1 pr-1">
-                        <IconButton
-                          size="sm"
-                          class="text-muted-foreground hover:bg-primary/6"
-                          :title="String(t('common.cancel'))"
-                          :aria-label="String(t('common.cancel'))"
-                          :disabled="sessionCreateBusy"
-                          @click="cancelSessionCreate"
-                        >
-                          <RiCloseLine class="h-4 w-4" />
-                        </IconButton>
-                        <IconButton
-                          size="sm"
-                          class="text-primary hover:bg-primary/10"
-                          :title="String(t('terminal.session.create'))"
-                          :aria-label="String(t('terminal.session.create'))"
-                          :disabled="sessionCreateBusy || !sessionCreateDraft.trim()"
-                          @click="saveSessionCreate"
-                        >
-                          <RiCheckLine class="h-4 w-4" />
-                        </IconButton>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div v-for="item in folder.recentSessions" :key="`recent:${item.id}`" class="relative">
-                    <SidebarListItem
-                      :active="sessionId === item.id"
-                      :as="isSessionRenaming(item.id) ? 'div' : 'button'"
-                      @click="!isSessionRenaming(item.id) && openSessionFromSidebar(item.id)"
-                    >
-                      <template #icon>
-                        <span
-                          class="inline-flex h-1.5 w-1.5 flex-shrink-0 rounded-full"
-                          :class="statusDotClassForSession(item.id)"
-                        />
-                      </template>
-
-                      <template v-if="!ui.isMobilePointer && isSessionRenaming(item.id)">
-                        <Input
-                          v-model="sessionRenameDraft"
-                          class="h-7 min-w-0 flex-1 text-xs"
-                          :placeholder="String(t('terminal.session.namePlaceholder'))"
-                          @keydown.enter.prevent="saveSessionRename"
-                          @keydown.esc.prevent="cancelSessionRename"
-                          @click.stop
-                        />
-                      </template>
-
-                      <template v-else>
-                        <div class="flex w-full min-w-0 items-center gap-1">
-                          <span
-                            class="block min-w-0 flex-1 truncate typography-ui-label text-left"
-                            :class="item.name ? 'font-medium' : 'font-mono'"
-                          >
-                            {{ sidebarSessionLabel(item) }}
-                          </span>
-
-                          <template v-if="ui.isMobilePointer">
-                            <IconButton
-                              size="sm"
-                              class="text-muted-foreground hover:text-foreground hover:bg-primary/6"
-                              :title="String(t('terminal.actions.title'))"
-                              :aria-label="String(t('terminal.actions.title'))"
-                              @click.stop="openMobileSessionActionMenu(item.id)"
-                            >
-                              <RiMore2Line class="h-4 w-4" />
-                            </IconButton>
-
-                            <OptionMenu
-                              :open="isMobileSessionActionMenuOpen(item.id)"
-                              :query="mobileSessionActionQuery"
-                              :groups="mobileSessionActionGroups(item.id)"
-                              :title="mobileSessionActionTitle(item.id)"
-                              :mobile-title="mobileSessionActionTitle(item.id)"
-                              :searchable="true"
-                              :is-mobile-pointer="ui.isMobilePointer"
-                              @update:open="(v) => setMobileSessionActionMenuOpen(item.id, v)"
-                              @update:query="(v) => (mobileSessionActionQuery = v)"
-                              @select="(action) => runMobileSessionAction(item.id, action)"
-                            />
-                          </template>
-                        </div>
-                      </template>
-
-                      <template #actions>
-                        <template v-if="!ui.isMobilePointer && isSessionRenaming(item.id)">
-                          <IconButton
-                            size="sm"
-                            class="text-muted-foreground hover:bg-primary/6"
-                            :title="String(t('terminal.session.cancelRename'))"
-                            :aria-label="String(t('terminal.session.cancelRename'))"
-                            @click.stop="cancelSessionRename"
-                          >
-                            <RiCloseLine class="h-4 w-4" />
-                          </IconButton>
-                          <IconButton
-                            size="sm"
-                            class="text-primary hover:bg-primary/10"
-                            :title="String(t('terminal.session.saveRename'))"
-                            :aria-label="String(t('terminal.session.saveRename'))"
-                            @click.stop="saveSessionRename"
-                          >
-                            <RiCheckLine class="h-4 w-4" />
-                          </IconButton>
-                        </template>
-
-                        <template v-else-if="!ui.isMobilePointer">
-                          <IconButton
-                            size="sm"
-                            class="text-muted-foreground hover:text-foreground hover:bg-primary/6"
-                            :title="String(t('terminal.actions.rename'))"
-                            :aria-label="String(t('terminal.actions.rename'))"
-                            @click.stop="startSessionRename(item.id)"
-                          >
-                            <RiEditLine class="h-4 w-4" />
-                          </IconButton>
-                          <ConfirmPopover
-                            :title="String(t('terminal.actions.disconnectConfirmTitle'))"
-                            :description="String(t('terminal.actions.disconnectConfirmDescription'))"
-                            :confirm-text="String(t('terminal.actions.disconnect'))"
-                            :cancel-text="String(t('common.cancel'))"
-                            variant="destructive"
-                            :anchor-to-cursor="false"
-                            :confirm-disabled="!canDisconnectSession(item.id)"
-                            @confirm="disconnectSessionFromSidebar(item.id)"
-                          >
-                            <IconButton
-                              size="sm"
-                              class="transition"
-                              :class="
-                                canDisconnectSession(item.id)
-                                  ? 'text-destructive hover:bg-destructive/10'
-                                  : 'text-muted-foreground/45'
-                              "
-                              :title="String(t('terminal.actions.disconnectStream'))"
-                              :aria-label="String(t('terminal.actions.disconnectStream'))"
-                              :disabled="!canDisconnectSession(item.id)"
-                              @click.stop
-                            >
-                              <RiStopCircleLine class="h-4 w-4" />
-                            </IconButton>
-                          </ConfirmPopover>
-                          <IconButton
-                            size="sm"
-                            class="transition hover:bg-primary/6"
-                            :class="item.pinned ? 'text-amber-500' : 'text-muted-foreground hover:text-amber-500'"
-                            :title="
-                              item.pinned ? String(t('terminal.actions.unpin')) : String(t('terminal.actions.pin'))
-                            "
-                            :aria-label="
-                              item.pinned ? String(t('terminal.actions.unpin')) : String(t('terminal.actions.pin'))
-                            "
-                            @click.stop="toggleSessionPinned(item.id)"
-                          >
-                            <component :is="item.pinned ? RiStarFill : RiStarLine" class="h-4 w-4" />
-                          </IconButton>
-                          <ConfirmPopover
-                            :title="String(t('terminal.actions.deleteConfirmTitle'))"
-                            :description="String(t('terminal.actions.deleteConfirmDescription'))"
-                            :confirm-text="String(t('terminal.actions.deleteConfirmText'))"
-                            :cancel-text="String(t('common.cancel'))"
-                            variant="destructive"
-                            @confirm="closeTrackedSession(item.id)"
-                          >
-                            <IconButton
-                              size="sm"
-                              class="text-muted-foreground hover:text-destructive hover:bg-primary/6"
-                              :title="String(t('terminal.actions.delete'))"
-                              :aria-label="String(t('terminal.actions.delete'))"
-                              @click.stop
-                            >
-                              <RiDeleteBinLine class="h-4 w-4" />
-                            </IconButton>
-                          </ConfirmPopover>
-                        </template>
-                      </template>
-                    </SidebarListItem>
-                  </div>
-                </template>
-
-                <div
-                  v-if="
-                    folder.pinnedSessions.length + folder.recentSessions.length === 0 &&
-                    sessionCreatingFolderId !== folder.id
-                  "
-                  class="px-1.5 py-1 text-xs text-muted-foreground"
-                >
-                  <TextActionButton class="inline-flex items-center gap-1" @click="startSessionCreate(folder.id)">
-                    <RiAddLine class="h-3.5 w-3.5" />
-                    {{ t('terminal.folder.newTerminalInThisFolder') }}
-                  </TextActionButton>
-                </div>
-              </div>
-            </div>
+              </template>
+            </SidebarListItem>
           </div>
         </div>
       </div>
@@ -2859,7 +2206,7 @@ watch(el, () => {
     <FormDialog
       :open="mobileSessionCreateDialogOpen"
       :title="String(t('terminal.dialogs.newTerminal.title'))"
-      :description="String(t('terminal.dialogs.newTerminal.description', { folder: sessionCreateTargetFolderName }))"
+      :description="String(t('terminal.emptyState.description'))"
       @update:open="(v) => !v && cancelSessionCreate()"
     >
       <div class="space-y-3">
