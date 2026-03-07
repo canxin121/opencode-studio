@@ -82,15 +82,21 @@ function isDataImageUrl(value: string): boolean {
 
 const normalizedPath = computed(() => (props.path || '').trim())
 const diffScope = computed(() => (props.staged ? 'staged' : 'working'))
+const commitScope = computed(() => {
+  const commit = (props.commit || '').trim()
+  const parent = (props.parentCommit || '').trim()
+  if (!commit) return 'workspace'
+  return `commit:${commit}:${parent || 'root'}`
+})
 
 const originalModelPath = computed(() => {
   const path = normalizedPath.value || 'git-diff-file'
-  return `git-diff:${diffScope.value}:original:${path}`
+  return `git-diff:${diffScope.value}:${commitScope.value}:original:${path}`
 })
 
 const modifiedModelPath = computed(() => {
   const path = normalizedPath.value || 'git-diff-file'
-  return `git-diff:${diffScope.value}:modified:${path}`
+  return `git-diff:${diffScope.value}:${commitScope.value}:modified:${path}`
 })
 
 const displayOriginal = computed(() => (loading.value ? original.value || staleOriginal.value : original.value))

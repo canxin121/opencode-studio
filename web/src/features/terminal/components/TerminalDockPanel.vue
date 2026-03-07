@@ -4,9 +4,11 @@ import { useI18n } from 'vue-i18n'
 import { FitAddon } from '@xterm/addon-fit'
 import { Terminal } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
-import { RiAddLine, RiRefreshLine } from '@remixicon/vue'
+import { RiAddLine, RiArrowDownSLine, RiRefreshLine } from '@remixicon/vue'
 
 import IconButton from '@/components/ui/IconButton.vue'
+import OptionMenu from '@/components/ui/OptionMenu.vue'
+import type { OptionMenuGroup, OptionMenuItem } from '@/components/ui/optionMenu.types'
 import { connectSse } from '@/lib/sse'
 import {
   createTerminalSession,
@@ -18,6 +20,7 @@ import {
   type TerminalUiState,
 } from '@/features/terminal/api/terminalApi'
 import { useDirectoryStore } from '@/stores/directory'
+import { useUiStore } from '@/stores/ui'
 
 type TerminalStreamEvent =
   | { type: 'connected'; seq?: number }
@@ -34,6 +37,7 @@ const SESSION_OUTPUT_MAX_BYTES = 192 * 1024
 
 const { t } = useI18n()
 const directoryStore = useDirectoryStore()
+const ui = useUiStore()
 
 const loading = ref(false)
 const refreshing = ref(false)
@@ -51,6 +55,8 @@ const streamClient = shallowRef<ReturnType<typeof connectSse> | null>(null)
 const streamSessionId = ref('')
 const streamSeqById = ref<Record<string, number>>({})
 const outputById = new Map<string, SessionBuffer>()
+const sessionMenuOpen = ref(false)
+const sessionMenuQuery = ref('')
 
 let resizeObserver: ResizeObserver | null = null
 let resizeTimer: number | null = null
@@ -70,15 +76,28 @@ const sessionItems = computed(() => {
     return {
       id: sid,
       label: custom || sid.slice(0, 8),
+      description: custom ? sid.slice(0, 8) : '',
     }
   })
 })
 
-const selectedSessionId = computed({
-  get: () => activeSessionId.value,
-  set: (value: string) => {
-    void activateSession(value)
+const sessionMenuGroups = computed<OptionMenuGroup[]>(() => [
+  {
+    id: 'terminal-sessions',
+    items: sessionItems.value.map((session) => ({
+      id: session.id,
+      label: session.label,
+      description: session.description,
+      checked: session.id === activeSessionId.value,
+      monospace: true,
+      keywords: `${session.label} ${session.id}`,
+    })),
   },
+])
+
+const activeSessionLabel = computed(() => {
+  const active = sessionItems.value.find((session) => session.id === activeSessionId.value)
+  return active?.label || String(t('workspaceDock.terminal.none'))
 })
 
 function sessionBuffer(id: string): SessionBuffer {
@@ -351,6 +370,20 @@ async function createSession() {
   }
 }
 
+function setSessionMenuOpen(value: boolean) {
+  sessionMenuOpen.value = value
+}
+
+function setSessionMenuQuery(value: string) {
+  sessionMenuQuery.value = String(value || '')
+}
+
+function onSessionMenuSelect(item: OptionMenuItem) {
+  const sid = String(item.id || '').trim()
+  if (!sid) return
+  void activateSession(sid)
+}
+
 function startPolling() {
   if (pollTimer !== null) {
     window.clearInterval(pollTimer)
@@ -443,17 +476,36 @@ onBeforeUnmount(() => {
       <div class="flex items-center gap-2">
         <div class="min-w-0 flex-1">
           <div class="text-xs text-muted-foreground">{{ t('workspaceDock.terminal.active') }}</div>
-          <select
-            v-model="selectedSessionId"
-            class="mt-1 h-8 w-full rounded border border-input bg-background px-2 text-xs text-foreground"
-            :disabled="loading || sessionItems.length === 0"
-            :aria-label="String(t('workspaceDock.terminal.active'))"
-          >
-            <option v-if="sessionItems.length === 0" value="">{{ t('workspaceDock.terminal.none') }}</option>
-            <option v-for="session in sessionItems" :key="session.id" :value="session.id">
-              {{ session.label }}
-            </option>
-          </select>
+          <div class="relative mt-1">
+            <button
+              type="button"
+              class="inline-flex h-8 w-full items-center justify-between gap-2 rounded border border-input bg-background px-2 text-xs text-foreground transition-colors hover:bg-secondary/40 disabled:cursor-not-allowed disabled:opacity-60"
+              :disabled="loading || sessionItems.length === 0"
+              :aria-label="String(t('workspaceDock.terminal.active'))"
+              @click.stop="setSessionMenuOpen(!sessionMenuOpen)"
+            >
+              <span class="min-w-0 truncate text-left font-mono">{{ activeSessionLabel }}</span>
+              <RiArrowDownSLine class="h-4 w-4 shrink-0 text-muted-foreground" />
+            </button>
+
+            <OptionMenu
+              :open="sessionMenuOpen"
+              :query="sessionMenuQuery"
+              :groups="sessionMenuGroups"
+              :title="t('workspaceDock.terminal.active')"
+              :mobile-title="t('workspaceDock.terminal.active')"
+              :searchable="sessionItems.length > 8"
+              :is-mobile-pointer="ui.isMobilePointer"
+              :paginated="true"
+              :page-size="18"
+              pagination-mode="item"
+              desktop-placement="bottom-start"
+              desktop-class="w-72"
+              @update:open="setSessionMenuOpen"
+              @update:query="setSessionMenuQuery"
+              @select="onSessionMenuSelect"
+            />
+          </div>
         </div>
 
         <div class="flex items-center gap-1">
