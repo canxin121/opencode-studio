@@ -38,6 +38,7 @@ const normalizedPage = computed(() => {
 
 const canGoPrev = computed(() => !props.disabled && normalizedPage.value > 1)
 const canGoNext = computed(() => !props.disabled && normalizedPage.value < normalizedTotalPages.value)
+const pageDigits = computed(() => String(normalizedTotalPages.value).length)
 
 const rootClass = computed(() =>
   cn(
@@ -48,15 +49,18 @@ const rootClass = computed(() =>
 )
 const buttonClass = computed(() =>
   props.size === 'md'
-    ? 'h-8 w-8 inline-flex items-center justify-center rounded-md border border-sidebar-border/70 bg-sidebar-accent/20 hover:bg-sidebar-accent/40 hover:text-foreground disabled:opacity-40 disabled:pointer-events-none transition'
-    : 'h-6 w-6 inline-flex items-center justify-center rounded-md border border-sidebar-border/70 bg-sidebar-accent/20 hover:bg-sidebar-accent/40 hover:text-foreground disabled:opacity-40 disabled:pointer-events-none transition',
+    ? 'h-7 w-7 inline-flex items-center justify-center rounded-full text-muted-foreground hover:bg-sidebar-accent/45 hover:text-foreground disabled:opacity-35 disabled:pointer-events-none transition-colors'
+    : 'h-6 w-6 inline-flex items-center justify-center rounded-full text-muted-foreground hover:bg-sidebar-accent/45 hover:text-foreground disabled:opacity-35 disabled:pointer-events-none transition-colors',
 )
 const inputClass = computed(() =>
   props.size === 'md'
-    ? 'h-7 w-11 px-2 py-0 text-center text-[11px] tabular-nums'
-    : 'h-6 w-10 px-1.5 py-0 text-center text-[10px] tabular-nums',
+    ? 'h-6 px-1 py-0 text-center text-[11px] tabular-nums !rounded-none !border-0 !border-b border-sidebar-border/55 !bg-transparent !shadow-none focus-visible:!ring-0 focus-visible:!border-foreground/70'
+    : 'h-5 px-1 py-0 text-center text-[10px] tabular-nums !rounded-none !border-0 !border-b border-sidebar-border/55 !bg-transparent !shadow-none focus-visible:!ring-0 focus-visible:!border-foreground/70',
 )
 const totalClass = computed(() => (props.size === 'md' ? 'text-[11px] tabular-nums' : 'text-[10px] tabular-nums'))
+const inputStyle = computed(() => ({
+  width: `calc(${pageDigits.value}ch + ${props.size === 'md' ? '0.7rem' : '0.55rem'})`,
+}))
 
 const pageInput = ref(String(normalizedPage.value))
 
@@ -115,6 +119,8 @@ function resetPageInput() {
         inputmode="numeric"
         pattern="[0-9]*"
         :class="inputClass"
+        :style="inputStyle"
+        :maxlength="pageDigits"
         :aria-label="pageInputLabel"
         @keydown.enter.prevent="jumpToPage"
         @blur="resetPageInput"

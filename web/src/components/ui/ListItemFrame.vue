@@ -53,7 +53,7 @@ const actionsClass = computed(() => {
     props.actionVisibility === 'always'
       ? 'max-w-full opacity-100 pointer-events-auto'
       : 'max-w-0 opacity-0 pointer-events-none group-hover:max-w-full group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:max-w-full group-focus-within:opacity-100 group-focus-within:pointer-events-auto'
-  const floatingClass = props.actionsFloating ? 'z-[1] rounded-md bg-background/70 backdrop-blur-[1px]' : ''
+  const floatingClass = props.actionsFloating ? 'z-[1]' : ''
   return cn(
     'ml-1 flex min-w-0 shrink-0 items-center gap-0.5 overflow-hidden transition-[max-width,opacity] duration-200 ease-out',
     visibilityClass,
