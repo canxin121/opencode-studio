@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { RiTextWrap } from '@remixicon/vue'
 
 import Button from '@/components/ui/Button.vue'
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import FormDialog from '@/components/ui/FormDialog.vue'
+import IconButton from '@/components/ui/IconButton.vue'
 import Input from '@/components/ui/Input.vue'
 import OptionPicker from '@/components/ui/OptionPicker.vue'
 import type { PickerOption } from '@/components/ui/pickerOption.types'
@@ -480,11 +482,15 @@ function onFilterRefTypeChange(value: string | number) {
                       : t('git.ui.dialogs.history.diffTitleAllFiles')
                   }}
                 </div>
-                <Button
+                <IconButton
                   variant="outline"
                   size="sm"
-                  class="h-7 transition-colors"
-                  :class="wrapLines ? 'bg-secondary/70 text-foreground shadow-inner' : 'text-muted-foreground'"
+                  class="h-7 w-7 transition-colors"
+                  :class="
+                    wrapLines
+                      ? 'bg-secondary/70 text-foreground shadow-inner'
+                      : 'text-muted-foreground hover:bg-secondary/40 hover:text-foreground'
+                  "
                   :title="
                     wrapLines ? t('git.ui.dialogs.history.wrap.disable') : t('git.ui.dialogs.history.wrap.enable')
                   "
@@ -494,8 +500,8 @@ function onFilterRefTypeChange(value: string | number) {
                   :aria-pressed="wrapLines"
                   @click="wrapLines = !wrapLines"
                 >
-                  {{ t('git.ui.dialogs.history.wrap.label') }}
-                </Button>
+                  <RiTextWrap class="h-4 w-4" />
+                </IconButton>
               </div>
               <div v-if="selectedFileLabel">
                 <div v-if="fileDiffError" class="text-xs text-red-500">{{ fileDiffError }}</div>

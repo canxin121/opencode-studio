@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { RiLoader4Line } from '@remixicon/vue'
+import { RiLoader4Line, RiTextWrap } from '@remixicon/vue'
 import { useI18n } from 'vue-i18n'
 
 import MonacoDiffEditor from '@/components/MonacoDiffEditor.vue'
 import { apiJson } from '@/lib/api'
 import Button from '@/components/ui/Button.vue'
+import IconButton from '@/components/ui/IconButton.vue'
 import { buildUnifiedDiffModel } from '@/features/git/diff/unifiedDiff'
 import type { GitCommitDiffResponse, GitCommitFileContentResponse, GitDiffMeta, GitDiffResponse } from '@/types/git'
 
@@ -395,18 +396,22 @@ watch(
       <div class="toolbar">
         <div v-if="path" class="path">{{ path }}</div>
         <div class="toolbar-actions">
-          <Button
+          <IconButton
             variant="outline"
             size="sm"
-            class="h-7 transition-colors"
-            :class="wrapLines ? 'bg-secondary/70 text-foreground shadow-inner' : 'text-muted-foreground'"
+            class="h-7 w-7 transition-colors"
+            :class="
+              wrapLines
+                ? 'bg-secondary/70 text-foreground shadow-inner'
+                : 'text-muted-foreground hover:bg-secondary/40 hover:text-foreground'
+            "
             :title="wrapLines ? t('git.ui.diffViewer.wrap.disable') : t('git.ui.diffViewer.wrap.enable')"
             :aria-label="wrapLines ? t('git.ui.diffViewer.wrap.disable') : t('git.ui.diffViewer.wrap.enable')"
             :aria-pressed="wrapLines"
             @click="wrapLines = !wrapLines"
           >
-            {{ t('git.ui.diffViewer.wrap.label') }}
-          </Button>
+            <RiTextWrap class="h-4 w-4" />
+          </IconButton>
           <Button v-if="canOpenFile" variant="secondary" size="sm" class="h-7" @click="openFile">{{
             t('git.ui.diffViewer.actions.openFile')
           }}</Button>

@@ -9,6 +9,7 @@ import {
   RiLoader4Line,
   RiPlugLine,
   RiRefreshLine,
+  RiTextWrap,
 } from '@remixicon/vue'
 
 import MonacoDiffEditor from '@/components/MonacoDiffEditor.vue'
@@ -643,9 +644,10 @@ onBeforeUnmount(() => {
               <div class="min-w-0 text-[11px] font-medium text-foreground truncate" :title="selectedDiffPath">
                 {{ selectedDiffPath }}
               </div>
-              <button
-                type="button"
-                class="ml-auto inline-flex h-6 items-center rounded-md border border-border/60 px-2 text-[10px] font-medium uppercase tracking-wide transition-colors"
+              <IconButton
+                variant="outline"
+                size="xs"
+                class="ml-auto h-6 w-6 transition-colors"
                 :class="
                   sessionDiffWrap
                     ? 'bg-secondary/70 text-foreground shadow-inner'
@@ -656,8 +658,8 @@ onBeforeUnmount(() => {
                 :aria-label="sessionDiffWrap ? t('chat.sessionDiff.wrap.disable') : t('chat.sessionDiff.wrap.enable')"
                 @click.stop="sessionDiffWrap = !sessionDiffWrap"
               >
-                {{ t('chat.sessionDiff.wrap.label') }}
-              </button>
+                <RiTextWrap class="h-4 w-4" />
+              </IconButton>
             </div>
             <div class="min-w-0 flex-1 min-h-[200px]">
               <MonacoDiffEditor
@@ -682,9 +684,10 @@ onBeforeUnmount(() => {
               <div class="min-w-0 flex-1 text-[11px] font-medium text-foreground truncate" :title="selectedDiffPath">
                 {{ selectedDiffPath }}
               </div>
-              <button
-                type="button"
-                class="inline-flex h-6 items-center rounded-md border border-border/60 px-2 text-[10px] font-medium uppercase tracking-wide transition-colors"
+              <IconButton
+                variant="outline"
+                size="xs"
+                class="h-6 w-6 transition-colors"
                 :class="
                   sessionDiffWrap
                     ? 'bg-secondary/70 text-foreground shadow-inner'
@@ -695,8 +698,8 @@ onBeforeUnmount(() => {
                 :aria-label="sessionDiffWrap ? t('chat.sessionDiff.wrap.disable') : t('chat.sessionDiff.wrap.enable')"
                 @click.stop="sessionDiffWrap = !sessionDiffWrap"
               >
-                {{ t('chat.sessionDiff.wrap.label') }}
-              </button>
+                <RiTextWrap class="h-4 w-4" />
+              </IconButton>
             </div>
             <MonacoDiffEditor
               class="h-full"

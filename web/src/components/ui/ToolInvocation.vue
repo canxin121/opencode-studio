@@ -17,11 +17,13 @@ import {
   RiTaskLine,
   RiGitBranchLine,
   RiToolsLine,
+  RiTextWrap,
   RiCheckLine,
   RiStopCircleLine,
 } from '@remixicon/vue'
 import ActivityDisclosureButton from '@/components/ui/ActivityDisclosureButton.vue'
 import CodeBlock from './CodeBlock.vue'
+import IconButton from '@/components/ui/IconButton.vue'
 import MonacoDiffEditor from '@/components/MonacoDiffEditor.vue'
 import { buildVirtualMonacoDiffModel } from '@/features/git/diff/unifiedDiff'
 import type { GitDiffMeta } from '@/types/git'
@@ -555,9 +557,10 @@ const shouldShowInput = computed(() => {
             <div class="text-muted-foreground/80 mb-1 font-medium flex justify-between items-center">
               <span>{{ t('chat.messages.activity.toolInvocation.sections.diff') }}</span>
               <div class="flex items-center gap-2">
-                <button
-                  type="button"
-                  class="rounded border border-border/60 px-1.5 py-0.5 text-[10px] uppercase tracking-wider transition-colors"
+                <IconButton
+                  variant="outline"
+                  size="xs"
+                  class="h-6 w-6 transition-colors"
                   :class="
                     activityDiffWrap
                       ? 'bg-secondary/70 text-foreground shadow-inner'
@@ -576,8 +579,8 @@ const shouldShowInput = computed(() => {
                   :aria-pressed="activityDiffWrap"
                   @click="activityDiffWrap = !activityDiffWrap"
                 >
-                  {{ t('chat.messages.activity.toolInvocation.wrap.label') }}
-                </button>
+                  <RiTextWrap class="h-4 w-4" />
+                </IconButton>
                 <span class="text-[10px] uppercase tracking-wider opacity-70">
                   {{ t('chat.messages.activity.toolInvocation.sections.diffCode') }}
                 </span>
