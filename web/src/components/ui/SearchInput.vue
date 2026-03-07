@@ -78,31 +78,14 @@ function clearValue() {
 }
 
 const inputClasses = computed(() => {
-  return cn(
-    props.showSearchButton ? 'pl-8' : '',
-    props.showClearButton && hasValue.value ? 'pr-8' : '',
-    props.inputClass,
-  )
+  const rightButtonsCount = (props.showSearchButton ? 1 : 0) + (props.showClearButton && hasValue.value ? 1 : 0)
+
+  return cn(rightButtonsCount === 1 ? 'pr-8' : '', rightButtonsCount === 2 ? 'pr-14' : '', props.inputClass)
 })
 </script>
 
 <template>
   <div :class="cn('relative', props.class)">
-    <IconButton
-      v-if="showSearchButton"
-      size="xs"
-      variant="ghost"
-      class="absolute left-1 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:bg-secondary/60 hover:text-foreground"
-      :disabled="disabled || searchDisabled"
-      :is-mobile-pointer="isMobilePointer"
-      :aria-label="searchAriaLabel"
-      :title="searchTitle"
-      :tooltip="searchTitle"
-      @click="triggerSearch"
-    >
-      <RiSearchLine class="h-4 w-4" />
-    </IconButton>
-
     <Input
       v-model="value"
       :placeholder="placeholder"
@@ -120,6 +103,7 @@ const inputClasses = computed(() => {
       :class="
         cn(
           'absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:bg-secondary/60 hover:text-foreground',
+          props.showSearchButton ? 'right-8' : 'right-1',
           props.clearButtonClass,
         )
       "
@@ -131,6 +115,21 @@ const inputClasses = computed(() => {
       @click="clearValue"
     >
       <RiCloseLine class="h-4 w-4" />
+    </IconButton>
+
+    <IconButton
+      v-if="showSearchButton"
+      size="xs"
+      variant="ghost"
+      class="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:bg-secondary/60 hover:text-foreground"
+      :disabled="disabled || searchDisabled"
+      :is-mobile-pointer="isMobilePointer"
+      :aria-label="searchAriaLabel"
+      :title="searchTitle"
+      :tooltip="searchTitle"
+      @click="triggerSearch"
+    >
+      <RiSearchLine class="h-4 w-4" />
     </IconButton>
   </div>
 </template>
