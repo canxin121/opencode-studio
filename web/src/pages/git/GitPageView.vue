@@ -459,7 +459,6 @@ const {
   historyError,
   historyCommits,
   historyHasMore,
-  historyLimit,
   historyCurrentPage,
   historyKnownLastPage,
   historyExactLastPage,
