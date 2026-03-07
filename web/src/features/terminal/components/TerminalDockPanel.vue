@@ -7,6 +7,7 @@ import '@xterm/xterm/css/xterm.css'
 import { RiAddLine, RiArrowDownSLine, RiRefreshLine } from '@remixicon/vue'
 
 import IconButton from '@/components/ui/IconButton.vue'
+import NameInputPrompt from '@/components/ui/NameInputPrompt.vue'
 import OptionMenu from '@/components/ui/OptionMenu.vue'
 import type { OptionMenuGroup, OptionMenuItem } from '@/components/ui/optionMenu.types'
 import { connectSse } from '@/lib/sse'
@@ -57,6 +58,8 @@ const streamSeqById = ref<Record<string, number>>({})
 const outputById = new Map<string, SessionBuffer>()
 const sessionMenuOpen = ref(false)
 const sessionMenuQuery = ref('')
+const sessionCreateOpen = ref(false)
+const sessionCreateDraft = ref('')
 
 let resizeObserver: ResizeObserver | null = null
 let resizeTimer: number | null = null
@@ -99,6 +102,16 @@ const activeSessionLabel = computed(() => {
   const active = sessionItems.value.find((session) => session.id === activeSessionId.value)
   return active?.label || String(t('workspaceDock.terminal.none'))
 })
+
+const sessionPickerLabel = computed(() => String(t('workspaceDock.terminal.sessions')))
+
+function normalizeSessionName(input: unknown): string {
+  const collapsed = String(input || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (!collapsed) return ''
+  return collapsed.slice(0, 80)
+}
 
 function sessionBuffer(id: string): SessionBuffer {
   const sid = String(id || '').trim()
@@ -337,7 +350,7 @@ async function activateSession(id: string) {
   })
 }
 
-async function createSession() {
+async function createSession(name?: string) {
   if (creating.value) return
   creating.value = true
   error.value = null
@@ -347,6 +360,8 @@ async function createSession() {
     const created = await createTerminalSession({ cwd, cols: 80, rows: 24 })
     const sid = String(created.sessionId || '').trim()
     if (!sid) return
+
+    const sessionName = normalizeSessionName(name)
 
     const now = Date.now()
     await updateState({
@@ -358,16 +373,39 @@ async function createSession() {
         ...base.sessionMetaById,
         [sid]: {
           ...(base.sessionMetaById?.[sid] || {}),
+          name: sessionName || undefined,
           lastUsedAt: now,
         },
       },
       folders: base.folders.slice(),
     })
+
+    sessionCreateOpen.value = false
+    sessionCreateDraft.value = ''
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
     creating.value = false
   }
+}
+
+function startCreateSession() {
+  if (creating.value) return
+  sessionMenuOpen.value = false
+  sessionCreateDraft.value = ''
+  sessionCreateOpen.value = true
+}
+
+function cancelCreateSession() {
+  if (creating.value) return
+  sessionCreateOpen.value = false
+  sessionCreateDraft.value = ''
+}
+
+function saveCreateSession() {
+  const name = normalizeSessionName(sessionCreateDraft.value)
+  if (!name || creating.value) return
+  void createSession(name)
 }
 
 function setSessionMenuOpen(value: boolean) {
@@ -396,7 +434,7 @@ function startPolling() {
 
 defineExpose({
   refresh: () => refreshState(),
-  createSession,
+  createSession: () => createSession(),
 })
 
 watch(activeSessionId, (sid) => {
@@ -472,48 +510,23 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="flex h-full min-h-0 flex-col gap-3 p-3">
-    <div class="rounded-md border border-border/60 bg-background/60 p-2.5">
-      <div class="flex items-center gap-2">
-        <div class="min-w-0 flex-1">
-          <div class="text-xs text-muted-foreground">{{ t('workspaceDock.terminal.active') }}</div>
-          <div class="relative mt-1">
-            <button
-              type="button"
-              class="inline-flex h-8 w-full items-center justify-between gap-2 rounded border border-input bg-background px-2 text-xs text-foreground transition-colors hover:bg-secondary/40 disabled:cursor-not-allowed disabled:opacity-60"
-              :disabled="loading || sessionItems.length === 0"
-              :aria-label="String(t('workspaceDock.terminal.active'))"
-              @click.stop="setSessionMenuOpen(!sessionMenuOpen)"
-            >
-              <span class="min-w-0 truncate text-left font-mono">{{ activeSessionLabel }}</span>
-              <RiArrowDownSLine class="h-4 w-4 shrink-0 text-muted-foreground" />
-            </button>
+    <div>
+      <div class="relative flex items-center gap-1.5">
+        <button
+          type="button"
+          class="inline-flex h-8 min-w-0 flex-1 items-center justify-between gap-2 border-0 bg-transparent px-1.5 text-xs text-foreground transition-colors hover:bg-secondary/40 disabled:cursor-not-allowed disabled:opacity-60"
+          :disabled="loading || sessionItems.length === 0"
+          :aria-label="sessionPickerLabel"
+          @click.stop="setSessionMenuOpen(!sessionMenuOpen)"
+        >
+          <span class="min-w-0 truncate text-left font-mono">{{ activeSessionLabel }}</span>
+          <RiArrowDownSLine class="h-4 w-4 shrink-0 text-muted-foreground" />
+        </button>
 
-            <OptionMenu
-              :open="sessionMenuOpen"
-              :query="sessionMenuQuery"
-              :groups="sessionMenuGroups"
-              :title="t('workspaceDock.terminal.active')"
-              :mobile-title="t('workspaceDock.terminal.active')"
-              :searchable="true"
-              :is-mobile-pointer="ui.isMobilePointer"
-              :paginated="true"
-              :page-size="18"
-              :loading="loading || refreshing"
-              :refreshable="true"
-              :on-refresh="refreshState"
-              pagination-mode="item"
-              desktop-placement="bottom-start"
-              desktop-class="w-72"
-              @update:open="setSessionMenuOpen"
-              @update:query="setSessionMenuQuery"
-              @select="onSessionMenuSelect"
-            />
-          </div>
-        </div>
-
-        <div class="flex items-center gap-1">
+        <div class="flex h-8 items-center gap-0.5">
           <IconButton
             size="sm"
+            class="rounded-none bg-transparent shadow-none"
             :aria-label="String(t('workspaceDock.refresh'))"
             :tooltip="String(t('workspaceDock.refresh'))"
             :disabled="refreshing"
@@ -523,15 +536,53 @@ onBeforeUnmount(() => {
           </IconButton>
           <IconButton
             size="sm"
+            class="rounded-none bg-transparent shadow-none"
             :aria-label="String(t('terminal.session.create'))"
             :tooltip="String(t('terminal.session.create'))"
             :disabled="creating"
-            @click="createSession"
+            @click="startCreateSession"
           >
             <RiAddLine class="h-4 w-4" />
           </IconButton>
         </div>
+
+        <OptionMenu
+          :open="sessionMenuOpen"
+          :query="sessionMenuQuery"
+          :groups="sessionMenuGroups"
+          :title="sessionPickerLabel"
+          :mobile-title="sessionPickerLabel"
+          :searchable="true"
+          :is-mobile-pointer="ui.isMobilePointer"
+          :paginated="true"
+          :page-size="18"
+          :loading="loading || refreshing"
+          :refreshable="true"
+          :on-refresh="refreshState"
+          pagination-mode="item"
+          desktop-placement="bottom-start"
+          desktop-class="w-72"
+          @update:open="setSessionMenuOpen"
+          @update:query="setSessionMenuQuery"
+          @select="onSessionMenuSelect"
+        />
       </div>
+
+      <NameInputPrompt
+        :open="sessionCreateOpen"
+        :model-value="sessionCreateDraft"
+        :title="String(t('terminal.dialogs.newTerminal.title'))"
+        :description="String(t('terminal.emptyState.description'))"
+        :placeholder="String(t('terminal.session.namePlaceholder'))"
+        :confirm-label="creating ? String(t('terminal.session.creating')) : String(t('terminal.session.create'))"
+        :cancel-label="String(t('common.cancel'))"
+        :busy="creating"
+        :is-mobile-pointer="ui.isMobilePointer"
+        @update:model-value="(v) => (sessionCreateDraft = v)"
+        @update:open="(v) => (sessionCreateOpen = v)"
+        @cancel="cancelCreateSession"
+        @submit="saveCreateSession"
+      />
     </div>
 
     <div v-if="error" class="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
