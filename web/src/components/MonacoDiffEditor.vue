@@ -37,6 +37,7 @@ const props = defineProps<{
   hunkActionsBusy?: boolean
   activeHunkActionId?: string | null
   activeHunkActionKind?: HunkActionKind | null
+  autoRevealFirstChange?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -57,6 +58,8 @@ let themeObserver: MutationObserver | null = null
 let diffUpdateListener: Monaco.IDisposable | null = null
 let hunkZoneIds: string[] = []
 let pendingHunkZoneRefresh = false
+let pendingFirstChangeReveal = true
+let lastRevealModelKey = ''
 let disposed = false
 
 function extname(path: string): string {
@@ -301,6 +304,40 @@ function scheduleHunkActionZoneRefresh() {
   })
 }
 
+function maybeRevealFirstDiffChange() {
+  if (disposed) return
+  if (props.autoRevealFirstChange === false) return
+  if (!pendingFirstChangeReveal) return
+
+  const diffEditor = diffEditorRef.value
+  if (!diffEditor) return
+
+  const lineChanges = diffEditor.getLineChanges()
+  if (lineChanges === null) {
+    return
+  }
+
+  pendingFirstChangeReveal = false
+  if (!lineChanges.length) return
+
+  const first = lineChanges[0]
+  const modifiedEditor = diffEditor.getModifiedEditor()
+  const model = modifiedEditor.getModel()
+  if (!model) return
+
+  const lineCount = Math.max(1, model.getLineCount())
+  const candidates = [
+    first.modifiedStartLineNumber,
+    first.modifiedEndLineNumber,
+    first.originalStartLineNumber,
+    first.originalEndLineNumber,
+  ]
+  const firstChangedLine = candidates.find((line) => Number.isFinite(line) && line > 0) ?? 1
+  const targetLine = clamp(Math.floor(firstChangedLine), 1, lineCount)
+  const revealLine = clamp(targetLine - 2, 1, lineCount)
+  modifiedEditor.revealLineNearTop(revealLine)
+}
+
 function syncModels() {
   if (disposed) return
   const monaco = monacoRef.value
@@ -443,8 +480,12 @@ onMounted(async () => {
   monaco.editor.setTheme(monacoTheme.value)
   syncModels()
   updateDiffEditorOptions()
-  diffUpdateListener = diffEditorRef.value.onDidUpdateDiff(() => scheduleHunkActionZoneRefresh())
+  diffUpdateListener = diffEditorRef.value.onDidUpdateDiff(() => {
+    scheduleHunkActionZoneRefresh()
+    maybeRevealFirstDiffChange()
+  })
   scheduleHunkActionZoneRefresh()
+  maybeRevealFirstDiffChange()
   ready.value = true
 })
 
@@ -496,6 +537,16 @@ watch(
   () => {
     syncModels()
   },
+)
+
+watch(
+  () => `${originalUriPath.value}::${modifiedUriPath.value}`,
+  (nextKey) => {
+    if (!nextKey || nextKey === lastRevealModelKey) return
+    lastRevealModelKey = nextKey
+    pendingFirstChangeReveal = props.autoRevealFirstChange !== false
+  },
+  { immediate: true },
 )
 
 watch(
