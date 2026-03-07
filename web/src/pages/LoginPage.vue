@@ -339,8 +339,8 @@ async function submit() {
 </script>
 
 <template>
-  <div class="h-screen overflow-y-auto bg-background px-4">
-    <div class="mx-auto w-full max-w-[360px] space-y-6 py-6">
+  <div class="min-h-dvh bg-background px-4 py-6">
+    <div class="mx-auto my-auto flex min-h-[calc(100dvh-3rem)] w-full max-w-[360px] flex-col justify-center space-y-6">
       <div class="flex flex-col items-center gap-4 text-center">
         <div
           class="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 ring-1 ring-inset ring-foreground/5"
