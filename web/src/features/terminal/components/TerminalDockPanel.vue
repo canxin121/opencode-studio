@@ -70,9 +70,15 @@ const sessionItems = computed(() => {
     return {
       id: sid,
       label: custom || sid.slice(0, 8),
-      active: activeSessionId.value === sid,
     }
   })
+})
+
+const selectedSessionId = computed({
+  get: () => activeSessionId.value,
+  set: (value: string) => {
+    void activateSession(value)
+  },
 })
 
 function sessionBuffer(id: string): SessionBuffer {
@@ -434,12 +440,20 @@ onBeforeUnmount(() => {
 <template>
   <div class="flex h-full min-h-0 flex-col gap-3 p-3">
     <div class="rounded-md border border-border/60 bg-background/60 p-2.5">
-      <div class="flex items-center justify-between gap-2">
-        <div class="min-w-0">
+      <div class="flex items-center gap-2">
+        <div class="min-w-0 flex-1">
           <div class="text-xs text-muted-foreground">{{ t('workspaceDock.terminal.active') }}</div>
-          <div class="mt-0.5 truncate font-mono text-xs text-foreground">
-            {{ activeSessionId || t('workspaceDock.terminal.none') }}
-          </div>
+          <select
+            v-model="selectedSessionId"
+            class="mt-1 h-8 w-full rounded border border-input bg-background px-2 text-xs text-foreground"
+            :disabled="loading || sessionItems.length === 0"
+            :aria-label="String(t('workspaceDock.terminal.active'))"
+          >
+            <option v-if="sessionItems.length === 0" value="">{{ t('workspaceDock.terminal.none') }}</option>
+            <option v-for="session in sessionItems" :key="session.id" :value="session.id">
+              {{ session.label }}
+            </option>
+          </select>
         </div>
 
         <div class="flex items-center gap-1">
@@ -463,9 +477,6 @@ onBeforeUnmount(() => {
           </IconButton>
         </div>
       </div>
-      <div class="mt-2 text-[11px] text-muted-foreground">
-        {{ t('workspaceDock.terminal.sessions') }} {{ sessionItems.length }}
-      </div>
     </div>
 
     <div v-if="error" class="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
@@ -484,26 +495,6 @@ onBeforeUnmount(() => {
     </div>
 
     <template v-else>
-      <div class="max-h-40 space-y-1 overflow-auto rounded-md border border-border/60 bg-background/45 p-1">
-        <button
-          v-for="session in sessionItems"
-          :key="session.id"
-          type="button"
-          class="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs transition-colors"
-          :class="
-            session.active
-              ? 'bg-secondary text-foreground'
-              : 'text-muted-foreground hover:bg-secondary/50 hover:text-foreground'
-          "
-          @click="activateSession(session.id)"
-        >
-          <span class="truncate">{{ session.label }}</span>
-          <span v-if="session.active" class="rounded bg-primary/15 px-1.5 py-0.5 text-[10px] text-primary">
-            {{ t('workspaceDock.terminal.current') }}
-          </span>
-        </button>
-      </div>
-
       <div class="min-h-[220px] flex-1 overflow-hidden rounded-md border border-border/60 bg-[#101415]">
         <div ref="el" class="h-full w-full" />
       </div>
