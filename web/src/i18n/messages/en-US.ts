@@ -70,6 +70,7 @@ export default {
     downloadFailed: 'Download failed',
     previousPage: 'Previous page',
     nextPage: 'Next page',
+    currentPage: 'Current page',
     previous: 'Prev',
     next: 'Next',
     unknown: 'Unknown',

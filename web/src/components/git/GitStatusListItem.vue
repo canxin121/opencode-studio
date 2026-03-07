@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { RiFileTextLine, RiMore2Line } from '@remixicon/vue'
+import { RiFileTextLine } from '@remixicon/vue'
 import { useI18n } from 'vue-i18n'
-import IconButton from '@/components/ui/IconButton.vue'
+import ListItemFrame from '@/components/ui/ListItemFrame.vue'
+import ListItemOverflowActionButton from '@/components/ui/ListItemOverflowActionButton.vue'
 import OptionMenu from '@/components/ui/OptionMenu.vue'
 import type { OptionMenuGroup, OptionMenuItem } from '@/components/ui/optionMenu.types'
-import SidebarListItem from '@/components/ui/SidebarListItem.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -76,16 +76,20 @@ function setMobileActionMenuOpen(open: boolean) {
 function onMobileActionSelect(item: OptionMenuItem) {
   emit('mobileAction', item.id)
 }
+
+function handleMobileActionTrigger() {
+  openMobileActionMenu()
+}
 </script>
 
 <template>
-  <SidebarListItem
+  <ListItemFrame
     :active="active"
-    :actions-always-visible="hasMobileActions"
+    :action-visibility="hasMobileActions ? 'always' : 'hover'"
     class="select-none"
     @click="emit('select')"
   >
-    <template #icon>
+    <template #leading>
       <RiFileTextLine class="h-3.5 w-3.5" />
     </template>
 
@@ -107,15 +111,7 @@ function onMobileActionSelect(item: OptionMenuItem) {
 
     <template #actions>
       <template v-if="hasMobileActions">
-        <IconButton
-          size="sm"
-          class="text-muted-foreground hover:text-foreground hover:bg-primary/6"
-          :title="mobileActionTitleText"
-          :aria-label="mobileActionTitleText"
-          @click.stop="openMobileActionMenu"
-        >
-          <RiMore2Line class="h-4 w-4" />
-        </IconButton>
+        <ListItemOverflowActionButton mobile :label="mobileActionTitleText" @trigger="handleMobileActionTrigger" />
 
         <OptionMenu
           :open="mobileActionMenuOpen"
@@ -133,5 +129,5 @@ function onMobileActionSelect(item: OptionMenuItem) {
 
       <slot v-else name="actions" />
     </template>
-  </SidebarListItem>
+  </ListItemFrame>
 </template>

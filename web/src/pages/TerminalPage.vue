@@ -17,12 +17,12 @@ import {
   RiStarFill,
   RiStarLine,
   RiEditLine,
-  RiMore2Line,
   RiQuestionLine,
 } from '@remixicon/vue'
 import Button from '@/components/ui/Button.vue'
 import IconButton from '@/components/ui/IconButton.vue'
-import SidebarListItem from '@/components/ui/SidebarListItem.vue'
+import ListItemFrame from '@/components/ui/ListItemFrame.vue'
+import ListItemOverflowActionButton from '@/components/ui/ListItemOverflowActionButton.vue'
 import MobileSidebarEmptyState from '@/components/ui/MobileSidebarEmptyState.vue'
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import FormDialog from '@/components/ui/FormDialog.vue'
@@ -992,6 +992,10 @@ function openMobileSessionActionMenu(id: string) {
   mobileSessionActionOpen.value = true
 }
 
+function handleMobileSessionActionTrigger(id: string) {
+  openMobileSessionActionMenu(id)
+}
+
 function isMobileSessionActionMenuOpen(id: string): boolean {
   const sid = normalizeSessionId(id)
   return Boolean(sid) && mobileSessionActionOpen.value && mobileSessionActionTargetId.value === sid
@@ -1940,12 +1944,13 @@ watch(el, () => {
           </div>
 
           <div v-for="item in visibleSidebarSessions" :key="item.id" class="relative">
-            <SidebarListItem
+            <ListItemFrame
               :active="sessionId === item.id"
               :as="isSessionRenaming(item.id) ? 'div' : 'button'"
+              :action-visibility="ui.isMobilePointer || isSessionRenaming(item.id) ? 'always' : 'hover'"
               @click="!isSessionRenaming(item.id) && openSessionFromSidebar(item.id)"
             >
-              <template #icon>
+              <template #leading>
                 <span
                   class="inline-flex h-1.5 w-1.5 flex-shrink-0 rounded-full"
                   :class="statusDotClassForSession(item.id)"
@@ -1971,38 +1976,34 @@ watch(el, () => {
                   >
                     {{ sidebarSessionLabel(item) }}
                   </span>
-
-                  <template v-if="ui.isMobilePointer">
-                    <IconButton
-                      size="sm"
-                      class="text-muted-foreground hover:text-foreground hover:bg-primary/6"
-                      :title="String(t('terminal.actions.title'))"
-                      :aria-label="String(t('terminal.actions.title'))"
-                      @click.stop="openMobileSessionActionMenu(item.id)"
-                    >
-                      <RiMore2Line class="h-4 w-4" />
-                    </IconButton>
-
-                    <OptionMenu
-                      :open="isMobileSessionActionMenuOpen(item.id)"
-                      :query="mobileSessionActionQuery"
-                      :groups="mobileSessionActionGroups(item.id)"
-                      :title="mobileSessionActionTitle(item.id)"
-                      :mobile-title="mobileSessionActionTitle(item.id)"
-                      :searchable="true"
-                      :is-mobile-pointer="ui.isMobilePointer"
-                      @update:open="(v) => setMobileSessionActionMenuOpen(item.id, v)"
-                      @update:query="(v) => (mobileSessionActionQuery = v)"
-                      @select="(action) => runMobileSessionAction(item.id, action)"
-                    />
-                  </template>
                 </div>
               </template>
 
               <template #actions>
+                <template v-if="ui.isMobilePointer && !isSessionRenaming(item.id)">
+                  <ListItemOverflowActionButton
+                    mobile
+                    :label="String(t('terminal.actions.title'))"
+                    @trigger="handleMobileSessionActionTrigger(item.id)"
+                  />
+
+                  <OptionMenu
+                    :open="isMobileSessionActionMenuOpen(item.id)"
+                    :query="mobileSessionActionQuery"
+                    :groups="mobileSessionActionGroups(item.id)"
+                    :title="mobileSessionActionTitle(item.id)"
+                    :mobile-title="mobileSessionActionTitle(item.id)"
+                    :searchable="true"
+                    :is-mobile-pointer="ui.isMobilePointer"
+                    @update:open="(v) => setMobileSessionActionMenuOpen(item.id, v)"
+                    @update:query="(v) => (mobileSessionActionQuery = v)"
+                    @select="(action) => runMobileSessionAction(item.id, action)"
+                  />
+                </template>
+
                 <template v-if="!ui.isMobilePointer && isSessionRenaming(item.id)">
                   <IconButton
-                    size="sm"
+                    size="xs"
                     class="text-muted-foreground hover:bg-primary/6"
                     :title="String(t('terminal.session.cancelRename'))"
                     :aria-label="String(t('terminal.session.cancelRename'))"
@@ -2011,7 +2012,7 @@ watch(el, () => {
                     <RiCloseLine class="h-4 w-4" />
                   </IconButton>
                   <IconButton
-                    size="sm"
+                    size="xs"
                     class="text-primary hover:bg-primary/10"
                     :title="String(t('terminal.session.saveRename'))"
                     :aria-label="String(t('terminal.session.saveRename'))"
@@ -2023,8 +2024,8 @@ watch(el, () => {
 
                 <template v-else-if="!ui.isMobilePointer">
                   <IconButton
-                    size="sm"
-                    class="text-muted-foreground hover:text-foreground hover:bg-primary/6"
+                    size="xs"
+                    class="text-muted-foreground hover:text-foreground hover:dark:bg-accent/40 hover:bg-primary/6"
                     :title="String(t('terminal.actions.rename'))"
                     :aria-label="String(t('terminal.actions.rename'))"
                     @click.stop="startSessionRename(item.id)"
@@ -2042,11 +2043,11 @@ watch(el, () => {
                     @confirm="disconnectSessionFromSidebar(item.id)"
                   >
                     <IconButton
-                      size="sm"
+                      size="xs"
                       class="transition"
                       :class="
                         canDisconnectSession(item.id)
-                          ? 'text-destructive hover:bg-destructive/10'
+                          ? 'text-destructive hover:bg-destructive/10 hover:dark:bg-accent/40'
                           : 'text-muted-foreground/45'
                       "
                       :title="String(t('terminal.actions.disconnectStream'))"
@@ -2058,8 +2059,8 @@ watch(el, () => {
                     </IconButton>
                   </ConfirmPopover>
                   <IconButton
-                    size="sm"
-                    class="transition hover:bg-primary/6"
+                    size="xs"
+                    class="transition hover:dark:bg-accent/40 hover:bg-primary/6"
                     :class="item.pinned ? 'text-amber-500' : 'text-muted-foreground hover:text-amber-500'"
                     :title="item.pinned ? String(t('terminal.actions.unpin')) : String(t('terminal.actions.pin'))"
                     :aria-label="item.pinned ? String(t('terminal.actions.unpin')) : String(t('terminal.actions.pin'))"
@@ -2076,8 +2077,8 @@ watch(el, () => {
                     @confirm="closeTrackedSession(item.id)"
                   >
                     <IconButton
-                      size="sm"
-                      class="text-muted-foreground hover:text-destructive hover:bg-primary/6"
+                      size="xs"
+                      class="text-muted-foreground hover:text-destructive hover:dark:bg-accent/40 hover:bg-primary/6"
                       :title="String(t('terminal.actions.delete'))"
                       :aria-label="String(t('terminal.actions.delete'))"
                       @click.stop
@@ -2087,7 +2088,7 @@ watch(el, () => {
                   </ConfirmPopover>
                 </template>
               </template>
-            </SidebarListItem>
+            </ListItemFrame>
           </div>
         </div>
       </div>

@@ -30,6 +30,7 @@ export default {
     no: 'لا',
     previousPage: 'الصفحة السابقة',
     nextPage: 'الصفحة التالية',
+    currentPage: 'الصفحة الحالية',
     previous: 'السابق',
     next: 'التالي',
     continue: 'متابعة',

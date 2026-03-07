@@ -38,6 +38,7 @@ export default {
     previous: 'Anterior',
     nextPage: 'Pagina seguinte',
     previousPage: 'Pagina anterior',
+    currentPage: 'Pagina atual',
     loadMore: 'Carregar mais',
     copied: 'Copiado',
     copyFailed: 'Falha ao copiar',

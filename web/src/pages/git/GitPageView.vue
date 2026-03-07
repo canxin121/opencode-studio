@@ -16,6 +16,7 @@ import MobileSidebarEmptyState from '@/components/ui/MobileSidebarEmptyState.vue
 import IconButton from '@/components/ui/IconButton.vue'
 import Input from '@/components/ui/Input.vue'
 import OptionMenu from '@/components/ui/OptionMenu.vue'
+import PaginationControls from '@/components/ui/PaginationControls.vue'
 import type { OptionMenuGroup, OptionMenuItem } from '@/components/ui/optionMenu.types'
 import ScrollArea from '@/components/ui/ScrollArea.vue'
 import SidebarIconButton from '@/components/ui/SidebarIconButton.vue'
@@ -476,8 +477,6 @@ const {
   applyHistoryFilters,
   clearHistoryFilters,
   loadHistoryPage,
-  loadPreviousHistoryPage,
-  loadMoreHistory,
   selectCommit,
   selectCommitFile,
   clearSelectedFile,
@@ -680,15 +679,12 @@ const isHistoryListView = computed(() => sourceControlView.value === 'history')
 const isHistoryCommitView = computed(() => sourceControlView.value === 'historyCommit')
 const isHistoryView = computed(() => isHistoryListView.value || isHistoryCommitView.value)
 
-const historyPageNumbers = computed(() => {
-  const maxPage = Math.max(historyKnownLastPage.value, historyCurrentPage.value)
-  const start = Math.max(1, historyCurrentPage.value - 2)
-  const end = Math.min(maxPage, start + 4)
-  const pages: number[] = []
-  for (let page = start; page <= end; page += 1) {
-    pages.push(page)
+const historyPaginationTotalPages = computed(() => {
+  if (historyExactLastPage.value !== null) {
+    return Math.max(1, historyExactLastPage.value)
   }
-  return pages
+  const known = Math.max(historyKnownLastPage.value, historyCurrentPage.value)
+  return historyHasMore.value ? known + 1 : known
 })
 
 const historySelectedMeta = computed(() => {
@@ -779,21 +775,10 @@ function backToHistoryList() {
   }
 }
 
-function jumpHistoryPage(page: number) {
+function setHistoryPage(page: number) {
   const next = Math.max(1, Math.floor(page))
   if (next === historyCurrentPage.value && historyCommits.value.length > 0) return
   void loadHistoryPage(next)
-}
-
-function goPreviousHistoryPage() {
-  void loadPreviousHistoryPage()
-}
-
-function goNextHistoryPage() {
-  const nextPage = historyCurrentPage.value + 1
-  const known = nextPage <= historyKnownLastPage.value
-  if (!known && !historyHasMore.value) return
-  void loadMoreHistory()
 }
 
 function onApplyHistoryFilters() {
@@ -1727,6 +1712,19 @@ void diffPaneRef
             </div>
 
             <div class="rounded-sm border border-sidebar-border/60 overflow-hidden">
+              <div class="border-b border-sidebar-border/50 px-2 py-1">
+                <PaginationControls
+                  class="w-full justify-center"
+                  :page="historyCurrentPage"
+                  :total-pages="historyPaginationTotalPages"
+                  :disabled="historyLoading"
+                  :prev-label="t('common.previousPage')"
+                  :next-label="t('common.nextPage')"
+                  :page-input-label="t('common.currentPage')"
+                  @update:page="setHistoryPage"
+                />
+              </div>
+
               <div v-if="historyError" class="px-2 py-2 text-xs text-destructive">
                 {{ historyError }}
               </div>
@@ -1756,38 +1754,17 @@ void diffPaneRef
               </div>
             </div>
 
-            <div class="flex items-center justify-between gap-2 px-1 py-0.5">
-              <MiniActionButton size="xs" :disabled="historyCurrentPage <= 1" @click="goPreviousHistoryPage">
-                {{ t('common.previous') }}
-              </MiniActionButton>
-
-              <div class="flex min-w-0 items-center gap-1">
-                <button
-                  v-for="page in historyPageNumbers"
-                  :key="`history-page-${page}`"
-                  type="button"
-                  class="rounded-sm px-1.5 py-0.5 text-[10px]"
-                  :class="
-                    page === historyCurrentPage
-                      ? 'bg-sidebar-accent/70 text-foreground'
-                      : 'text-muted-foreground hover:bg-sidebar-accent/40 hover:text-foreground'
-                  "
-                  @click="jumpHistoryPage(page)"
-                >
-                  {{ page }}
-                </button>
-                <span v-if="historyExactLastPage === null && historyHasMore" class="text-[10px] text-muted-foreground"
-                  >…</span
-                >
-              </div>
-
-              <MiniActionButton
-                size="xs"
-                :disabled="!historyHasMore && historyCurrentPage >= historyKnownLastPage"
-                @click="goNextHistoryPage"
-              >
-                {{ t('common.next') }}
-              </MiniActionButton>
+            <div class="px-1 py-0.5">
+              <PaginationControls
+                class="w-full justify-center"
+                :page="historyCurrentPage"
+                :total-pages="historyPaginationTotalPages"
+                :disabled="historyLoading"
+                :prev-label="t('common.previousPage')"
+                :next-label="t('common.nextPage')"
+                :page-input-label="t('common.currentPage')"
+                @update:page="setHistoryPage"
+              />
             </div>
 
             <div class="px-1 text-[10px] text-muted-foreground">

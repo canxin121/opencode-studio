@@ -7,7 +7,6 @@ import {
   RiCloseLine,
   RiDeleteBinLine,
   RiLoader4Line,
-  RiMore2Line,
   RiQuestionLine,
   RiShieldLine,
   RiStarFill,
@@ -17,12 +16,12 @@ import { useI18n } from 'vue-i18n'
 
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import IconButton from '@/components/ui/IconButton.vue'
+import ListItemOverflowActionButton from '@/components/ui/ListItemOverflowActionButton.vue'
 import { directoryEntryLabel, formatTime, sessionLabel } from '@/features/sessions/model/labels'
 import type { DirectoryEntry } from '@/features/sessions/model/types'
 import type { SessionActionItem } from '@/layout/chatSidebar/useSessionActionMenu'
 import SidebarListItem from '@/components/ui/SidebarListItem.vue'
 import SidebarSessionActionMenu from '@/layout/chatSidebar/components/SidebarSessionActionMenu.vue'
-import { shouldAcceptSessionActionTap } from '@/layout/chatSidebar/sessionActionTapGuard'
 
 type SessionLike = {
   id?: string | number | null
@@ -129,7 +128,6 @@ const isInlineRename = computed(() => props.renaming && !props.uiIsMobile && has
 const actionsAlwaysVisible = computed(() => isInlineRename.value || (props.uiIsMobile && canShowActions.value))
 const renameDraftText = computed(() => String(props.renameDraft || ''))
 const canSaveRename = computed(() => !props.renameBusy && renameDraftText.value.trim().length > 0)
-const actionPointerDownAtMs = ref(0)
 
 const shouldRenderSessionActionMenu = computed(() => {
   if (isInlineRename.value) return false
@@ -185,17 +183,11 @@ function setMenuRef(el: Element | ComponentPublicInstance | null) {
   props.setSessionActionMenuRef(el)
 }
 
-function markActionPointerDown() {
-  actionPointerDownAtMs.value = Date.now()
-}
-
-function handleMobileOpenActionsClick(event: MouseEvent) {
-  if (!shouldAcceptSessionActionTap(event, actionPointerDownAtMs.value)) return
+function handleMobileOpenActionsClick() {
   emit('open-actions')
 }
 
 function handleDesktopOpenActionMenu(event: MouseEvent) {
-  if (!shouldAcceptSessionActionTap(event, actionPointerDownAtMs.value)) return
   emit('open-action-menu', event)
 }
 </script>
@@ -336,29 +328,18 @@ function handleDesktopOpenActionMenu(event: MouseEvent) {
         </template>
 
         <template v-else-if="uiIsMobile && canShowActions">
-          <IconButton
-            size="sm"
-            class="text-muted-foreground hover:text-foreground hover:dark:bg-accent/40 hover:bg-primary/6"
-            :title="String(t('chat.sidebar.sessionActions.menuTitle'))"
-            :aria-label="String(t('chat.sidebar.sessionActions.menuTitle'))"
-            @pointerdown="markActionPointerDown"
-            @click.stop="handleMobileOpenActionsClick"
-          >
-            <RiMore2Line class="h-4 w-4" />
-          </IconButton>
+          <ListItemOverflowActionButton
+            mobile
+            :label="String(t('chat.sidebar.sessionActions.menuTitle'))"
+            @trigger="handleMobileOpenActionsClick"
+          />
         </template>
 
         <template v-else-if="canShowActions">
-          <IconButton
-            size="xs"
-            class="text-muted-foreground hover:text-foreground hover:dark:bg-accent/40 hover:bg-primary/6"
-            :title="String(t('chat.sidebar.sessionActions.menuTitle'))"
-            :aria-label="String(t('chat.sidebar.sessionActions.menuTitle'))"
-            @pointerdown="markActionPointerDown"
-            @click.stop="handleDesktopOpenActionMenu"
-          >
-            <RiMore2Line class="h-4 w-4" />
-          </IconButton>
+          <ListItemOverflowActionButton
+            :label="String(t('chat.sidebar.sessionActions.menuTitle'))"
+            @trigger="handleDesktopOpenActionMenu"
+          />
 
           <IconButton
             v-if="canPin"

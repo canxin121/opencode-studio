@@ -1,21 +1,14 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import {
-  RiAddLine,
-  RiArrowDownSLine,
-  RiArrowRightSLine,
-  RiDeleteBinLine,
-  RiMore2Line,
-  RiRefreshLine,
-} from '@remixicon/vue'
+import { computed } from 'vue'
+import { RiAddLine, RiArrowDownSLine, RiArrowRightSLine, RiDeleteBinLine, RiRefreshLine } from '@remixicon/vue'
 import { useI18n } from 'vue-i18n'
 
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import IconButton from '@/components/ui/IconButton.vue'
+import ListItemOverflowActionButton from '@/components/ui/ListItemOverflowActionButton.vue'
 import SidebarListItem from '@/components/ui/SidebarListItem.vue'
 import { directoryEntryLabel } from '@/features/sessions/model/labels'
 import type { DirectoryEntry } from '@/features/sessions/model/types'
-import { shouldAcceptSessionActionTap } from '@/layout/chatSidebar/sessionActionTapGuard'
 
 const props = withDefaults(
   defineProps<{
@@ -47,14 +40,8 @@ const emit = defineEmits<{
 const { t } = useI18n()
 
 const actionsAlwaysVisible = computed(() => props.uiIsMobile)
-const actionPointerDownAtMs = ref(0)
 
-function markActionPointerDown() {
-  actionPointerDownAtMs.value = Date.now()
-}
-
-function handleMobileOpenActionsClick(event: MouseEvent) {
-  if (!shouldAcceptSessionActionTap(event, actionPointerDownAtMs.value)) return
+function handleMobileOpenActionsClick() {
   emit('open-actions')
 }
 </script>
@@ -104,16 +91,11 @@ function handleMobileOpenActionsClick(event: MouseEvent) {
 
     <template #actions>
       <template v-if="uiIsMobile">
-        <IconButton
-          size="sm"
-          class="text-muted-foreground hover:text-foreground hover:dark:bg-accent/40 hover:bg-primary/6"
-          :title="String(t('chat.sidebar.directoriesList.directoryActions'))"
-          :aria-label="String(t('chat.sidebar.directoriesList.directoryActions'))"
-          @pointerdown="markActionPointerDown"
-          @click.stop="handleMobileOpenActionsClick"
-        >
-          <RiMore2Line class="h-4 w-4" />
-        </IconButton>
+        <ListItemOverflowActionButton
+          mobile
+          :label="String(t('chat.sidebar.directoriesList.directoryActions'))"
+          @trigger="handleMobileOpenActionsClick"
+        />
       </template>
 
       <template v-else>

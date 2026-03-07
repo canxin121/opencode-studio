@@ -70,6 +70,7 @@ export default {
     downloadFailed: '下载失败',
     previousPage: '上一页',
     nextPage: '下一页',
+    currentPage: '当前页',
     previous: '上一项',
     next: '下一项',
     unknown: '未知',
