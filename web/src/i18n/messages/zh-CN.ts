@@ -2490,6 +2490,7 @@ export default {
             branchName: '分支名',
             authorContains: '作者包含',
             messageContains: '信息包含',
+            commitMetaContains: '提交信息、作者或邮箱',
           },
           allTags: '全部标签',
           allBranches: '全部分支',

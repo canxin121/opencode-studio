@@ -45,104 +45,14 @@ pub struct GitLogQuery {
     pub limit: Option<usize>,
     pub offset: Option<usize>,
     pub path: Option<String>,
+    pub search: Option<String>,
     pub author: Option<String>,
     pub message: Option<String>,
     pub r#ref: Option<String>,
     pub graph: Option<bool>,
 }
 
-pub async fn git_log(Query(q): Query<GitLogQuery>) -> Response {
-    let Some(dir_raw) = q.directory.as_deref() else {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({"error": "directory parameter is required"})),
-        )
-            .into_response();
-    };
-    let dir = abs_path(dir_raw);
-
-    let limit = q.limit.unwrap_or(50).clamp(1, 200);
-    let offset = q.offset.unwrap_or(0);
-
-    let path = q
-        .path
-        .as_deref()
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty());
-
-    let author = q
-        .author
-        .as_deref()
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty());
-    let message = q
-        .message
-        .as_deref()
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty());
-    let ref_name = q
-        .r#ref
-        .as_deref()
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty());
-    let include_graph = q.graph.unwrap_or(false);
-
-    if let Some(p) = path
-        && !is_safe_repo_rel_path(p)
-    {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({"error": "Invalid path", "code": "invalid_path"})),
-        )
-            .into_response();
-    }
-
-    let max_count = limit + 1;
-    let format = "%x1f%H%x1f%h%x1f%an%x1f%ae%x1f%ad%x1f%s%x1f%b%x1f%D%x1f%P%x1e";
-    let mut args: Vec<String> = vec![
-        "log".into(),
-        "--date=iso-strict".into(),
-        format!("--max-count={}", max_count),
-        format!("--skip={}", offset),
-        format!("--pretty=format:{}", format),
-    ];
-    if include_graph {
-        args.push("--graph".into());
-    }
-    if author.is_some() || message.is_some() {
-        args.push("--fixed-strings".into());
-        args.push("--regexp-ignore-case".into());
-    }
-    if let Some(a) = author {
-        args.push(format!("--author={}", a));
-    }
-    if let Some(m) = message {
-        args.push(format!("--grep={}", m));
-    }
-    if let Some(r) = ref_name {
-        args.push(r.to_string());
-    }
-    if let Some(p) = path {
-        args.push("--".into());
-        args.push(p.to_string());
-    }
-
-    let args_ref: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-    let (code, out, err) =
-        run_git(&dir, &args_ref)
-            .await
-            .unwrap_or((1, "".to_string(), "".to_string()));
-    if code != 0 {
-        if let Some(resp) = map_git_failure(code, &out, &err) {
-            return resp;
-        }
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"error": err.trim(), "code": "git_log_failed"})),
-        )
-            .into_response();
-    }
-
+fn parse_git_log_records(out: &str) -> Vec<GitLogCommit> {
     let mut commits: Vec<GitLogCommit> = Vec::new();
     for record in out
         .split('\x1e')
@@ -186,8 +96,180 @@ pub async fn git_log(Query(q): Query<GitLogQuery>) -> Response {
             parents,
         });
     }
+    commits
+}
 
-    let has_more = commits.len() > limit;
+fn matches_log_search(commit: &GitLogCommit, search: &str) -> bool {
+    let needle = search.to_lowercase();
+    if needle.is_empty() {
+        return true;
+    }
+
+    [
+        commit.subject.as_str(),
+        commit.body.as_str(),
+        commit.author_name.as_str(),
+        commit.author_email.as_str(),
+    ]
+    .iter()
+    .any(|field| field.to_lowercase().contains(&needle))
+}
+
+pub async fn git_log(Query(q): Query<GitLogQuery>) -> Response {
+    let Some(dir_raw) = q.directory.as_deref() else {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "directory parameter is required"})),
+        )
+            .into_response();
+    };
+    let dir = abs_path(dir_raw);
+
+    let limit = q.limit.unwrap_or(50).clamp(1, 200);
+    let offset = q.offset.unwrap_or(0);
+
+    let path = q
+        .path
+        .as_deref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty());
+
+    let search = q
+        .search
+        .as_deref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
+
+    let author = q
+        .author
+        .as_deref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty());
+    let message = q
+        .message
+        .as_deref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty());
+    let ref_name = q
+        .r#ref
+        .as_deref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty());
+    let include_graph = q.graph.unwrap_or(false);
+
+    if let Some(p) = path
+        && !is_safe_repo_rel_path(p)
+    {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "Invalid path", "code": "invalid_path"})),
+        )
+            .into_response();
+    }
+
+    let format = "%x1f%H%x1f%h%x1f%an%x1f%ae%x1f%ad%x1f%s%x1f%b%x1f%D%x1f%P%x1e";
+    let mut base_args: Vec<String> = vec![
+        "log".into(),
+        "--date=iso-strict".into(),
+        format!("--pretty=format:{}", format),
+    ];
+    if include_graph {
+        base_args.push("--graph".into());
+    }
+    if let Some(r) = ref_name {
+        base_args.push(r.to_string());
+    }
+    if let Some(p) = path {
+        base_args.push("--".into());
+        base_args.push(p.to_string());
+    }
+
+    let mut commits: Vec<GitLogCommit>;
+    let has_more: bool;
+
+    if let Some(search_term) = search {
+        let page_target = offset.saturating_add(limit).saturating_add(1);
+        let mut matched: Vec<GitLogCommit> = Vec::new();
+        let mut scan_skip: usize = 0;
+        let scan_batch_size: usize = 200;
+
+        loop {
+            let mut args = base_args.clone();
+            args.push(format!("--max-count={}", scan_batch_size));
+            args.push(format!("--skip={}", scan_skip));
+
+            let args_ref: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+            let (code, out, err) =
+                run_git(&dir, &args_ref)
+                    .await
+                    .unwrap_or((1, "".to_string(), "".to_string()));
+            if code != 0 {
+                if let Some(resp) = map_git_failure(code, &out, &err) {
+                    return resp;
+                }
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({"error": err.trim(), "code": "git_log_failed"})),
+                )
+                    .into_response();
+            }
+
+            let batch = parse_git_log_records(&out);
+            let scanned = batch.len();
+            for commit in batch {
+                if matches_log_search(&commit, &search_term) {
+                    matched.push(commit);
+                }
+                if matched.len() >= page_target {
+                    break;
+                }
+            }
+
+            if matched.len() >= page_target || scanned < scan_batch_size {
+                break;
+            }
+            scan_skip = scan_skip.saturating_add(scanned);
+        }
+
+        commits = matched.into_iter().skip(offset).take(limit + 1).collect();
+        has_more = commits.len() > limit;
+    } else {
+        let max_count = limit + 1;
+        let mut args = base_args;
+        args.push(format!("--max-count={}", max_count));
+        args.push(format!("--skip={}", offset));
+        if author.is_some() || message.is_some() {
+            args.push("--fixed-strings".into());
+            args.push("--regexp-ignore-case".into());
+        }
+        if let Some(a) = author {
+            args.push(format!("--author={}", a));
+        }
+        if let Some(m) = message {
+            args.push(format!("--grep={}", m));
+        }
+
+        let args_ref: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+        let (code, out, err) =
+            run_git(&dir, &args_ref)
+                .await
+                .unwrap_or((1, "".to_string(), "".to_string()));
+        if code != 0 {
+            if let Some(resp) = map_git_failure(code, &out, &err) {
+                return resp;
+            }
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": err.trim(), "code": "git_log_failed"})),
+            )
+                .into_response();
+        }
+
+        commits = parse_git_log_records(&out);
+        has_more = commits.len() > limit;
+    }
+
     if has_more {
         commits.truncate(limit);
     }

@@ -2494,6 +2494,7 @@ export default {
             branchName: 'Branch name',
             authorContains: 'Author contains',
             messageContains: 'Message contains',
+            commitMetaContains: 'Message, author, or email',
           },
           allTags: 'All tags',
           allBranches: 'All branches',

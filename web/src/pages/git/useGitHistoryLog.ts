@@ -33,10 +33,8 @@ export function useGitHistoryLog(opts: { repoRoot: { value: string | null }; git
   const historyFileSelected = ref<GitCommitFile | null>(null)
 
   const historyFilterPath = ref<string | null>(null)
-  const historyFilterAuthor = ref('')
-  const historyFilterMessage = ref('')
-  const historyFilterRef = ref('')
-  const historyFilterRefType = ref<'branch' | 'tag'>('branch')
+  const historySearchDraft = ref('')
+  const historySearchQuery = ref('')
 
   const COMMIT_DETAILS_CACHE_LIMIT = 80
   const HISTORY_PAGE_CACHE_LIMIT = 60
@@ -66,20 +64,10 @@ export function useGitHistoryLog(opts: { repoRoot: { value: string | null }; git
     return name === 'AbortError'
   }
 
-  function normalizeRefInput(): string | undefined {
-    const raw = historyFilterRef.value.trim()
-    if (!raw) return undefined
-    if (raw.startsWith('refs/')) return raw
-    if (historyFilterRefType.value === 'tag') return `refs/tags/${raw}`
-    return `refs/heads/${raw}`
-  }
-
   function historyPageKey(directory: string, page: number): string {
     const path = (historyFilterPath.value || '').trim()
-    const author = historyFilterAuthor.value.trim()
-    const message = historyFilterMessage.value.trim()
-    const ref = normalizeRefInput() || ''
-    return `${directory}::${path}::${author}::${message}::${ref}::${page}`
+    const search = historySearchQuery.value.trim().toLowerCase()
+    return `${directory}::${path}::${search}::${page}`
   }
 
   function resetHistoryListState() {
@@ -150,9 +138,7 @@ export function useGitHistoryLog(opts: { repoRoot: { value: string | null }; git
           offset,
           limit: historyLimit,
           path: historyFilterPath.value || undefined,
-          author: historyFilterAuthor.value.trim() || undefined,
-          message: historyFilterMessage.value.trim() || undefined,
-          ref: normalizeRefInput(),
+          search: historySearchQuery.value.trim() || undefined,
           graph: true,
         },
         {
@@ -286,16 +272,15 @@ export function useGitHistoryLog(opts: { repoRoot: { value: string | null }; git
   }
 
   function applyHistoryFilters() {
+    historySearchQuery.value = historySearchDraft.value.trim()
     clearHistorySelectionState()
     resetHistoryListState()
     void loadHistoryPage(1, true)
   }
 
   function clearHistoryFilters() {
-    historyFilterAuthor.value = ''
-    historyFilterMessage.value = ''
-    historyFilterRef.value = ''
-    historyFilterRefType.value = 'branch'
+    historySearchDraft.value = ''
+    historySearchQuery.value = ''
     clearHistorySelectionState()
     resetHistoryListState()
     void loadHistoryPage(1, true)
@@ -328,10 +313,8 @@ export function useGitHistoryLog(opts: { repoRoot: { value: string | null }; git
     historyFilesError,
     historyFileSelected,
     historyFilterPath,
-    historyFilterAuthor,
-    historyFilterMessage,
-    historyFilterRef,
-    historyFilterRefType,
+    historySearchDraft,
+    historySearchQuery,
     openHistoryDialog,
     openFileHistory,
     closeHistoryDialog,

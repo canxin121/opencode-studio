@@ -7,6 +7,7 @@ import {
   RiGitBranchLine,
   RiMore2Line,
   RiRefreshLine,
+  RiSearchLine,
 } from '@remixicon/vue'
 import { useI18n } from 'vue-i18n'
 
@@ -240,8 +241,6 @@ const {
   stageSelected,
   unstageSelected,
   discardSelected,
-  historyBranchOptions,
-  historyTagOptions,
 
   // Merge/Rebase
   mergeDialogOpen,
@@ -470,10 +469,7 @@ const {
   historyFilesError,
   historyFileSelected,
   historyFilterPath,
-  historyFilterAuthor,
-  historyFilterMessage,
-  historyFilterRef,
-  historyFilterRefType,
+  historySearchDraft,
   openFileHistory,
   refreshHistory,
   clearHistoryFilter,
@@ -725,11 +721,6 @@ const historyParentCommitHash = computed(() => {
   return String(parents[0] || '').trim()
 })
 
-const historyRefOptions = computed(() => {
-  if (historyFilterRefType.value === 'tag') return historyTagOptions.value
-  return historyBranchOptions.value
-})
-
 function ensureHistoryLoaded() {
   if (!gitReady.value || !repoRoot.value) return
   if (historyLoading.value || historyCommits.value.length > 0) return
@@ -820,10 +811,6 @@ function onClearHistoryPathFilter() {
   sourceControlView.value = 'history'
 }
 
-function toggleHistorySearchExpanded() {
-  ui.gitHistorySearchExpanded = !ui.gitHistorySearchExpanded
-}
-
 watch(
   () => repoRoot.value,
   () => {
@@ -836,14 +823,6 @@ watch(
   (ready) => {
     if (ready) return
     sourceControlView.value = 'changes'
-  },
-)
-
-watch(
-  () => ui.gitHistorySearchExpanded,
-  (expanded) => {
-    if (expanded) return
-    historyFilterRefType.value = 'branch'
   },
 )
 
@@ -1753,13 +1732,6 @@ void diffPaneRef
             <div class="rounded-sm border border-sidebar-border/60 bg-sidebar-accent/10 p-2">
               <div class="mb-1 flex items-center justify-between gap-2">
                 <div class="text-[11px] font-medium text-muted-foreground">{{ t('common.search') }}</div>
-                <button
-                  type="button"
-                  class="rounded-sm px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-sidebar-accent/40 hover:text-foreground"
-                  @click="toggleHistorySearchExpanded"
-                >
-                  {{ ui.gitHistorySearchExpanded ? t('common.collapse') : t('common.expand') }}
-                </button>
               </div>
 
               <div v-if="historyFilterPath" class="mb-2 flex items-center justify-between gap-2">
@@ -1770,57 +1742,27 @@ void diffPaneRef
               </div>
 
               <div class="grid gap-2">
-                <div v-if="ui.gitHistorySearchExpanded" class="grid grid-cols-[86px_minmax(0,1fr)] gap-2">
-                  <select
-                    v-model="historyFilterRefType"
-                    class="h-8 rounded border border-input bg-background px-2 text-xs text-foreground"
-                  >
-                    <option value="branch">{{ t('git.ui.dialogs.history.refType.branch') }}</option>
-                    <option value="tag">{{ t('git.ui.dialogs.history.refType.tag') }}</option>
-                  </select>
-                  <input
-                    v-model="historyFilterRef"
-                    class="h-8 w-full rounded border border-input bg-transparent px-2 text-xs font-mono text-foreground placeholder:text-muted-foreground"
-                    list="git-history-ref-options"
-                    :placeholder="
-                      historyFilterRefType === 'tag'
-                        ? t('git.ui.dialogs.history.placeholders.tagName')
-                        : t('git.ui.dialogs.history.placeholders.branchName')
-                    "
+                <div class="flex items-center gap-1.5">
+                  <Input
+                    v-model="historySearchDraft"
+                    class="h-8 flex-1 font-mono text-xs"
+                    :placeholder="t('git.ui.dialogs.history.placeholders.commitMetaContains')"
+                    @keydown.enter="onApplyHistoryFilters"
                   />
+                  <SidebarIconButton
+                    size="sm"
+                    :tooltip="t('common.search')"
+                    :is-mobile-pointer="ui.isMobilePointer"
+                    :aria-label="t('common.search')"
+                    @click="onApplyHistoryFilters"
+                  >
+                    <RiSearchLine class="h-3.5 w-3.5" />
+                  </SidebarIconButton>
                 </div>
-                <input
-                  v-else
-                  v-model="historyFilterRef"
-                  class="h-8 w-full rounded border border-input bg-transparent px-2 text-xs font-mono text-foreground placeholder:text-muted-foreground"
-                  list="git-history-ref-options"
-                  :placeholder="t('git.ui.dialogs.history.placeholders.branchName')"
-                />
-                <datalist id="git-history-ref-options">
-                  <option v-for="name in historyRefOptions" :key="`history-ref-${name}`" :value="name" />
-                </datalist>
-
-                <Input
-                  v-if="ui.gitHistorySearchExpanded"
-                  v-model="historyFilterAuthor"
-                  class="h-8 font-mono text-xs"
-                  :placeholder="t('git.ui.dialogs.history.placeholders.authorContains')"
-                />
-
-                <Input
-                  v-if="ui.gitHistorySearchExpanded"
-                  v-model="historyFilterMessage"
-                  class="h-8 font-mono text-xs"
-                  :placeholder="t('git.ui.dialogs.history.placeholders.messageContains')"
-                  @keydown.enter="onApplyHistoryFilters"
-                />
 
                 <div class="flex items-center justify-end gap-2">
                   <MiniActionButton size="xs" @click="refreshHistory">{{ t('common.refresh') }}</MiniActionButton>
                   <MiniActionButton size="xs" @click="onClearHistoryFilters">{{ t('common.clear') }}</MiniActionButton>
-                  <MiniActionButton variant="default" size="xs" @click="onApplyHistoryFilters">{{
-                    t('common.search')
-                  }}</MiniActionButton>
                 </div>
               </div>
             </div>
