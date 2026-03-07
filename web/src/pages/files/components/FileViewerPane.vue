@@ -269,6 +269,9 @@ const timelineLeftMenuAnchorEl = ref<HTMLElement | null>(null)
 const timelineRightMenuOpen = ref(false)
 const timelineRightMenuQuery = ref('')
 const timelineRightMenuAnchorEl = ref<HTMLElement | null>(null)
+const TIMELINE_MENU_PAGE_SIZE = 10
+const timelineLeftMenuPage = ref(1)
+const timelineRightMenuPage = ref(1)
 
 async function setViewMenuOpen(next: boolean) {
   if (!next) {
@@ -345,13 +348,13 @@ function optionItemHaystack(item: OptionMenuItem): string {
   return `${item.label || ''} ${item.description || ''} ${item.keywords || ''}`.toLowerCase()
 }
 
-function buildTimelineMenuGroups(side: TimelineSide, queryRaw: string): OptionMenuGroup[] {
+function buildTimelineMenuItems(side: TimelineSide, queryRaw: string): OptionMenuItem[] {
   const query = String(queryRaw || '')
     .trim()
     .toLowerCase()
   const selectedHash = (side === 'left' ? props.timelineLeftCommit?.hash : props.timelineRightCommit?.hash) || ''
 
-  const commitItems = props.timelineCommits
+  return props.timelineCommits
     .map<OptionMenuItem>((commit) => {
       const hash = String(commit?.hash || '').trim()
       return {
@@ -363,36 +366,57 @@ function buildTimelineMenuGroups(side: TimelineSide, queryRaw: string): OptionMe
       }
     })
     .filter((item) => (!query ? true : optionItemHaystack(item).includes(query)))
+}
 
-  const groups: OptionMenuGroup[] = [
+function pagedTimelineMenuItems(items: OptionMenuItem[], page: number): OptionMenuItem[] {
+  const safePage = Math.max(1, Math.floor(page || 1))
+  const start = (safePage - 1) * TIMELINE_MENU_PAGE_SIZE
+  return items.slice(start, start + TIMELINE_MENU_PAGE_SIZE)
+}
+
+function buildTimelineMenuGroups(side: TimelineSide, items: OptionMenuItem[], page: number): OptionMenuGroup[] {
+  const visibleItems = pagedTimelineMenuItems(items, page)
+
+  return [
     {
       id: `timeline-${side}-commits`,
       title: 'Commits',
-      subtitle: `${commitItems.length}/${props.timelineCommits.length} loaded`,
-      items: commitItems,
+      subtitle: `${items.length}/${props.timelineCommits.length} loaded`,
+      items: visibleItems,
     },
   ]
-
-  if (props.timelineHasMore || props.timelineLoading) {
-    groups.push({
-      id: `timeline-${side}-load-more`,
-      items: [
-        {
-          id: 'timeline-load-more',
-          label: props.timelineLoading ? 'Loading more commits...' : 'Load more commits',
-          description: props.timelineHasMore ? 'Fetch older history for broader search' : 'No more commits',
-          keywords: 'older history more commits',
-          disabled: props.timelineLoading || !props.timelineHasMore,
-        },
-      ],
-    })
-  }
-
-  return groups
 }
 
-const timelineLeftMenuGroups = computed(() => buildTimelineMenuGroups('left', timelineLeftMenuQuery.value))
-const timelineRightMenuGroups = computed(() => buildTimelineMenuGroups('right', timelineRightMenuQuery.value))
+const timelineLeftMenuItems = computed(() => buildTimelineMenuItems('left', timelineLeftMenuQuery.value))
+const timelineRightMenuItems = computed(() => buildTimelineMenuItems('right', timelineRightMenuQuery.value))
+
+const timelineLeftLoadedPageCount = computed(() =>
+  Math.max(1, Math.ceil(timelineLeftMenuItems.value.length / TIMELINE_MENU_PAGE_SIZE)),
+)
+const timelineRightLoadedPageCount = computed(() =>
+  Math.max(1, Math.ceil(timelineRightMenuItems.value.length / TIMELINE_MENU_PAGE_SIZE)),
+)
+
+const timelineLeftMenuDisplayPage = computed(() =>
+  Math.max(1, Math.min(timelineLeftMenuPage.value, timelineLeftLoadedPageCount.value)),
+)
+const timelineRightMenuDisplayPage = computed(() =>
+  Math.max(1, Math.min(timelineRightMenuPage.value, timelineRightLoadedPageCount.value)),
+)
+
+const timelineLeftMenuExternalPageCount = computed(
+  () => timelineLeftLoadedPageCount.value + (props.timelineHasMore ? 1 : 0),
+)
+const timelineRightMenuExternalPageCount = computed(
+  () => timelineRightLoadedPageCount.value + (props.timelineHasMore ? 1 : 0),
+)
+
+const timelineLeftMenuGroups = computed(() =>
+  buildTimelineMenuGroups('left', timelineLeftMenuItems.value, timelineLeftMenuDisplayPage.value),
+)
+const timelineRightMenuGroups = computed(() =>
+  buildTimelineMenuGroups('right', timelineRightMenuItems.value, timelineRightMenuDisplayPage.value),
+)
 
 const timelineLeftButtonLabel = computed(() => timelineCommitLabel(props.timelineLeftCommit))
 const timelineRightButtonLabel = computed(() => timelineCommitLabel(props.timelineRightCommit))
@@ -434,20 +458,45 @@ async function setTimelineMenuOpen(side: TimelineSide, value: boolean) {
 function setTimelineMenuQuery(side: TimelineSide, value: string) {
   if (side === 'left') {
     timelineLeftMenuQuery.value = value
+    timelineLeftMenuPage.value = 1
     return
   }
 
   timelineRightMenuQuery.value = value
+  timelineRightMenuPage.value = 1
+}
+
+function loadedTimelineMenuPageCount(side: TimelineSide): number {
+  return side === 'left' ? timelineLeftLoadedPageCount.value : timelineRightLoadedPageCount.value
+}
+
+function setTimelineMenuPage(side: TimelineSide, page: number) {
+  const safePage = Math.max(1, Math.floor(page || 1))
+  if (side === 'left') {
+    timelineLeftMenuPage.value = safePage
+    return
+  }
+  timelineRightMenuPage.value = safePage
+}
+
+async function requestTimelineMenuPage(side: TimelineSide, page: number) {
+  const targetPage = Math.max(1, Math.floor(page || 1))
+  const loadedPageCount = loadedTimelineMenuPageCount(side)
+  if (targetPage <= loadedPageCount) {
+    setTimelineMenuPage(side, targetPage)
+    return
+  }
+
+  if (!props.timelineHasMore || props.timelineLoading) return
+  await props.loadMoreTimeline()
+
+  const nextLoadedPageCount = loadedTimelineMenuPageCount(side)
+  setTimelineMenuPage(side, Math.min(targetPage, nextLoadedPageCount))
 }
 
 function handleTimelineMenuSelect(side: TimelineSide, item: OptionMenuItem) {
   const id = String(item?.id || '').trim()
   if (!id) return
-
-  if (id === 'timeline-load-more') {
-    void props.loadMoreTimeline()
-    return
-  }
 
   if (!id.startsWith('timeline-commit:')) return
   const hash = id.slice('timeline-commit:'.length).trim()
@@ -1454,11 +1503,12 @@ function onSendSelection() {
               :desktop-anchor-el="timelineLeftMenuAnchorEl"
               filter-mode="external"
               :close-on-select="false"
-              :paginated="true"
-              :page-size="10"
-              pagination-mode="item"
+              :external-page="timelineLeftMenuDisplayPage"
+              :external-page-count="timelineLeftMenuExternalPageCount"
+              :external-pager-loading="timelineLoading"
               @update:open="(v) => void setTimelineMenuOpen('left', v)"
               @update:query="(v) => setTimelineMenuQuery('left', v)"
+              @request-page="(page) => void requestTimelineMenuPage('left', page)"
               @select="(item) => handleTimelineMenuSelect('left', item)"
             />
 
@@ -1476,11 +1526,12 @@ function onSendSelection() {
               :desktop-anchor-el="timelineRightMenuAnchorEl"
               filter-mode="external"
               :close-on-select="false"
-              :paginated="true"
-              :page-size="10"
-              pagination-mode="item"
+              :external-page="timelineRightMenuDisplayPage"
+              :external-page-count="timelineRightMenuExternalPageCount"
+              :external-pager-loading="timelineLoading"
               @update:open="(v) => void setTimelineMenuOpen('right', v)"
               @update:query="(v) => setTimelineMenuQuery('right', v)"
+              @request-page="(page) => void requestTimelineMenuPage('right', page)"
               @select="(item) => handleTimelineMenuSelect('right', item)"
             />
           </div>

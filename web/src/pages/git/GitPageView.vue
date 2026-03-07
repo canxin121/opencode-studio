@@ -884,6 +884,7 @@ const mergeRebaseBranchOptions = computed(() => {
 const REPO_MENU_PAGE_SIZE = 30
 const repoMenuOpen = ref(false)
 const repoMenuQuery = ref('')
+const repoMenuAnchorEl = ref<HTMLElement | null>(null)
 
 const repoMenuGroups = computed<OptionMenuGroup[]>(() => {
   const selected = String(selectedRepoRelative.value || '.').trim() || '.'
@@ -911,24 +912,6 @@ const repoMenuGroups = computed<OptionMenuGroup[]>(() => {
       items: repoItems,
     },
   ]
-
-  if (repoPickerTotalPages.value > 1) {
-    groups.push({
-      id: 'repo-pager',
-      items: [
-        {
-          id: '__repo_prev',
-          label: t('common.previousPage'),
-          disabled: repoPickerLoading.value || repoPickerPage.value <= 1,
-        },
-        {
-          id: '__repo_next',
-          label: t('common.nextPage'),
-          disabled: repoPickerLoading.value || repoPickerPage.value >= repoPickerTotalPages.value,
-        },
-      ],
-    })
-  }
 
   const parentItems: OptionMenuItem[] = (parentRepos.value || []).map((rootPath: string) => ({
     id: `parent:${rootPath}`,
@@ -977,18 +960,6 @@ function onRepoMenuQueryChange(value: string) {
 
 function onRepoMenuSelect(item: OptionMenuItem) {
   const id = String(item.id || '')
-  if (id === '__repo_prev') {
-    if (repoPickerPage.value > 1) {
-      void requestRepoMenuPage(repoPickerPage.value - 1)
-    }
-    return
-  }
-  if (id === '__repo_next') {
-    if (repoPickerPage.value < repoPickerTotalPages.value) {
-      void requestRepoMenuPage(repoPickerPage.value + 1)
-    }
-    return
-  }
   if (id.startsWith('parent:')) {
     void openParentRepo(id.slice('parent:'.length))
     repoMenuOpen.value = false
@@ -1003,6 +974,7 @@ function onRepoMenuSelect(item: OptionMenuItem) {
 
 const branchMenuOpen = ref(false)
 const branchMenuQuery = ref('')
+const branchMenuAnchorEl = ref<HTMLElement | null>(null)
 
 const branchSwitcherOptions = computed<OptionMenuItem[]>(() => {
   const map = (branchPicker.value?.branches ?? {}) as Record<string, { name?: string; current?: boolean }>
@@ -1051,24 +1023,6 @@ const branchMenuGroups = computed<OptionMenuGroup[]>(() => {
     },
   ]
 
-  if (branchPickerTotalPages.value > 1) {
-    groups.push({
-      id: 'branch-pager',
-      items: [
-        {
-          id: '__branch_prev',
-          label: t('common.previousPage'),
-          disabled: branchPickerLoading.value || branchPickerPage.value <= 1,
-        },
-        {
-          id: '__branch_next',
-          label: t('common.nextPage'),
-          disabled: branchPickerLoading.value || branchPickerPage.value >= branchPickerTotalPages.value,
-        },
-      ],
-    })
-  }
-
   return groups
 })
 
@@ -1102,18 +1056,6 @@ function onBranchMenuQueryChange(value: string) {
 
 function onBranchMenuSelect(item: OptionMenuItem) {
   const id = String(item.id || '').trim()
-  if (id === '__branch_prev') {
-    if (branchPickerPage.value > 1) {
-      void requestBranchMenuPage(branchPickerPage.value - 1)
-    }
-    return
-  }
-  if (id === '__branch_next') {
-    if (branchPickerPage.value < branchPickerTotalPages.value) {
-      void requestBranchMenuPage(branchPickerPage.value + 1)
-    }
-    return
-  }
   const target = id
   if (!target) return
   const current = String(status.value?.current || '').trim()
@@ -1273,11 +1215,13 @@ void diffPaneRef
         <!-- Repository Selector -->
         <div class="relative">
           <button
+            ref="repoMenuAnchorEl"
             type="button"
             class="w-full flex items-center gap-2 rounded-sm border border-sidebar-border/60 bg-sidebar-accent/20 px-2 py-1.5 text-left transition"
             :class="projectRoot ? 'hover:bg-sidebar-accent/40' : 'opacity-70 cursor-not-allowed'"
             :disabled="!projectRoot"
-            @click="toggleRepoMenu"
+            @mousedown.prevent
+            @click.stop="toggleRepoMenu"
           >
             <span class="shrink-0 text-[10px] uppercase tracking-[0.08em] text-muted-foreground">{{
               t('git.ui.repository')
@@ -1301,10 +1245,15 @@ void diffPaneRef
             :filter-mode="'external'"
             :close-on-select="false"
             :desktop-fixed="true"
+            :desktop-anchor-el="repoMenuAnchorEl"
+            :external-page="repoPickerPage"
+            :external-page-count="repoPickerTotalPages"
+            :external-pager-loading="repoPickerLoading"
             desktop-placement="bottom-start"
             desktop-class="w-[26rem] max-w-[calc(100vw-1rem)]"
             @update:open="setRepoMenuOpen"
             @update:query="onRepoMenuQueryChange"
+            @request-page="requestRepoMenuPage"
             @select="onRepoMenuSelect"
           />
         </div>
@@ -1316,10 +1265,12 @@ void diffPaneRef
         <div v-if="gitReady" class="mt-1.5">
           <div class="relative">
             <button
+              ref="branchMenuAnchorEl"
               type="button"
               class="w-full flex items-center gap-1.5 rounded-sm px-1 py-1 text-[11px] transition-colors hover:bg-sidebar-accent/40"
               :disabled="repoBusy"
-              @click="toggleBranchMenu"
+              @mousedown.prevent
+              @click.stop="toggleBranchMenu"
             >
               <RiGitBranchLine class="h-3.5 w-3.5 shrink-0 text-primary" />
               <span class="min-w-0 flex-1 truncate text-left font-mono text-foreground/90" :title="status?.current">{{
@@ -1338,10 +1289,15 @@ void diffPaneRef
               :filter-mode="'external'"
               :close-on-select="false"
               :desktop-fixed="true"
+              :desktop-anchor-el="branchMenuAnchorEl"
+              :external-page="branchPickerPage"
+              :external-page-count="branchPickerTotalPages"
+              :external-pager-loading="branchPickerLoading"
               desktop-placement="bottom-start"
               desktop-class="w-72"
               @update:open="setBranchMenuOpen"
               @update:query="onBranchMenuQueryChange"
+              @request-page="requestBranchMenuPage"
               @select="onBranchMenuSelect"
             />
           </div>

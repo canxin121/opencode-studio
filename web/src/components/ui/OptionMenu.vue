@@ -60,6 +60,9 @@ const props = withDefaults(
     pageSize?: number
     paginationMode?: 'group' | 'item'
     collapsibleGroups?: boolean
+    externalPage?: number
+    externalPageCount?: number
+    externalPagerLoading?: boolean
   }>(),
   {
     query: '',
@@ -86,6 +89,9 @@ const props = withDefaults(
     pageSize: 80,
     paginationMode: 'group',
     collapsibleGroups: false,
+    externalPage: 1,
+    externalPageCount: 1,
+    externalPagerLoading: false,
   },
 )
 
@@ -93,6 +99,7 @@ const emit = defineEmits<{
   (e: 'update:open', value: boolean): void
   (e: 'update:query', value: string): void
   (e: 'select', item: OptionMenuItem): void
+  (e: 'request-page', page: number): void
   (e: 'close'): void
 }>()
 
@@ -549,7 +556,22 @@ const hasVisibleItems = computed(() => totalVisibleItemCount.value > 0)
 
 const showPager = computed(() => props.paginated && hasVisibleItems.value && pageCount.value > 1)
 
-const pagerLabel = computed(() => `${currentPage.value}/${pageCount.value}`)
+const externalPagerTotalPages = computed(() => Math.max(1, Math.floor(Number(props.externalPageCount) || 1)))
+const externalPagerCurrentPage = computed(() => {
+  const page = Math.floor(Number(props.externalPage) || 1)
+  return Math.max(1, Math.min(externalPagerTotalPages.value, page))
+})
+const useExternalPager = computed(() => props.filterMode === 'external' && externalPagerTotalPages.value > 1)
+const effectiveShowPager = computed(() =>
+  useExternalPager.value ? externalPagerTotalPages.value > 1 : showPager.value,
+)
+const pagerCurrentPage = computed(() => (useExternalPager.value ? externalPagerCurrentPage.value : currentPage.value))
+const pagerTotalPages = computed(() => (useExternalPager.value ? externalPagerTotalPages.value : pageCount.value))
+const pagerBusy = computed(() => useExternalPager.value && props.externalPagerLoading)
+const canGoPrev = computed(() => pagerCurrentPage.value > 1 && !pagerBusy.value)
+const canGoNext = computed(() => pagerCurrentPage.value < pagerTotalPages.value && !pagerBusy.value)
+
+const pagerLabel = computed(() => `${pagerCurrentPage.value}/${pagerTotalPages.value}`)
 
 watch(
   () => pageCount.value,
@@ -569,7 +591,7 @@ watch(
 )
 
 watch(
-  () => [props.query, totalVisibleItemCount.value, showPager.value] as const,
+  () => [props.query, totalVisibleItemCount.value, effectiveShowPager.value, pagerLabel.value] as const,
   () => {
     if (!props.open) return
     if (isMobileSheet.value) {
@@ -602,12 +624,20 @@ function updateQuery(value: string | number) {
 }
 
 function goToPrevPage() {
-  if (currentPage.value <= 1) return
+  if (!canGoPrev.value) return
+  if (useExternalPager.value) {
+    emit('request-page', pagerCurrentPage.value - 1)
+    return
+  }
   currentPage.value -= 1
 }
 
 function goToNextPage() {
-  if (currentPage.value >= pageCount.value) return
+  if (!canGoNext.value) return
+  if (useExternalPager.value) {
+    emit('request-page', pagerCurrentPage.value + 1)
+    return
+  }
   currentPage.value += 1
 }
 
@@ -837,7 +867,7 @@ defineExpose({ containsTarget, focusSearch })
         </div>
 
         <div
-          v-if="showPager"
+          v-if="effectiveShowPager"
           class="border-t border-border/40 px-2 py-1.5 flex items-center justify-between gap-2 bg-background/80"
         >
           <Button
@@ -846,7 +876,7 @@ defineExpose({ containsTarget, focusSearch })
             class="h-7 w-7 p-0"
             :title="t('common.previousPage')"
             :aria-label="t('common.previousPage')"
-            :disabled="currentPage <= 1"
+            :disabled="!canGoPrev"
             @click="goToPrevPage"
           >
             <RiArrowLeftSLine class="h-4 w-4" />
@@ -858,7 +888,7 @@ defineExpose({ containsTarget, focusSearch })
             class="h-7 w-7 p-0"
             :title="t('common.nextPage')"
             :aria-label="t('common.nextPage')"
-            :disabled="currentPage >= pageCount"
+            :disabled="!canGoNext"
             @click="goToNextPage"
           >
             <RiArrowRightSLine class="h-4 w-4" />
@@ -1005,7 +1035,7 @@ defineExpose({ containsTarget, focusSearch })
           </div>
 
           <div
-            v-if="showPager"
+            v-if="effectiveShowPager"
             class="border-t border-border/40 px-3 py-2 flex items-center justify-between gap-2 bg-background/80"
           >
             <Button
@@ -1014,7 +1044,7 @@ defineExpose({ containsTarget, focusSearch })
               class="h-8 w-8 p-0"
               :title="t('common.previousPage')"
               :aria-label="t('common.previousPage')"
-              :disabled="currentPage <= 1"
+              :disabled="!canGoPrev"
               @click="goToPrevPage"
             >
               <RiArrowLeftSLine class="h-4 w-4" />
@@ -1026,7 +1056,7 @@ defineExpose({ containsTarget, focusSearch })
               class="h-8 w-8 p-0"
               :title="t('common.nextPage')"
               :aria-label="t('common.nextPage')"
-              :disabled="currentPage >= pageCount"
+              :disabled="!canGoNext"
               @click="goToNextPage"
             >
               <RiArrowRightSLine class="h-4 w-4" />
