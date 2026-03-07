@@ -7,6 +7,7 @@ import Button from '@/components/ui/Button.vue'
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import FormDialog from '@/components/ui/FormDialog.vue'
 import Input from '@/components/ui/Input.vue'
+import SearchInput from '@/components/ui/SearchInput.vue'
 import ScrollArea from '@/components/ui/ScrollArea.vue'
 import Skeleton from '@/components/ui/Skeleton.vue'
 
@@ -82,11 +83,18 @@ function onQuickSwitch() {
       </div>
 
       <div class="space-y-2">
-        <Input
+        <SearchInput
           v-model="branchSearchQuery"
           :placeholder="t('common.search')"
-          class="h-8 text-sm font-mono"
-          @keydown.enter.prevent="onQuickSwitch"
+          class="text-sm"
+          input-class="h-8 text-sm font-mono"
+          :input-aria-label="t('common.search')"
+          :input-title="t('common.search')"
+          :search-aria-label="t('common.search')"
+          :search-title="t('common.search')"
+          :clear-aria-label="t('common.clear')"
+          :clear-title="t('common.clear')"
+          @search="onQuickSwitch"
         />
         <Button
           v-if="quickSwitchTarget"

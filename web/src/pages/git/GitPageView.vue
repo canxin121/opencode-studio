@@ -7,18 +7,17 @@ import {
   RiGitBranchLine,
   RiMore2Line,
   RiRefreshLine,
-  RiSearchLine,
 } from '@remixicon/vue'
 import { useI18n } from 'vue-i18n'
 
 import MiniActionButton from '@/components/ui/MiniActionButton.vue'
 import MobileSidebarEmptyState from '@/components/ui/MobileSidebarEmptyState.vue'
 import IconButton from '@/components/ui/IconButton.vue'
-import Input from '@/components/ui/Input.vue'
 import OptionMenu from '@/components/ui/OptionMenu.vue'
 import PaginationControls from '@/components/ui/PaginationControls.vue'
 import type { OptionMenuGroup, OptionMenuItem } from '@/components/ui/optionMenu.types'
 import ScrollArea from '@/components/ui/ScrollArea.vue'
+import SearchInput from '@/components/ui/SearchInput.vue'
 import SidebarIconButton from '@/components/ui/SidebarIconButton.vue'
 import GitCommitBox from '@/components/git/GitCommitBox.vue'
 import GitDiffPane from '@/components/git/GitDiffPane.vue'
@@ -1686,23 +1685,20 @@ void diffPaneRef
               </div>
 
               <div class="grid gap-2">
-                <div class="flex items-center gap-1.5">
-                  <Input
-                    v-model="historySearchDraft"
-                    class="h-8 flex-1 font-mono text-xs"
-                    :placeholder="t('git.ui.dialogs.history.placeholders.commitMetaContains')"
-                    @keydown.enter="onApplyHistoryFilters"
-                  />
-                  <SidebarIconButton
-                    size="sm"
-                    :tooltip="t('common.search')"
-                    :is-mobile-pointer="ui.isMobilePointer"
-                    :aria-label="t('common.search')"
-                    @click="onApplyHistoryFilters"
-                  >
-                    <RiSearchLine class="h-3.5 w-3.5" />
-                  </SidebarIconButton>
-                </div>
+                <SearchInput
+                  v-model="historySearchDraft"
+                  class="flex-1 text-xs"
+                  input-class="h-8 font-mono text-xs"
+                  :placeholder="t('git.ui.dialogs.history.placeholders.commitMetaContains')"
+                  :input-aria-label="t('common.search')"
+                  :input-title="t('common.search')"
+                  :search-aria-label="t('common.search')"
+                  :search-title="t('common.search')"
+                  :clear-aria-label="t('common.clear')"
+                  :clear-title="t('common.clear')"
+                  :is-mobile-pointer="ui.isMobilePointer"
+                  @search="onApplyHistoryFilters"
+                />
 
                 <div class="flex items-center justify-end gap-2">
                   <MiniActionButton size="xs" @click="refreshHistory">{{ t('common.refresh') }}</MiniActionButton>
