@@ -887,16 +887,18 @@ const repoMenuQuery = ref('')
 
 const repoMenuGroups = computed<OptionMenuGroup[]>(() => {
   const selected = String(selectedRepoRelative.value || '.').trim() || '.'
-  const repoItems: OptionMenuItem[] = (repoPickerRepos.value || []).map((repo) => {
-    const relative = String(repo.relative || '.').trim() || '.'
-    return {
-      id: `repo:${relative}`,
-      label: relative,
-      description: repo.root,
-      checked: relative === selected,
-      monospace: true,
-    }
-  })
+  const repoItems: OptionMenuItem[] = (repoPickerRepos.value || []).map(
+    (repo: { relative?: string; root?: string }) => {
+      const relative = String(repo.relative || '.').trim() || '.'
+      return {
+        id: `repo:${relative}`,
+        label: relative,
+        description: repo.root,
+        checked: relative === selected,
+        monospace: true,
+      }
+    },
+  )
 
   const groups: OptionMenuGroup[] = [
     {
@@ -928,7 +930,7 @@ const repoMenuGroups = computed<OptionMenuGroup[]>(() => {
     })
   }
 
-  const parentItems: OptionMenuItem[] = (parentRepos.value || []).map((rootPath) => ({
+  const parentItems: OptionMenuItem[] = (parentRepos.value || []).map((rootPath: string) => ({
     id: `parent:${rootPath}`,
     label: rootPath,
     monospace: true,
