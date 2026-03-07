@@ -42,6 +42,7 @@ export default {
     next: 'Suivant',
     previousPage: 'Page precedente',
     nextPage: 'Page suivante',
+    currentPage: 'Page actuelle',
     unknown: 'Inconnu',
     yes: 'Oui',
     no: 'Non',

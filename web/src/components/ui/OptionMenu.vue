@@ -1,20 +1,13 @@
 <script setup lang="ts">
 import { computed, isRef, nextTick, onBeforeUnmount, ref, watch, type CSSProperties } from 'vue'
 import { useI18n } from 'vue-i18n'
-import {
-  RiArrowDownSLine,
-  RiArrowLeftSLine,
-  RiArrowRightSLine,
-  RiCheckLine,
-  RiCloseLine,
-  RiMore2Line,
-} from '@remixicon/vue'
+import { RiArrowDownSLine, RiCheckLine, RiCloseLine, RiMore2Line } from '@remixicon/vue'
 
-import Button from '@/components/ui/Button.vue'
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import IconButton from '@/components/ui/IconButton.vue'
 import Input from '@/components/ui/Input.vue'
 import ListRowButton from '@/components/ui/ListRowButton.vue'
+import PaginationControls from '@/components/ui/PaginationControls.vue'
 import type { OptionMenuGroup, OptionMenuItem } from '@/components/ui/optionMenu.types'
 import { cn } from '@/lib/utils'
 
@@ -568,10 +561,6 @@ const effectiveShowPager = computed(() =>
 const pagerCurrentPage = computed(() => (useExternalPager.value ? externalPagerCurrentPage.value : currentPage.value))
 const pagerTotalPages = computed(() => (useExternalPager.value ? externalPagerTotalPages.value : pageCount.value))
 const pagerBusy = computed(() => useExternalPager.value && props.externalPagerLoading)
-const canGoPrev = computed(() => pagerCurrentPage.value > 1 && !pagerBusy.value)
-const canGoNext = computed(() => pagerCurrentPage.value < pagerTotalPages.value && !pagerBusy.value)
-
-const pagerLabel = computed(() => `${pagerCurrentPage.value}/${pagerTotalPages.value}`)
 
 watch(
   () => pageCount.value,
@@ -591,7 +580,14 @@ watch(
 )
 
 watch(
-  () => [props.query, totalVisibleItemCount.value, effectiveShowPager.value, pagerLabel.value] as const,
+  () =>
+    [
+      props.query,
+      totalVisibleItemCount.value,
+      effectiveShowPager.value,
+      pagerCurrentPage.value,
+      pagerTotalPages.value,
+    ] as const,
   () => {
     if (!props.open) return
     if (isMobileSheet.value) {
@@ -623,22 +619,15 @@ function updateQuery(value: string | number) {
   emit('update:query', String(value || ''))
 }
 
-function goToPrevPage() {
-  if (!canGoPrev.value) return
+function setPagerPage(nextPage: number) {
+  if (pagerBusy.value) return
+  const target = Math.max(1, Math.min(pagerTotalPages.value, Math.floor(nextPage || 1)))
+  if (target === pagerCurrentPage.value) return
   if (useExternalPager.value) {
-    emit('request-page', pagerCurrentPage.value - 1)
+    emit('request-page', target)
     return
   }
-  currentPage.value -= 1
-}
-
-function goToNextPage() {
-  if (!canGoNext.value) return
-  if (useExternalPager.value) {
-    emit('request-page', pagerCurrentPage.value + 1)
-    return
-  }
-  currentPage.value += 1
+  currentPage.value = target
 }
 
 async function focusSearch() {
@@ -870,29 +859,16 @@ defineExpose({ containsTarget, focusSearch })
           v-if="effectiveShowPager"
           class="border-t border-border/40 px-2 py-1.5 flex items-center justify-between gap-2 bg-background/80"
         >
-          <Button
-            size="sm"
-            variant="ghost"
-            class="h-7 w-7 p-0"
-            :title="t('common.previousPage')"
-            :aria-label="t('common.previousPage')"
-            :disabled="!canGoPrev"
-            @click="goToPrevPage"
-          >
-            <RiArrowLeftSLine class="h-4 w-4" />
-          </Button>
-          <div class="text-[11px] text-muted-foreground tabular-nums text-center">{{ pagerLabel }}</div>
-          <Button
-            size="sm"
-            variant="ghost"
-            class="h-7 w-7 p-0"
-            :title="t('common.nextPage')"
-            :aria-label="t('common.nextPage')"
-            :disabled="!canGoNext"
-            @click="goToNextPage"
-          >
-            <RiArrowRightSLine class="h-4 w-4" />
-          </Button>
+          <PaginationControls
+            class="w-full justify-center"
+            :page="pagerCurrentPage"
+            :total-pages="pagerTotalPages"
+            :disabled="pagerBusy"
+            :prev-label="t('common.previousPage')"
+            :next-label="t('common.nextPage')"
+            :page-input-label="t('common.currentPage')"
+            @update:page="setPagerPage"
+          />
         </div>
       </div>
     </Teleport>
@@ -1038,29 +1014,17 @@ defineExpose({ containsTarget, focusSearch })
             v-if="effectiveShowPager"
             class="border-t border-border/40 px-3 py-2 flex items-center justify-between gap-2 bg-background/80"
           >
-            <Button
-              size="sm"
-              variant="ghost"
-              class="h-8 w-8 p-0"
-              :title="t('common.previousPage')"
-              :aria-label="t('common.previousPage')"
-              :disabled="!canGoPrev"
-              @click="goToPrevPage"
-            >
-              <RiArrowLeftSLine class="h-4 w-4" />
-            </Button>
-            <div class="text-xs text-muted-foreground tabular-nums text-center">{{ pagerLabel }}</div>
-            <Button
-              size="sm"
-              variant="ghost"
-              class="h-8 w-8 p-0"
-              :title="t('common.nextPage')"
-              :aria-label="t('common.nextPage')"
-              :disabled="!canGoNext"
-              @click="goToNextPage"
-            >
-              <RiArrowRightSLine class="h-4 w-4" />
-            </Button>
+            <PaginationControls
+              class="w-full justify-center"
+              size="md"
+              :page="pagerCurrentPage"
+              :total-pages="pagerTotalPages"
+              :disabled="pagerBusy"
+              :prev-label="t('common.previousPage')"
+              :next-label="t('common.nextPage')"
+              :page-input-label="t('common.currentPage')"
+              @update:page="setPagerPage"
+            />
           </div>
         </div>
       </div>

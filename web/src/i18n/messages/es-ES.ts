@@ -33,6 +33,7 @@ export default {
     previous: 'Anterior',
     previousPage: 'Pagina anterior',
     nextPage: 'Pagina siguiente',
+    currentPage: 'Pagina actual',
     yes: 'Si',
     no: 'No',
     unknown: 'Desconocido',
