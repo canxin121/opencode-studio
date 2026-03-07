@@ -51,7 +51,29 @@ export interface GitBranch {
 }
 
 export interface GitBranchesResponse {
+  all: string[]
+  current: string
   branches: Record<string, GitBranch>
+  page?: number
+  pageSize?: number
+  total?: number
+  totalPages?: number
+  hasMore?: boolean
+  search?: string
+}
+
+export interface GitRepoListResponse {
+  repos: GitRepoEntry[]
+  count: number
+  base: string
+  parentRepos?: string[]
+  parentCount?: number
+  page?: number
+  pageSize?: number
+  total?: number
+  totalPages?: number
+  hasMore?: boolean
+  search?: string
 }
 
 export interface GitRemoteInfo {

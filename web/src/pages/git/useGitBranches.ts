@@ -27,8 +27,15 @@ export function useGitBranches(opts: {
   const { root, toasts, gitJson, withRepoBusy, handleGitBusy, load } = opts
 
   const branches = ref<GitBranchesResponse | null>(null)
+  const branchPicker = ref<GitBranchesResponse | null>(null)
   const isBranchDialogOpen = ref(false)
   const branchesLoading = ref(false)
+  const branchPickerLoading = ref(false)
+  const branchPickerPage = ref(1)
+  const branchPickerPageSize = ref(40)
+  const branchPickerTotal = ref(0)
+  const branchPickerTotalPages = ref(1)
+  const branchPickerSearch = ref('')
   const newBranchName = ref('')
   const renameBranchOpen = ref(false)
   const renameBranchFrom = ref('')
@@ -44,6 +51,39 @@ export function useGitBranches(opts: {
       branches.value = null
     } finally {
       branchesLoading.value = false
+    }
+  }
+
+  async function loadBranchPicker(opts?: { page?: number; pageSize?: number; search?: string }) {
+    const dir = root.value
+    if (!dir) return
+    const pageRaw = Number(opts?.page ?? branchPickerPage.value)
+    const pageSizeRaw = Number(opts?.pageSize ?? branchPickerPageSize.value)
+    const page = Number.isFinite(pageRaw) ? Math.max(1, Math.floor(pageRaw)) : 1
+    const pageSize = Number.isFinite(pageSizeRaw) ? Math.max(1, Math.floor(pageSizeRaw)) : 40
+    const search = String((opts?.search ?? branchPickerSearch.value) || '').trim()
+
+    branchPickerLoading.value = true
+    try {
+      const resp = await gitJson<GitBranchesResponse>('branches', dir, {
+        page,
+        pageSize,
+        search: search || undefined,
+        localOnly: true,
+      })
+      branchPicker.value = resp
+      branchPickerPage.value = Number(resp.page || page) || page
+      branchPickerPageSize.value = Number(resp.pageSize || pageSize) || pageSize
+      branchPickerTotal.value = Number(resp.total || Object.keys(resp.branches || {}).length) || 0
+      branchPickerTotalPages.value = Math.max(1, Number(resp.totalPages || 1) || 1)
+      branchPickerSearch.value = String(resp.search ?? search)
+    } catch {
+      branchPicker.value = null
+      branchPickerPage.value = 1
+      branchPickerTotal.value = 0
+      branchPickerTotalPages.value = 1
+    } finally {
+      branchPickerLoading.value = false
     }
   }
 
@@ -170,13 +210,21 @@ export function useGitBranches(opts: {
 
   return {
     branches,
+    branchPicker,
     isBranchDialogOpen,
     branchesLoading,
+    branchPickerLoading,
+    branchPickerPage,
+    branchPickerPageSize,
+    branchPickerTotal,
+    branchPickerTotalPages,
+    branchPickerSearch,
     newBranchName,
     renameBranchOpen,
     renameBranchFrom,
     renameBranchTo,
     loadBranches,
+    loadBranchPicker,
     createBranch,
     checkoutBranch,
     deleteBranch,
