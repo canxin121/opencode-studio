@@ -34,7 +34,8 @@ export const localStorageKeys = {
     gitmoji: namespacedKey('git.gitmoji'),
   },
   terminal: {
-    gitHandoffSessionId: namespacedKey('terminal.git-handoff-session-id'),
+    gitHandoffSessionName: namespacedKey('terminal.git-handoff-session-name'),
+    legacyGitHandoffSessionId: namespacedKey('terminal.git-handoff-session-id'),
   },
   files: {
     showHidden: namespacedKey('files.show-hidden'),
