@@ -1,12 +1,6 @@
 import { ref, watch } from 'vue'
 
-import type {
-  GitCommitDiffResponse,
-  GitCommitFile,
-  GitCommitFilesResponse,
-  GitLogCommit,
-  GitLogResponse,
-} from '@/types/git'
+import type { GitCommitFile, GitCommitFilesResponse, GitLogCommit, GitLogResponse } from '@/types/git'
 import type { JsonValue } from '@/types/json'
 
 type QueryValue = string | number | boolean | null | undefined
@@ -32,17 +26,11 @@ export function useGitHistoryLog(opts: { repoRoot: { value: string | null }; git
   const historyLimit = 40
 
   const historySelected = ref<GitLogCommit | null>(null)
-  const historyDiff = ref('')
-  const historyDiffLoading = ref(false)
-  const historyDiffError = ref<string | null>(null)
 
   const historyFiles = ref<GitCommitFile[]>([])
   const historyFilesLoading = ref(false)
   const historyFilesError = ref<string | null>(null)
   const historyFileSelected = ref<GitCommitFile | null>(null)
-  const historyFileDiff = ref('')
-  const historyFileDiffLoading = ref(false)
-  const historyFileDiffError = ref<string | null>(null)
 
   const historyFilterPath = ref<string | null>(null)
   const historyFilterAuthor = ref('')
@@ -51,20 +39,16 @@ export function useGitHistoryLog(opts: { repoRoot: { value: string | null }; git
   const historyFilterRefType = ref<'branch' | 'tag'>('branch')
 
   const COMMIT_DETAILS_CACHE_LIMIT = 80
-  const COMMIT_FILE_DIFF_CACHE_LIMIT = 160
   const HISTORY_PAGE_CACHE_LIMIT = 60
-  type CommitDetailsCacheValue = { files: GitCommitFile[]; diff: string }
+  type CommitDetailsCacheValue = { files: GitCommitFile[] }
   type HistoryPageCacheValue = { commits: GitLogCommit[]; hasMore: boolean }
   const commitDetailsCache = new Map<string, CommitDetailsCacheValue>()
-  const commitFileDiffCache = new Map<string, string>()
   const historyPageCache = new Map<string, HistoryPageCacheValue>()
 
   let historyLoadSeq = 0
   let selectCommitSeq = 0
-  let selectFileSeq = 0
   let activeHistoryAbort: AbortController | null = null
   let activeCommitAbort: AbortController | null = null
-  let activeFileDiffAbort: AbortController | null = null
 
   function setBoundedCache<K, V>(cache: Map<K, V>, key: K, value: V, maxEntries: number) {
     if (cache.has(key)) cache.delete(key)
@@ -112,15 +96,10 @@ export function useGitHistoryLog(opts: { repoRoot: { value: string | null }; git
 
   function clearHistorySelectionState() {
     historySelected.value = null
-    historyDiff.value = ''
-    historyDiffError.value = null
     historyFiles.value = []
     historyFilesError.value = null
     historyFileSelected.value = null
-    historyFileDiff.value = ''
-    historyFileDiffError.value = null
     activeCommitAbort?.abort()
-    activeFileDiffAbort?.abort()
   }
 
   function updateHistoryPageBounds(page: number, hasMore: boolean) {
@@ -221,18 +200,13 @@ export function useGitHistoryLog(opts: { repoRoot: { value: string | null }; git
     const commitCacheKey = `${dir}::${hash}`
 
     historySelected.value = commit
-    historyDiff.value = ''
-    historyDiffError.value = null
     historyFileSelected.value = null
-    historyFileDiff.value = ''
-    historyFileDiffError.value = null
     historyFiles.value = []
     historyFilesError.value = null
 
     const cached = commitDetailsCache.get(commitCacheKey)
     if (cached) {
       historyFiles.value = cached.files
-      historyDiff.value = cached.diff
       return
     }
 
@@ -242,40 +216,25 @@ export function useGitHistoryLog(opts: { repoRoot: { value: string | null }; git
     activeCommitAbort = abortController
 
     historyFilesLoading.value = true
-    historyDiffLoading.value = true
     try {
-      const [filesResp, diffResp] = await Promise.all([
-        gitJson<GitCommitFilesResponse>('commit-files', dir, { commit: hash }, { signal: abortController.signal }),
-        gitJson<GitCommitDiffResponse>(
-          'commit-diff',
-          dir,
-          {
-            commit: hash,
-            contextLines: 3,
-          },
-          { signal: abortController.signal },
-        ),
-      ])
+      const filesResp = await gitJson<GitCommitFilesResponse>(
+        'commit-files',
+        dir,
+        { commit: hash },
+        { signal: abortController.signal },
+      )
 
       if (requestSeq !== selectCommitSeq || abortController.signal.aborted) return
 
       historyFiles.value = Array.isArray(filesResp?.files) ? filesResp.files : []
-      historyDiff.value = diffResp?.diff || ''
-      setBoundedCache(
-        commitDetailsCache,
-        commitCacheKey,
-        { files: historyFiles.value, diff: historyDiff.value },
-        COMMIT_DETAILS_CACHE_LIMIT,
-      )
+      setBoundedCache(commitDetailsCache, commitCacheKey, { files: historyFiles.value }, COMMIT_DETAILS_CACHE_LIMIT)
     } catch (err) {
       if (requestSeq !== selectCommitSeq || isAbortError(err)) return
       const msg = err instanceof Error ? err.message : String(err)
-      historyDiffError.value = msg
       historyFilesError.value = msg
     } finally {
       if (requestSeq === selectCommitSeq) {
         historyFilesLoading.value = false
-        historyDiffLoading.value = false
       }
       if (activeCommitAbort === abortController) {
         activeCommitAbort = null
@@ -283,65 +242,12 @@ export function useGitHistoryLog(opts: { repoRoot: { value: string | null }; git
     }
   }
 
-  async function selectCommitFile(file: GitCommitFile) {
-    const dir = repoRoot.value
-    const commit = historySelected.value
-    if (!dir || !commit) return
-
-    const hash = String(commit.hash || '').trim()
-    const path = String(file.path || '').trim()
-    if (!hash || !path) return
-    const key = `${dir}::${hash}::${path}`
-
+  function selectCommitFile(file: GitCommitFile) {
     historyFileSelected.value = file
-    historyFileDiff.value = ''
-    historyFileDiffError.value = null
-
-    const cached = commitFileDiffCache.get(key)
-    if (typeof cached === 'string') {
-      historyFileDiff.value = cached
-      return
-    }
-
-    activeFileDiffAbort?.abort()
-    const requestSeq = ++selectFileSeq
-    const abortController = new AbortController()
-    activeFileDiffAbort = abortController
-
-    historyFileDiffLoading.value = true
-    try {
-      const resp = await gitJson<GitCommitDiffResponse>(
-        'commit-file-diff',
-        dir,
-        {
-          commit: hash,
-          path,
-          contextLines: 3,
-        },
-        { signal: abortController.signal },
-      )
-
-      if (requestSeq !== selectFileSeq || abortController.signal.aborted) return
-
-      historyFileDiff.value = resp?.diff || ''
-      setBoundedCache(commitFileDiffCache, key, historyFileDiff.value, COMMIT_FILE_DIFF_CACHE_LIMIT)
-    } catch (err) {
-      if (requestSeq !== selectFileSeq || isAbortError(err)) return
-      historyFileDiffError.value = err instanceof Error ? err.message : String(err)
-    } finally {
-      if (requestSeq === selectFileSeq) {
-        historyFileDiffLoading.value = false
-      }
-      if (activeFileDiffAbort === abortController) {
-        activeFileDiffAbort = null
-      }
-    }
   }
 
   function clearSelectedFile() {
     historyFileSelected.value = null
-    historyFileDiff.value = ''
-    historyFileDiffError.value = null
   }
 
   function openHistoryDialog() {
@@ -366,7 +272,6 @@ export function useGitHistoryLog(opts: { repoRoot: { value: string | null }; git
     historyOpen.value = false
     activeHistoryAbort?.abort()
     activeCommitAbort?.abort()
-    activeFileDiffAbort?.abort()
   }
 
   function refreshHistory() {
@@ -400,7 +305,6 @@ export function useGitHistoryLog(opts: { repoRoot: { value: string | null }; git
     () => repoRoot.value,
     () => {
       commitDetailsCache.clear()
-      commitFileDiffCache.clear()
       resetHistoryListState()
       clearHistorySelectionState()
       if (!historyOpen.value) return
@@ -419,16 +323,10 @@ export function useGitHistoryLog(opts: { repoRoot: { value: string | null }; git
     historyKnownLastPage,
     historyExactLastPage,
     historySelected,
-    historyDiff,
-    historyDiffLoading,
-    historyDiffError,
     historyFiles,
     historyFilesLoading,
     historyFilesError,
     historyFileSelected,
-    historyFileDiff,
-    historyFileDiffLoading,
-    historyFileDiffError,
     historyFilterPath,
     historyFilterAuthor,
     historyFilterMessage,

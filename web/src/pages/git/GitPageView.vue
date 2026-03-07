@@ -20,7 +20,7 @@ import ScrollArea from '@/components/ui/ScrollArea.vue'
 import SidebarIconButton from '@/components/ui/SidebarIconButton.vue'
 import GitCommitBox from '@/components/git/GitCommitBox.vue'
 import GitDiffPane from '@/components/git/GitDiffPane.vue'
-import DiffViewer from '@/components/DiffViewer.vue'
+import GitEditorDiffViewer from '@/components/git/GitEditorDiffViewer.vue'
 import GitMergeChangesSection from '@/components/git/GitMergeChangesSection.vue'
 import GitStagedChangesSection from '@/components/git/GitStagedChangesSection.vue'
 import GitChangesSection from '@/components/git/GitChangesSection.vue'
@@ -461,16 +461,10 @@ const {
   historyKnownLastPage,
   historyExactLastPage,
   historySelected,
-  historyDiff,
-  historyDiffLoading,
-  historyDiffError,
   historyFiles,
   historyFilesLoading,
   historyFilesError,
   historyFileSelected,
-  historyFileDiff,
-  historyFileDiffLoading,
-  historyFileDiffError,
   historyFilterPath,
   historyFilterAuthor,
   historyFilterMessage,
@@ -681,7 +675,6 @@ function onRevertActionMenuSelect(item: OptionMenuItem) {
 type SourceControlView = 'changes' | 'history' | 'historyCommit'
 
 const sourceControlView = ref<SourceControlView>('changes')
-const historyDiffWrap = ref(true)
 
 const isHistoryListView = computed(() => sourceControlView.value === 'history')
 const isHistoryCommitView = computed(() => sourceControlView.value === 'historyCommit')
@@ -696,21 +689,6 @@ const historyPageNumbers = computed(() => {
     pages.push(page)
   }
   return pages
-})
-
-const activeHistoryDiff = computed(() => {
-  if (historyFileSelected.value) return historyFileDiff.value
-  return historyDiff.value
-})
-
-const activeHistoryDiffLoading = computed(() => {
-  if (historyFileSelected.value) return historyFileDiffLoading.value
-  return historyDiffLoading.value
-})
-
-const activeHistoryDiffError = computed(() => {
-  if (historyFileSelected.value) return historyFileDiffError.value
-  return historyDiffError.value
 })
 
 const historySelectedMeta = computed(() => {
@@ -734,6 +712,13 @@ const historySelectedSummary = computed(() => {
     insertions,
     deletions,
   }
+})
+
+const historyParentCommitHash = computed(() => {
+  const commit = historySelected.value
+  if (!commit) return ''
+  const parents = Array.isArray(commit.parents) ? commit.parents : []
+  return String(parents[0] || '').trim()
 })
 
 const historyRefOptions = computed(() => {
@@ -781,9 +766,15 @@ function openFileHistoryWithRefs(path: string) {
 function onSelectHistoryCommit(commit: Parameters<typeof selectCommit>[0]) {
   sourceControlView.value = 'historyCommit'
   if (props.embedded) {
-    embeddedView.value = 'diff'
+    embeddedView.value = 'list'
   }
   void selectCommit(commit)
+}
+
+function onSelectHistoryCommitFile(file: Parameters<typeof selectCommitFile>[0]) {
+  selectCommitFile(file)
+  if (!props.embedded) return
+  embeddedView.value = 'diff'
 }
 
 function backToHistoryList() {
@@ -984,7 +975,7 @@ watch(
   (embedded) => {
     if (!embedded) return
     if (sourceControlView.value === 'historyCommit') {
-      embeddedView.value = 'diff'
+      embeddedView.value = historyFileSelected.value ? 'diff' : 'list'
       return
     }
     if (sourceControlView.value === 'history') {
@@ -1013,15 +1004,16 @@ watch(
       embeddedView.value = selectedFile.value ? 'diff' : 'list'
       return
     }
-    embeddedView.value = view === 'historyCommit' ? 'diff' : 'list'
+    if (view === 'historyCommit') {
+      embeddedView.value = historyFileSelected.value ? 'diff' : 'list'
+      return
+    }
+    embeddedView.value = 'list'
   },
 )
 
 function showEmbeddedList() {
   if (!props.embedded) return
-  if (sourceControlView.value === 'historyCommit') {
-    sourceControlView.value = 'history'
-  }
   embeddedView.value = 'list'
 }
 
@@ -1764,7 +1756,7 @@ void diffPaneRef
                   type="button"
                   class="w-full px-2 py-1.5 text-left text-xs hover:bg-sidebar-accent/35"
                   :class="historyFileSelected?.path === file.path ? 'bg-sidebar-accent/45' : ''"
-                  @click="selectCommitFile(file)"
+                  @click="onSelectHistoryCommitFile(file)"
                 >
                   <div class="flex min-w-0 items-center gap-2">
                     <span class="w-4 text-[10px] font-mono text-muted-foreground">{{ file.status }}</span>
@@ -1808,33 +1800,23 @@ void diffPaneRef
         <div class="flex items-center justify-between gap-2 border-b border-sidebar-border/50 px-2 py-1.5">
           <div class="truncate text-xs text-muted-foreground">
             {{
-              historyFileSelected
-                ? t('git.ui.dialogs.history.diffTitleFile', { file: historyFileSelected.path })
-                : t('git.ui.dialogs.history.diffTitleAllFiles')
+              historyFileSelected ? t('git.ui.dialogs.history.diffTitleFile', { file: historyFileSelected.path }) : ''
             }}
           </div>
-          <button
-            type="button"
-            class="rounded-sm border border-sidebar-border/60 px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-sidebar-accent/35 hover:text-foreground"
-            @click="historyDiffWrap = !historyDiffWrap"
-          >
-            {{ t('git.ui.dialogs.history.wrap.label') }}
-          </button>
         </div>
 
-        <div v-if="activeHistoryDiffError" class="px-3 py-2 text-xs text-destructive">{{ activeHistoryDiffError }}</div>
-        <div v-else-if="activeHistoryDiffLoading" class="px-3 py-2 text-xs text-muted-foreground">
-          {{ t('git.ui.dialogs.history.loadingDiff') }}
+        <div
+          v-if="!historyFileSelected"
+          class="flex min-h-0 flex-1 items-center justify-center px-4 text-xs text-muted-foreground"
+        >
+          {{ t('git.ui.dialogs.history.selectFileToViewDiff') }}
         </div>
-        <div v-else-if="!activeHistoryDiff" class="px-3 py-2 text-xs text-muted-foreground">
-          {{ t('git.ui.dialogs.history.emptyDiff') }}
-        </div>
-        <div v-else class="min-h-0 flex-1 overflow-hidden">
-          <DiffViewer
-            :diff="activeHistoryDiff"
-            output-format="side-by-side"
-            :draw-file-list="false"
-            :wrap="historyDiffWrap"
+        <div v-else class="min-h-0 flex-1 overflow-hidden px-2 py-2">
+          <GitEditorDiffViewer
+            :directory="root || ''"
+            :path="historyFileSelected.path"
+            :commit="historySelected?.hash || ''"
+            :parent-commit="historyParentCommitHash"
           />
         </div>
       </div>

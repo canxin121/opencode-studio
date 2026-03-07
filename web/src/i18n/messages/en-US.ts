@@ -2478,6 +2478,7 @@ export default {
           noMessage: '(no message)',
           emptyCommits: 'No commits',
           selectCommitToViewDiff: 'Select a commit to view diff.',
+          selectFileToViewDiff: 'Select a changed file to view diff.',
           fields: {
             refType: 'Ref type',
             ref: 'Ref',
