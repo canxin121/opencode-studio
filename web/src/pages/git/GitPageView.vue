@@ -5,6 +5,7 @@ import {
   RiArrowLeftSLine,
   RiArrowRightSLine,
   RiGitBranchLine,
+  RiClipboardLine,
   RiMore2Line,
   RiRefreshLine,
 } from '@remixicon/vue'
@@ -141,7 +142,6 @@ const {
   commitAll,
   commitEmpty,
   undoLastCommit,
-  cherryPickCommit,
   revertCommit,
   restoreCommitTemplate,
   discardCommitMessage,
@@ -837,10 +837,6 @@ function onHistoryCheckout(commit: HistoryCommitLike) {
 function onHistoryCreateBranch(commit: HistoryCommitLike) {
   branchFromRef.value = commit?.hash || ''
   branchFromOpen.value = true
-}
-
-function onHistoryCherryPick(commit: HistoryCommitLike) {
-  cherryPickCommit(commit?.hash || '')
 }
 
 function onHistoryRevert(commit: HistoryCommitLike) {
@@ -1779,9 +1775,6 @@ void diffPaneRef
               <RiArrowLeftSLine class="h-3.5 w-3.5" />
               {{ t('git.ui.dialogs.history.title') }}
             </button>
-            <MiniActionButton size="xs" :disabled="!historySelected" @click="openHistoryView">{{
-              t('common.back')
-            }}</MiniActionButton>
           </div>
 
           <div
@@ -1797,7 +1790,19 @@ void diffPaneRef
                 {{ historySelected.subject || t('git.ui.dialogs.history.noMessage') }}
               </div>
               <div class="mt-1 text-[10px] text-muted-foreground">{{ historySelectedMeta }}</div>
-              <div class="mt-0.5 font-mono text-[10px] text-muted-foreground">{{ historySelected.hash }}</div>
+              <div class="mt-0.5 flex items-center gap-1">
+                <div class="min-w-0 flex-1 truncate font-mono text-[10px] text-muted-foreground">
+                  {{ historySelected.hash }}
+                </div>
+                <IconButton
+                  size="sm"
+                  :tooltip="t('git.ui.dialogs.history.actions.copyHash')"
+                  :aria-label="t('git.ui.dialogs.history.actions.copyHash')"
+                  @click="copyCommitHash(historySelected.hash)"
+                >
+                  <RiClipboardLine class="h-3.5 w-3.5" />
+                </IconButton>
+              </div>
               <div class="mt-1 text-[10px] text-muted-foreground">
                 {{ t('common.files') }}: {{ historySelectedSummary.files }} · +{{
                   historySelectedSummary.insertions
@@ -1806,17 +1811,11 @@ void diffPaneRef
               </div>
 
               <div class="mt-2 flex flex-wrap gap-1">
-                <MiniActionButton size="xs" @click="copyCommitHash(historySelected.hash)">{{
-                  t('git.ui.dialogs.history.actions.copyHash')
-                }}</MiniActionButton>
                 <MiniActionButton size="xs" @click="onHistoryCheckout(historySelected)">{{
                   t('git.ui.dialogs.history.actions.checkout')
                 }}</MiniActionButton>
                 <MiniActionButton size="xs" @click="onHistoryCreateBranch(historySelected)">{{
                   t('git.ui.dialogs.history.actions.createBranch')
-                }}</MiniActionButton>
-                <MiniActionButton size="xs" @click="onHistoryCherryPick(historySelected)">{{
-                  t('git.ui.dialogs.history.actions.cherryPick')
                 }}</MiniActionButton>
                 <MiniActionButton size="xs" variant="destructive" @click="onHistoryRevert(historySelected)">{{
                   t('git.ui.dialogs.history.actions.revert')
@@ -1888,14 +1887,6 @@ void diffPaneRef
       </div>
 
       <div v-else-if="sourceControlView === 'historyCommit'" class="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div class="flex items-center justify-between gap-2 border-b border-sidebar-border/50 px-2 py-1.5">
-          <div class="truncate text-xs text-muted-foreground">
-            {{
-              historyFileSelected ? t('git.ui.dialogs.history.diffTitleFile', { file: historyFileSelected.path }) : ''
-            }}
-          </div>
-        </div>
-
         <div
           v-if="!historyFileSelected"
           class="flex min-h-0 flex-1 items-center justify-center px-4 text-xs text-muted-foreground"
