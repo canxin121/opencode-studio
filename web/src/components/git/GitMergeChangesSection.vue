@@ -83,60 +83,65 @@ function runMobileAction(path: string, actionId: string) {
     />
 
     <div v-if="expanded" class="space-y-0.5 px-1 pb-1">
-      <GitStatusListItem
-        v-for="f in files"
-        :key="f.path"
-        :path="f.path"
-        :active="selectedFile === f.path && diffSource === 'working'"
-        status-label="U"
-        status-class="oc-vscode-status-untracked"
-        :is-mobile-pointer="isMobilePointer"
-        :mobile-action-items="mobileActionsForFile(f.path)"
-        :mobile-action-title="t('git.ui.workingTree.fileActionsTitle')"
-        @select="$emit('select', f.path)"
-        @mobileAction="(id) => runMobileAction(f.path, id)"
-      >
-        <template #actions>
-          <SidebarIconButton
-            size="sm"
-            :tooltip="t('git.ui.workingTree.actions.history')"
-            :is-mobile-pointer="isMobilePointer"
-            :aria-label="t('git.ui.workingTree.actions.history')"
-            @click.stop="$emit('history', f.path)"
-          >
-            <RiHistoryLine class="h-3.5 w-3.5" />
-          </SidebarIconButton>
-          <ConfirmPopover
-            :title="t('git.ui.workingTree.confirmDiscard.title')"
-            :description="t('git.ui.workingTree.confirmDiscard.description')"
-            :confirm-text="t('common.discard')"
-            :cancel-text="t('common.cancel')"
-            variant="destructive"
-            @confirm="$emit('discard', f.path)"
-          >
+      <div v-if="loading && !files.length" class="oc-vscode-empty">{{ t('common.loading') }}</div>
+      <div v-else-if="!files.length" class="oc-vscode-empty">{{ t('git.ui.workingTree.empty.mergeChanges') }}</div>
+
+      <template v-else>
+        <GitStatusListItem
+          v-for="f in files"
+          :key="f.path"
+          :path="f.path"
+          :active="selectedFile === f.path && diffSource === 'working'"
+          status-label="U"
+          status-class="oc-vscode-status-untracked"
+          :is-mobile-pointer="isMobilePointer"
+          :mobile-action-items="mobileActionsForFile(f.path)"
+          :mobile-action-title="t('git.ui.workingTree.fileActionsTitle')"
+          @select="$emit('select', f.path)"
+          @mobileAction="(id) => runMobileAction(f.path, id)"
+        >
+          <template #actions>
             <SidebarIconButton
               size="sm"
-              destructive
-              :tooltip="t('git.ui.workingTree.actions.discardChanges')"
+              :tooltip="t('git.ui.workingTree.actions.history')"
               :is-mobile-pointer="isMobilePointer"
-              :aria-label="t('git.ui.workingTree.actions.discardChanges')"
-              @click.stop
+              :aria-label="t('git.ui.workingTree.actions.history')"
+              @click.stop="$emit('history', f.path)"
             >
-              <RiArrowGoBackLine class="h-3.5 w-3.5" />
+              <RiHistoryLine class="h-3.5 w-3.5" />
             </SidebarIconButton>
-          </ConfirmPopover>
-        </template>
-      </GitStatusListItem>
+            <ConfirmPopover
+              :title="t('git.ui.workingTree.confirmDiscard.title')"
+              :description="t('git.ui.workingTree.confirmDiscard.description')"
+              :confirm-text="t('common.discard')"
+              :cancel-text="t('common.cancel')"
+              variant="destructive"
+              @confirm="$emit('discard', f.path)"
+            >
+              <SidebarIconButton
+                size="sm"
+                destructive
+                :tooltip="t('git.ui.workingTree.actions.discardChanges')"
+                :is-mobile-pointer="isMobilePointer"
+                :aria-label="t('git.ui.workingTree.actions.discardChanges')"
+                @click.stop
+              >
+                <RiArrowGoBackLine class="h-3.5 w-3.5" />
+              </SidebarIconButton>
+            </ConfirmPopover>
+          </template>
+        </GitStatusListItem>
 
-      <button
-        v-if="hasMore"
-        type="button"
-        class="ml-5 rounded-sm px-2 py-1 text-left text-[11px] text-muted-foreground hover:bg-sidebar-accent/45 hover:text-foreground disabled:pointer-events-none disabled:opacity-60"
-        :disabled="loading"
-        @click="$emit('showMore')"
-      >
-        {{ t('git.ui.workingTree.showMoreCount', { shown: files.length, total: count }) }}
-      </button>
+        <button
+          v-if="hasMore"
+          type="button"
+          class="ml-5 rounded-sm px-2 py-1 text-left text-[11px] text-muted-foreground hover:bg-sidebar-accent/45 hover:text-foreground disabled:pointer-events-none disabled:opacity-60"
+          :disabled="loading"
+          @click="$emit('showMore')"
+        >
+          {{ t('git.ui.workingTree.showMoreCount', { shown: files.length, total: count }) }}
+        </button>
+      </template>
     </div>
   </div>
 </template>

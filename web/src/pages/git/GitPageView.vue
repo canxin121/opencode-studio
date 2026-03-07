@@ -459,7 +459,6 @@ const {
   historyError,
   historyCommits,
   historyHasMore,
-  historyLimit,
   historyCurrentPage,
   historyKnownLastPage,
   historyExactLastPage,
@@ -474,7 +473,6 @@ const {
   refreshHistory,
   clearHistoryFilter,
   applyHistoryFilters,
-  clearHistoryFilters,
   loadHistoryPage,
   selectCommit,
   selectCommitFile,
@@ -785,11 +783,6 @@ function onApplyHistoryFilters() {
   sourceControlView.value = 'history'
 }
 
-function onClearHistoryFilters() {
-  clearHistoryFilters()
-  sourceControlView.value = 'history'
-}
-
 function onClearHistoryPathFilter() {
   clearHistoryFilter()
   sourceControlView.value = 'history'
@@ -914,6 +907,10 @@ async function requestRepoMenuPage(page: number, query = repoMenuQuery.value) {
   await loadRepoPickerPage({ page, pageSize: REPO_MENU_PAGE_SIZE, search: query })
 }
 
+function refreshRepoMenuOptions() {
+  void requestRepoMenuPage(1, repoMenuQuery.value)
+}
+
 function toggleRepoMenu() {
   const nextOpen = !repoMenuOpen.value
   repoMenuOpen.value = nextOpen
@@ -1008,6 +1005,10 @@ const branchMenuGroups = computed<OptionMenuGroup[]>(() => {
 
 async function requestBranchMenuPage(page: number, query = branchMenuQuery.value) {
   await loadBranchPicker({ page, pageSize: 40, search: query })
+}
+
+function refreshBranchMenuOptions() {
+  void requestBranchMenuPage(1, branchMenuQuery.value)
 }
 
 function toggleBranchMenu() {
@@ -1229,6 +1230,9 @@ void diffPaneRef
             :external-page="repoPickerPage"
             :external-page-count="repoPickerTotalPages"
             :external-pager-loading="repoPickerLoading"
+            :loading="repoPickerLoading || reposLoading"
+            :refreshable="true"
+            :on-refresh="refreshRepoMenuOptions"
             desktop-placement="bottom-start"
             desktop-class="w-[26rem] max-w-[calc(100vw-1rem)]"
             @update:open="setRepoMenuOpen"
@@ -1273,6 +1277,9 @@ void diffPaneRef
               :external-page="branchPickerPage"
               :external-page-count="branchPickerTotalPages"
               :external-pager-loading="branchPickerLoading"
+              :loading="branchPickerLoading"
+              :refreshable="true"
+              :on-refresh="refreshBranchMenuOptions"
               desktop-placement="bottom-start"
               desktop-class="w-72"
               @update:open="setBranchMenuOpen"
@@ -1695,26 +1702,27 @@ void diffPaneRef
                   :is-mobile-pointer="ui.isMobilePointer"
                   @search="onApplyHistoryFilters"
                 />
-
-                <div class="flex items-center justify-end gap-2">
-                  <MiniActionButton size="xs" @click="refreshHistory">{{ t('common.refresh') }}</MiniActionButton>
-                  <MiniActionButton size="xs" @click="onClearHistoryFilters">{{ t('common.clear') }}</MiniActionButton>
-                </div>
               </div>
             </div>
 
             <div class="rounded-sm border border-sidebar-border/60 overflow-hidden">
               <div class="border-b border-sidebar-border/50 px-2 py-1">
-                <PaginationControls
-                  class="w-full justify-center"
-                  :page="historyCurrentPage"
-                  :total-pages="historyPaginationTotalPages"
-                  :disabled="historyLoading"
-                  :prev-label="t('common.previousPage')"
-                  :next-label="t('common.nextPage')"
-                  :page-input-label="t('common.currentPage')"
-                  @update:page="setHistoryPage"
-                />
+                <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                  <div aria-hidden="true" />
+                  <PaginationControls
+                    class="justify-center"
+                    :page="historyCurrentPage"
+                    :total-pages="historyPaginationTotalPages"
+                    :disabled="historyLoading"
+                    :prev-label="t('common.previousPage')"
+                    :next-label="t('common.nextPage')"
+                    :page-input-label="t('common.currentPage')"
+                    @update:page="setHistoryPage"
+                  />
+                  <div class="flex justify-end">
+                    <MiniActionButton size="xs" @click="refreshHistory">{{ t('common.refresh') }}</MiniActionButton>
+                  </div>
+                </div>
               </div>
 
               <div v-if="historyError" class="px-2 py-2 text-xs text-destructive">
@@ -1757,10 +1765,6 @@ void diffPaneRef
                 :page-input-label="t('common.currentPage')"
                 @update:page="setHistoryPage"
               />
-            </div>
-
-            <div class="px-1 text-[10px] text-muted-foreground">
-              {{ t('git.ui.dialogs.history.sections.commits') }} · {{ historyCommits.length }} / {{ historyLimit }}
             </div>
           </template>
         </div>

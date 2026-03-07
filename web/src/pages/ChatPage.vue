@@ -440,6 +440,20 @@ const composerPickerGroups = computed<OptionMenuGroup[]>(() => {
   return []
 })
 
+const composerPickerLoading = computed(() => {
+  if (composerPickerOpen.value !== 'model' && composerPickerOpen.value !== 'agent') return false
+  return modelSelection.catalogLoading.value
+})
+
+const composerPickerRefreshable = computed(
+  () => composerPickerOpen.value === 'model' || composerPickerOpen.value === 'agent',
+)
+
+function refreshComposerPickerOptions() {
+  if (!composerPickerRefreshable.value) return
+  void modelSelection.loadProvidersAndAgents()
+}
+
 function closeComposerPickerMenu() {
   composerPickerOpen.value = null
   modelPickerQuery.value = ''
@@ -1418,6 +1432,9 @@ const viewCtx = {
   composerPickerHelperText,
   composerPickerEmptyText,
   composerPickerGroups,
+  composerPickerLoading,
+  composerPickerRefreshable,
+  refreshComposerPickerOptions,
   setComposerPickerOpen,
   handleComposerPickerSelect,
   ...modelSelection,

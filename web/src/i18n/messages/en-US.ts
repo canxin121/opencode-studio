@@ -2821,6 +2821,12 @@ export default {
           mergeChanges: 'Merge Changes',
           stashChanges: 'Stash Changes',
         },
+        empty: {
+          mergeChanges: 'No merge changes',
+          stagedChanges: 'No staged changes',
+          changes: 'No changes',
+          untracked: 'No untracked files',
+        },
         actions: {
           stageAll: 'Stage all',
           stage: 'Stage',

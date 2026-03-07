@@ -1310,6 +1310,11 @@ async function loadMoreFileTimeline() {
   await loadFileTimeline(false)
 }
 
+async function refreshFileTimeline() {
+  if (!fileTimelineEnabled.value || !fileTimelinePath.value.trim()) return
+  await loadFileTimeline(true)
+}
+
 function openFileTimeline() {
   const file = selectedFile.value
   if (!file || file.type !== 'file' || viewerMode.value !== 'text') {
@@ -3729,6 +3734,7 @@ onMounted(async () => {
                 :toggle-git-diff-mode="toggleGitDiffMode"
                 :apply-git-patch="applyGitPatch"
                 :load-more-timeline="loadMoreFileTimeline"
+                :refresh-timeline="refreshFileTimeline"
                 :select-timeline-commit="selectFileTimelineCommit"
                 :open-timeline="openFileTimeline"
                 :open-sidebar="() => ui.setSessionSwitcherOpen(true)"

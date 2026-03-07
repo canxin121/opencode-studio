@@ -63,6 +63,7 @@ export function useModelSelectionCatalog(opts: {
 
   const providers = ref<Provider[]>([])
   const agents = ref<Agent[]>([])
+  const catalogLoading = ref(false)
 
   const resolvedOpencodeConfig = computed(() => {
     return projectConfigLayer.value || userConfigLayer.value || {}
@@ -250,53 +251,60 @@ export function useModelSelectionCatalog(opts: {
   }
 
   async function loadProvidersAndAgents() {
-    await refreshOpencodeConfig()
-
+    if (catalogLoading.value) return
+    catalogLoading.value = true
     try {
-      const resp = await apiJson<ProvidersConfigResp>(`/api/config/providers${dirQuery()}`)
-      const list = Array.isArray(resp?.providers) ? resp.providers : []
-      const defaults = resp?.default
-      const nextProviderDefaults: Record<string, string> = {}
-      if (isRecord(defaults) && !Array.isArray(defaults)) {
-        for (const [providerID, modelID] of Object.entries(defaults)) {
-          const pid = String(providerID || '').trim()
-          const mid = typeof modelID === 'string' ? modelID.trim() : ''
-          if (pid && mid) nextProviderDefaults[pid] = mid
+      await refreshOpencodeConfig()
+
+      try {
+        const resp = await apiJson<ProvidersConfigResp>(`/api/config/providers${dirQuery()}`)
+        const list = Array.isArray(resp?.providers) ? resp.providers : []
+        const defaults = resp?.default
+        const nextProviderDefaults: Record<string, string> = {}
+        if (isRecord(defaults) && !Array.isArray(defaults)) {
+          for (const [providerID, modelID] of Object.entries(defaults)) {
+            const pid = String(providerID || '').trim()
+            const mid = typeof modelID === 'string' ? modelID.trim() : ''
+            if (pid && mid) nextProviderDefaults[pid] = mid
+          }
         }
+        providerDefaultModels.value = nextProviderDefaults
+        providers.value = ensureDefaultProviderInList(mergeProviderLists(list, providerListFromConfig()))
+      } catch {
+        providerDefaultModels.value = {}
+        providers.value = ensureDefaultProviderInList(mergeProviderLists([], providerListFromConfig()))
       }
-      providerDefaultModels.value = nextProviderDefaults
-      providers.value = ensureDefaultProviderInList(mergeProviderLists(list, providerListFromConfig()))
-    } catch {
-      providerDefaultModels.value = {}
-      providers.value = ensureDefaultProviderInList(mergeProviderLists([], providerListFromConfig()))
-    }
 
-    try {
-      const resp = await apiJson<JsonLike>(`/api/agent${dirQuery()}`)
-      const list: Agent[] = Array.isArray(resp)
-        ? resp
-            .map((a) => {
-              const rec = asRecord(a)
-              return {
-                name: typeof rec.name === 'string' ? rec.name.trim() : '',
-                description: typeof rec.description === 'string' ? rec.description : undefined,
-                mode: typeof rec.mode === 'string' ? rec.mode : undefined,
-                hidden: typeof rec.hidden === 'boolean' ? rec.hidden : undefined,
-              }
-            })
-            .filter((a: Agent) => Boolean(a.name))
-        : []
+      try {
+        const resp = await apiJson<JsonLike>(`/api/agent${dirQuery()}`)
+        const list: Agent[] = Array.isArray(resp)
+          ? resp
+              .map((a) => {
+                const rec = asRecord(a)
+                return {
+                  name: typeof rec.name === 'string' ? rec.name.trim() : '',
+                  description: typeof rec.description === 'string' ? rec.description : undefined,
+                  mode: typeof rec.mode === 'string' ? rec.mode : undefined,
+                  hidden: typeof rec.hidden === 'boolean' ? rec.hidden : undefined,
+                }
+              })
+              .filter((a: Agent) => Boolean(a.name))
+          : []
 
-      const primary = list.filter(isSelectablePrimaryAgent)
-      agents.value = primary.length ? primary : agentListFromConfig()
-    } catch {
-      agents.value = agentListFromConfig()
+        const primary = list.filter(isSelectablePrimaryAgent)
+        agents.value = primary.length ? primary : agentListFromConfig()
+      } catch {
+        agents.value = agentListFromConfig()
+      }
+    } finally {
+      catalogLoading.value = false
     }
   }
 
   return {
     providers,
     agents,
+    catalogLoading,
     shareDisabled,
     projectConfigDefaults,
     userConfigDefaults,

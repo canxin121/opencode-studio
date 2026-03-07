@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, isRef, nextTick, onBeforeUnmount, ref, watch, type CSSProperties } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { RiArrowDownSLine, RiCheckLine, RiCloseLine, RiMore2Line } from '@remixicon/vue'
+import { RiArrowDownSLine, RiCheckLine, RiCloseLine, RiMore2Line, RiRefreshLine } from '@remixicon/vue'
 
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import IconButton from '@/components/ui/IconButton.vue'
@@ -56,6 +56,12 @@ const props = withDefaults(
     externalPage?: number
     externalPageCount?: number
     externalPagerLoading?: boolean
+    loading?: boolean
+    loadingSkeletonRows?: number
+    refreshable?: boolean
+    refreshing?: boolean
+    refreshLabel?: string
+    onRefresh?: (() => void | Promise<void>) | null
   }>(),
   {
     query: '',
@@ -85,6 +91,12 @@ const props = withDefaults(
     externalPage: 1,
     externalPageCount: 1,
     externalPagerLoading: false,
+    loading: false,
+    loadingSkeletonRows: 6,
+    refreshable: false,
+    refreshing: false,
+    refreshLabel: '',
+    onRefresh: null,
   },
 )
 
@@ -93,6 +105,7 @@ const emit = defineEmits<{
   (e: 'update:query', value: string): void
   (e: 'select', item: OptionMenuItem): void
   (e: 'request-page', page: number): void
+  (e: 'refresh'): void
   (e: 'close'): void
 }>()
 
@@ -107,11 +120,15 @@ const effectiveEmptyText = computed(() =>
 const effectiveCloseLabel = computed(() =>
   props.closeLabel && props.closeLabel.trim() ? props.closeLabel : t('common.close'),
 )
+const effectiveRefreshLabel = computed(() =>
+  props.refreshLabel && props.refreshLabel.trim() ? props.refreshLabel : t('common.refresh'),
+)
 
 const rootEl = ref<HTMLElement | null>(null)
 const panelEl = ref<HTMLElement | null>(null)
 const collapsedGroupByKey = ref<Record<string, boolean>>({})
 const currentPage = ref(1)
+const localRefreshing = ref(false)
 
 const isMobileSheet = computed(() => Boolean(props.isMobilePointer))
 const normalizedQuery = computed(() =>
@@ -546,6 +563,13 @@ const pagedGroups = computed<ResolvedGroup[]>(() => {
 
 const totalVisibleItemCount = computed(() => visibleGroups.value.reduce((sum, group) => sum + group.items.length, 0))
 const hasVisibleItems = computed(() => totalVisibleItemCount.value > 0)
+const showRefreshButton = computed(() => props.refreshable || typeof props.onRefresh === 'function')
+const refreshBusy = computed(() => props.refreshing || localRefreshing.value)
+const refreshDisabled = computed(() => refreshBusy.value || props.loading)
+const loadingSkeletonRows = computed(() => {
+  const count = Math.max(3, Math.floor(Number(props.loadingSkeletonRows) || 6))
+  return Array.from({ length: count }, (_, idx) => idx)
+})
 
 const showPager = computed(() => props.paginated && hasVisibleItems.value && pageCount.value > 1)
 
@@ -628,6 +652,21 @@ function setPagerPage(nextPage: number) {
     return
   }
   currentPage.value = target
+}
+
+async function triggerRefresh() {
+  if (!showRefreshButton.value || refreshDisabled.value) return
+  const callback = props.onRefresh
+  if (typeof callback === 'function') {
+    localRefreshing.value = true
+    try {
+      await callback()
+    } finally {
+      localRefreshing.value = false
+    }
+    return
+  }
+  emit('refresh')
 }
 
 async function focusSearch() {
@@ -741,8 +780,20 @@ defineExpose({ containsTarget, focusSearch })
         @pointerdown.stop
         @click.stop
       >
-        <div v-if="title" class="px-3 py-2 border-b border-border/40 text-xs font-semibold text-foreground">
-          {{ title }}
+        <div v-if="title || showRefreshButton" class="flex items-center gap-2 px-3 py-2 border-b border-border/40">
+          <div v-if="title" class="min-w-0 flex-1 text-xs font-semibold text-foreground truncate">{{ title }}</div>
+          <div v-else class="flex-1" />
+          <IconButton
+            v-if="showRefreshButton"
+            size="sm"
+            class="h-6 w-6 text-muted-foreground hover:text-foreground"
+            :title="effectiveRefreshLabel"
+            :aria-label="effectiveRefreshLabel"
+            :disabled="refreshDisabled"
+            @click="void triggerRefresh()"
+          >
+            <RiRefreshLine class="h-3.5 w-3.5" :class="refreshBusy ? 'animate-spin' : ''" />
+          </IconButton>
         </div>
 
         <div v-if="searchable" class="p-2 border-b border-border/40">
@@ -755,7 +806,25 @@ defineExpose({ containsTarget, focusSearch })
         </div>
 
         <div class="p-1 overflow-auto" :class="desktopContentMaxHeightClass">
-          <template v-if="hasVisibleItems">
+          <template v-if="loading">
+            <div class="space-y-1 px-1 py-1">
+              <div
+                v-for="idx in loadingSkeletonRows"
+                :key="`desktop-loading-${idx}`"
+                class="rounded-md border border-border/35 bg-secondary/20 px-2 py-2 animate-pulse"
+              >
+                <div class="flex items-start gap-2">
+                  <div class="h-4 w-4 rounded bg-muted-foreground/25" />
+                  <div class="min-w-0 flex-1 space-y-1.5">
+                    <div class="h-2.5 w-2/3 rounded bg-muted-foreground/25" />
+                    <div class="h-2 w-1/2 rounded bg-muted-foreground/20" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <template v-else-if="hasVisibleItems">
             <div
               v-for="(group, groupIndex) in pagedGroups"
               :key="group._key || `group-${groupIndex}`"
@@ -891,9 +960,21 @@ defineExpose({ containsTarget, focusSearch })
         >
           <div class="flex items-center justify-between gap-3 px-3 py-2 border-b border-border/40">
             <div class="text-sm font-semibold">{{ mobileTitle || title || t('common.options') }}</div>
-            <IconButton size="sm" :title="effectiveCloseLabel" :aria-label="effectiveCloseLabel" @click="closeMenu">
-              <RiCloseLine class="h-4 w-4" />
-            </IconButton>
+            <div class="flex items-center gap-1">
+              <IconButton
+                v-if="showRefreshButton"
+                size="sm"
+                :title="effectiveRefreshLabel"
+                :aria-label="effectiveRefreshLabel"
+                :disabled="refreshDisabled"
+                @click="void triggerRefresh()"
+              >
+                <RiRefreshLine class="h-4 w-4" :class="refreshBusy ? 'animate-spin' : ''" />
+              </IconButton>
+              <IconButton size="sm" :title="effectiveCloseLabel" :aria-label="effectiveCloseLabel" @click="closeMenu">
+                <RiCloseLine class="h-4 w-4" />
+              </IconButton>
+            </div>
           </div>
 
           <div v-if="searchable" class="p-3 border-b border-border/40">
@@ -906,7 +987,25 @@ defineExpose({ containsTarget, focusSearch })
           </div>
 
           <div class="flex-1 min-h-0 overflow-auto px-2 py-1.5">
-            <template v-if="hasVisibleItems">
+            <template v-if="loading">
+              <div class="space-y-2 px-1 py-1.5">
+                <div
+                  v-for="idx in loadingSkeletonRows"
+                  :key="`mobile-loading-${idx}`"
+                  class="rounded-md border border-border/35 bg-secondary/20 px-3 py-3 animate-pulse"
+                >
+                  <div class="mx-auto flex w-full max-w-[18rem] items-center gap-3">
+                    <div class="h-5 w-5 shrink-0 rounded bg-muted-foreground/25" />
+                    <div class="min-w-0 flex-1 space-y-1.5">
+                      <div class="h-3 w-3/4 rounded bg-muted-foreground/25" />
+                      <div class="h-2.5 w-1/2 rounded bg-muted-foreground/20" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </template>
+
+            <template v-else-if="hasVisibleItems">
               <div
                 v-for="(group, groupIndex) in pagedGroups"
                 :key="group._key || `mobile-group-${groupIndex}`"

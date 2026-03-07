@@ -2816,6 +2816,12 @@ export default {
           mergeChanges: '合并更改',
           stashChanges: '储藏更改',
         },
+        empty: {
+          mergeChanges: '没有合并更改',
+          stagedChanges: '没有暂存更改',
+          changes: '没有工作更改',
+          untracked: '没有未跟踪项',
+        },
         actions: {
           stageAll: '全部暂存',
           stage: '暂存',

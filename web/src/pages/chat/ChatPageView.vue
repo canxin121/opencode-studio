@@ -148,6 +148,9 @@ const {
   composerPickerHelperText,
   composerPickerEmptyText,
   composerPickerGroups,
+  composerPickerLoading,
+  composerPickerRefreshable,
+  refreshComposerPickerOptions,
   setComposerPickerOpen,
   handleComposerPickerSelect,
   hasVariantsForSelection,
@@ -493,6 +496,9 @@ void sessionActionsMenuRef
                       :search-placeholder="composerPickerSearchPlaceholder"
                       :empty-text="composerPickerEmptyText"
                       :helper-text="composerPickerHelperText"
+                      :loading="composerPickerLoading"
+                      :refreshable="composerPickerRefreshable"
+                      :on-refresh="refreshComposerPickerOptions"
                       :is-mobile-pointer="ui.isMobilePointer"
                       :desktop-fixed="true"
                       :desktop-style="composerPickerStyle"
