@@ -475,6 +475,7 @@ struct GitWatchStatusPayload {
     untracked_count: usize,
     merge_count: usize,
     is_clean: bool,
+    worktree_signature: String,
 }
 
 pub async fn git_watch(Query(q): Query<GitWatchQuery>) -> Response {
@@ -594,14 +595,23 @@ pub async fn git_watch(Query(q): Query<GitWatchQuery>) -> Response {
                         ""
                     }
 
+                    fn fnv1a64_update(hash: &mut u64, bytes: &[u8]) {
+                        const FNV_PRIME: u64 = 1099511628211;
+                        for byte in bytes {
+                            *hash ^= u64::from(*byte);
+                            *hash = hash.wrapping_mul(FNV_PRIME);
+                        }
+                    }
+
                     let mut staged_count: usize = 0;
                     let mut unstaged_count: usize = 0;
                     let mut untracked_count: usize = 0;
                     let mut merge_count: usize = 0;
                     let mut total_files: usize = 0;
+                    let mut worktree_signature: u64 = 1469598103934665603;
 
                     for entry in statuses.iter() {
-                        let Some(_path) = entry.path() else {
+                        let Some(path) = entry.path() else {
                             continue;
                         };
                         let st = entry.status();
@@ -617,6 +627,13 @@ pub async fn git_watch(Query(q): Query<GitWatchQuery>) -> Response {
                             x = "?";
                             y = "?";
                         }
+
+                        fnv1a64_update(&mut worktree_signature, x.as_bytes());
+                        fnv1a64_update(&mut worktree_signature, b"|");
+                        fnv1a64_update(&mut worktree_signature, y.as_bytes());
+                        fnv1a64_update(&mut worktree_signature, b"|");
+                        fnv1a64_update(&mut worktree_signature, path.as_bytes());
+                        fnv1a64_update(&mut worktree_signature, b"\n");
 
                         total_files += 1;
 
@@ -649,6 +666,7 @@ pub async fn git_watch(Query(q): Query<GitWatchQuery>) -> Response {
                         untracked_count,
                         merge_count,
                         is_clean: total_files == 0,
+                        worktree_signature: format!("{worktree_signature:016x}"),
                     })
                 }
             })

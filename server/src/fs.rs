@@ -35,6 +35,7 @@ const DEFAULT_CONTENT_SEARCH_CONTEXT_CHARS: usize = 48;
 const MAX_CONTENT_SEARCH_CONTEXT_CHARS: usize = 160;
 const MAX_CONTENT_SEARCH_FILE_BYTES: u64 = 2 * 1024 * 1024;
 const MAX_CONTENT_REPLACE_PATHS: usize = 4000;
+const MAX_FS_CHANGE_EVENT_PATHS: usize = 160;
 
 const FILE_SEARCH_EXCLUDED_DIRS: &[&str] = &[
     "node_modules",
@@ -48,6 +49,93 @@ const FILE_SEARCH_EXCLUDED_DIRS: &[&str] = &[
     "tmp",
     "logs",
 ];
+
+fn is_false(value: &bool) -> bool {
+    !*value
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FsChangedEventProperties {
+    directory: String,
+    change_type: String,
+    paths: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    old_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    new_path: Option<String>,
+    #[serde(skip_serializing_if = "is_false")]
+    truncated: bool,
+}
+
+#[derive(Debug, Serialize)]
+struct FsChangedEvent {
+    #[serde(rename = "type")]
+    event_type: &'static str,
+    properties: FsChangedEventProperties,
+}
+
+fn encode_fs_changed_event<I>(
+    root: &Path,
+    change_type: &str,
+    changed_paths: I,
+    old_path: Option<&Path>,
+    new_path: Option<&Path>,
+) -> Option<String>
+where
+    I: IntoIterator,
+    I::Item: AsRef<Path>,
+{
+    let mut seen = HashSet::<String>::new();
+    let mut paths = Vec::<String>::new();
+    let mut truncated = false;
+
+    for path in changed_paths {
+        let normalized = to_api_path(path.as_ref());
+        if normalized.trim().is_empty() || !seen.insert(normalized.clone()) {
+            continue;
+        }
+        if paths.len() >= MAX_FS_CHANGE_EVENT_PATHS {
+            truncated = true;
+            continue;
+        }
+        paths.push(normalized);
+    }
+
+    if paths.is_empty() {
+        return None;
+    }
+
+    serde_json::to_string(&FsChangedEvent {
+        event_type: "opencode-studio:fs-changed",
+        properties: FsChangedEventProperties {
+            directory: to_api_path(root),
+            change_type: change_type.to_string(),
+            paths,
+            old_path: old_path.map(to_api_path),
+            new_path: new_path.map(to_api_path),
+            truncated,
+        },
+    })
+    .ok()
+}
+
+pub(crate) fn publish_fs_changed_event<I>(
+    root: &Path,
+    change_type: &str,
+    changed_paths: I,
+    old_path: Option<&Path>,
+    new_path: Option<&Path>,
+) where
+    I: IntoIterator,
+    I::Item: AsRef<Path>,
+{
+    if let Some(encoded) =
+        encode_fs_changed_event(root, change_type, changed_paths, old_path, new_path)
+    {
+        crate::global_sse_hub::publish_downstream_json(&encoded);
+    }
+}
 
 fn has_parent_dir_component(p: &Path) -> bool {
     p.components().any(|c| matches!(c, Component::ParentDir))
@@ -157,7 +245,9 @@ pub async fn resolve_project_directory(
         header_directory.or(query_directory.map(|v| v.trim()).filter(|v| !v.is_empty()));
 
     if let Some(req) = requested {
-        return validate_directory(req).await;
+        let resolved = validate_directory(req).await?;
+        crate::fs_watch::hint_watch_root(&resolved);
+        return Ok(resolved);
     }
 
     Err(AppError::bad_request("Directory parameter is required"))
@@ -231,7 +321,7 @@ pub async fn fs_mkdir(
         .filter(|p| !p.is_empty())
         .ok_or_else(|| AppError::bad_request("Path is required"))?;
 
-    let (_base, resolved) = resolve_workspace_path_from_context(
+    let (base, resolved) = resolve_workspace_path_from_context(
         state.as_ref(),
         &headers,
         q.directory.as_deref(),
@@ -246,6 +336,8 @@ pub async fn fs_mkdir(
             AppError::internal(err.to_string())
         }
     })?;
+
+    publish_fs_changed_event(&base, "mkdir", [resolved.as_path()], None, None);
 
     Ok(Json(SuccessPathResponse {
         success: true,
@@ -667,7 +759,7 @@ pub async fn fs_upload(
 
     let overwrite = q.overwrite.unwrap_or(false);
 
-    let (_base, resolved) = resolve_workspace_path_from_context(
+    let (base, resolved) = resolve_workspace_path_from_context(
         state.as_ref(),
         &headers,
         q.directory.as_deref(),
@@ -708,6 +800,8 @@ pub async fn fs_upload(
             std::io::ErrorKind::IsADirectory => AppError::bad_request("Target path is a directory"),
             _ => AppError::internal(err.to_string()),
         })?;
+
+    publish_fs_changed_event(&base, "upload", [resolved.as_path()], None, None);
 
     let upload_mime = mime_for_ext(&resolved);
     if let Err(err) = state
@@ -756,7 +850,7 @@ pub async fn fs_write(
         return Err(AppError::payload_too_large("Content too large"));
     }
 
-    let (_base, resolved) = resolve_workspace_path_from_context(
+    let (base, resolved) = resolve_workspace_path_from_context(
         state.as_ref(),
         &headers,
         q.directory.as_deref(),
@@ -782,6 +876,8 @@ pub async fn fs_write(
         }
     })?;
 
+    publish_fs_changed_event(&base, "write", [resolved.as_path()], None, None);
+
     Ok(Json(SuccessPathResponse {
         success: true,
         path: to_api_path(&resolved),
@@ -806,7 +902,7 @@ pub async fn fs_delete(
         .filter(|p| !p.is_empty())
         .ok_or_else(|| AppError::bad_request("Path is required"))?;
 
-    let (_base, resolved) = resolve_workspace_path_from_context(
+    let (base, resolved) = resolve_workspace_path_from_context(
         state.as_ref(),
         &headers,
         q.directory.as_deref(),
@@ -844,6 +940,8 @@ pub async fn fs_delete(
             AppError::internal(err.to_string())
         }
     })?;
+
+    publish_fs_changed_event(&base, "delete", [resolved.as_path()], None, None);
 
     Ok(Json(SuccessPathResponse {
         success: true,
@@ -906,6 +1004,14 @@ pub async fn fs_rename(
             std::io::ErrorKind::PermissionDenied => AppError::forbidden("Access denied"),
             _ => AppError::internal(err.to_string()),
         })?;
+
+    publish_fs_changed_event(
+        &base_old,
+        "rename",
+        [resolved_old.as_path(), resolved_new.as_path()],
+        Some(&resolved_old),
+        Some(&resolved_new),
+    );
 
     Ok(Json(SuccessPathResponse {
         success: true,
@@ -1006,6 +1112,8 @@ pub async fn fs_list(Query(q): Query<ListQuery>) -> ApiResult<Json<ListResponse>
     if !meta.is_dir() {
         return Err(AppError::bad_request("Specified path is not a directory"));
     }
+
+    crate::fs_watch::hint_watch_root(&abs);
 
     let mut rd = tokio::fs::read_dir(&abs)
         .await
@@ -1238,6 +1346,8 @@ pub async fn fs_search(Query(q): Query<SearchQuery>) -> ApiResult<Json<SearchRes
     if !stats.is_dir() {
         return Err(AppError::bad_request("Specified root is not a directory"));
     }
+
+    crate::fs_watch::hint_watch_root(&abs_root);
 
     let query_norm = raw_query.trim().to_ascii_lowercase();
     let match_all = query_norm.is_empty();
@@ -1937,6 +2047,8 @@ pub async fn fs_content_replace(
                 _ => AppError::internal(err.to_string()),
             })?;
 
+        publish_fs_changed_event(&root, "replace-content", [resolved.as_path()], None, None);
+
         let relative_path = normalize_relative_search_path(&root, &resolved);
         return Ok(Json(ContentReplaceResponse {
             root: to_api_path(&root),
@@ -1979,6 +2091,7 @@ pub async fn fs_content_replace(
     };
 
     let mut files = Vec::new();
+    let mut changed_paths = Vec::new();
     let mut total_replacements = 0usize;
     let mut skipped = 0usize;
 
@@ -2011,12 +2124,17 @@ pub async fn fs_content_replace(
         }
 
         total_replacements += replacements;
+        changed_paths.push(path.clone());
         let relative_path = normalize_relative_search_path(&root, &path);
         files.push(ContentReplaceFileResult {
             path: to_api_path(&path),
             relative_path,
             replacements,
         });
+    }
+
+    if !changed_paths.is_empty() {
+        publish_fs_changed_event(&root, "replace-content", changed_paths.iter(), None, None);
     }
 
     files.sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
@@ -2070,6 +2188,56 @@ mod tests {
     fn to_api_path_uses_forward_slashes() {
         let path = Path::new("C:\\Users\\Alice\\workspace\\file.txt");
         assert_eq!(to_api_path(path), "C:/Users/Alice/workspace/file.txt");
+    }
+
+    #[test]
+    fn encode_fs_changed_event_includes_rename_paths() {
+        let root = Path::new("/tmp/workspace");
+        let old_path = Path::new("/tmp/workspace/src/old.ts");
+        let new_path = Path::new("/tmp/workspace/src/new.ts");
+
+        let payload = encode_fs_changed_event(
+            root,
+            "rename",
+            [old_path, new_path],
+            Some(old_path),
+            Some(new_path),
+        )
+        .expect("expected fs event payload");
+
+        let value: serde_json::Value = serde_json::from_str(&payload).expect("valid json payload");
+        assert_eq!(value["type"], "opencode-studio:fs-changed");
+        assert_eq!(value["properties"]["directory"], "/tmp/workspace");
+        assert_eq!(value["properties"]["changeType"], "rename");
+        assert_eq!(value["properties"]["oldPath"], "/tmp/workspace/src/old.ts");
+        assert_eq!(value["properties"]["newPath"], "/tmp/workspace/src/new.ts");
+        assert_eq!(
+            value["properties"]["paths"]
+                .as_array()
+                .map(|items| items.len()),
+            Some(2)
+        );
+    }
+
+    #[test]
+    fn encode_fs_changed_event_deduplicates_and_truncates_paths() {
+        let root = Path::new("/tmp/workspace");
+        let mut paths = Vec::new();
+        for idx in 0..(MAX_FS_CHANGE_EVENT_PATHS + 5) {
+            let rel = format!("src/file-{idx}.ts");
+            paths.push(root.join(&rel));
+            paths.push(root.join(rel));
+        }
+
+        let payload = encode_fs_changed_event(root, "replace-content", paths.iter(), None, None)
+            .expect("expected fs event payload");
+        let value: serde_json::Value = serde_json::from_str(&payload).expect("valid json payload");
+        let reported = value["properties"]["paths"]
+            .as_array()
+            .map(|items| items.len())
+            .expect("paths array");
+        assert_eq!(reported, MAX_FS_CHANGE_EVENT_PATHS);
+        assert_eq!(value["properties"]["truncated"], true);
     }
 
     #[test]

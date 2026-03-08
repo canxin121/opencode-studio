@@ -34,6 +34,18 @@ export function useGitStatusPaged(opts: {
   const hasMoreUntracked = computed(() => untrackedList.value.length < untrackedCount.value)
 
   type Scope = 'staged' | 'unstaged' | 'untracked' | 'merge'
+  const pendingReloadByScope: Record<Scope, boolean> = {
+    merge: false,
+    staged: false,
+    unstaged: false,
+    untracked: false,
+  }
+  const latestDirectoryByScope: Record<Scope, string> = {
+    merge: '',
+    staged: '',
+    unstaged: '',
+    untracked: '',
+  }
 
   function listForScope(scope: Scope) {
     if (scope === 'merge') return mergeList
@@ -63,9 +75,47 @@ export function useGitStatusPaged(opts: {
     })
   }
 
+  async function reloadScopeFirstPage(directory: string, scope: Scope) {
+    if (!opts.gitReady.value) return
+    const trimmedDirectory = directory.trim()
+    if (!trimmedDirectory) return
+
+    latestDirectoryByScope[scope] = trimmedDirectory
+    const list = listForScope(scope)
+    const loading = loadingForScope(scope)
+
+    if (loading.value) {
+      pendingReloadByScope[scope] = true
+      return
+    }
+
+    loading.value = true
+    try {
+      const resp = await opts.loadStatusPage({
+        directory: trimmedDirectory,
+        scope,
+        offset: 0,
+        limit: opts.pageSize,
+      })
+      list.value = mapFiles(resp)
+    } finally {
+      loading.value = false
+      if (pendingReloadByScope[scope]) {
+        pendingReloadByScope[scope] = false
+        const queuedDirectory = latestDirectoryByScope[scope]
+        if (queuedDirectory) {
+          void reloadScopeFirstPage(queuedDirectory, scope)
+        }
+      }
+    }
+  }
+
   async function loadMore(directory: string, scope: Scope) {
     if (!opts.gitReady.value) return
-    if (!directory.trim()) return
+    const trimmedDirectory = directory.trim()
+    if (!trimmedDirectory) return
+
+    latestDirectoryByScope[scope] = trimmedDirectory
 
     const list = listForScope(scope)
     const loading = loadingForScope(scope)
@@ -75,7 +125,7 @@ export function useGitStatusPaged(opts: {
     try {
       const offset = list.value.length
       const resp = await opts.loadStatusPage({
-        directory,
+        directory: trimmedDirectory,
         scope,
         offset,
         limit: opts.pageSize,
@@ -84,33 +134,23 @@ export function useGitStatusPaged(opts: {
       if (next.length) list.value = [...list.value, ...next]
     } finally {
       loading.value = false
+      if (pendingReloadByScope[scope]) {
+        pendingReloadByScope[scope] = false
+        const queuedDirectory = latestDirectoryByScope[scope] || trimmedDirectory
+        if (queuedDirectory) {
+          void reloadScopeFirstPage(queuedDirectory, scope)
+        }
+      }
     }
   }
 
   async function reloadFirstPages(directory: string) {
     if (!opts.gitReady.value) return
-    if (!directory.trim()) return
+    const trimmedDirectory = directory.trim()
+    if (!trimmedDirectory) return
 
     const scopes: Scope[] = ['merge', 'staged', 'unstaged', 'untracked']
-    await Promise.all(
-      scopes.map(async (scope) => {
-        const list = listForScope(scope)
-        const loading = loadingForScope(scope)
-        if (loading.value) return
-        loading.value = true
-        try {
-          const resp = await opts.loadStatusPage({
-            directory,
-            scope,
-            offset: 0,
-            limit: opts.pageSize,
-          })
-          list.value = mapFiles(resp)
-        } finally {
-          loading.value = false
-        }
-      }),
-    )
+    await Promise.all(scopes.map((scope) => reloadScopeFirstPage(trimmedDirectory, scope)))
   }
 
   function resetAll() {
@@ -118,6 +158,14 @@ export function useGitStatusPaged(opts: {
     stagedList.value = []
     changesList.value = []
     untrackedList.value = []
+    pendingReloadByScope.merge = false
+    pendingReloadByScope.staged = false
+    pendingReloadByScope.unstaged = false
+    pendingReloadByScope.untracked = false
+    latestDirectoryByScope.merge = ''
+    latestDirectoryByScope.staged = ''
+    latestDirectoryByScope.unstaged = ''
+    latestDirectoryByScope.untracked = ''
   }
 
   return {

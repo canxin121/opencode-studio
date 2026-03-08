@@ -131,15 +131,6 @@ export function connectGlobalWs(opts: SseClientOptions): SseClient {
       const sessionKey = sid ? `:${String(sid)}` : ''
       return `message.part.updated:${directory}${sessionKey}:${String(mid)}:${String(pid)}`
     }
-    if (evt.type === 'chat-sidebar.delta') {
-      return `chat-sidebar.delta:${directory}`
-    }
-    if (evt.type === 'chat-sidebar.state') {
-      return `chat-sidebar.state:${directory}`
-    }
-    if (evt.type === 'chat-sidebar.patch') {
-      return `chat-sidebar.patch:${directory}`
-    }
     return null
   }
 

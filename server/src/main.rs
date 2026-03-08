@@ -10,6 +10,7 @@ mod directory_session_index;
 mod directory_sessions;
 mod error;
 mod fs;
+mod fs_watch;
 mod git;
 mod git2_utils;
 mod global_sse_hub;

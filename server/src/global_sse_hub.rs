@@ -213,6 +213,58 @@ pub(crate) fn downstream_client_count() -> usize {
     GLOBAL_HUB.downstream_client_count()
 }
 
+#[cfg(test)]
+pub(crate) struct TestDownstreamSubscriber {
+    rx: broadcast::Receiver<HubFrame>,
+}
+
+#[cfg(test)]
+impl TestDownstreamSubscriber {
+    pub(crate) async fn recv_matching_json<F>(
+        &mut self,
+        timeout: Duration,
+        predicate: F,
+    ) -> Option<serde_json::Value>
+    where
+        F: Fn(&serde_json::Value) -> bool,
+    {
+        let deadline = tokio::time::Instant::now() + timeout;
+        loop {
+            let now = tokio::time::Instant::now();
+            if now >= deadline {
+                return None;
+            }
+
+            let wait = deadline.saturating_duration_since(now);
+            let recv = match tokio::time::timeout(wait, self.rx.recv()).await {
+                Ok(result) => result,
+                Err(_) => return None,
+            };
+
+            match recv {
+                Ok(frame) => {
+                    let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&frame.payload_json)
+                    else {
+                        continue;
+                    };
+                    if predicate(&parsed) {
+                        return Some(parsed);
+                    }
+                }
+                Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(broadcast::error::RecvError::Closed) => return None,
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn subscribe_test_downstream() -> TestDownstreamSubscriber {
+    TestDownstreamSubscriber {
+        rx: GLOBAL_HUB.tx.subscribe(),
+    }
+}
+
 fn sse_frame(seq: u64, payload_json: &str) -> Bytes {
     let id = seq.to_string();
     let mut out = BytesMut::with_capacity(4 + id.len() + 7 + payload_json.len() + 2);
@@ -378,6 +430,8 @@ async fn read_activity_policy(
 }
 
 pub(crate) fn start_global_sse_hub_if_needed(state: Arc<crate::AppState>) {
+    crate::fs_watch::start_fs_watch_hub_if_needed(state.clone());
+
     if !GLOBAL_HUB.mark_started() {
         return;
     }

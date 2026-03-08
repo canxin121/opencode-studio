@@ -236,6 +236,7 @@ export function useAppRuntime() {
           activity.applyEvent(evt)
           chat.applyEvent(evt)
           directorySessions.applyGlobalEvent(evt)
+          directoryStore.applyGlobalEvent(evt)
         },
         onError: (err) => {
           // When the stream drops mid-run the UI can get stuck on partial output.

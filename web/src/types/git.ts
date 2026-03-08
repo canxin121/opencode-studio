@@ -39,6 +39,7 @@ export interface GitWatchStatusPayload {
   untrackedCount: number
   mergeCount: number
   isClean: boolean
+  worktreeSignature?: string
 }
 
 export interface GitBranch {

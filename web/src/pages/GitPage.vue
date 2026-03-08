@@ -766,6 +766,8 @@ const {
     }
 
     // Debounce list refreshes; avoid thrashing on rapid edits.
+    const prevSignature = typeof prev?.worktreeSignature === 'string' ? prev.worktreeSignature : ''
+    const nextSignature = typeof payload.worktreeSignature === 'string' ? payload.worktreeSignature : ''
     const changedCounts =
       !prev ||
       prev.current !== payload.current ||
@@ -775,7 +777,8 @@ const {
       prev.unstagedCount !== payload.unstagedCount ||
       prev.untrackedCount !== payload.untrackedCount ||
       prev.mergeCount !== payload.mergeCount ||
-      prev.isClean !== payload.isClean
+      prev.isClean !== payload.isClean ||
+      prevSignature !== nextSignature
 
     if (changedCounts && !loading.value) {
       if (watchRefreshTimer.value) window.clearTimeout(watchRefreshTimer.value)

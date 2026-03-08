@@ -231,15 +231,6 @@ export function connectSse(opts: SseClientOptions): SseClient {
       const sessionKey = sid ? `:${String(sid)}` : ''
       return `message.part.updated:${dir}${sessionKey}:${String(mid)}:${String(pid)}`
     }
-    if (evt.type === 'chat-sidebar.delta') {
-      return `chat-sidebar.delta:${dir}`
-    }
-    if (evt.type === 'chat-sidebar.state') {
-      return `chat-sidebar.state:${dir}`
-    }
-    if (evt.type === 'chat-sidebar.patch') {
-      return `chat-sidebar.patch:${dir}`
-    }
     return null
   }
 

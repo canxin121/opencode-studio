@@ -167,6 +167,60 @@ test('connectSse: coalesces message.part.updated deltas within a frame', async (
   assert.equal(received[0].properties.delta, 'Hello world')
 })
 
+test('connectSse: does not coalesce chat-sidebar.delta events', async () => {
+  installDomLikeGlobals()
+  const originalFetch = globalThis.fetch
+
+  const payload1 = {
+    type: 'chat-sidebar.delta',
+    properties: {
+      delta: { ops: [{ type: 'invalidateDirectory', directoryId: 'd1' }] },
+    },
+  }
+  const payload2 = {
+    type: 'chat-sidebar.delta',
+    properties: {
+      delta: { ops: [{ type: 'invalidateFooter', kind: 'recent' }] },
+    },
+  }
+  const chunk =
+    'id: 1\n' + `data: ${JSON.stringify(payload1)}\n\n` + 'id: 2\n' + `data: ${JSON.stringify(payload2)}\n\n`
+
+  globalThis.fetch = async () => {
+    let sent = false
+    return {
+      ok: true,
+      body: {
+        getReader() {
+          return {
+            async read() {
+              if (sent) return { done: true, value: undefined }
+              sent = true
+              return { done: false, value: new TextEncoder().encode(chunk) }
+            },
+            releaseLock() {},
+          }
+        },
+      },
+    }
+  }
+
+  const received = []
+  const client = connectSse({
+    endpoint: '/fake',
+    stallTimeoutMsVisible: 50,
+    onEvent: (evt) => received.push(evt),
+  })
+
+  await new Promise((r) => setTimeout(r, 60))
+  client.close()
+  globalThis.fetch = originalFetch
+
+  assert.equal(received.length, 2)
+  assert.equal(received[0].type, 'chat-sidebar.delta')
+  assert.equal(received[1].type, 'chat-sidebar.delta')
+})
+
 test('connectSse: aborts stalled reads and increments stallCount', async () => {
   installDomLikeGlobals()
   const originalFetch = globalThis.fetch

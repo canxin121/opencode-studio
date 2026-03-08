@@ -95,7 +95,7 @@ import { useChatStore } from '@/stores/chat'
 import { useSettingsStore } from '@/stores/settings'
 import type { Settings } from '@/stores/settings'
 import { useToastsStore } from '@/stores/toasts'
-import { useDirectoryStore } from '@/stores/directory'
+import { useDirectoryStore, type FsChangeEvent } from '@/stores/directory'
 import { useUiStore } from '@/stores/ui'
 
 const STORAGE_FILES_SHOW_HIDDEN = localStorageKeys.files.showHidden
@@ -113,6 +113,10 @@ const FILE_CHUNK_BYTES = 256 * 1024
 const LARGE_FILE_WARNING_BYTES = 1024 * 1024
 const FILE_AUTO_REFRESH_INTERVAL_MS = 9_000
 const FILE_AUTO_REFRESH_EDIT_IDLE_MS = 4_500
+const FILE_TREE_BACKGROUND_SYNC_INTERVAL_MS = 12_000
+const FILE_TREE_BACKGROUND_SYNC_MIN_GAP_MS = 5_000
+const FILE_TREE_BACKGROUND_SYNC_DEBOUNCE_MS = 260
+const FILE_TREE_EVENT_SYNC_DEBOUNCE_MS = 140
 const HIDDEN_FILE_RELATIVE_PATHS = new Set(['web/src/data/directorySessionSnapshotDb.ts'])
 
 const chat = useChatStore()
@@ -435,6 +439,18 @@ let autoSaveTimer: number | null = null
 let fileAutoRefreshTimer: number | null = null
 let fileRefreshSeq = 0
 let lastDraftEditAt = 0
+let treeBackgroundSyncTimer: number | null = null
+let treeBackgroundSyncInterval: number | null = null
+let treeBackgroundSyncInFlight = false
+let treeBackgroundSyncQueued = false
+let lastTreeBackgroundSyncAt = 0
+let filePageVisibilityHandler: (() => void) | null = null
+let filePageFocusHandler: (() => void) | null = null
+let fsEventSyncTimer: number | null = null
+let fsEventSyncInFlight = false
+let fsEventSyncQueued = false
+let fsEventSyncForceRootRefresh = false
+const fsEventPendingPaths = new Set<string>()
 
 function clearAutoSaveTimer() {
   if (autoSaveTimer !== null) {
@@ -447,6 +463,27 @@ function clearFileAutoRefreshTimer() {
   if (fileAutoRefreshTimer !== null) {
     window.clearInterval(fileAutoRefreshTimer)
     fileAutoRefreshTimer = null
+  }
+}
+
+function clearTreeBackgroundSyncTimer() {
+  if (treeBackgroundSyncTimer !== null) {
+    window.clearTimeout(treeBackgroundSyncTimer)
+    treeBackgroundSyncTimer = null
+  }
+}
+
+function clearTreeBackgroundSyncInterval() {
+  if (treeBackgroundSyncInterval !== null) {
+    window.clearInterval(treeBackgroundSyncInterval)
+    treeBackgroundSyncInterval = null
+  }
+}
+
+function clearFsEventSyncTimer() {
+  if (fsEventSyncTimer !== null) {
+    window.clearTimeout(fsEventSyncTimer)
+    fsEventSyncTimer = null
   }
 }
 
@@ -1616,6 +1653,160 @@ async function refreshRoot() {
     await loadDirectory(dir, { force: true })
     if (root.value !== rootPath) return
   }
+}
+
+function shouldRunTreeBackgroundSync(opts?: { force?: boolean }): boolean {
+  if (!pageMounted) return false
+  if (!root.value) return false
+  if (!opts?.force) {
+    if (document.visibilityState !== 'visible') return false
+    if (!showFilesSidebar.value) return false
+    if (explorerSidebarMode.value !== 'tree') return false
+    if (Date.now() - lastTreeBackgroundSyncAt < FILE_TREE_BACKGROUND_SYNC_MIN_GAP_MS) return false
+  }
+  if (uploading.value) return false
+  if (deletingPaths.value.size > 0) return false
+  if (inFlightDirs.value.size > 0) return false
+  if (dialogSubmitting.value || moveDialogSubmitting.value) return false
+  return true
+}
+
+async function runTreeBackgroundSync(opts?: { force?: boolean }) {
+  if (!shouldRunTreeBackgroundSync(opts)) return
+  if (treeBackgroundSyncInFlight) {
+    treeBackgroundSyncQueued = true
+    return
+  }
+
+  treeBackgroundSyncInFlight = true
+  try {
+    await refreshRoot()
+    lastTreeBackgroundSyncAt = Date.now()
+  } finally {
+    treeBackgroundSyncInFlight = false
+    if (treeBackgroundSyncQueued) {
+      treeBackgroundSyncQueued = false
+      scheduleTreeBackgroundSync(FILE_TREE_BACKGROUND_SYNC_DEBOUNCE_MS)
+    }
+  }
+}
+
+function scheduleTreeBackgroundSync(delayMs = FILE_TREE_BACKGROUND_SYNC_DEBOUNCE_MS, opts?: { force?: boolean }) {
+  if (!root.value) return
+  if (!opts?.force && Date.now() - lastTreeBackgroundSyncAt < FILE_TREE_BACKGROUND_SYNC_MIN_GAP_MS) {
+    return
+  }
+  clearTreeBackgroundSyncTimer()
+  treeBackgroundSyncTimer = window.setTimeout(
+    () => {
+      treeBackgroundSyncTimer = null
+      void runTreeBackgroundSync(opts)
+    },
+    Math.max(0, Math.floor(delayMs)),
+  )
+}
+
+function startTreeBackgroundSyncInterval() {
+  clearTreeBackgroundSyncInterval()
+  treeBackgroundSyncInterval = window.setInterval(() => {
+    scheduleTreeBackgroundSync(0)
+  }, FILE_TREE_BACKGROUND_SYNC_INTERVAL_MS)
+}
+
+function resetFsEventSyncState() {
+  clearFsEventSyncTimer()
+  fsEventSyncInFlight = false
+  fsEventSyncQueued = false
+  fsEventSyncForceRootRefresh = false
+  fsEventPendingPaths.clear()
+}
+
+function parentDirectoryPathForFsEvent(path: string, rootPath: string): string {
+  const normalized = trimTrailingSlashes(normalizePath(String(path || '').trim()))
+  if (!normalized) return rootPath
+  if (normalized === rootPath) return rootPath
+  const parent = trimTrailingSlashes(normalized.split('/').slice(0, -1).join('/'))
+  if (!parent) return rootPath
+  if (!withinWorkspace(parent, rootPath)) return rootPath
+  return parent
+}
+
+function queueFsEventPathRefresh(path: string, rootPath: string) {
+  const normalized = trimTrailingSlashes(normalizePath(String(path || '').trim()))
+  if (!normalized || !withinWorkspace(normalized, rootPath)) return
+  fsEventPendingPaths.add(parentDirectoryPathForFsEvent(normalized, rootPath))
+  if (loadedDirs.value.has(normalized)) {
+    fsEventPendingPaths.add(normalized)
+  }
+}
+
+function scheduleFsEventSync(delayMs = FILE_TREE_EVENT_SYNC_DEBOUNCE_MS) {
+  clearFsEventSyncTimer()
+  fsEventSyncTimer = window.setTimeout(
+    () => {
+      fsEventSyncTimer = null
+      void flushFsEventSyncQueue()
+    },
+    Math.max(0, Math.floor(delayMs)),
+  )
+}
+
+async function flushFsEventSyncQueue() {
+  if (fsEventSyncInFlight) {
+    fsEventSyncQueued = true
+    return
+  }
+
+  const workspaceRoot = root.value
+  if (!workspaceRoot) return
+
+  fsEventSyncInFlight = true
+  const forceRootRefresh = fsEventSyncForceRootRefresh
+  const targetDirectories = Array.from(fsEventPendingPaths)
+  fsEventSyncForceRootRefresh = false
+  fsEventPendingPaths.clear()
+
+  try {
+    if (forceRootRefresh || targetDirectories.length === 0) {
+      await refreshRoot()
+      return
+    }
+
+    for (const directoryPath of targetDirectories) {
+      if (root.value !== workspaceRoot) return
+      await loadDirectory(directoryPath, { force: true })
+    }
+  } finally {
+    fsEventSyncInFlight = false
+    if (fsEventSyncQueued) {
+      fsEventSyncQueued = false
+      scheduleFsEventSync(90)
+    }
+  }
+}
+
+function queueFsEventSync(event: FsChangeEvent) {
+  const workspaceRoot = root.value
+  if (!workspaceRoot) return
+
+  const eventRoot = trimTrailingSlashes(normalizePath(String(event.directory || '').trim()))
+  const workspacePaths = event.paths
+    .map((path) => trimTrailingSlashes(normalizePath(String(path || '').trim())))
+    .filter((path) => path && withinWorkspace(path, workspaceRoot))
+
+  if (workspacePaths.length === 0) {
+    if (event.truncated && eventRoot === workspaceRoot) {
+      fsEventSyncForceRootRefresh = true
+      scheduleFsEventSync(40)
+    }
+    return
+  }
+
+  for (const path of workspacePaths) {
+    queueFsEventPathRefresh(path, workspaceRoot)
+  }
+
+  scheduleFsEventSync()
 }
 
 function collapseAllDirectories() {
@@ -2864,6 +3055,20 @@ watch(
 
 onMounted(() => {
   window.addEventListener('keydown', handleGlobalKeydown)
+  filePageVisibilityHandler = () => {
+    if (document.visibilityState === 'visible') {
+      scheduleTreeBackgroundSync(120, { force: true })
+    }
+  }
+  document.addEventListener('visibilitychange', filePageVisibilityHandler)
+  filePageFocusHandler = () => {
+    scheduleTreeBackgroundSync(80, { force: true })
+  }
+  window.addEventListener('focus', filePageFocusHandler)
+
+  startTreeBackgroundSyncInterval()
+  scheduleTreeBackgroundSync(FILE_TREE_BACKGROUND_SYNC_DEBOUNCE_MS, { force: true })
+
   if (autoSaveEnabled.value) {
     startFileAutoRefreshTimer()
   }
@@ -2878,12 +3083,26 @@ onBeforeUnmount(() => {
   closeRefreshConflictDialog()
   clearAutoSaveTimer()
   clearFileAutoRefreshTimer()
+  clearTreeBackgroundSyncTimer()
+  clearTreeBackgroundSyncInterval()
+  resetFsEventSyncState()
+  treeBackgroundSyncInFlight = false
+  treeBackgroundSyncQueued = false
+  lastTreeBackgroundSyncAt = 0
   if (persistExplorerTimer !== null) {
     window.clearTimeout(persistExplorerTimer)
     persistExplorerTimer = null
   }
   persistExplorerNow()
   window.removeEventListener('keydown', handleGlobalKeydown)
+  if (filePageVisibilityHandler) {
+    document.removeEventListener('visibilitychange', filePageVisibilityHandler)
+    filePageVisibilityHandler = null
+  }
+  if (filePageFocusHandler) {
+    window.removeEventListener('focus', filePageFocusHandler)
+    filePageFocusHandler = null
+  }
 })
 
 function normalizeCreateDirectory(basePath: string): string {
@@ -3195,6 +3414,7 @@ async function restoreForRoot(next: string) {
   lastDraftEditAt = 0
 
   closeFileTimeline()
+  resetFsEventSyncState()
 
   selectedFile.value = null
   clearSelectedPaths()
@@ -3247,6 +3467,9 @@ async function restoreForRoot(next: string) {
   }
 
   await restoreSelectedFile(next, seq)
+  if (!isStaleRootRestore(seq, next)) {
+    scheduleTreeBackgroundSync(FILE_TREE_BACKGROUND_SYNC_DEBOUNCE_MS, { force: true })
+  }
 }
 
 watch(
@@ -3254,6 +3477,16 @@ watch(
   (next) => {
     if (!pageMounted) return
     void restoreForRoot(next)
+  },
+)
+
+watch(
+  () => directoryStore.fsEventSeq,
+  () => {
+    if (!pageMounted) return
+    const event = directoryStore.lastFsChangeEvent
+    if (!event) return
+    queueFsEventSync(event)
   },
 )
 
