@@ -115,7 +115,7 @@ export function useAppRuntime() {
       void chat.refreshMessages(sid, { silent: true }).catch(() => {})
     }
     void activity.refresh().catch(() => {})
-    directorySessions.scheduleSidebarRecoverySync(`resume:${reason}`, 160)
+    directorySessions.scheduleSidebarRecoverySync(`resume:${reason}`, 80, { force: true })
 
     try {
       console.debug('[sse] resync after resume:', reason)
