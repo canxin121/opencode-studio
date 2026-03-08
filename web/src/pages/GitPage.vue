@@ -726,6 +726,7 @@ let loadSeq = 0
 // Live status watch (SSE). This keeps the SCM panel "fresh" while files change.
 async function refreshListsFromWatch(directory: string) {
   await Promise.all([loadConflicts(directory).catch(() => (conflictPaths.value = [])), reloadFirstPages(directory)])
+  refreshDiff()
 }
 
 async function refreshAfterWorkingTreeChange() {
@@ -737,6 +738,7 @@ async function refreshAfterWorkingTreeChange() {
     loadConflicts(directory).catch(() => (conflictPaths.value = [])),
     reloadFirstPages(directory),
   ])
+  refreshDiff()
 }
 
 const {
