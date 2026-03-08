@@ -97,6 +97,10 @@ function applyUiPrefsToLocal(prefsRaw: Parameters<typeof normalizeSidebarUiPrefs
   }
 
   const nextCollapsedDirectories = toIdSet(prefs.collapsedDirectoryIds)
+  for (const pendingDirectoryId of collapseCommandPendingIds.value) {
+    if (directoryExpandLoadingIds.value.has(pendingDirectoryId)) continue
+    nextCollapsedDirectories.add(pendingDirectoryId)
+  }
   if (!setsEquivalent(collapsedDirectories.value, nextCollapsedDirectories)) {
     collapsedDirectories.value = nextCollapsedDirectories
   }
@@ -106,19 +110,19 @@ function applyUiPrefsToLocal(prefsRaw: Parameters<typeof normalizeSidebarUiPrefs
     expandedParents.value = nextExpandedParents
   }
 
-  if (runningSessionsOpen.value !== prefs.runningSessionsOpen) {
+  if (!runningSessionsOpenUpdating.value && runningSessionsOpen.value !== prefs.runningSessionsOpen) {
     runningSessionsOpen.value = prefs.runningSessionsOpen
   }
   if (runningSessionsPage.value !== prefs.runningSessionsPage) {
     runningSessionsPage.value = prefs.runningSessionsPage
   }
-  if (recentSessionsOpen.value !== prefs.recentSessionsOpen) {
+  if (!recentSessionsOpenUpdating.value && recentSessionsOpen.value !== prefs.recentSessionsOpen) {
     recentSessionsOpen.value = prefs.recentSessionsOpen
   }
   if (recentSessionsPage.value !== prefs.recentSessionsPage) {
     recentSessionsPage.value = prefs.recentSessionsPage
   }
-  if (pinnedSessionsOpen.value !== prefs.pinnedSessionsOpen) {
+  if (!pinnedSessionsOpenUpdating.value && pinnedSessionsOpen.value !== prefs.pinnedSessionsOpen) {
     pinnedSessionsOpen.value = prefs.pinnedSessionsOpen
   }
   if (pinnedSessionsPage.value !== prefs.pinnedSessionsPage) {
@@ -768,9 +772,9 @@ const sessionsLoading = computed(() => {
   return chat.sessionsLoading || directoryPageLoading.value
 })
 
-const pinnedFooterLoading = computed(() => pinnedSessionsOpenUpdating.value)
-const recentFooterLoading = computed(() => recentSessionsOpenUpdating.value)
-const runningFooterLoading = computed(() => runningSessionsOpenUpdating.value)
+const pinnedFooterLoading = computed(() => pinnedSessionsOpenUpdating.value && pinnedSessionsOpen.value)
+const recentFooterLoading = computed(() => recentSessionsOpenUpdating.value && recentSessionsOpen.value)
+const runningFooterLoading = computed(() => runningSessionsOpenUpdating.value && runningSessionsOpen.value)
 
 async function toggleDirectoryCollapse(directoryId: string, _directoryPath: string) {
   void _directoryPath
@@ -930,12 +934,15 @@ watch(
 async function requestPinnedSessionsOpen(nextOpen: boolean) {
   if (pinnedSessionsOpenUpdating.value) return
   const target = Boolean(nextOpen)
-  if (target === pinnedSessionsOpen.value) return
+  const previous = pinnedSessionsOpen.value
+  if (target === previous) return
 
+  pinnedSessionsOpen.value = target
   pinnedSessionsOpenUpdating.value = true
   try {
     const ok = await directorySessions.commandSetFooterOpen('pinned', target, { silent: true })
     if (!ok) {
+      pinnedSessionsOpen.value = previous
       await revalidateSidebarState(undefined, { silent: true })
     }
   } finally {
@@ -946,12 +953,15 @@ async function requestPinnedSessionsOpen(nextOpen: boolean) {
 async function requestRecentSessionsOpen(nextOpen: boolean) {
   if (recentSessionsOpenUpdating.value) return
   const target = Boolean(nextOpen)
-  if (target === recentSessionsOpen.value) return
+  const previous = recentSessionsOpen.value
+  if (target === previous) return
 
+  recentSessionsOpen.value = target
   recentSessionsOpenUpdating.value = true
   try {
     const ok = await directorySessions.commandSetFooterOpen('recent', target, { silent: true })
     if (!ok) {
+      recentSessionsOpen.value = previous
       await revalidateSidebarState(undefined, { silent: true })
     }
   } finally {
@@ -962,12 +972,15 @@ async function requestRecentSessionsOpen(nextOpen: boolean) {
 async function requestRunningSessionsOpen(nextOpen: boolean) {
   if (runningSessionsOpenUpdating.value) return
   const target = Boolean(nextOpen)
-  if (target === runningSessionsOpen.value) return
+  const previous = runningSessionsOpen.value
+  if (target === previous) return
 
+  runningSessionsOpen.value = target
   runningSessionsOpenUpdating.value = true
   try {
     const ok = await directorySessions.commandSetFooterOpen('running', target, { silent: true })
     if (!ok) {
+      runningSessionsOpen.value = previous
       await revalidateSidebarState(undefined, { silent: true })
     }
   } finally {
