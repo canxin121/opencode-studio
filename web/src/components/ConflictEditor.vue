@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { RiRefreshLine } from '@remixicon/vue'
 import { useI18n } from 'vue-i18n'
 
 import Button from '@/components/ui/Button.vue'
+import IconButton from '@/components/ui/IconButton.vue'
 import Skeleton from '@/components/ui/Skeleton.vue'
 import { apiErrorBodyRecord, apiJson, ApiError } from '@/lib/api'
 
@@ -177,9 +179,17 @@ onMounted(() => void load())
             {{ t('common.next') }}
           </Button>
         </div>
-        <Button variant="secondary" size="sm" class="h-8" :disabled="loading" @click="load">{{
-          t('common.refresh')
-        }}</Button>
+        <IconButton
+          variant="secondary"
+          size="sm"
+          class="h-8 w-8"
+          :tooltip="String(t('common.refresh'))"
+          :aria-label="String(t('common.refresh'))"
+          :disabled="loading"
+          @click="load"
+        >
+          <RiRefreshLine class="h-4 w-4" :class="loading ? 'animate-spin' : ''" />
+        </IconButton>
         <Button
           variant="secondary"
           size="sm"

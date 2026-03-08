@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { RiTextWrap } from '@remixicon/vue'
+import { RiCloseLine, RiRefreshLine, RiTextWrap } from '@remixicon/vue'
 
 import Button from '@/components/ui/Button.vue'
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
@@ -175,9 +175,16 @@ function onFilterRefTypeChange(value: string | number) {
           <div class="text-xs font-medium text-muted-foreground">
             {{ t('git.ui.dialogs.history.sections.commits') }}
           </div>
-          <Button variant="secondary" size="sm" :disabled="loading" @click="$emit('refresh')">{{
-            t('common.refresh')
-          }}</Button>
+          <IconButton
+            variant="secondary"
+            size="sm"
+            :disabled="loading"
+            :tooltip="t('common.refresh')"
+            :aria-label="t('common.refresh')"
+            @click="$emit('refresh')"
+          >
+            <RiRefreshLine class="h-4 w-4" :class="loading ? 'animate-spin' : ''" />
+          </IconButton>
         </div>
 
         <div
@@ -188,7 +195,16 @@ function onFilterRefTypeChange(value: string | number) {
             {{ t('git.ui.dialogs.history.compareBase') }}
             <span class="font-mono">{{ compareSelectionShort }}</span>
           </div>
-          <Button variant="ghost" size="sm" class="h-6" @click="$emit('clearCompare')">{{ t('common.clear') }}</Button>
+          <IconButton
+            variant="ghost"
+            size="xs"
+            class="h-6 w-6"
+            :tooltip="t('common.clear')"
+            :aria-label="t('common.clear')"
+            @click="$emit('clearCompare')"
+          >
+            <RiCloseLine class="h-3.5 w-3.5" />
+          </IconButton>
         </div>
 
         <div
@@ -196,7 +212,16 @@ function onFilterRefTypeChange(value: string | number) {
           class="flex items-center justify-between rounded-md border border-border/50 bg-muted/20 px-2 py-1"
         >
           <div class="text-[11px] text-muted-foreground font-mono truncate">{{ filterPath }}</div>
-          <Button variant="ghost" size="sm" class="h-6" @click="$emit('clearFilter')">{{ t('common.clear') }}</Button>
+          <IconButton
+            variant="ghost"
+            size="xs"
+            class="h-6 w-6"
+            :tooltip="t('common.clear')"
+            :aria-label="t('common.clear')"
+            @click="$emit('clearFilter')"
+          >
+            <RiCloseLine class="h-3.5 w-3.5" />
+          </IconButton>
         </div>
 
         <div class="grid gap-2 rounded-md border border-border/50 bg-muted/10 p-2">

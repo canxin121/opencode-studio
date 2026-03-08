@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { RiRefreshLine } from '@remixicon/vue'
 import { useI18n } from 'vue-i18n'
 
 import Dialog from '@/components/ui/Dialog.vue'
 import Button from '@/components/ui/Button.vue'
+import IconButton from '@/components/ui/IconButton.vue'
 import { apiJson } from '@/lib/api'
 import { useUiStore } from '@/stores/ui'
 import { useToastsStore } from '@/stores/toasts'
@@ -140,9 +142,16 @@ watch(
       </div>
 
       <div class="flex items-center justify-end gap-2">
-        <Button variant="outline" @click="refresh" :disabled="loading">{{
-          loading ? t('mcp.dialog.actions.refreshing') : t('common.refresh')
-        }}</Button>
+        <IconButton
+          variant="outline"
+          size="md"
+          :tooltip="String(loading ? t('mcp.dialog.actions.refreshing') : t('common.refresh'))"
+          :aria-label="String(loading ? t('mcp.dialog.actions.refreshing') : t('common.refresh'))"
+          :disabled="loading"
+          @click="refresh"
+        >
+          <RiRefreshLine class="h-4 w-4" :class="loading ? 'animate-spin' : ''" />
+        </IconButton>
       </div>
     </div>
   </Dialog>

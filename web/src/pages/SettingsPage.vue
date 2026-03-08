@@ -13,6 +13,7 @@ import { i18n, setAppLocale } from '@/i18n'
 import type { AppLocale } from '@/i18n/locale'
 
 import Button from '@/components/ui/Button.vue'
+import IconButton from '@/components/ui/IconButton.vue'
 import OptionPicker from '@/components/ui/OptionPicker.vue'
 import SidebarTextButton from '@/components/ui/SidebarTextButton.vue'
 import ScrollArea from '@/components/ui/ScrollArea.vue'
@@ -1269,13 +1270,16 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
                 </label>
 
                 <div class="flex items-center gap-2">
-                  <Button
+                  <IconButton
                     variant="outline"
+                    size="md"
                     :disabled="desktopRuntimeLoading || desktopRuntimeSaving"
+                    :tooltip="String(t('common.refresh'))"
+                    :aria-label="String(t('common.refresh'))"
                     @click="loadDesktopRuntimeConfig"
                   >
-                    {{ t('common.refresh') }}
-                  </Button>
+                    <RiRefreshLine class="h-4 w-4" :class="desktopRuntimeLoading ? 'animate-spin' : ''" />
+                  </IconButton>
                   <Button :disabled="desktopRuntimeLoading || desktopRuntimeSaving" @click="saveDesktopRuntimeConfig">
                     {{ desktopRuntimeSaving ? t('common.saving') : t('settings.desktopRuntime.saveAndRestart') }}
                   </Button>

@@ -5,6 +5,7 @@ import {
   RiArrowDownSLine,
   RiArrowLeftSLine,
   RiArrowRightSLine,
+  RiCloseLine,
   RiGitBranchLine,
   RiClipboardLine,
   RiMore2Line,
@@ -1710,7 +1711,14 @@ void diffPaneRef
                 <div class="truncate text-[10px] text-muted-foreground font-mono" :title="historyFilterPath">
                   {{ historyFilterPath }}
                 </div>
-                <MiniActionButton size="xs" @click="onClearHistoryPathFilter">{{ t('common.clear') }}</MiniActionButton>
+                <IconButton
+                  size="xs"
+                  :tooltip="t('common.clear')"
+                  :aria-label="t('common.clear')"
+                  @click="onClearHistoryPathFilter"
+                >
+                  <RiCloseLine class="h-3.5 w-3.5" />
+                </IconButton>
               </div>
 
               <div class="grid gap-2">
@@ -1746,7 +1754,15 @@ void diffPaneRef
                     @update:page="setHistoryPage"
                   />
                   <div class="flex justify-end">
-                    <MiniActionButton size="xs" @click="refreshHistory">{{ t('common.refresh') }}</MiniActionButton>
+                    <IconButton
+                      size="xs"
+                      :tooltip="t('common.refresh')"
+                      :aria-label="t('common.refresh')"
+                      :disabled="historyLoading"
+                      @click="refreshHistory"
+                    >
+                      <RiRefreshLine class="h-3.5 w-3.5" :class="historyLoading ? 'animate-spin' : ''" />
+                    </IconButton>
                   </div>
                 </div>
               </div>
