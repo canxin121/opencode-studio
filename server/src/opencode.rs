@@ -50,6 +50,47 @@ fn forward_logs_enabled() -> bool {
     )
 }
 
+fn normalize_directory_for_upstream_query(value: &str) -> String {
+    crate::path_utils::normalize_directory_for_match(value).unwrap_or_else(|| {
+        let normalized = crate::path_utils::normalize_directory_path(value);
+        let trimmed = normalized.trim();
+        if trimmed.is_empty() {
+            value.trim().to_string()
+        } else {
+            trimmed.to_string()
+        }
+    })
+}
+
+fn normalize_query_for_upstream(raw_query: &str) -> Option<String> {
+    if raw_query.trim().is_empty() {
+        return None;
+    }
+
+    let mut has_directory = false;
+    let mut serializer = url::form_urlencoded::Serializer::new(String::new());
+    for (key, value) in url::form_urlencoded::parse(raw_query.as_bytes()) {
+        if key == "directory" {
+            has_directory = true;
+            let normalized = normalize_directory_for_upstream_query(value.as_ref());
+            serializer.append_pair(key.as_ref(), &normalized);
+            continue;
+        }
+        serializer.append_pair(key.as_ref(), value.as_ref());
+    }
+
+    if !has_directory {
+        return None;
+    }
+
+    let rewritten = serializer.finish();
+    if rewritten.is_empty() {
+        None
+    } else {
+        Some(rewritten)
+    }
+}
+
 #[derive(Clone)]
 pub struct OpenCodeBridge {
     pub base_url: String,
@@ -68,8 +109,9 @@ impl OpenCodeBridge {
             && let Some(q) = uri.query()
             && !q.is_empty()
         {
+            let query = normalize_query_for_upstream(q).unwrap_or_else(|| q.to_string());
             url.push('?');
-            url.push_str(q);
+            url.push_str(&query);
         }
         let _ = url.parse::<axum::http::Uri>()?;
         Ok(url)
@@ -506,6 +548,57 @@ mod tests {
         assert_eq!(OpenCodeLogLevel::Info.as_cli_value(), "INFO");
         assert_eq!(OpenCodeLogLevel::Warn.as_cli_value(), "WARN");
         assert_eq!(OpenCodeLogLevel::Error.as_cli_value(), "ERROR");
+    }
+
+    #[test]
+    fn build_url_normalizes_directory_query_param() {
+        let bridge = OpenCodeBridge {
+            base_url: "http://127.0.0.1:4096".to_string(),
+            client: reqwest::Client::new(),
+            sse_client: reqwest::Client::new(),
+        };
+        let uri: axum::http::Uri =
+            "/session/status?directory=C%3A%5CUsers%5CAlice%5CRepo%5C&sessionId=ses_1"
+                .parse()
+                .expect("valid uri");
+
+        let built = bridge
+            .build_url("/session/status", Some(&uri))
+            .expect("url");
+        let parsed = url::Url::parse(&built).expect("parsed url");
+
+        let directory = parsed
+            .query_pairs()
+            .find(|(k, _)| k == "directory")
+            .map(|(_, v)| v.into_owned());
+        let session_id = parsed
+            .query_pairs()
+            .find(|(k, _)| k == "sessionId")
+            .map(|(_, v)| v.into_owned());
+
+        assert_eq!(directory.as_deref(), Some("c:/users/alice/repo"));
+        assert_eq!(session_id.as_deref(), Some("ses_1"));
+    }
+
+    #[test]
+    fn build_url_keeps_query_without_directory_unchanged() {
+        let bridge = OpenCodeBridge {
+            base_url: "http://127.0.0.1:4096".to_string(),
+            client: reqwest::Client::new(),
+            sse_client: reqwest::Client::new(),
+        };
+        let uri: axum::http::Uri = "/session/status?sessionId=ses_1&local=true"
+            .parse()
+            .expect("valid uri");
+
+        let built = bridge
+            .build_url("/session/status", Some(&uri))
+            .expect("url");
+
+        assert_eq!(
+            built,
+            "http://127.0.0.1:4096/session/status?sessionId=ses_1&local=true"
+        );
     }
 
     #[tokio::test]
