@@ -79,7 +79,6 @@ const sessionItems = computed(() => {
     return {
       id: sid,
       label: custom || sid.slice(0, 8),
-      description: custom ? sid.slice(0, 8) : '',
     }
   })
 })
@@ -90,7 +89,6 @@ const sessionMenuGroups = computed<OptionMenuGroup[]>(() => [
     items: sessionItems.value.map((session) => ({
       id: session.id,
       label: session.label,
-      description: session.description,
       checked: session.id === activeSessionId.value,
       monospace: true,
       keywords: `${session.label} ${session.id}`,
