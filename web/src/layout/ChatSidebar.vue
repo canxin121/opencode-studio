@@ -28,6 +28,7 @@ import {
 } from '@/layout/chatSidebar/useSessionActionMenu'
 import type { DirectoryEntry } from '@/features/sessions/model/types'
 import type { FlatTreeRow } from '@/features/sessions/model/tree'
+import { normalizeDirForCompare } from '@/features/sessions/model/labels'
 import { useSidebarLocate } from '@/layout/chatSidebar/useSidebarLocate'
 import { normalizeSidebarUiPrefsForUi } from '@/features/sessions/model/sidebarUiPrefs'
 import { apiJson } from '@/lib/api'
@@ -897,14 +898,92 @@ const pinnedSessionsTotal = computed(() => Math.max(0, Number(pinnedFooterView.v
 const recentSessionsTotal = computed(() => Math.max(0, Number(recentFooterView.value.total || 0)))
 const runningSessionsTotal = computed(() => Math.max(0, Number(runningFooterView.value.total || 0)))
 
-const pagedPinnedSessionRows = computed<ThreadSessionRow[]>(
-  () => (pinnedFooterView.value.rows || []) as ThreadSessionRow[],
+function nonEmptyString(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function sessionDirectoryFromLike(session: SessionLike | null | undefined): string {
+  const directory = nonEmptyString(session?.directory)
+  if (directory) return directory
+  const record = asRecord(session as SessionValue)
+  return nonEmptyString(record?.cwd)
+}
+
+function normalizeSidebarSessionLike(session: SessionLike | null | undefined, fallbackId: string): SessionLike | null {
+  const sid = nonEmptyString(session?.id) || nonEmptyString(fallbackId)
+  if (!sid) return null
+
+  const source = asRecord(session as SessionValue)
+  const next: SessionLike = source ? ({ ...source } as SessionLike) : ({ ...(session || {}) } as SessionLike)
+  next.id = sid
+
+  const directory = sessionDirectoryFromLike(next)
+  if (directory) {
+    next.directory = directory
+  }
+  return next
+}
+
+function mergeSidebarSessionLike(
+  rowSession: SessionLike | null,
+  cacheSession: SessionLike | null,
+  sessionId: string,
+): SessionLike {
+  const sid = nonEmptyString(sessionId)
+  const merged: SessionLike = {
+    ...((cacheSession || {}) as SessionLike),
+    ...((rowSession || {}) as SessionLike),
+    id: sid,
+  }
+
+  const title = nonEmptyString(rowSession?.title) || nonEmptyString(cacheSession?.title)
+  const slug = nonEmptyString(rowSession?.slug) || nonEmptyString(cacheSession?.slug)
+  const directory = sessionDirectoryFromLike(rowSession) || sessionDirectoryFromLike(cacheSession)
+
+  if (title) merged.title = title
+  if (slug) merged.slug = slug
+  if (directory) merged.directory = directory
+  return merged
+}
+
+function directoryEntryByPath(path: string): DirectoryEntry | null {
+  const normalizedPath = normalizeDirForCompare(path)
+  if (!normalizedPath) return null
+  for (const entry of directories.value) {
+    if (!entry?.id || !entry?.path) continue
+    if (normalizeDirForCompare(entry.path) === normalizedPath) {
+      return entry
+    }
+  }
+  return null
+}
+
+function resolveSidebarRow(row: ThreadSessionRow): ThreadSessionRow {
+  const sid = nonEmptyString(row?.id)
+  if (!sid) return row
+
+  const rowSession = normalizeSidebarSessionLike(row.session || null, sid)
+  const cachedSession = normalizeSidebarSessionLike(chat.getSessionById(sid) as SessionLike | null, sid)
+  const session = rowSession || cachedSession ? mergeSidebarSessionLike(rowSession, cachedSession, sid) : null
+  const sessionDirectory = sessionDirectoryFromLike(session)
+  const directory = row.directory || (sessionDirectory ? directoryEntryByPath(sessionDirectory) : null)
+
+  return {
+    ...row,
+    id: sid,
+    session,
+    directory,
+  }
+}
+
+const pagedPinnedSessionRows = computed<ThreadSessionRow[]>(() =>
+  ((pinnedFooterView.value.rows || []) as ThreadSessionRow[]).map(resolveSidebarRow),
 )
-const pagedRecentSessionRows = computed<ThreadSessionRow[]>(
-  () => (recentFooterView.value.rows || []) as ThreadSessionRow[],
+const pagedRecentSessionRows = computed<ThreadSessionRow[]>(() =>
+  ((recentFooterView.value.rows || []) as ThreadSessionRow[]).map(resolveSidebarRow),
 )
-const pagedRunningSessionRows = computed<ThreadSessionRow[]>(
-  () => (runningFooterView.value.rows || []) as ThreadSessionRow[],
+const pagedRunningSessionRows = computed<ThreadSessionRow[]>(() =>
+  ((runningFooterView.value.rows || []) as ThreadSessionRow[]).map(resolveSidebarRow),
 )
 
 watch(
@@ -1389,9 +1468,10 @@ function buildBackendFlattenedTree(section: DirectorySidebarView | null | undefi
     .map((row) => {
       const sid = String(row?.id || '').trim()
       if (!sid) return null
+      const resolved = resolveSidebarRow(row)
       return {
         id: sid,
-        session: row.session || ({ id: sid } as SessionLike),
+        session: resolved.session || ({ id: sid } as SessionLike),
         depth: Number.isFinite(Number(row?.depth)) ? Math.max(0, Math.floor(Number(row.depth))) : 0,
         isParent: row.isParent,
         isExpanded: row.isExpanded,
