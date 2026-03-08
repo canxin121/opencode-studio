@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { PopoverContent, PopoverPortal, PopoverRoot, PopoverTrigger } from 'radix-vue'
 import {
   RiArrowDownSLine,
   RiArrowLeftSLine,
@@ -674,6 +675,10 @@ const sourceControlView = ref<SourceControlView>('changes')
 const isHistoryListView = computed(() => sourceControlView.value === 'history')
 const isHistoryCommitView = computed(() => sourceControlView.value === 'historyCommit')
 const isHistoryView = computed(() => isHistoryListView.value || isHistoryCommitView.value)
+const showSshSigningWarning = computed(() => {
+  const info = signingInfo.value
+  return Boolean(info?.commitGpgsign && (info.gpgFormat || '').toLowerCase() === 'ssh' && !info.sshSigningAvailable)
+})
 
 const historyPaginationTotalPages = computed(() => {
   if (historyExactLastPage.value !== null) {
@@ -1184,6 +1189,35 @@ void diffPaneRef
           >
             <RiArrowRightSLine class="h-3.5 w-3.5 -rotate-45" />
           </SidebarIconButton>
+          <PopoverRoot v-if="showSshSigningWarning">
+            <PopoverTrigger as-child>
+              <SidebarIconButton
+                :tooltip="t('git.ui.signing.sshMayFailTitle')"
+                :is-mobile-pointer="ui.isMobilePointer"
+                :disable-tooltip="true"
+                class="text-amber-600 hover:text-amber-700 hover:bg-amber-500/15"
+                :aria-label="t('git.ui.signing.sshMayFailTitle')"
+              >
+                <span aria-hidden="true" class="text-[12px] font-bold leading-none">!</span>
+              </SidebarIconButton>
+            </PopoverTrigger>
+            <PopoverPortal>
+              <PopoverContent
+                class="z-[80] w-72 max-w-[calc(100vw-1rem)] rounded-sm border border-amber-500/40 bg-background/95 p-2 shadow-lg backdrop-blur outline-none"
+                side="bottom"
+                align="end"
+                :side-offset="6"
+                :collision-padding="8"
+              >
+                <div class="text-[11px] font-medium text-foreground">
+                  {{ t('git.ui.signing.sshMayFailTitle') }}
+                </div>
+                <div class="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+                  {{ t('git.ui.signing.sshMayFailDescription') }}
+                </div>
+              </PopoverContent>
+            </PopoverPortal>
+          </PopoverRoot>
           <div ref="actionsMenuAnchorEl" class="inline-flex">
             <SidebarIconButton
               :tooltip="t('git.ui.moreActions')"
@@ -1492,20 +1526,6 @@ void diffPaneRef
                     @select="onRevertActionMenuSelect"
                   />
                 </div>
-              </div>
-            </div>
-
-            <div
-              v-if="
-                signingInfo?.commitGpgsign &&
-                (signingInfo?.gpgFormat || '').toLowerCase() === 'ssh' &&
-                !signingInfo.sshSigningAvailable
-              "
-              class="rounded-sm border border-sidebar-border/60 bg-sidebar-accent/20 p-2 text-[11px]"
-            >
-              <div class="font-medium">{{ t('git.ui.signing.sshMayFailTitle') }}</div>
-              <div class="text-[11px] text-muted-foreground mt-0.5">
-                {{ t('git.ui.signing.sshMayFailDescription') }}
               </div>
             </div>
 

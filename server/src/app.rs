@@ -336,8 +336,18 @@ fn parse_attention_session_ids(payload: &serde_json::Value) -> HashSet<String> {
 async fn fetch_attention_session_ids(
     bridge: &crate::opencode::OpenCodeBridge,
     endpoint: &str,
+    directory: Option<&str>,
 ) -> Option<HashSet<String>> {
-    let target = format!("{}{}", bridge.base_url.trim_end_matches('/'), endpoint);
+    let mut target = format!("{}{}", bridge.base_url.trim_end_matches('/'), endpoint);
+    if let Some(directory) = directory {
+        let trimmed = directory.trim();
+        if !trimmed.is_empty() {
+            let separator = if target.contains('?') { '&' } else { '?' };
+            target.push(separator);
+            target.push_str("directory=");
+            target.push_str(&urlencoding::encode(trimmed));
+        }
+    }
     let resp = bridge.client.get(target).send().await.ok()?;
     if !resp.status().is_success() {
         return None;
@@ -476,13 +486,32 @@ fn reconcile_runtime_attention_from_sets(
     scope.extend(permission_session_ids.iter().cloned());
     scope.extend(question_session_ids.iter().cloned());
 
-    for session_id in scope {
-        if permission_session_ids.contains(&session_id) {
-            index.upsert_runtime_attention(&session_id, Some("permission"));
-        } else if question_session_ids.contains(&session_id) {
-            index.upsert_runtime_attention(&session_id, Some("question"));
+    reconcile_runtime_attention_from_sets_scoped(
+        index,
+        permission_session_ids,
+        question_session_ids,
+        &scope,
+    );
+}
+
+fn reconcile_runtime_attention_from_sets_scoped(
+    index: &crate::directory_session_index::DirectorySessionIndexManager,
+    permission_session_ids: &HashSet<String>,
+    question_session_ids: &HashSet<String>,
+    scope_session_ids: &HashSet<String>,
+) {
+    for session_id in scope_session_ids {
+        let sid = session_id.trim();
+        if sid.is_empty() {
+            continue;
+        }
+
+        if permission_session_ids.contains(sid) {
+            index.upsert_runtime_attention(sid, Some("permission"));
+        } else if question_session_ids.contains(sid) {
+            index.upsert_runtime_attention(sid, Some("question"));
         } else {
-            index.upsert_runtime_attention(&session_id, None);
+            index.upsert_runtime_attention(sid, None);
         }
     }
 }
@@ -490,23 +519,68 @@ fn reconcile_runtime_attention_from_sets(
 async fn reconcile_runtime_attention_from_opencode(
     state: &Arc<AppState>,
     bridge: &crate::opencode::OpenCodeBridge,
-) -> Option<HashSet<String>> {
-    let permissions = fetch_attention_session_ids(bridge, "/permission").await;
-    let questions = fetch_attention_session_ids(bridge, "/question").await;
-    let (Some(permission_session_ids), Some(question_session_ids)) = (permissions, questions)
-    else {
-        return None;
-    };
+    directories: &[String],
+) -> HashSet<String> {
+    if directories.is_empty() {
+        let permissions = fetch_attention_session_ids(bridge, "/permission", None).await;
+        let questions = fetch_attention_session_ids(bridge, "/question", None).await;
+        let (Some(permission_session_ids), Some(question_session_ids)) = (permissions, questions)
+        else {
+            return HashSet::new();
+        };
 
-    reconcile_runtime_attention_from_sets(
-        &state.directory_session_index,
-        &permission_session_ids,
-        &question_session_ids,
-    );
+        reconcile_runtime_attention_from_sets(
+            &state.directory_session_index,
+            &permission_session_ids,
+            &question_session_ids,
+        );
 
-    let mut all_attention = permission_session_ids;
-    all_attention.extend(question_session_ids);
-    Some(all_attention)
+        let mut all_attention = permission_session_ids;
+        all_attention.extend(question_session_ids);
+        return all_attention;
+    }
+
+    let mut all_attention = HashSet::<String>::new();
+    let directory_list = directories.to_vec();
+    let tasks = futures_stream::iter(directory_list.into_iter().map(|directory| {
+        let bridge = bridge.clone();
+        async move {
+            let (permissions, questions) = tokio::join!(
+                fetch_attention_session_ids(&bridge, "/permission", Some(&directory)),
+                fetch_attention_session_ids(&bridge, "/question", Some(&directory)),
+            );
+            (directory, permissions, questions)
+        }
+    }))
+    .buffer_unordered(STATUS_RECONCILE_FETCH_CONCURRENCY)
+    .collect::<Vec<_>>()
+    .await;
+
+    for (directory, permissions, questions) in tasks {
+        let (Some(permission_session_ids), Some(question_session_ids)) = (permissions, questions)
+        else {
+            continue;
+        };
+
+        let mut scope = state
+            .directory_session_index
+            .session_ids_for_directory(&directory);
+        scope.extend(permission_session_ids.iter().cloned());
+        scope.extend(question_session_ids.iter().cloned());
+        if !scope.is_empty() {
+            reconcile_runtime_attention_from_sets_scoped(
+                &state.directory_session_index,
+                &permission_session_ids,
+                &question_session_ids,
+                &scope,
+            );
+        }
+
+        all_attention.extend(permission_session_ids);
+        all_attention.extend(question_session_ids);
+    }
+
+    all_attention
 }
 
 async fn reconcile_runtime_status_from_opencode(state: &Arc<AppState>) {
@@ -541,7 +615,8 @@ async fn reconcile_runtime_status_from_opencode(state: &Arc<AppState>) {
         let mut scope = HashSet::<String>::new();
         let mut failed_fetches = 0usize;
 
-        let tasks = futures_stream::iter(directories.into_iter().map(|directory| {
+        let status_directories = directories.clone();
+        let tasks = futures_stream::iter(status_directories.into_iter().map(|directory| {
             let bridge = bridge.clone();
             async move {
                 let payload = fetch_session_status_map(&bridge, Some(&directory)).await;
@@ -592,9 +667,9 @@ async fn reconcile_runtime_status_from_opencode(state: &Arc<AppState>) {
         }
     }
 
-    if let Some(attention_session_ids) =
-        reconcile_runtime_attention_from_opencode(state, &bridge).await
-    {
+    let attention_session_ids =
+        reconcile_runtime_attention_from_opencode(state, &bridge, &directories).await;
+    if !attention_session_ids.is_empty() {
         sessions_requiring_directory_hydration.extend(attention_session_ids);
     }
 
@@ -1350,6 +1425,45 @@ mod tests {
         assert!(
             snapshot
                 .get("ses_stale")
+                .and_then(|v| v.get("attention"))
+                .is_some_and(|v| v.is_null())
+        );
+    }
+
+    #[test]
+    fn reconcile_runtime_attention_from_sets_scoped_preserves_outside_scope() {
+        let index = crate::directory_session_index::DirectorySessionIndexManager::new();
+
+        index.upsert_runtime_status("ses_outside", "busy");
+        index.upsert_runtime_attention("ses_outside", Some("permission"));
+        index.upsert_runtime_status("ses_in_scope", "busy");
+        index.upsert_runtime_attention("ses_in_scope", Some("question"));
+
+        let permission_session_ids = HashSet::<String>::new();
+        let question_session_ids = HashSet::<String>::new();
+        let scope_session_ids = HashSet::from(["ses_in_scope".to_string()]);
+
+        reconcile_runtime_attention_from_sets_scoped(
+            &index,
+            &permission_session_ids,
+            &question_session_ids,
+            &scope_session_ids,
+        );
+
+        let snapshot = index.runtime_snapshot_json();
+        let snapshot = snapshot.as_object().expect("runtime snapshot object");
+
+        assert_eq!(
+            snapshot
+                .get("ses_outside")
+                .and_then(|v| v.get("attention"))
+                .and_then(|v| v.as_str()),
+            Some("permission")
+        );
+
+        assert!(
+            snapshot
+                .get("ses_in_scope")
                 .and_then(|v| v.get("attention"))
                 .is_some_and(|v| v.is_null())
         );

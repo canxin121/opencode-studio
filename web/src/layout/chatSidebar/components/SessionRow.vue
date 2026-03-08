@@ -7,8 +7,6 @@ import {
   RiCloseLine,
   RiDeleteBinLine,
   RiLoader4Line,
-  RiQuestionLine,
-  RiShieldLine,
   RiStarFill,
   RiStarLine,
 } from '@remixicon/vue'
@@ -257,24 +255,6 @@ function handleDesktopOpenActionMenu(event: MouseEvent) {
               :aria-label="String(t('chat.sidebar.sessionRow.loading.directory'))"
             />
           </div>
-
-          <!-- Attention Icons -->
-          <span
-            v-if="attention === 'permission'"
-            class="inline-flex items-center gap-1 rounded bg-destructive/10 px-1.5 py-0.5 text-[10px] text-destructive shrink-0"
-            :title="String(t('chat.attention.title.permissionRequired'))"
-          >
-            <RiShieldLine class="h-3 w-3" />
-            <span class="max-w-[8.5rem] truncate">{{ t('chat.sidebar.sessionRow.status.needsPermission') }}</span>
-          </span>
-          <span
-            v-else-if="attention === 'question'"
-            class="inline-flex items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-600 dark:text-amber-400 shrink-0"
-            :title="String(t('chat.sidebar.sessionRow.attention.questionAsked'))"
-          >
-            <RiQuestionLine class="h-3 w-3" />
-            <span class="max-w-[8.5rem] truncate">{{ t('chat.sidebar.sessionRow.status.needsReply') }}</span>
-          </span>
 
           <!-- Time -->
           <span
