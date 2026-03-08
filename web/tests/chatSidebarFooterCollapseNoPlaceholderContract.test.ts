@@ -7,9 +7,21 @@ test('chat sidebar footer collapse closes immediately and only shows loading pla
   const sidebarFile = resolve(import.meta.dir, '../src/layout/ChatSidebar.vue')
   const sidebarSource = readFileSync(sidebarFile, 'utf8')
 
-  assert.ok(sidebarSource.includes('const pinnedFooterLoading = computed(() => pinnedSessionsOpenUpdating.value && pinnedSessionsOpen.value)'))
-  assert.ok(sidebarSource.includes('const recentFooterLoading = computed(() => recentSessionsOpenUpdating.value && recentSessionsOpen.value)'))
-  assert.ok(sidebarSource.includes('const runningFooterLoading = computed(() => runningSessionsOpenUpdating.value && runningSessionsOpen.value)'))
+  assert.ok(
+    sidebarSource.includes(
+      'const pinnedFooterLoading = computed(() => pinnedSessionsOpenUpdating.value && pinnedSessionsOpen.value)',
+    ),
+  )
+  assert.ok(
+    sidebarSource.includes(
+      'const recentFooterLoading = computed(() => recentSessionsOpenUpdating.value && recentSessionsOpen.value)',
+    ),
+  )
+  assert.ok(
+    sidebarSource.includes(
+      'const runningFooterLoading = computed(() => runningSessionsOpenUpdating.value && runningSessionsOpen.value)',
+    ),
+  )
 
   const pinnedRequestIndex = sidebarSource.indexOf('async function requestPinnedSessionsOpen(nextOpen: boolean) {')
   const pinnedSetOpenIndex = sidebarSource.indexOf('pinnedSessionsOpen.value = target', pinnedRequestIndex)
