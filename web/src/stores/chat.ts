@@ -181,12 +181,33 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function readSessionDirectory(value: JsonValue): string {
-    const directory = asRecord(value)?.directory
-    return typeof directory === 'string' ? directory.trim() : ''
+    const record = asRecord(value)
+    const directory = typeof record?.directory === 'string' ? record.directory.trim() : ''
+    if (directory) return directory
+    const cwd = typeof record?.cwd === 'string' ? record.cwd.trim() : ''
+    return cwd
   }
 
   function readEventProperties(evt: SseEvent): UnknownRecord {
     return asRecord(evt.properties) || {}
+  }
+
+  function sessionPatchFromEventProperties(
+    properties: UnknownRecord,
+    sessionId: string,
+  ): (Partial<Session> & { id: string }) | null {
+    const sid = String(sessionId || '').trim()
+    if (!sid) return null
+
+    const title = typeof properties.title === 'string' ? properties.title.trim() : ''
+    const slug = typeof properties.slug === 'string' ? properties.slug.trim() : ''
+    const directory = readSessionDirectory(properties)
+
+    const patch: Partial<Session> & { id: string } = { id: sid }
+    if (title) patch.title = title
+    if (slug) patch.slug = slug
+    if (directory) patch.directory = directory
+    return patch
   }
 
   type SessionErrorClassificationOrEmpty = SessionErrorClassification | ''
@@ -1613,6 +1634,9 @@ export const useChatStore = defineStore('chat', () => {
       const maybeId = readSessionId(raw)
       if (asRecord(raw) && maybeId) {
         upsertSessionCache(raw as Partial<Session> & { id: string })
+      } else if (sid) {
+        const patch = sessionPatchFromEventProperties(props, sid)
+        if (patch) upsertSessionCache(patch)
       }
     }
 
@@ -1624,12 +1648,11 @@ export const useChatStore = defineStore('chat', () => {
       const maybeId = readSessionId(raw)
       if (asRecord(raw) && maybeId) {
         upsertSessionCache(raw as Partial<Session> & { id: string })
+      } else if (asRecord(raw) && sid) {
+        upsertSessionCache({ id: sid, ...(raw as Partial<Session>) })
       } else if (sid) {
-        const title = typeof props?.title === 'string' ? props.title.trim() : ''
-        const slug = typeof props?.slug === 'string' ? props.slug.trim() : ''
-        if (title || slug) {
-          upsertSessionCache({ id: sid, ...(title ? { title } : {}), ...(slug ? { slug } : {}) })
-        }
+        const patch = sessionPatchFromEventProperties(props, sid)
+        if (patch) upsertSessionCache(patch)
       }
     }
 

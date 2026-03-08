@@ -2349,9 +2349,9 @@ fn prune_session_snapshot_for_sse(value: &mut serde_json::Value) -> bool {
     };
 
     let session_id = read_trimmed_from_map(obj, &["id"]);
-    let title = read_trimmed_from_map(obj, &["title"]);
+    let title = read_trimmed_from_map(obj, &["title", "name"]);
     let slug = read_trimmed_from_map(obj, &["slug"]);
-    let directory = read_trimmed_from_map(obj, &["directory"]);
+    let directory = read_trimmed_from_map(obj, &["directory", "cwd"]);
     let parent_id = read_trimmed_from_map(obj, &["parentID", "parentId", "parent_id"]);
 
     let mut out = serde_json::Map::new();
@@ -3283,10 +3283,95 @@ fn sanitize_session_created_updated_event_properties(
         .or_else(|| props.remove("data"));
 
     let session_id = read_trimmed_from_map(props, &["sessionID", "sessionId", "session_id"]);
-    let title = read_trimmed_from_map(props, &["title"]);
+    let title = read_trimmed_from_map(props, &["title", "name"]);
     let slug = read_trimmed_from_map(props, &["slug"]);
+    let directory = read_trimmed_from_map(props, &["directory", "cwd"]);
+    let parent_id = read_trimmed_from_map(props, &["parentID", "parentId", "parent_id"]);
+    let created = finite_number_from_map(props, "created");
+    let updated = finite_number_from_map(props, "updated");
+    let mut event_time = props.get("time").cloned();
+
+    if event_time.is_none() {
+        let mut time = serde_json::Map::new();
+        if let Some(v) = created.clone() {
+            time.insert("created".to_string(), v);
+        }
+        if let Some(v) = updated.clone() {
+            time.insert("updated".to_string(), v);
+        }
+        if !time.is_empty() {
+            event_time = Some(serde_json::Value::Object(time));
+        }
+    }
+
+    let apply_event_fallback_fields =
+        |session_obj: &mut serde_json::Map<String, serde_json::Value>| {
+            if session_obj.get("id").and_then(|v| v.as_str()).is_none()
+                && let Some(v) = session_id.clone()
+            {
+                session_obj.insert("id".to_string(), serde_json::Value::String(v));
+            }
+
+            let has_title = session_obj
+                .get("title")
+                .and_then(|v| v.as_str())
+                .is_some_and(|v| !v.trim().is_empty());
+            if !has_title && let Some(v) = title.clone() {
+                session_obj.insert("title".to_string(), serde_json::Value::String(v));
+            }
+
+            let has_slug = session_obj
+                .get("slug")
+                .and_then(|v| v.as_str())
+                .is_some_and(|v| !v.trim().is_empty());
+            if !has_slug && let Some(v) = slug.clone() {
+                session_obj.insert("slug".to_string(), serde_json::Value::String(v));
+            }
+
+            let has_directory = session_obj
+                .get("directory")
+                .and_then(|v| v.as_str())
+                .is_some_and(|v| !v.trim().is_empty())
+                || session_obj
+                    .get("cwd")
+                    .and_then(|v| v.as_str())
+                    .is_some_and(|v| !v.trim().is_empty());
+            if !has_directory && let Some(v) = directory.clone() {
+                session_obj.insert("directory".to_string(), serde_json::Value::String(v));
+            }
+
+            let has_parent = session_obj
+                .get("parentID")
+                .or_else(|| session_obj.get("parentId"))
+                .or_else(|| session_obj.get("parent_id"))
+                .and_then(|v| v.as_str())
+                .is_some_and(|v| !v.trim().is_empty());
+            if !has_parent && let Some(v) = parent_id.clone() {
+                session_obj.insert("parentID".to_string(), serde_json::Value::String(v));
+            }
+
+            if !session_obj.contains_key("time")
+                && let Some(mut time) = event_time.clone()
+            {
+                prune_session_time(&mut time);
+                if time.as_object().is_some_and(|m| !m.is_empty()) {
+                    session_obj.insert("time".to_string(), time);
+                }
+            }
+        };
+
+    if session_value.is_none() && session_id.is_some() {
+        let mut synthesized = serde_json::Map::new();
+        apply_event_fallback_fields(&mut synthesized);
+        session_value = Some(serde_json::Value::Object(synthesized));
+    }
 
     let mut out = serde_json::Map::new();
+    if let Some(ref mut value) = session_value
+        && let Some(session_obj) = value.as_object_mut()
+    {
+        apply_event_fallback_fields(session_obj);
+    }
     if let Some(ref mut value) = session_value
         && prune_session_snapshot_for_sse(value)
     {
@@ -6150,6 +6235,46 @@ mod tests {
         };
 
         assert!(!sanitize_sse_event_data(&mut event, &filter, &detail));
+    }
+
+    #[test]
+    fn sanitize_sse_session_created_synthesizes_session_snapshot_from_flat_props() {
+        let mut event = json!({
+            "type": "session.created",
+            "properties": {
+                "sessionID": "ses_child",
+                "name": "Child Session",
+                "cwd": "/tmp/child",
+                "parentID": "ses_parent",
+                "updated": 1710000000.0
+            }
+        });
+
+        let filter = ActivityFilter {
+            allowed: HashSet::new(),
+            tool_allowed: HashSet::new(),
+            tool_explicit: true,
+            show_reasoning: false,
+            show_justification: false,
+        };
+        let detail = ActivityDetailPolicy {
+            enabled: false,
+            expanded: HashSet::new(),
+            expanded_tools: HashSet::new(),
+        };
+
+        assert!(sanitize_sse_event_data(&mut event, &filter, &detail));
+
+        let session = event
+            .get("properties")
+            .and_then(|v| v.get("session"))
+            .cloned()
+            .expect("session snapshot");
+        assert_eq!(session["id"], json!("ses_child"));
+        assert_eq!(session["title"], json!("Child Session"));
+        assert_eq!(session["directory"], json!("/tmp/child"));
+        assert_eq!(session["parentID"], json!("ses_parent"));
+        assert_eq!(session["time"]["updated"], json!(1710000000.0));
     }
 
     #[test]
