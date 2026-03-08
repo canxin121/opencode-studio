@@ -31,6 +31,14 @@ test('monaco diff editor keeps reveal and hunk actions enabled by default', () =
   assert.ok(diffEditor.includes('hunkActionsEnabled: true'))
 })
 
+test('monaco diff reveal waits for visible layout before consuming first-change reveal', () => {
+  const diffEditor = readFileSync(resolve(import.meta.dir, '../src/components/MonacoDiffEditor.vue'), 'utf8')
+
+  assert.ok(diffEditor.includes('onDidLayoutChange(() => {'))
+  assert.ok(diffEditor.includes('layout.width <= 0 || layout.height <= 0'))
+  assert.ok(diffEditor.includes('requestAnimationFrame(() => {'))
+})
+
 test('keyboard tap fix skips editor surfaces and file viewer listens on pointerup', () => {
   const tapFix = readFileSync(resolve(import.meta.dir, '../src/lib/keyboardTapFix.ts'), 'utf8')
   const viewer = readFileSync(resolve(import.meta.dir, '../src/pages/files/components/FileViewerPane.vue'), 'utf8')

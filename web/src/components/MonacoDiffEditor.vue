@@ -62,9 +62,11 @@ const modifiedModelRef = shallowRef<Monaco.editor.ITextModel | null>(null)
 let monacoSetup: Promise<void> | null = null
 let themeObserver: MutationObserver | null = null
 let diffUpdateListener: Monaco.IDisposable | null = null
+let modifiedLayoutListener: Monaco.IDisposable | null = null
 let hunkZoneIds: string[] = []
 let pendingHunkZoneRefresh = false
 let pendingFirstChangeReveal = true
+let revealRetryFrame: number | null = null
 let lastRevealModelKey = ''
 let lastRevealContentKey = ''
 let disposed = false
@@ -324,13 +326,36 @@ function maybeRevealFirstDiffChange() {
     return
   }
 
-  pendingFirstChangeReveal = false
-  if (!lineChanges.length) return
+  if (!lineChanges.length) {
+    pendingFirstChangeReveal = false
+    if (revealRetryFrame !== null && typeof cancelAnimationFrame === 'function') {
+      cancelAnimationFrame(revealRetryFrame)
+    }
+    revealRetryFrame = null
+    return
+  }
 
   const first = lineChanges[0]
   const modifiedEditor = diffEditor.getModifiedEditor()
   const model = modifiedEditor.getModel()
   if (!model) return
+
+  const layout = modifiedEditor.getLayoutInfo()
+  if (layout.width <= 0 || layout.height <= 0) {
+    if (revealRetryFrame === null && typeof requestAnimationFrame === 'function') {
+      revealRetryFrame = requestAnimationFrame(() => {
+        revealRetryFrame = null
+        maybeRevealFirstDiffChange()
+      })
+    }
+    return
+  }
+
+  pendingFirstChangeReveal = false
+  if (revealRetryFrame !== null && typeof cancelAnimationFrame === 'function') {
+    cancelAnimationFrame(revealRetryFrame)
+  }
+  revealRetryFrame = null
 
   const lineCount = Math.max(1, model.getLineCount())
   const candidates = [
@@ -499,6 +524,9 @@ onMounted(async () => {
   monaco.editor.setTheme(monacoTheme.value)
   syncModels()
   updateDiffEditorOptions()
+  modifiedLayoutListener = diffEditorRef.value.getModifiedEditor().onDidLayoutChange(() => {
+    maybeRevealFirstDiffChange()
+  })
   diffUpdateListener = diffEditorRef.value.onDidUpdateDiff(() => {
     scheduleHunkActionZoneRefresh()
     maybeRevealFirstDiffChange()
@@ -515,6 +543,14 @@ onBeforeUnmount(() => {
 
   diffUpdateListener?.dispose()
   diffUpdateListener = null
+
+  modifiedLayoutListener?.dispose()
+  modifiedLayoutListener = null
+
+  if (revealRetryFrame !== null && typeof cancelAnimationFrame === 'function') {
+    cancelAnimationFrame(revealRetryFrame)
+  }
+  revealRetryFrame = null
 
   clearHunkActionZones()
 
