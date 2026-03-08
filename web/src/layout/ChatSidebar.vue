@@ -780,6 +780,11 @@ async function toggleDirectoryCollapse(directoryId: string, _directoryPath: stri
   if (collapseCommandPendingIds.value.has(pid)) return
 
   const nextCollapsed = !collapsedDirectories.value.has(pid)
+  if (nextCollapsed) {
+    const nextLocalCollapsed = new Set(collapsedDirectories.value)
+    nextLocalCollapsed.add(pid)
+    collapsedDirectories.value = nextLocalCollapsed
+  }
   const pending = new Set(collapseCommandPendingIds.value)
   pending.add(pid)
   collapseCommandPendingIds.value = pending
