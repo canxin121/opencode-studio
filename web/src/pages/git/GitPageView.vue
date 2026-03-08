@@ -22,7 +22,6 @@ import SearchInput from '@/components/ui/SearchInput.vue'
 import SidebarIconButton from '@/components/ui/SidebarIconButton.vue'
 import GitCommitBox from '@/components/git/GitCommitBox.vue'
 import GitDiffPane from '@/components/git/GitDiffPane.vue'
-import GitEditorDiffViewer from '@/components/git/GitEditorDiffViewer.vue'
 import GitMergeChangesSection from '@/components/git/GitMergeChangesSection.vue'
 import GitStagedChangesSection from '@/components/git/GitStagedChangesSection.vue'
 import GitChangesSection from '@/components/git/GitChangesSection.vue'
@@ -763,6 +762,13 @@ function onSelectHistoryCommitFile(file: Parameters<typeof selectCommitFile>[0])
   selectCommitFile(file)
   if (!props.embedded) return
   embeddedView.value = 'diff'
+}
+
+function onHistoryDiffSelectionUpdate(path: string | null) {
+  if (path) return
+  clearSelectedFile()
+  if (!props.embedded) return
+  embeddedView.value = 'list'
 }
 
 function backToHistoryList() {
@@ -1891,20 +1897,18 @@ void diffPaneRef
       </div>
 
       <div v-else-if="sourceControlView === 'historyCommit'" class="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div
-          v-if="!historyFileSelected"
-          class="flex min-h-0 flex-1 items-center justify-center px-4 text-xs text-muted-foreground"
-        >
-          {{ t('git.ui.dialogs.history.selectFileToViewDiff') }}
-        </div>
-        <div v-else class="min-h-0 flex-1 overflow-hidden px-2 py-2">
-          <GitEditorDiffViewer
-            :directory="root || ''"
-            :path="historyFileSelected.path"
-            :commit="historySelected?.hash || ''"
-            :parent-commit="historyParentCommitHash"
-          />
-        </div>
+        <GitDiffPane
+          :directory="root || ''"
+          :selected-file="historyFileSelected?.path || null"
+          :diff-source="'working'"
+          :commit="historySelected?.hash || ''"
+          :parent-commit="historyParentCommitHash"
+          :is-mobile="ui.isMobile"
+          :selected-is-conflict="false"
+          :open-file="openFileInFiles"
+          :reveal-file="revealFileInFiles"
+          @update:selectedFile="onHistoryDiffSelectionUpdate"
+        />
       </div>
 
       <template v-else>

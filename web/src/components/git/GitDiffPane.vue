@@ -15,6 +15,8 @@ const props = defineProps<{
   directory: string
   selectedFile: string | null
   diffSource: DiffSource
+  commit?: string | null
+  parentCommit?: string | null
   isMobile: boolean
   selectedIsConflict: boolean
   conflictPaths?: string[]
@@ -43,11 +45,17 @@ function refreshDiff() {
 defineExpose({ refreshDiff })
 
 const sourceLabel = computed(() =>
-  props.diffSource === 'staged' ? t('git.ui.diffViewer.labels.index') : t('git.ui.diffViewer.labels.workingTree'),
+  props.commit
+    ? t('git.ui.historySidebar.title')
+    : props.diffSource === 'staged'
+      ? t('git.ui.diffViewer.labels.index')
+      : t('git.ui.diffViewer.labels.workingTree'),
 )
+const hasCommitSource = computed(() => Boolean((props.commit || '').trim()))
 const showConflictEditor = computed(() => {
   const file = (props.selectedFile || '').trim()
   if (!file) return false
+  if (hasCommitSource.value) return false
   if (props.diffSource !== 'working' || !props.selectedIsConflict) return false
   return forceDiffForPath.value !== file
 })
@@ -141,6 +149,8 @@ function close() {
           :directory="directory || ''"
           :path="selectedFile"
           :staged="diffSource === 'staged'"
+          :commit="props.commit"
+          :parent-commit="props.parentCommit"
           :on-stage-hunk="props.stageHunk"
           :on-unstage-hunk="props.unstageHunk"
           :on-discard-hunk="props.discardHunk"

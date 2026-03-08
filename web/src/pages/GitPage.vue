@@ -990,13 +990,25 @@ function resolveRepoFilePath(path: string): string | null {
 function openFileInFiles(path: string) {
   const abs = resolveRepoFilePath(path)
   if (!abs) return
-  void router.push({ path: '/files' })
+  void router.push({
+    path: '/files',
+    query: {
+      gitPath: abs,
+      gitAction: 'open',
+    },
+  })
 }
 
 function revealFileInFiles(path: string) {
   const abs = resolveRepoFilePath(path)
   if (!abs) return
-  void router.push({ path: '/files' })
+  void router.push({
+    path: '/files',
+    query: {
+      gitPath: abs,
+      gitAction: 'reveal',
+    },
+  })
 }
 
 function openWorktree(path: string) {

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute, useRouter } from 'vue-router'
 import Button from '@/components/ui/Button.vue'
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import FormDialog from '@/components/ui/FormDialog.vue'
@@ -119,6 +120,8 @@ const settings = useSettingsStore()
 const toasts = useToastsStore()
 const directoryStore = useDirectoryStore()
 const ui = useUiStore()
+const route = useRoute()
+const router = useRouter()
 const { startDesktopSidebarResize } = useDesktopSidebarResize()
 const { t } = useI18n()
 
@@ -616,6 +619,7 @@ watch(
 let rootRestoreSeq = 0
 let openFileSeq = 0
 let pageMounted = false
+const handledGitNavigationKey = ref('')
 
 function isStaleRootRestore(seq: number, rootPath: string): boolean {
   return seq !== rootRestoreSeq || root.value !== rootPath
@@ -1071,6 +1075,88 @@ function buildFileNode(path: string): FileNode {
     type: 'file',
     extension: extensionFromPath(name),
   }
+}
+
+type GitNavigationAction = 'open' | 'reveal'
+
+function routeQueryValue(value: unknown): string {
+  if (Array.isArray(value)) return String(value[0] || '').trim()
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function parseGitNavigationAction(value: unknown): GitNavigationAction {
+  return routeQueryValue(value) === 'reveal' ? 'reveal' : 'open'
+}
+
+function resolveGitNavigationPath(rawPath: string, workspaceRoot: string): string {
+  const normalized = normalizePath(String(rawPath || '').trim())
+  if (!normalized) return ''
+  if (withinWorkspace(normalized, workspaceRoot)) return normalized
+
+  const joined = normalizePath(`${workspaceRoot}/${normalized.replace(/^\/+/, '')}`)
+  if (withinWorkspace(joined, workspaceRoot)) return joined
+  return ''
+}
+
+function parentDirectoriesForPath(path: string, workspaceRoot: string): string[] {
+  const rel = normalizePath(String(relativeToWorkspace(path) || '').trim()).replace(/^\/+/, '')
+  const segments = rel.split('/').filter(Boolean)
+  if (segments.length <= 1) return []
+
+  const dirs: string[] = []
+  let current = workspaceRoot
+  for (const segment of segments.slice(0, -1)) {
+    current = normalizePath(`${current}/${segment}`)
+    dirs.push(current)
+  }
+  return dirs
+}
+
+function clearGitNavigationQuery() {
+  if (!route.query.gitPath && !route.query.gitAction) return
+  const nextQuery = { ...route.query }
+  delete nextQuery.gitPath
+  delete nextQuery.gitAction
+  void router.replace({ path: route.path, query: nextQuery })
+}
+
+async function applyGitNavigationQuery() {
+  if (!pageMounted) return
+
+  const workspaceRoot = root.value
+  const gitPathRaw = routeQueryValue(route.query.gitPath)
+  if (!workspaceRoot || !gitPathRaw) return
+
+  const action = parseGitNavigationAction(route.query.gitAction)
+  const targetPath = resolveGitNavigationPath(gitPathRaw, workspaceRoot)
+  const key = `${workspaceRoot}::${action}::${targetPath || gitPathRaw}`
+  if (handledGitNavigationKey.value === key) return
+  handledGitNavigationKey.value = key
+
+  if (!targetPath || isPathHiddenInFiles(targetPath)) {
+    clearGitNavigationQuery()
+    return
+  }
+
+  await loadDirectory(workspaceRoot).catch(() => {})
+  for (const dir of parentDirectoriesForPath(targetPath, workspaceRoot)) {
+    await ensureDirectoryExpanded(dir)
+  }
+
+  if (action === 'open') {
+    await openFile(buildFileNode(targetPath))
+    clearGitNavigationQuery()
+    return
+  }
+
+  selectOnlyPath(targetPath)
+  highlightedPath.value = targetPath
+  selectedDirectoryPath.value = normalizePath(targetPath.split('/').slice(0, -1).join('/')) || workspaceRoot
+  if (isMobile.value) {
+    showMobileViewer.value = false
+  }
+  persistExplorerSoon()
+  clearGitNavigationQuery()
 }
 
 async function restoreSelectedFile(rootPath: string, seq: number) {
@@ -3172,6 +3258,13 @@ watch(
 )
 
 watch(
+  () => [root.value, route.query.gitPath, route.query.gitAction] as const,
+  () => {
+    void applyGitNavigationQuery()
+  },
+)
+
+watch(
   () => [root.value, selectedFile.value?.path] as const,
   ([rootPath, path]) => {
     const conflict = fileRefreshConflict.value
@@ -3229,6 +3322,7 @@ onMounted(async () => {
   pageMounted = true
   await nextTick()
   await restoreForRoot(root.value).catch(() => {})
+  await applyGitNavigationQuery()
   if (!chat.sessions.length) {
     await chat.refreshSessions().catch(() => {})
   }
