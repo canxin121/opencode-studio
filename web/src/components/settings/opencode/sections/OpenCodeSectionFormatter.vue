@@ -16,7 +16,7 @@ import OptionPicker from '@/components/ui/OptionPicker.vue'
 import type { PickerOption } from '@/components/ui/pickerOption.types'
 import Tooltip from '@/components/ui/Tooltip.vue'
 import VirtualList from '@/components/ui/VirtualList.vue'
-import CodeMirrorEditor from '@/components/CodeMirrorEditor.vue'
+import MonacoCodeEditor from '@/components/MonacoCodeEditor.vue'
 import StringListEditor from '../StringListEditor.vue'
 import { useOpencodeConfigPanelContext } from '../opencodeConfigContext'
 
@@ -28,7 +28,7 @@ export default defineComponent({
     OptionPicker,
     Tooltip,
     VirtualList,
-    CodeMirrorEditor,
+    MonacoCodeEditor,
     StringListEditor,
     RiAddLine,
     RiArrowDownSLine,

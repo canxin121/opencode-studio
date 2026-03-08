@@ -116,6 +116,11 @@ function onUpdateText(key: 'base' | 'head' | 'path', v: string | number) {
           <MonacoDiffEditor
             :original-value="compareDiffModel.original"
             :modified-value="compareDiffModel.modified"
+            :initial-top-line="compareDiffModel.initialTopLine"
+            :original-start-line="compareDiffModel.originalStartLine"
+            :modified-start-line="compareDiffModel.modifiedStartLine"
+            :original-line-numbers="compareDiffModel.originalLineNumbers"
+            :modified-line-numbers="compareDiffModel.modifiedLineNumbers"
             :path="compareDiffModel.path"
             :language-path="compareDiffModel.path"
             :model-id="compareModelId"

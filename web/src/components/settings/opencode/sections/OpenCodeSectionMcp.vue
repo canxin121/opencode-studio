@@ -16,7 +16,7 @@ import Input from '@/components/ui/Input.vue'
 import OptionPicker from '@/components/ui/OptionPicker.vue'
 import type { PickerOption } from '@/components/ui/pickerOption.types'
 import VirtualList from '@/components/ui/VirtualList.vue'
-import CodeMirrorEditor from '@/components/CodeMirrorEditor.vue'
+import MonacoCodeEditor from '@/components/MonacoCodeEditor.vue'
 import StringListEditor from '../StringListEditor.vue'
 import { useUiStore } from '@/stores/ui'
 
@@ -29,7 +29,7 @@ export default defineComponent({
     Input,
     OptionPicker,
     VirtualList,
-    CodeMirrorEditor,
+    MonacoCodeEditor,
     StringListEditor,
     RiAddLine,
     RiArrowDownSLine,

@@ -4,7 +4,7 @@ import { resolve } from 'node:path'
 import test from 'node:test'
 
 test('file editors expose a text-editor root marker', () => {
-  const codeEditor = readFileSync(resolve(import.meta.dir, '../src/components/CodeMirrorEditor.vue'), 'utf8')
+  const codeEditor = readFileSync(resolve(import.meta.dir, '../src/components/MonacoCodeEditor.vue'), 'utf8')
   const diffEditor = readFileSync(resolve(import.meta.dir, '../src/components/MonacoDiffEditor.vue'), 'utf8')
 
   assert.ok(codeEditor.includes('data-oc-text-editor-root="true"'))
@@ -12,7 +12,7 @@ test('file editors expose a text-editor root marker', () => {
 })
 
 test('mobile monaco styles keep native text selection enabled', () => {
-  const codeEditor = readFileSync(resolve(import.meta.dir, '../src/components/CodeMirrorEditor.vue'), 'utf8')
+  const codeEditor = readFileSync(resolve(import.meta.dir, '../src/components/MonacoCodeEditor.vue'), 'utf8')
   const diffEditor = readFileSync(resolve(import.meta.dir, '../src/components/MonacoDiffEditor.vue'), 'utf8')
 
   assert.ok(codeEditor.includes(':root.mobile-pointer .monaco-host .monaco-editor .lines-content'))
@@ -29,6 +29,11 @@ test('monaco diff editor keeps reveal and hunk actions enabled by default', () =
 
   assert.ok(diffEditor.includes('autoRevealFirstChange: true'))
   assert.ok(diffEditor.includes('hunkActionsEnabled: true'))
+  assert.ok(diffEditor.includes('initialTopLine?: number | null'))
+  assert.ok(diffEditor.includes('originalStartLine?: number | null'))
+  assert.ok(diffEditor.includes('modifiedStartLine?: number | null'))
+  assert.ok(diffEditor.includes('originalLineNumbers?: Array<number | null> | null'))
+  assert.ok(diffEditor.includes('modifiedLineNumbers?: Array<number | null> | null'))
 })
 
 test('monaco diff reveal waits for visible layout before consuming first-change reveal', () => {
@@ -37,6 +42,11 @@ test('monaco diff reveal waits for visible layout before consuming first-change 
   assert.ok(diffEditor.includes('onDidLayoutChange(() => {'))
   assert.ok(diffEditor.includes('layout.width <= 0 || layout.height <= 0'))
   assert.ok(diffEditor.includes('requestAnimationFrame(() => {'))
+  assert.ok(diffEditor.includes('getRequestedInitialTopLine()'))
+  assert.ok(diffEditor.includes('resolveModelLineFromDisplayLine('))
+  assert.ok(diffEditor.includes('updateLineNumberOptions()'))
+  assert.ok(diffEditor.includes('revealModifiedLineAtTop'))
+  assert.ok(diffEditor.includes("'is-hidden': !ready"))
 })
 
 test('keyboard tap fix skips editor surfaces and file viewer listens on pointerup', () => {

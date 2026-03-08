@@ -20,7 +20,7 @@ import OptionPicker from '@/components/ui/OptionPicker.vue'
 import type { PickerOption } from '@/components/ui/pickerOption.types'
 import Tooltip from '@/components/ui/Tooltip.vue'
 import VirtualList from '@/components/ui/VirtualList.vue'
-import CodeMirrorEditor from '@/components/CodeMirrorEditor.vue'
+import MonacoCodeEditor from '@/components/MonacoCodeEditor.vue'
 import type { JsonValue } from '@/types/json'
 
 import { useOpencodeConfigPanelContext } from '../opencodeConfigContext'
@@ -33,7 +33,7 @@ export default defineComponent({
     OptionPicker,
     Tooltip,
     VirtualList,
-    CodeMirrorEditor,
+    MonacoCodeEditor,
     RiAddLine,
     RiArrowDownSLine,
     RiArrowUpSLine,
@@ -220,7 +220,7 @@ export default defineComponent({
               </div>
             </div>
             <div class="h-40 rounded-md border border-input overflow-hidden">
-              <CodeMirrorEditor
+              <MonacoCodeEditor
                 :ref="(el) => setCommandEditorRef(commandId, el)"
                 :model-value="command.template || ''"
                 @update:model-value="(v) => setEntryField('command', commandId, 'template', v)"

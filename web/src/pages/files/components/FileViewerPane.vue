@@ -16,7 +16,7 @@ import {
   RiUserLine,
 } from '@remixicon/vue'
 
-import CodeMirrorEditor from '@/components/CodeMirrorEditor.vue'
+import MonacoCodeEditor from '@/components/MonacoCodeEditor.vue'
 import MarkdownRenderer from '@/components/markdown/MarkdownRenderer.vue'
 import MonacoDiffEditor from '@/components/MonacoDiffEditor.vue'
 import Button from '@/components/ui/Button.vue'
@@ -27,7 +27,7 @@ import SegmentedButton from '@/components/ui/SegmentedButton.vue'
 import SegmentedControl from '@/components/ui/SegmentedControl.vue'
 import Skeleton from '@/components/ui/Skeleton.vue'
 import type { OptionMenuGroup, OptionMenuItem } from '@/components/ui/optionMenu.types'
-import { buildUnifiedDiffModel } from '@/features/git/diff/unifiedDiff'
+import { buildUnifiedDiffModel, resolveInitialTopLineFromTextPair } from '@/features/git/diff/unifiedDiff'
 import { formatDateTimeYMDHM, formatDateYMDShort2DigitYear } from '@/i18n/intl'
 
 import { isImagePath } from '../fileKinds'
@@ -127,7 +127,7 @@ const emit = defineEmits<{
   (e: 'insertSelection'): void
 }>()
 
-const editorRef = ref<InstanceType<typeof CodeMirrorEditor> | null>(null)
+const editorRef = ref<InstanceType<typeof MonacoCodeEditor> | null>(null)
 const viewMenuOpen = ref(false)
 const viewMenuQuery = ref('')
 const viewMenuAnchorEl = ref<HTMLElement | null>(null)
@@ -315,6 +315,10 @@ const timelineRightModelPath = computed(() => {
   const filePath = (props.timelinePath || props.selectedPath || '').trim() || 'timeline-file'
   return `timeline-right:${filePath}`
 })
+
+const timelineInitialTopLine = computed(() =>
+  resolveInitialTopLineFromTextPair(props.timelineLeftContent || '', props.timelineRightContent || ''),
+)
 
 const timelineAnyLoading = computed(
   () => props.timelineLoading || props.timelineLeftLoading || props.timelineRightLoading,
@@ -1403,7 +1407,7 @@ function onSendSelection() {
           @pointerup="updateSelectionFromEditor"
           @keyup="updateSelectionFromEditor"
         >
-          <CodeMirrorEditor
+          <MonacoCodeEditor
             ref="editorRef"
             v-model="draftContent"
             :path="selectedPath"
@@ -1479,6 +1483,7 @@ function onSendSelection() {
               <MonacoDiffEditor
                 :original-value="timelineLeftContent"
                 :modified-value="timelineRightContent"
+                :initial-top-line="timelineInitialTopLine"
                 :path="timelineRightModelPath"
                 :original-path="timelineLeftModelPath"
                 :use-files-theme="true"
@@ -1555,7 +1560,7 @@ function onSendSelection() {
           @pointerup="updateSelectionFromEditor"
           @keyup="updateSelectionFromEditor"
         >
-          <CodeMirrorEditor
+          <MonacoCodeEditor
             ref="editorRef"
             v-model="draftContent"
             :path="selectedPath"

@@ -29,6 +29,11 @@ export type UnifiedMonacoDiffModel = {
   original: string
   modified: string
   hasChanges: boolean
+  initialTopLine: number | null
+  originalStartLine: number | null
+  modifiedStartLine: number | null
+  originalLineNumbers: Array<number | null> | null
+  modifiedLineNumbers: Array<number | null> | null
 }
 
 export type VirtualDiffInput = {
@@ -67,6 +72,31 @@ function normalizeTextBlock(text: string): string {
   return String(text || '')
     .replace(/\r\n/g, '\n')
     .replace(/\r/g, '\n')
+}
+
+function normalizePositiveLine(value: unknown): number | null {
+  const line = Number(value)
+  if (!Number.isFinite(line) || line <= 0) return null
+  return Math.floor(line)
+}
+
+function hasMappedLines(map: Array<number | null>): boolean {
+  return map.some((line) => Number.isFinite(line) && Number(line) > 0)
+}
+
+function normalizeLineNumberMap(map: Array<number | null>): Array<number | null> | null {
+  if (!Array.isArray(map) || !map.length) return null
+  if (!hasMappedLines(map)) return null
+  return map
+}
+
+function firstMappedLine(map: Array<number | null> | null | undefined): number | null {
+  if (!Array.isArray(map)) return null
+  for (const entry of map) {
+    const line = normalizePositiveLine(entry)
+    if (line !== null) return line
+  }
+  return null
 }
 
 function compactSnapshotPair(
@@ -451,64 +481,139 @@ function extractPathFromDiffSource(source: string): string {
   return ''
 }
 
+export function resolveInitialTopLineFromParsedDiff(parsed: ParsedUnifiedDiffModel | null | undefined): number | null {
+  if (!parsed || !Array.isArray(parsed.hunks) || !parsed.hunks.length) return null
+  const firstHunk = parsed.hunks[0]
+  if (!firstHunk) return null
+
+  const candidates = [firstHunk.anchorLine, firstHunk.newStart, firstHunk.oldStart]
+  for (const candidate of candidates) {
+    const line = normalizePositiveLine(candidate)
+    if (line !== null) return line
+  }
+
+  return null
+}
+
+export function resolveInitialTopLineFromUnifiedDiff(diff: string, meta?: GitDiffMeta | null): number | null {
+  return resolveInitialTopLineFromParsedDiff(buildUnifiedDiffModel(diff, meta))
+}
+
+export function resolveInitialTopLineFromTextPair(originalText: string, modifiedText: string): number | null {
+  const originalLines = normalizeTextBlock(originalText).split('\n')
+  const modifiedLines = normalizeTextBlock(modifiedText).split('\n')
+  const maxLength = Math.max(originalLines.length, modifiedLines.length)
+
+  for (let index = 0; index < maxLength; index += 1) {
+    const originalLine = index < originalLines.length ? originalLines[index] : null
+    const modifiedLine = index < modifiedLines.length ? modifiedLines[index] : null
+    if (originalLine !== modifiedLine) return index + 1
+  }
+
+  return null
+}
+
+function isUnifiedDiffMetaLine(line: string): boolean {
+  return (
+    line.startsWith('diff --git ') ||
+    line.startsWith('--- ') ||
+    line.startsWith('+++ ') ||
+    line.startsWith('index ') ||
+    line.startsWith('new file mode') ||
+    line.startsWith('deleted file mode') ||
+    line.startsWith('similarity index') ||
+    line.startsWith('dissimilarity index') ||
+    line.startsWith('rename from') ||
+    line.startsWith('rename to') ||
+    line.startsWith('copy from') ||
+    line.startsWith('copy to') ||
+    line.startsWith('old mode ') ||
+    line.startsWith('new mode ') ||
+    line.startsWith('Binary files ') ||
+    line.startsWith('GIT binary patch')
+  )
+}
+
+function isLikelyMultiFileUnifiedDiff(source: string): boolean {
+  if (!source.trim()) return false
+  const matches = normalizeTextBlock(source).match(/^diff --git\s+/gm)
+  return Array.isArray(matches) && matches.length > 1
+}
+
 function buildMonacoDiffFromRawUnified(source: string): {
   original: string
   modified: string
   hasChanges: boolean
+  initialTopLine: number | null
+  originalStartLine: number | null
+  modifiedStartLine: number | null
+  originalLineNumbers: Array<number | null> | null
+  modifiedLineNumbers: Array<number | null> | null
 } | null {
   if (!source.trim()) return null
 
   const lines = source.split('\n')
   const original: string[] = []
   const modified: string[] = []
+  const originalLineNumbers: Array<number | null> = []
+  const modifiedLineNumbers: Array<number | null> = []
   let inHunk = false
   let sawHunkHeader = false
   let hasChanges = false
+  let oldLineCursor = 1
+  let newLineCursor = 1
+  let initialTopLine: number | null = null
+
+  const pushOriginal = (line: string, lineNumber: number | null) => {
+    original.push(line)
+    originalLineNumbers.push(lineNumber)
+  }
+
+  const pushModified = (line: string, lineNumber: number | null) => {
+    modified.push(line)
+    modifiedLineNumbers.push(lineNumber)
+  }
 
   for (const rawLine of lines) {
     const line = normalizeLine(rawLine)
 
     if (line.startsWith('@@')) {
+      const parsedHeader = parseHunkHeader(line)
+      const nextOld = normalizePositiveLine(parsedHeader.oldStart)
+      const nextNew = normalizePositiveLine(parsedHeader.newStart)
+      if (nextOld !== null) oldLineCursor = nextOld
+      if (nextNew !== null) newLineCursor = nextNew
+      if (initialTopLine === null) {
+        initialTopLine = nextNew || nextOld
+      }
+
       sawHunkHeader = true
       inHunk = true
-      original.push(line)
-      modified.push(line)
+      pushOriginal(line, null)
+      pushModified(line, null)
       continue
     }
 
-    if (
-      line.startsWith('diff --git ') ||
-      line.startsWith('--- ') ||
-      line.startsWith('+++ ') ||
-      line.startsWith('index ') ||
-      line.startsWith('new file mode') ||
-      line.startsWith('deleted file mode') ||
-      line.startsWith('similarity index') ||
-      line.startsWith('dissimilarity index') ||
-      line.startsWith('rename from') ||
-      line.startsWith('rename to') ||
-      line.startsWith('copy from') ||
-      line.startsWith('copy to') ||
-      line.startsWith('old mode ') ||
-      line.startsWith('new mode ') ||
-      line.startsWith('Binary files ') ||
-      line.startsWith('GIT binary patch')
-    ) {
+    if (isUnifiedDiffMetaLine(line)) {
       inHunk = false
-      original.push(line)
-      modified.push(line)
+      pushOriginal(line, null)
+      pushModified(line, null)
       continue
     }
 
     if (inHunk) {
       if (line.startsWith('+') && !line.startsWith('+++')) {
-        modified.push(line.slice(1))
+        pushModified(line.slice(1), newLineCursor)
+        if (initialTopLine === null) initialTopLine = newLineCursor
+        newLineCursor += 1
         hasChanges = true
         continue
       }
 
       if (line.startsWith('-') && !line.startsWith('---')) {
-        original.push(line.slice(1))
+        pushOriginal(line.slice(1), oldLineCursor)
+        if (initialTopLine === null) initialTopLine = newLineCursor
+        oldLineCursor += 1
         hasChanges = true
         continue
       }
@@ -519,95 +624,154 @@ function buildMonacoDiffFromRawUnified(source: string): {
 
       if (line.startsWith(' ') || line.startsWith('\t')) {
         const content = line.slice(1)
-        original.push(content)
-        modified.push(content)
+        pushOriginal(content, oldLineCursor)
+        pushModified(content, newLineCursor)
+        oldLineCursor += 1
+        newLineCursor += 1
         continue
       }
     }
 
-    original.push(line)
-    modified.push(line)
+    pushOriginal(line, null)
+    pushModified(line, null)
   }
 
   if (!sawHunkHeader || !hasChanges) {
     return null
   }
 
+  const normalizedOriginalLineNumbers = normalizeLineNumberMap(originalLineNumbers)
+  const normalizedModifiedLineNumbers = normalizeLineNumberMap(modifiedLineNumbers)
+  const originalStartLine = firstMappedLine(normalizedOriginalLineNumbers)
+  const modifiedStartLine = firstMappedLine(normalizedModifiedLineNumbers)
+
   return {
     original: original.join('\n'),
     modified: modified.join('\n'),
     hasChanges: true,
+    initialTopLine: initialTopLine || modifiedStartLine || originalStartLine,
+    originalStartLine,
+    modifiedStartLine,
+    originalLineNumbers: normalizedOriginalLineNumbers,
+    modifiedLineNumbers: normalizedModifiedLineNumbers,
   }
 }
 
 export function buildUnifiedMonacoDiffModel(diff: string, meta?: GitDiffMeta | null): UnifiedMonacoDiffModel {
   const source = normalizeTextBlock(diff)
   const parsedFromMeta = meta && typeof meta === 'object' ? normalizeMeta(meta) : null
+  const parsed = parsedFromMeta || (source.trim() ? getCachedFallback(source) : null)
+  const initialTopLineFromParsed = resolveInitialTopLineFromParsedDiff(parsed)
   const pathFromSource = extractPathFromDiffSource(source)
   const pathFromMeta = parsedFromMeta ? extractHeaderPath(parsedFromMeta.fileHeader) : ''
   const path = pathFromSource || pathFromMeta || 'activity.patch'
 
   const rawMonaco = buildMonacoDiffFromRawUnified(source)
-  if (rawMonaco) {
+  const shouldPreferRaw = Boolean(rawMonaco) && isLikelyMultiFileUnifiedDiff(source)
+  if (rawMonaco && (shouldPreferRaw || !parsed || !parsed.hunks.length)) {
     return {
       modelId: `diff:${path}`,
       path,
       original: rawMonaco.original,
       modified: rawMonaco.modified,
       hasChanges: true,
+      initialTopLine: rawMonaco.initialTopLine || initialTopLineFromParsed,
+      originalStartLine: rawMonaco.originalStartLine,
+      modifiedStartLine: rawMonaco.modifiedStartLine,
+      originalLineNumbers: rawMonaco.originalLineNumbers,
+      modifiedLineNumbers: rawMonaco.modifiedLineNumbers,
     }
   }
 
-  const parsed = parsedFromMeta || buildUnifiedDiffModel(source, meta)
+  if (!parsed || !parsed.hunks.length) {
+    if (rawMonaco) {
+      return {
+        modelId: `diff:${path}`,
+        path,
+        original: rawMonaco.original,
+        modified: rawMonaco.modified,
+        hasChanges: true,
+        initialTopLine: rawMonaco.initialTopLine,
+        originalStartLine: rawMonaco.originalStartLine,
+        modifiedStartLine: rawMonaco.modifiedStartLine,
+        originalLineNumbers: rawMonaco.originalLineNumbers,
+        modifiedLineNumbers: rawMonaco.modifiedLineNumbers,
+      }
+    }
 
-  if (!parsed.hunks.length) {
     return {
       modelId: `diff:${path}`,
       path,
       original: source,
       modified: source,
       hasChanges: false,
+      initialTopLine: null,
+      originalStartLine: null,
+      modifiedStartLine: null,
+      originalLineNumbers: null,
+      modifiedLineNumbers: null,
     }
   }
 
   const original: string[] = []
   const modified: string[] = []
+  const originalLineNumbers: Array<number | null> = []
+  const modifiedLineNumbers: Array<number | null> = []
   let hasChanges = false
+
+  const pushOriginal = (line: string, lineNumber: number | null) => {
+    original.push(line)
+    originalLineNumbers.push(lineNumber)
+  }
+
+  const pushModified = (line: string, lineNumber: number | null) => {
+    modified.push(line)
+    modifiedLineNumbers.push(lineNumber)
+  }
 
   for (const [index, hunk] of parsed.hunks.entries()) {
     if (index > 0) {
-      original.push('')
-      modified.push('')
+      pushOriginal('', null)
+      pushModified('', null)
     }
 
     if (hunk.header) {
-      original.push(hunk.header)
-      modified.push(hunk.header)
+      pushOriginal(hunk.header, null)
+      pushModified(hunk.header, null)
     }
+
+    let oldLineCursor = normalizePositiveLine(hunk.oldStart) || 1
+    let newLineCursor = normalizePositiveLine(hunk.newStart) || 1
 
     for (const rawLine of hunk.lines) {
       const line = normalizeLine(rawLine)
       if (!line) {
-        original.push('')
-        modified.push('')
+        pushOriginal('', oldLineCursor)
+        pushModified('', newLineCursor)
+        oldLineCursor += 1
+        newLineCursor += 1
         continue
       }
 
       if (line.startsWith(' ') || line.startsWith('\t')) {
         const content = line.slice(1)
-        original.push(content)
-        modified.push(content)
+        pushOriginal(content, oldLineCursor)
+        pushModified(content, newLineCursor)
+        oldLineCursor += 1
+        newLineCursor += 1
         continue
       }
 
       if (line.startsWith('-') && !line.startsWith('---')) {
-        original.push(line.slice(1))
+        pushOriginal(line.slice(1), oldLineCursor)
+        oldLineCursor += 1
         hasChanges = true
         continue
       }
 
       if (line.startsWith('+') && !line.startsWith('+++')) {
-        modified.push(line.slice(1))
+        pushModified(line.slice(1), newLineCursor)
+        newLineCursor += 1
         hasChanges = true
         continue
       }
@@ -616,17 +780,32 @@ export function buildUnifiedMonacoDiffModel(diff: string, meta?: GitDiffMeta | n
         continue
       }
 
-      original.push(line)
-      modified.push(line)
+      pushOriginal(line, null)
+      pushModified(line, null)
     }
   }
+
+  const originalText = original.join('\n')
+  const modifiedText = modified.join('\n')
+  const normalizedOriginalLineNumbers = normalizeLineNumberMap(originalLineNumbers)
+  const normalizedModifiedLineNumbers = normalizeLineNumberMap(modifiedLineNumbers)
+  const originalStartLine = firstMappedLine(normalizedOriginalLineNumbers)
+  const modifiedStartLine = firstMappedLine(normalizedModifiedLineNumbers)
+  const initialTopLine = hasChanges
+    ? initialTopLineFromParsed || resolveInitialTopLineFromTextPair(originalText, modifiedText)
+    : null
 
   return {
     modelId: `diff:${path}`,
     path,
-    original: original.join('\n'),
-    modified: modified.join('\n'),
+    original: originalText,
+    modified: modifiedText,
     hasChanges,
+    initialTopLine,
+    originalStartLine,
+    modifiedStartLine,
+    originalLineNumbers: normalizedOriginalLineNumbers,
+    modifiedLineNumbers: normalizedModifiedLineNumbers,
   }
 }
 
@@ -642,6 +821,11 @@ export function buildVirtualMonacoDiffModel(input: VirtualDiffInput): UnifiedMon
   let original = explicitOriginal
   let modified = explicitModified
   let hasChanges = original !== modified
+  let initialTopLine: number | null = null
+  let originalStartLine: number | null = null
+  let modifiedStartLine: number | null = null
+  let originalLineNumbers: Array<number | null> | null = null
+  let modifiedLineNumbers: Array<number | null> | null = null
   let usedPatchFallback = false
 
   const diffText = typeof input.diff === 'string' ? input.diff : ''
@@ -655,6 +839,11 @@ export function buildVirtualMonacoDiffModel(input: VirtualDiffInput): UnifiedMon
       original = fallback.original
       modified = fallback.modified
       hasChanges = fallback.hasChanges
+      initialTopLine = fallback.initialTopLine
+      originalStartLine = fallback.originalStartLine
+      modifiedStartLine = fallback.modifiedStartLine
+      originalLineNumbers = fallback.originalLineNumbers
+      modifiedLineNumbers = fallback.modifiedLineNumbers
       usedPatchFallback = true
     }
   }
@@ -668,6 +857,10 @@ export function buildVirtualMonacoDiffModel(input: VirtualDiffInput): UnifiedMon
 
   if (!path) path = 'virtual.diff'
 
+  if (hasChanges && initialTopLine === null) {
+    initialTopLine = resolveInitialTopLineFromTextPair(original, modified)
+  }
+
   const modelId = String(input.modelId || '').trim() || `virtual:${path}`
 
   return {
@@ -676,6 +869,11 @@ export function buildVirtualMonacoDiffModel(input: VirtualDiffInput): UnifiedMon
     original,
     modified,
     hasChanges,
+    initialTopLine,
+    originalStartLine,
+    modifiedStartLine,
+    originalLineNumbers,
+    modifiedLineNumbers,
   }
 }
 

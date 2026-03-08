@@ -39,6 +39,11 @@ const props = withDefaults(
     activeHunkActionId?: string | null
     activeHunkActionKind?: HunkActionKind | null
     autoRevealFirstChange?: boolean
+    initialTopLine?: number | null
+    originalStartLine?: number | null
+    modifiedStartLine?: number | null
+    originalLineNumbers?: Array<number | null> | null
+    modifiedLineNumbers?: Array<number | null> | null
   }>(),
   {
     autoRevealFirstChange: true,
@@ -69,6 +74,7 @@ let pendingFirstChangeReveal = true
 let revealRetryFrame: number | null = null
 let lastRevealModelKey = ''
 let lastRevealContentKey = ''
+let lastLineNumberOptionsKey = ''
 let disposed = false
 
 function extname(path: string): string {
@@ -152,13 +158,12 @@ function hunkRangeLabel(hunk: HunkAction): string {
 }
 
 function resolveHunkAnchorLine(hunk: HunkAction, lineCount: number): number {
-  const maxAnchor = Math.max(1, lineCount + 1)
   const directAnchor = Number(hunk.anchorLine)
   if (Number.isFinite(directAnchor) && directAnchor > 0) {
-    return clamp(Math.floor(directAnchor), 1, maxAnchor)
+    return resolveModifiedModelLineFromDisplayLine(Math.floor(directAnchor), lineCount)
   }
   const preferred = hunk.newCount > 0 ? hunk.newStart : hunk.newStart || hunk.oldStart || 1
-  return clamp(Math.floor(preferred || 1), 1, maxAnchor)
+  return resolveModifiedModelLineFromDisplayLine(Math.floor(preferred || 1), lineCount)
 }
 
 function isHunkActionActive(id: string, kind: HunkActionKind): boolean {
@@ -185,11 +190,19 @@ function buildHunkActionRow(hunk: HunkAction): HTMLDivElement {
   counts.className = 'oc-monaco-hunk-counts'
   const additions = Math.max(0, Math.floor(hunk.additions || 0))
   const deletions = Math.max(0, Math.floor(hunk.deletions || 0))
-  const chunks: string[] = []
-  if (additions > 0) chunks.push(`+${additions}`)
-  if (deletions > 0) chunks.push(`-${deletions}`)
-  if (chunks.length) {
-    counts.textContent = chunks.join(' ')
+  if (additions > 0) {
+    const addCount = document.createElement('span')
+    addCount.className = 'oc-monaco-hunk-count oc-monaco-hunk-count--add'
+    addCount.textContent = `+${additions}`
+    counts.appendChild(addCount)
+  }
+  if (deletions > 0) {
+    const delCount = document.createElement('span')
+    delCount.className = 'oc-monaco-hunk-count oc-monaco-hunk-count--del'
+    delCount.textContent = `-${deletions}`
+    counts.appendChild(delCount)
+  }
+  if (counts.childNodes.length) {
     meta.appendChild(counts)
   }
 
@@ -292,7 +305,7 @@ function refreshHunkActionZones() {
         afterLineNumber: clamp(anchorLine - 1, 0, lineCount),
         afterColumn: 0,
         domNode,
-        heightInPx: 28,
+        heightInPx: 24,
         suppressMouseDown: true,
         showInHiddenAreas: true,
         ordinal: 0,
@@ -313,13 +326,268 @@ function scheduleHunkActionZoneRefresh() {
   })
 }
 
+function normalizePositiveInteger(value: unknown): number | null {
+  const next = Number(value)
+  if (!Number.isFinite(next) || next <= 0) return null
+  return Math.floor(next)
+}
+
+function normalizeLineNumberMap(
+  value: Array<number | null> | null | undefined,
+  lineCount: number,
+): Array<number | null> | null {
+  if (!Array.isArray(value) || lineCount <= 0) return null
+  const normalized: Array<number | null> = new Array(lineCount).fill(null)
+  let hasMappedLine = false
+  const limit = Math.min(lineCount, value.length)
+  for (let idx = 0; idx < limit; idx += 1) {
+    const mapped = normalizePositiveInteger(value[idx])
+    if (mapped === null) continue
+    normalized[idx] = mapped
+    hasMappedLine = true
+  }
+  return hasMappedLine ? normalized : null
+}
+
+function getRequestedInitialTopLine(): number | null {
+  return normalizePositiveInteger(props.initialTopLine)
+}
+
+function getOriginalStartLine(): number | null {
+  return normalizePositiveInteger(props.originalStartLine)
+}
+
+function getModifiedStartLine(): number | null {
+  return normalizePositiveInteger(props.modifiedStartLine)
+}
+
+function getOriginalLineNumberMap(lineCount: number): Array<number | null> | null {
+  return normalizeLineNumberMap(props.originalLineNumbers || null, lineCount)
+}
+
+function getModifiedLineNumberMap(lineCount: number): Array<number | null> | null {
+  return normalizeLineNumberMap(props.modifiedLineNumbers || null, lineCount)
+}
+
+function resolveModelLineFromDisplayLine(
+  displayLine: number,
+  lineCount: number,
+  lineMap: Array<number | null> | null,
+  startLine: number | null,
+): number {
+  const target = normalizePositiveInteger(displayLine) || 1
+
+  if (lineMap) {
+    let fallback: number | null = null
+    for (let index = 0; index < Math.min(lineMap.length, lineCount); index += 1) {
+      const mapped = normalizePositiveInteger(lineMap[index])
+      if (mapped === null) continue
+      const modelLine = index + 1
+      if (mapped >= target) return modelLine
+      fallback = modelLine
+    }
+    if (fallback !== null) return fallback
+  }
+
+  if (startLine !== null) {
+    return clamp(target - startLine + 1, 1, lineCount)
+  }
+
+  return clamp(target, 1, lineCount)
+}
+
+function resolveModifiedModelLineFromDisplayLine(displayLine: number, lineCount: number): number {
+  return resolveModelLineFromDisplayLine(
+    displayLine,
+    lineCount,
+    getModifiedLineNumberMap(lineCount),
+    getModifiedStartLine(),
+  )
+}
+
+function resolveExplicitInitialTopLine(lineCount: number): number | null {
+  const requested = getRequestedInitialTopLine()
+  if (requested === null) return null
+  return resolveModifiedModelLineFromDisplayLine(requested, lineCount)
+}
+
+function resolveMaxDisplayLineNumber(
+  lineCount: number,
+  lineMap: Array<number | null> | null,
+  startLine: number | null,
+): number {
+  let maxLine = lineCount
+  if (lineMap) {
+    for (const entry of lineMap) {
+      const mapped = normalizePositiveInteger(entry)
+      if (mapped !== null && mapped > maxLine) maxLine = mapped
+    }
+    return Math.max(1, maxLine)
+  }
+
+  if (startLine !== null) {
+    return Math.max(1, startLine + Math.max(0, lineCount - 1))
+  }
+
+  return Math.max(1, maxLine)
+}
+
+function computeLineNumberDigits(
+  lineCount: number,
+  lineMap: Array<number | null> | null,
+  startLine: number | null,
+): number {
+  return String(resolveMaxDisplayLineNumber(lineCount, lineMap, startLine)).length
+}
+
+function computeLineNumberMinChars(
+  lineCount: number,
+  lineMap: Array<number | null> | null,
+  startLine: number | null,
+  extraChars = 0,
+): number {
+  const digits = computeLineNumberDigits(lineCount, lineMap, startLine)
+  return clamp(digits + Math.max(0, Math.floor(extraChars)), 1, 12)
+}
+
+function computeInlineGapChars(originalDigits: number, modifiedDigits: number): number {
+  const maxDigits = Math.max(1, originalDigits, modifiedDigits)
+  return clamp(Math.ceil(maxDigits / 6), 1, 3)
+}
+
+function isInlineDiffMode(): boolean {
+  const diffEditor = diffEditorRef.value
+  if (!diffEditor) return false
+  const container = diffEditor.getContainerDomNode?.()
+  if (!container) return false
+  return !container.classList.contains('side-by-side')
+}
+
+function setInlineGapCssVar(gapChars: number) {
+  const diffEditor = diffEditorRef.value
+  const container = diffEditor?.getContainerDomNode?.()
+  if (!container) return
+  container.style.setProperty('--oc-inline-line-gap-ch', `${Math.max(0, Math.floor(gapChars))}ch`)
+}
+
+function applyEditorLineNumberOptions(
+  editor: Monaco.editor.ICodeEditor,
+  lineMap: Array<number | null> | null,
+  startLine: number | null,
+  trailingGapChars = 0,
+) {
+  const model = editor.getModel()
+  if (!model) return
+  const lineCount = Math.max(1, model.getLineCount())
+
+  if (!lineMap && startLine === null && trailingGapChars <= 0) {
+    editor.updateOptions({
+      lineNumbers: 'on',
+      lineNumbersMinChars: 1,
+    })
+    return
+  }
+
+  const minChars = computeLineNumberMinChars(lineCount, lineMap, startLine, trailingGapChars)
+  editor.updateOptions({
+    lineNumbers: (lineNumber: number) => {
+      const modelLine = clamp(Math.floor(lineNumber || 1), 1, lineCount)
+      if (lineMap) {
+        const mapped = normalizePositiveInteger(lineMap[modelLine - 1])
+        return mapped !== null ? String(mapped) : ''
+      }
+      if (startLine !== null) {
+        return String(startLine + modelLine - 1)
+      }
+      return String(modelLine)
+    },
+    lineNumbersMinChars: minChars,
+  })
+}
+
+function updateLineNumberOptions() {
+  if (disposed) return
+  const diffEditor = diffEditorRef.value
+  if (!diffEditor) return
+
+  const originalEditor = diffEditor.getOriginalEditor()
+  const modifiedEditor = diffEditor.getModifiedEditor()
+
+  const originalLineCount = Math.max(1, originalEditor.getModel()?.getLineCount() || 1)
+  const modifiedLineCount = Math.max(1, modifiedEditor.getModel()?.getLineCount() || 1)
+
+  const originalLineMap = getOriginalLineNumberMap(originalLineCount)
+  const modifiedLineMap = getModifiedLineNumberMap(modifiedLineCount)
+  const originalStartLine = getOriginalStartLine()
+  const modifiedStartLine = getModifiedStartLine()
+
+  const inlineMode = isInlineDiffMode()
+  const originalDigits = computeLineNumberDigits(originalLineCount, originalLineMap, originalStartLine)
+  const modifiedDigits = computeLineNumberDigits(modifiedLineCount, modifiedLineMap, modifiedStartLine)
+  const inlineGapChars = inlineMode ? computeInlineGapChars(originalDigits, modifiedDigits) : 0
+
+  const lineNumberKey = `${inlineMode ? 'inline' : 'side'}:${inlineGapChars}:${originalDigits}:${modifiedDigits}:${lineMapSignature(originalLineMap)}:${lineMapSignature(modifiedLineMap)}:${originalStartLine ?? 'n'}:${modifiedStartLine ?? 'n'}`
+  if (lineNumberKey === lastLineNumberOptionsKey) return
+  lastLineNumberOptionsKey = lineNumberKey
+
+  setInlineGapCssVar(inlineGapChars)
+  applyEditorLineNumberOptions(originalEditor, originalLineMap, originalStartLine, inlineGapChars)
+  applyEditorLineNumberOptions(modifiedEditor, modifiedLineMap, modifiedStartLine)
+}
+
+function revealModifiedLineAtTop(modifiedEditor: Monaco.editor.ICodeEditor, targetLine: number) {
+  const scrollTop = Math.max(0, modifiedEditor.getTopForLineNumber(targetLine))
+  const immediate = monacoRef.value?.editor.ScrollType.Immediate
+  if (typeof immediate === 'number') {
+    modifiedEditor.setScrollTop(scrollTop, immediate)
+    return
+  }
+  modifiedEditor.setScrollTop(scrollTop)
+}
+
 function maybeRevealFirstDiffChange() {
   if (disposed) return
-  if (props.autoRevealFirstChange === false) return
   if (!pendingFirstChangeReveal) return
 
   const diffEditor = diffEditorRef.value
   if (!diffEditor) return
+
+  const modifiedEditor = diffEditor.getModifiedEditor()
+  const model = modifiedEditor.getModel()
+  if (!model) return
+
+  const lineCount = Math.max(1, model.getLineCount())
+  const explicitTopLine = resolveExplicitInitialTopLine(lineCount)
+
+  const layout = modifiedEditor.getLayoutInfo()
+  if (layout.width <= 0 || layout.height <= 0) {
+    if (revealRetryFrame === null && typeof requestAnimationFrame === 'function') {
+      revealRetryFrame = requestAnimationFrame(() => {
+        revealRetryFrame = null
+        maybeRevealFirstDiffChange()
+      })
+    }
+    return
+  }
+
+  if (explicitTopLine !== null) {
+    pendingFirstChangeReveal = false
+    if (revealRetryFrame !== null && typeof cancelAnimationFrame === 'function') {
+      cancelAnimationFrame(revealRetryFrame)
+    }
+    revealRetryFrame = null
+    revealModifiedLineAtTop(modifiedEditor, explicitTopLine)
+    return
+  }
+
+  if (props.autoRevealFirstChange === false) {
+    pendingFirstChangeReveal = false
+    if (revealRetryFrame !== null && typeof cancelAnimationFrame === 'function') {
+      cancelAnimationFrame(revealRetryFrame)
+    }
+    revealRetryFrame = null
+    return
+  }
 
   const lineChanges = diffEditor.getLineChanges()
   if (lineChanges === null) {
@@ -336,20 +604,6 @@ function maybeRevealFirstDiffChange() {
   }
 
   const first = lineChanges[0]
-  const modifiedEditor = diffEditor.getModifiedEditor()
-  const model = modifiedEditor.getModel()
-  if (!model) return
-
-  const layout = modifiedEditor.getLayoutInfo()
-  if (layout.width <= 0 || layout.height <= 0) {
-    if (revealRetryFrame === null && typeof requestAnimationFrame === 'function') {
-      revealRetryFrame = requestAnimationFrame(() => {
-        revealRetryFrame = null
-        maybeRevealFirstDiffChange()
-      })
-    }
-    return
-  }
 
   pendingFirstChangeReveal = false
   if (revealRetryFrame !== null && typeof cancelAnimationFrame === 'function') {
@@ -357,7 +611,6 @@ function maybeRevealFirstDiffChange() {
   }
   revealRetryFrame = null
 
-  const lineCount = Math.max(1, model.getLineCount())
   const candidates = [
     first.modifiedStartLineNumber,
     first.modifiedEndLineNumber,
@@ -367,17 +620,38 @@ function maybeRevealFirstDiffChange() {
   const firstChangedLine = candidates.find((line) => Number.isFinite(line) && line > 0) ?? 1
   const targetLine = clamp(Math.floor(firstChangedLine), 1, lineCount)
   const revealLine = clamp(targetLine - 2, 1, lineCount)
-  modifiedEditor.revealLineNearTop(revealLine)
+  revealModifiedLineAtTop(modifiedEditor, revealLine)
+}
+
+function lineMapSignature(value: Array<number | null> | null | undefined): string {
+  if (!Array.isArray(value) || !value.length) return 'none'
+  let first = 'x'
+  let last = 'x'
+  let count = 0
+  for (const raw of value) {
+    const mapped = normalizePositiveInteger(raw)
+    if (mapped === null) continue
+    if (count === 0) first = String(mapped)
+    last = String(mapped)
+    count += 1
+  }
+  return `${value.length}:${count}:${first}:${last}`
 }
 
 function buildRevealContentKey(): string {
   const original = props.originalValue ?? ''
   const modified = props.modifiedValue ?? ''
-  return `${original.length}:${modified.length}:${original.slice(0, 160)}:${original.slice(-160)}:${modified.slice(0, 160)}:${modified.slice(-160)}`
+  const revealMode = props.autoRevealFirstChange === false ? 'off' : 'on'
+  const explicitTop = getRequestedInitialTopLine()
+  const originalStartLine = getOriginalStartLine()
+  const modifiedStartLine = getModifiedStartLine()
+  const originalLineMapSig = lineMapSignature(props.originalLineNumbers || null)
+  const modifiedLineMapSig = lineMapSignature(props.modifiedLineNumbers || null)
+  return `${revealMode}:${explicitTop ?? 'none'}:${originalStartLine ?? 'none'}:${modifiedStartLine ?? 'none'}:${originalLineMapSig}:${modifiedLineMapSig}:${original.length}:${modified.length}:${original.slice(0, 160)}:${original.slice(-160)}:${modified.slice(0, 160)}:${modified.slice(-160)}`
 }
 
 function requestFirstChangeReveal() {
-  if (props.autoRevealFirstChange === false) return
+  if (props.autoRevealFirstChange === false && getRequestedInitialTopLine() === null) return
   pendingFirstChangeReveal = true
   queueMicrotask(() => maybeRevealFirstDiffChange())
 }
@@ -442,6 +716,7 @@ function syncModels() {
     previousModified.dispose()
   }
 
+  updateLineNumberOptions()
   scheduleHunkActionZoneRefresh()
 }
 
@@ -504,7 +779,7 @@ onMounted(async () => {
     automaticLayout: true,
     fontFamily: 'var(--font-mono)',
     fontSize: 13,
-    lineDecorationsWidth: 4,
+    lineDecorationsWidth: 10,
     lineNumbers: 'on',
     lineNumbersMinChars: 1,
     minimap: { enabled: false },
@@ -525,6 +800,7 @@ onMounted(async () => {
   syncModels()
   updateDiffEditorOptions()
   modifiedLayoutListener = diffEditorRef.value.getModifiedEditor().onDidLayoutChange(() => {
+    updateLineNumberOptions()
     maybeRevealFirstDiffChange()
   })
   diffUpdateListener = diffEditorRef.value.onDidUpdateDiff(() => {
@@ -605,7 +881,16 @@ watch(
 )
 
 watch(
-  () => [props.originalValue, props.modifiedValue, props.autoRevealFirstChange],
+  () => [
+    props.originalValue,
+    props.modifiedValue,
+    props.autoRevealFirstChange,
+    props.initialTopLine,
+    props.originalStartLine,
+    props.modifiedStartLine,
+    props.originalLineNumbers,
+    props.modifiedLineNumbers,
+  ],
   () => {
     const nextKey = buildRevealContentKey()
     if (nextKey === lastRevealContentKey) return
@@ -636,12 +921,18 @@ watch(
   () => props.readOnly,
   () => updateDiffEditorOptions(),
 )
+
+watch(
+  () => [props.originalStartLine, props.modifiedStartLine, props.originalLineNumbers, props.modifiedLineNumbers],
+  () => updateLineNumberOptions(),
+  { deep: true },
+)
 </script>
 
 <template>
   <div class="monaco-diff-host" data-oc-text-editor-root="true" :data-files-theme="props.useFilesTheme ? '1' : '0'">
+    <div ref="containerRef" class="monaco-diff-container" :class="{ 'is-hidden': !ready }" />
     <div v-if="!ready" class="monaco-loading">Loading diff editor...</div>
-    <div v-show="ready" ref="containerRef" class="monaco-diff-container" />
   </div>
 </template>
 
@@ -649,6 +940,7 @@ watch(
 .monaco-diff-host {
   height: 100%;
   min-height: 0;
+  position: relative;
   width: 100%;
 }
 
@@ -658,14 +950,20 @@ watch(
   width: 100%;
 }
 
+.monaco-diff-container.is-hidden {
+  visibility: hidden;
+}
+
 .monaco-loading {
   align-items: center;
   color: oklch(var(--muted-foreground));
   display: flex;
   font-size: 12px;
-  height: 100%;
+  inset: 0;
   justify-content: center;
   letter-spacing: 0.08em;
+  pointer-events: none;
+  position: absolute;
   text-transform: uppercase;
 }
 
@@ -682,6 +980,41 @@ watch(
 :global(.monaco-diff-host[data-files-theme='1'] .monaco-editor .monaco-editor-background),
 :global(.monaco-diff-host[data-files-theme='1'] .monaco-editor .inputarea.ime-input) {
   background-color: oklch(var(--background)) !important;
+}
+
+:global(.monaco-diff-host .monaco-editor .sticky-widget .sticky-widget-line-numbers) {
+  background-color: var(--vscode-editorStickyScroll-background) !important;
+}
+
+:global(.monaco-diff-host .monaco-editor .sticky-widget.peek .sticky-widget-line-numbers) {
+  background-color: var(--vscode-peekViewEditorStickyScroll-background) !important;
+}
+
+:global(.monaco-diff-host .monaco-editor .sticky-widget .sticky-line-number),
+:global(.monaco-diff-host .monaco-editor .sticky-widget .sticky-line-number-inner) {
+  background-color: inherit !important;
+}
+
+:global(.monaco-diff-host .monaco-editor .sticky-widget .sticky-line-number) {
+  align-items: center;
+  display: inline-flex;
+  height: 100%;
+}
+
+:global(.monaco-diff-host .monaco-editor .sticky-widget .sticky-line-number-inner) {
+  align-items: center;
+  display: inline-flex;
+  height: 100%;
+}
+
+:global(.monaco-diff-host .monaco-diff-editor:not(.side-by-side) .editor.original .margin-view-overlays .line-numbers) {
+  padding-right: var(--oc-inline-line-gap-ch, 1ch);
+}
+
+:global(
+  .monaco-diff-host .monaco-diff-editor:not(.side-by-side) .editor.original .sticky-widget .sticky-line-number-inner
+) {
+  padding-right: var(--oc-inline-line-gap-ch, 1ch) !important;
 }
 
 :global(.monaco-diff-host[data-files-theme='1'] .monaco-editor .line-numbers) {
@@ -704,12 +1037,12 @@ watch(
   display: flex;
   font-family: var(--font-mono);
   font-size: 10px;
-  gap: 16px;
-  height: 28px;
+  gap: 12px;
+  height: 24px;
   justify-content: space-between;
-  line-height: 1;
+  line-height: 1.2;
   pointer-events: all !important;
-  padding: 0 12px;
+  padding: 0 10px;
   position: relative;
   z-index: 3;
 }
@@ -726,7 +1059,8 @@ watch(
 :global(.oc-monaco-hunk-meta) {
   align-items: center;
   display: inline-flex;
-  gap: 12px;
+  gap: 10px;
+  height: 100%;
   min-width: 0;
 }
 
@@ -735,7 +1069,41 @@ watch(
 }
 
 :global(.oc-monaco-hunk-counts) {
-  color: oklch(var(--muted-foreground));
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+}
+
+:global(.oc-monaco-hunk-count) {
+  font-weight: 600;
+}
+
+:global(.oc-monaco-hunk-count--add) {
+  color: oklch(0.62 0.17 145);
+}
+
+:global(.oc-monaco-hunk-count--del) {
+  color: oklch(0.56 0.2 25);
+}
+
+:global(.dark .oc-monaco-hunk-count--add) {
+  color: oklch(0.74 0.13 145);
+}
+
+:global(.dark .oc-monaco-hunk-count--del) {
+  color: oklch(0.68 0.16 25);
+}
+
+:global(.monaco-diff-host .monaco-editor .insert-sign),
+:global(.monaco-diff-host .monaco-diff-editor .insert-sign) {
+  color: oklch(0.62 0.17 145) !important;
+  opacity: 1 !important;
+}
+
+:global(.monaco-diff-host .monaco-editor .delete-sign),
+:global(.monaco-diff-host .monaco-diff-editor .delete-sign) {
+  color: oklch(0.56 0.2 25) !important;
+  opacity: 1 !important;
 }
 
 :global(.oc-monaco-hunk-unavailable) {
@@ -745,19 +1113,24 @@ watch(
 :global(.oc-monaco-hunk-actions) {
   align-items: center;
   display: inline-flex;
+  height: 100%;
   gap: 8px;
 }
 
 :global(.oc-monaco-hunk-button) {
+  align-items: center;
   background: transparent;
   border: 0;
   border-radius: 4px;
   color: oklch(var(--foreground));
   cursor: pointer;
+  display: inline-flex;
   font-family: var(--font-mono);
   font-size: 10px;
+  height: 18px;
+  justify-content: center;
   line-height: 1;
-  padding: 3px 6px;
+  padding: 0 6px;
   text-decoration: none;
   text-decoration-color: oklch(var(--border));
   text-underline-offset: 2px;

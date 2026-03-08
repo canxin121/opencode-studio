@@ -520,6 +520,11 @@ function onFilterRefTypeChange(value: string | number) {
                   <MonacoDiffEditor
                     :original-value="selectedFileDiffModel.original"
                     :modified-value="selectedFileDiffModel.modified"
+                    :initial-top-line="selectedFileDiffModel.initialTopLine"
+                    :original-start-line="selectedFileDiffModel.originalStartLine"
+                    :modified-start-line="selectedFileDiffModel.modifiedStartLine"
+                    :original-line-numbers="selectedFileDiffModel.originalLineNumbers"
+                    :modified-line-numbers="selectedFileDiffModel.modifiedLineNumbers"
                     :path="selectedFileDiffModel.path"
                     :language-path="selectedFileDiffModel.path"
                     :model-id="selectedFileDiffModelId"
@@ -542,6 +547,11 @@ function onFilterRefTypeChange(value: string | number) {
                   <MonacoDiffEditor
                     :original-value="commitDiffModel.original"
                     :modified-value="commitDiffModel.modified"
+                    :initial-top-line="commitDiffModel.initialTopLine"
+                    :original-start-line="commitDiffModel.originalStartLine"
+                    :modified-start-line="commitDiffModel.modifiedStartLine"
+                    :original-line-numbers="commitDiffModel.originalLineNumbers"
+                    :modified-line-numbers="commitDiffModel.modifiedLineNumbers"
                     :path="commitDiffModel.path"
                     :language-path="commitDiffModel.path"
                     :model-id="commitDiffModelId"

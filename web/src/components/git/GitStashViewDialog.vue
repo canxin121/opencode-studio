@@ -52,6 +52,11 @@ const stashModelId = computed(() => `git-stash:${stashDiffModel.value.path}`)
         <MonacoDiffEditor
           :original-value="stashDiffModel.original"
           :modified-value="stashDiffModel.modified"
+          :initial-top-line="stashDiffModel.initialTopLine"
+          :original-start-line="stashDiffModel.originalStartLine"
+          :modified-start-line="stashDiffModel.modifiedStartLine"
+          :original-line-numbers="stashDiffModel.originalLineNumbers"
+          :modified-line-numbers="stashDiffModel.modifiedLineNumbers"
           :path="stashDiffModel.path"
           :language-path="stashDiffModel.path"
           :model-id="stashModelId"

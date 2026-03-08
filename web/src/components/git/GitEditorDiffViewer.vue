@@ -161,6 +161,17 @@ const editorHunkActions = computed<EditorHunkAction[]>(() =>
   })),
 )
 
+const firstChangedLine = computed<number | null>(() => {
+  for (const hunk of hunks.value) {
+    const anchor = Number(hunk.anchorLine)
+    if (Number.isFinite(anchor) && anchor > 0) return Math.floor(anchor)
+
+    const fallback = Number(hunk.newStart || hunk.oldStart)
+    if (Number.isFinite(fallback) && fallback > 0) return Math.floor(fallback)
+  }
+  return null
+})
+
 function resetState() {
   loading.value = false
   error.value = null
@@ -442,6 +453,7 @@ watch(
           :modified-value="displayModified"
           :path="modifiedModelPath"
           :original-path="originalModelPath"
+          :initial-top-line="firstChangedLine"
           :use-files-theme="true"
           :wrap="wrapLines"
           :read-only="true"
