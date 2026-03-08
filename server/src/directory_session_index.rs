@@ -262,6 +262,7 @@ impl DirectorySessionIndexManager {
 
         let directory_path = session
             .get("directory")
+            .or_else(|| session.get("cwd"))
             .and_then(|v| v.as_str())
             .map(|v| v.trim().to_string())
             .filter(|v| !v.is_empty());
@@ -282,6 +283,7 @@ impl DirectorySessionIndexManager {
 
         let title = session
             .get("title")
+            .or_else(|| session.get("name"))
             .or_else(|| session.get("slug"))
             .and_then(|v| v.as_str())
             .map(|v| v.trim().to_string())
