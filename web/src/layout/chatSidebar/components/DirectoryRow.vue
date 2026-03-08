@@ -41,19 +41,6 @@ const { t } = useI18n()
 
 const actionsAlwaysVisible = computed(() => props.uiIsMobile)
 
-const activityLabel = computed(() => {
-  if (props.activityState === 'running') {
-    return String(t('chat.sidebar.directoriesList.activity.running'))
-  }
-  if (props.activityState === 'blocked') {
-    return String(t('chat.sidebar.directoriesList.activity.blocked'))
-  }
-  if (props.activityState === 'mixed') {
-    return String(t('chat.sidebar.directoriesList.activity.mixed'))
-  }
-  return ''
-})
-
 const activityTitle = computed(() => {
   if (props.activityState === 'running') {
     return String(t('chat.sidebar.directoriesList.activity.runningTooltip'))
@@ -67,28 +54,15 @@ const activityTitle = computed(() => {
   return ''
 })
 
-const activityBadgeClass = computed(() => {
-  if (props.activityState === 'running') {
-    return 'bg-primary/10 text-primary'
-  }
-  if (props.activityState === 'blocked') {
-    return 'bg-amber-500/12 text-amber-700 dark:text-amber-400'
-  }
-  if (props.activityState === 'mixed') {
-    return 'bg-orange-500/12 text-orange-700 dark:text-orange-400'
-  }
-  return ''
-})
-
 const activityDotClass = computed(() => {
   if (props.activityState === 'running') {
     return 'bg-primary animate-pulse'
   }
   if (props.activityState === 'blocked') {
-    return 'bg-amber-500'
+    return 'bg-destructive'
   }
   if (props.activityState === 'mixed') {
-    return 'bg-orange-500 animate-pulse'
+    return 'bg-destructive animate-pulse ring-1 ring-primary/40 ring-offset-1 ring-offset-sidebar'
   }
   return ''
 })
@@ -130,13 +104,12 @@ function handleMobileOpenActionsClick() {
           <div class="min-w-0 flex-1 truncate">{{ directoryEntryLabel(directory) }}</div>
           <span
             v-if="activityState"
-            class="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium flex-shrink-0"
-            :class="activityBadgeClass"
+            class="inline-flex items-center flex-shrink-0"
             :title="activityTitle"
             :aria-label="activityTitle"
           >
             <span class="inline-flex h-1.5 w-1.5 rounded-full" :class="activityDotClass" />
-            <span class="max-w-[6rem] truncate">{{ activityLabel }}</span>
+            <span class="sr-only">{{ activityTitle }}</span>
           </span>
         </div>
       </div>

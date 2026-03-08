@@ -31,7 +31,7 @@ import SearchInput from '@/components/ui/SearchInput.vue'
 import type { OptionMenuGroup, OptionMenuItem } from '@/components/ui/optionMenu.types'
 import TerminalKeybar from '@/components/TerminalKeybar.vue'
 import { consumeTrustedTerminalHandoffPayload, type TerminalHandoffTarget } from '@/lib/terminalHandoff'
-import { getLocalString, removeLocalKey, setLocalString } from '@/lib/persist'
+import { getLocalString, removeLocalKey, removeSessionKey, setLocalString } from '@/lib/persist'
 import { localStorageKeys } from '@/lib/persistence/storageKeys'
 import { ApiError } from '@/lib/api'
 import { copyTextToClipboard, readTextFromClipboard } from '@/lib/clipboard'
@@ -88,7 +88,14 @@ type TerminalUiStateEvent =
     }
 
 const STORAGE_GIT_HANDOFF_SESSION_NAME = localStorageKeys.terminal.gitHandoffSessionName
-const STORAGE_GIT_HANDOFF_SESSION_ID_LEGACY = localStorageKeys.terminal.legacyGitHandoffSessionId
+const STORAGE_GIT_HANDOFF_SESSION_ID_DEPRECATED = 'studio.terminal.git-handoff-session-id'
+
+function clearDeprecatedGitHandoffStorage() {
+  removeLocalKey(STORAGE_GIT_HANDOFF_SESSION_ID_DEPRECATED)
+  removeSessionKey(STORAGE_GIT_HANDOFF_SESSION_ID_DEPRECATED)
+}
+
+clearDeprecatedGitHandoffStorage()
 
 const TERMINAL_STATE_REMOTE_SAVE_DEBOUNCE_MS = 250
 
@@ -155,19 +162,13 @@ function readStoredGitHandoffSessionName(): string {
   return normalizeSessionMetaName(getLocalString(STORAGE_GIT_HANDOFF_SESSION_NAME) || '')
 }
 
-function readLegacyGitHandoffSessionId(): string {
-  return normalizeSessionId(getLocalString(STORAGE_GIT_HANDOFF_SESSION_ID_LEGACY) || '')
-}
-
 function persistGitHandoffSessionName(next: string | null) {
   const name = normalizeSessionMetaName(next || '')
   if (!name) {
     removeLocalKey(STORAGE_GIT_HANDOFF_SESSION_NAME)
-    removeLocalKey(STORAGE_GIT_HANDOFF_SESSION_ID_LEGACY)
     return
   }
   setLocalString(STORAGE_GIT_HANDOFF_SESSION_NAME, name)
-  removeLocalKey(STORAGE_GIT_HANDOFF_SESSION_ID_LEGACY)
 }
 
 const ui = useUiStore()
@@ -351,8 +352,6 @@ function isGitHandoffSession(id: string): boolean {
   const sid = normalizeSessionId(id)
   if (!sid) return false
   const storedName = readStoredGitHandoffSessionName()
-  const legacyStoredSid = readLegacyGitHandoffSessionId()
-  if (legacyStoredSid && sid === legacyStoredSid) return true
 
   const meta = sessionMetaFor(sid)
   const name = normalizeSessionMetaName(meta.name)
@@ -364,7 +363,6 @@ function gitHandoffSessionCandidates(): string[] {
   const out: string[] = []
   const seen = new Set<string>()
   const storedName = readStoredGitHandoffSessionName()
-  const legacySid = readLegacyGitHandoffSessionId()
 
   function push(rawId: string | null | undefined) {
     const sid = normalizeSessionId(rawId || '')
@@ -374,14 +372,6 @@ function gitHandoffSessionCandidates(): string[] {
   }
 
   push(resolveSessionIdByStoredName(storedName))
-  push(legacySid)
-
-  if (!storedName && legacySid) {
-    const legacyName = normalizeSessionMetaName(sessionMetaFor(legacySid).name)
-    if (legacyName) {
-      persistGitHandoffSessionName(legacyName)
-    }
-  }
   for (const sid of sessionList.value) {
     if (isGitHandoffSession(sid)) {
       push(sid)

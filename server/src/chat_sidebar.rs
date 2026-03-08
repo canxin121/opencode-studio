@@ -1469,12 +1469,13 @@ fn collect_directory_activity_ids(
 
         let is_blocked = matches!(attention.as_str(), "permission" | "question")
             || matches!(display_state.as_str(), "needspermission" | "needsreply");
-        let mut is_running = matches!(
-            display_state.as_str(),
-            "running" | "retrying" | "coolingdown"
-        ) || matches!(status_type.as_str(), "busy" | "retry")
-            || matches!(phase.as_str(), "busy" | "cooldown")
-            || matches!(effective.as_str(), "busy" | "cooldown");
+        let mut is_running = !is_blocked
+            && (matches!(
+                display_state.as_str(),
+                "running" | "retrying" | "coolingdown"
+            ) || matches!(status_type.as_str(), "busy" | "retry")
+                || matches!(phase.as_str(), "busy" | "cooldown")
+                || matches!(effective.as_str(), "busy" | "cooldown"));
 
         if !is_blocked
             && !is_running

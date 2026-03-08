@@ -35,7 +35,6 @@ export const localStorageKeys = {
   },
   terminal: {
     gitHandoffSessionName: namespacedKey('terminal.git-handoff-session-name'),
-    legacyGitHandoffSessionId: namespacedKey('terminal.git-handoff-session-id'),
   },
   files: {
     showHidden: namespacedKey('files.show-hidden'),
@@ -79,7 +78,6 @@ export const sessionStorageKeys = {
   },
   terminal: {
     handoffKeyPrefix: namespacedKey('terminal.handoff:'),
-    gitHandoffSessionId: namespacedKey('terminal.git-handoff-session-id'),
   },
   sessions: {
     bootCollapseAppliedToken: namespacedKey('sessions.boot-collapse.applied-token'),

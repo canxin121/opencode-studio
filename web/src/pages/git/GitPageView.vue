@@ -1870,7 +1870,7 @@ void diffPaneRef
       </ScrollArea>
     </div>
 
-    <div class="min-w-0 flex-1 overflow-hidden" :class="props.embedded ? 'flex flex-col' : ''" v-show="showDiffPane">
+    <div class="min-w-0 flex flex-1 flex-col overflow-hidden" v-show="showDiffPane">
       <div v-if="props.embedded" class="flex items-center gap-2 border-b border-sidebar-border/50 px-2 py-1.5">
         <IconButton
           size="sm"
