@@ -2133,7 +2133,11 @@ mod tests {
         tokio::fs::create_dir_all(&proj1).await.unwrap();
         tokio::fs::create_dir_all(&proj2).await.unwrap();
 
-        let storage = tmp.join(".local").join("share").join("opencode").join("storage");
+        let storage = tmp
+            .join(".local")
+            .join("share")
+            .join("opencode")
+            .join("storage");
         let session_dir = storage.join("sessions").join("global");
 
         // Three sessions in the same global project; two share the same directory.
@@ -2310,7 +2314,11 @@ mod tests {
         tokio::fs::create_dir_all(&sub).await.unwrap();
         tokio::fs::create_dir_all(&other).await.unwrap();
 
-        let storage = tmp.join(".local").join("share").join("opencode").join("storage");
+        let storage = tmp
+            .join(".local")
+            .join("share")
+            .join("opencode")
+            .join("storage");
         let session_dir = storage.join("sessions").join("global");
 
         write_json(
@@ -2463,7 +2471,11 @@ mod tests {
         let proj = tmp.join("proj");
         tokio::fs::create_dir_all(&proj).await.unwrap();
 
-        let storage = tmp.join(".local").join("share").join("opencode").join("storage");
+        let storage = tmp
+            .join(".local")
+            .join("share")
+            .join("opencode")
+            .join("storage");
         let session_dir = storage.join("sessions").join("global");
 
         write_json(
@@ -2529,8 +2541,8 @@ mod tests {
                 .join("storage")
                 .join("sessions"),
         )
-            .await
-            .unwrap();
+        .await
+        .unwrap();
 
         let _home = EnvVarGuard::set("HOME", home.to_string_lossy().to_string());
 
@@ -2671,7 +2683,11 @@ mod tests {
             .await
             .unwrap();
 
-        let storage = tmp.join(".local").join("share").join("opencode").join("storage");
+        let storage = tmp
+            .join(".local")
+            .join("share")
+            .join("opencode")
+            .join("storage");
 
         write_json(
             &storage
@@ -2751,7 +2767,11 @@ mod tests {
             .await
             .unwrap();
 
-        let storage = tmp.join(".local").join("share").join("opencode").join("storage");
+        let storage = tmp
+            .join(".local")
+            .join("share")
+            .join("opencode")
+            .join("storage");
 
         write_json(
             &storage
@@ -2830,7 +2850,12 @@ mod tests {
         let proj = tmp.join("proj");
         tokio::fs::create_dir_all(&proj).await.unwrap();
 
-        let db_path = tmp.join(".local").join("share").join("opencode").join("storage").join("opencode.sqlite");
+        let db_path = tmp
+            .join(".local")
+            .join("share")
+            .join("opencode")
+            .join("storage")
+            .join("opencode.sqlite");
         if let Some(parent) = db_path.parent() {
             tokio::fs::create_dir_all(parent).await.unwrap();
         }
@@ -2903,7 +2928,12 @@ mod tests {
             .await
             .unwrap();
 
-        let db_path = tmp.join(".local").join("share").join("opencode").join("storage").join("opencode.sqlite");
+        let db_path = tmp
+            .join(".local")
+            .join("share")
+            .join("opencode")
+            .join("storage")
+            .join("opencode.sqlite");
         if let Some(parent) = db_path.parent() {
             tokio::fs::create_dir_all(parent).await.unwrap();
         }
@@ -2988,7 +3018,12 @@ mod tests {
         tokio::fs::create_dir_all(&child_dir).await.unwrap();
         tokio::fs::create_dir_all(&parent_dir).await.unwrap();
 
-        let db_path = tmp.join(".local").join("share").join("opencode").join("storage").join("opencode.sqlite");
+        let db_path = tmp
+            .join(".local")
+            .join("share")
+            .join("opencode")
+            .join("storage")
+            .join("opencode.sqlite");
         if let Some(parent) = db_path.parent() {
             tokio::fs::create_dir_all(parent).await.unwrap();
         }
@@ -3083,7 +3118,12 @@ mod tests {
         tokio::fs::create_dir_all(&child_dir_a).await.unwrap();
         tokio::fs::create_dir_all(&child_dir_b).await.unwrap();
 
-        let db_path = tmp.join(".local").join("share").join("opencode").join("storage").join("opencode.sqlite");
+        let db_path = tmp
+            .join(".local")
+            .join("share")
+            .join("opencode")
+            .join("storage")
+            .join("opencode.sqlite");
         if let Some(parent) = db_path.parent() {
             tokio::fs::create_dir_all(parent).await.unwrap();
         }
@@ -3192,7 +3232,11 @@ mod tests {
         let proj = tmp.join("proj");
         tokio::fs::create_dir_all(&proj).await.unwrap();
 
-        let storage = tmp.join(".local").join("share").join("opencode").join("storage");
+        let storage = tmp
+            .join(".local")
+            .join("share")
+            .join("opencode")
+            .join("storage");
         let session_dir = storage.join("sessions").join("global");
 
         write_json(
@@ -3267,7 +3311,11 @@ mod tests {
         let proj = tmp.join("proj");
         tokio::fs::create_dir_all(&proj).await.unwrap();
 
-        let storage = tmp.join(".local").join("share").join("opencode").join("storage");
+        let storage = tmp
+            .join(".local")
+            .join("share")
+            .join("opencode")
+            .join("storage");
         let session_path = storage.join("sessions").join("global").join("ses_1.json");
 
         write_json(
@@ -3367,7 +3415,12 @@ mod tests {
         tokio::fs::create_dir_all(&tmp).await.unwrap();
         let _home = EnvVarGuard::set("HOME", tmp.to_string_lossy().to_string());
 
-        let db_path = tmp.join(".local").join("share").join("opencode").join("storage").join("opencode.sqlite");
+        let db_path = tmp
+            .join(".local")
+            .join("share")
+            .join("opencode")
+            .join("storage")
+            .join("opencode.sqlite");
         if let Some(parent) = db_path.parent() {
             tokio::fs::create_dir_all(parent).await.unwrap();
         }
@@ -3519,7 +3572,12 @@ mod tests {
         tokio::fs::create_dir_all(&tmp).await.unwrap();
         let _home = EnvVarGuard::set("HOME", tmp.to_string_lossy().to_string());
 
-        let db_path = tmp.join(".local").join("share").join("opencode").join("storage").join("opencode.sqlite");
+        let db_path = tmp
+            .join(".local")
+            .join("share")
+            .join("opencode")
+            .join("storage")
+            .join("opencode.sqlite");
         if let Some(parent) = db_path.parent() {
             tokio::fs::create_dir_all(parent).await.unwrap();
         }
@@ -3529,7 +3587,11 @@ mod tests {
             .await
             .unwrap();
 
-        let storage = tmp.join(".local").join("share").join("opencode").join("storage");
+        let storage = tmp
+            .join(".local")
+            .join("share")
+            .join("opencode")
+            .join("storage");
         write_json(
             &storage.join("messages").join("ses_json").join("msg_1.json"),
             &serde_json::json!({
@@ -3610,7 +3672,12 @@ mod tests {
         tokio::fs::create_dir_all(&tmp).await.unwrap();
         let _home = EnvVarGuard::set("HOME", tmp.to_string_lossy().to_string());
 
-        let db_path = tmp.join(".local").join("share").join("opencode").join("storage").join("opencode.sqlite");
+        let db_path = tmp
+            .join(".local")
+            .join("share")
+            .join("opencode")
+            .join("storage")
+            .join("opencode.sqlite");
         if let Some(parent) = db_path.parent() {
             tokio::fs::create_dir_all(parent).await.unwrap();
         }
@@ -3726,7 +3793,11 @@ mod tests {
         tokio::fs::create_dir_all(&tmp).await.unwrap();
         let _home = EnvVarGuard::set("HOME", tmp.to_string_lossy().to_string());
 
-        let storage = tmp.join(".local").join("share").join("opencode").join("storage");
+        let storage = tmp
+            .join(".local")
+            .join("share")
+            .join("opencode")
+            .join("storage");
         let message_dir = storage.join("messages").join("ses_1");
         let part_dir = storage.join("message-parts").join("ok_msg");
 
@@ -3815,7 +3886,11 @@ mod tests {
         tokio::fs::create_dir_all(&tmp).await.unwrap();
         let _home = EnvVarGuard::set("HOME", tmp.to_string_lossy().to_string());
 
-        let storage = tmp.join(".local").join("share").join("opencode").join("storage");
+        let storage = tmp
+            .join(".local")
+            .join("share")
+            .join("opencode")
+            .join("storage");
         let message_dir = storage.join("messages").join("ses_2");
         let part_dir = storage.join("message-parts").join("msg_1");
 

@@ -442,11 +442,10 @@ fn apply_windows_home_env_defaults(cmd: &mut Command) {
     {
         cmd.env("HOME", &home);
     }
-
 }
 
 fn windows_home_env_defaults() -> Option<String> {
-    let home = std::env::var("HOME")
+    std::env::var("HOME")
         .ok()
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty())
@@ -455,9 +454,7 @@ fn windows_home_env_defaults() -> Option<String> {
                 .ok()
                 .map(|v| v.trim().to_string())
                 .filter(|v| !v.is_empty())
-        });
-
-    home
+        })
 }
 
 async fn forward_child_output(label: &'static str, stream: impl tokio::io::AsyncRead + Unpin) {
