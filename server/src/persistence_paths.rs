@@ -167,25 +167,7 @@ pub(crate) fn terminal_session_registry_path() -> PathBuf {
 }
 
 pub(crate) fn opencode_data_dir_candidates() -> Vec<PathBuf> {
-    let mut candidates = Vec::<PathBuf>::new();
-
-    candidates.push(crate::path_utils::opencode_data_dir());
-
-    if let Ok(dir) = std::env::var("APPDATA") {
-        let trimmed = dir.trim();
-        if !trimmed.is_empty() {
-            candidates.push(PathBuf::from(trimmed).join("opencode"));
-        }
-    }
-
-    if let Ok(dir) = std::env::var("LOCALAPPDATA") {
-        let trimmed = dir.trim();
-        if !trimmed.is_empty() {
-            candidates.push(PathBuf::from(trimmed).join("opencode"));
-        }
-    }
-
-    dedupe_paths(candidates)
+    vec![crate::path_utils::opencode_data_dir()]
 }
 
 pub(crate) fn opencode_db_path_candidates() -> Vec<PathBuf> {
@@ -284,7 +266,7 @@ mod tests {
     }
 
     #[test]
-    fn studio_settings_path_prefers_xdg_style_home_when_present_on_windows_like_env() {
+    fn studio_settings_path_prefers_home_config_when_present_on_windows_like_env() {
         let _env_lock = ENV_LOCK.lock().unwrap();
         let tmp = unique_tmp_dir("studio-settings-xdg-home-priority");
         std::fs::create_dir_all(&tmp).unwrap();
@@ -313,7 +295,6 @@ mod tests {
         .unwrap();
 
         let _override = EnvVarGuard::set("OPENCODE_STUDIO_DATA_DIR", "".to_string());
-        let _xdg = EnvVarGuard::set("XDG_CONFIG_HOME", "".to_string());
         let _home = EnvVarGuard::set("HOME", home.to_string_lossy().to_string());
         let _appdata = EnvVarGuard::set("APPDATA", appdata.to_string_lossy().to_string());
 
@@ -340,7 +321,6 @@ mod tests {
         .unwrap();
 
         let _override = EnvVarGuard::set("OPENCODE_STUDIO_DATA_DIR", "".to_string());
-        let _xdg = EnvVarGuard::set("XDG_CONFIG_HOME", "".to_string());
         let _home = EnvVarGuard::set("HOME", home.to_string_lossy().to_string());
         let _appdata = EnvVarGuard::set("APPDATA", appdata.to_string_lossy().to_string());
 
@@ -352,10 +332,13 @@ mod tests {
         let _env_lock = ENV_LOCK.lock().unwrap();
         let tmp = unique_tmp_dir("persistence-db-legacy-priority");
         std::fs::create_dir_all(&tmp).unwrap();
-        let _xdg = EnvVarGuard::set("XDG_DATA_HOME", tmp.to_string_lossy().to_string());
+        let home = tmp.join("home");
+        std::fs::create_dir_all(&home).unwrap();
+        let _home = EnvVarGuard::set("HOME", home.to_string_lossy().to_string());
 
-        let modern = tmp.join("opencode").join("storage").join(OPENCODE_DB_FILE);
-        let legacy = tmp.join("opencode").join(LEGACY_OPENCODE_DB_FILE);
+        let data_root = home.join(".local").join("share").join("opencode");
+        let modern = data_root.join("storage").join(OPENCODE_DB_FILE);
+        let legacy = data_root.join(LEGACY_OPENCODE_DB_FILE);
 
         std::fs::create_dir_all(modern.parent().unwrap_or(tmp.as_path())).unwrap();
         std::fs::write(&modern, b"").unwrap();
@@ -365,24 +348,22 @@ mod tests {
     }
 
     #[test]
-    fn opencode_db_path_uses_existing_appdata_storage_when_default_is_missing() {
+    fn opencode_db_path_uses_home_share_storage_only() {
         let _env_lock = ENV_LOCK.lock().unwrap();
-        let tmp = unique_tmp_dir("persistence-db-appdata-fallback");
+        let tmp = unique_tmp_dir("persistence-db-home-share-only");
         std::fs::create_dir_all(&tmp).unwrap();
 
         let home = tmp.join("home");
         let appdata = tmp.join("appdata");
-        let local_appdata = tmp.join("localappdata");
         std::fs::create_dir_all(&home).unwrap();
         std::fs::create_dir_all(&appdata).unwrap();
-        std::fs::create_dir_all(&local_appdata).unwrap();
 
-        let _xdg = EnvVarGuard::set("XDG_DATA_HOME", "".to_string());
         let _home = EnvVarGuard::set("HOME", home.to_string_lossy().to_string());
         let _appdata = EnvVarGuard::set("APPDATA", appdata.to_string_lossy().to_string());
-        let _local = EnvVarGuard::set("LOCALAPPDATA", local_appdata.to_string_lossy().to_string());
 
-        let expected = appdata
+        let expected = home
+            .join(".local")
+            .join("share")
             .join("opencode")
             .join(OPENCODE_STORAGE_DIRNAME)
             .join(OPENCODE_DB_FILE);
@@ -393,22 +374,18 @@ mod tests {
     }
 
     #[test]
-    fn opencode_db_path_prefers_xdg_style_home_over_windows_appdata_roots() {
+    fn opencode_db_path_ignores_windows_appdata_roots() {
         let _env_lock = ENV_LOCK.lock().unwrap();
-        let tmp = unique_tmp_dir("persistence-db-xdg-home-priority");
+        let tmp = unique_tmp_dir("persistence-db-ignore-appdata");
         std::fs::create_dir_all(&tmp).unwrap();
 
         let home = tmp.join("home");
         let appdata = tmp.join("appdata");
-        let local_appdata = tmp.join("localappdata");
         std::fs::create_dir_all(&home).unwrap();
         std::fs::create_dir_all(&appdata).unwrap();
-        std::fs::create_dir_all(&local_appdata).unwrap();
 
-        let _xdg = EnvVarGuard::set("XDG_DATA_HOME", "".to_string());
         let _home = EnvVarGuard::set("HOME", home.to_string_lossy().to_string());
         let _appdata = EnvVarGuard::set("APPDATA", appdata.to_string_lossy().to_string());
-        let _local = EnvVarGuard::set("LOCALAPPDATA", local_appdata.to_string_lossy().to_string());
 
         let preferred = home
             .join(".local")
@@ -433,13 +410,19 @@ mod tests {
         let _env_lock = ENV_LOCK.lock().unwrap();
         let tmp = unique_tmp_dir("persistence-message-dir-priority");
         std::fs::create_dir_all(&tmp).unwrap();
-        let _xdg = EnvVarGuard::set("XDG_DATA_HOME", tmp.to_string_lossy().to_string());
+        let home = tmp.join("home");
+        std::fs::create_dir_all(&home).unwrap();
+        let _home = EnvVarGuard::set("HOME", home.to_string_lossy().to_string());
 
-        let modern = tmp
+        let modern = home
+            .join(".local")
+            .join("share")
             .join("opencode")
             .join(OPENCODE_STORAGE_DIRNAME)
             .join(MESSAGE_RECORDS_DIR);
-        let legacy = tmp
+        let legacy = home
+            .join(".local")
+            .join("share")
             .join("opencode")
             .join(OPENCODE_STORAGE_DIRNAME)
             .join(LEGACY_MESSAGE_RECORDS_DIR);
@@ -456,13 +439,19 @@ mod tests {
         let _env_lock = ENV_LOCK.lock().unwrap();
         let tmp = unique_tmp_dir("persistence-message-dir-modern-preferred");
         std::fs::create_dir_all(&tmp).unwrap();
-        let _xdg = EnvVarGuard::set("XDG_DATA_HOME", tmp.to_string_lossy().to_string());
+        let home = tmp.join("home");
+        std::fs::create_dir_all(&home).unwrap();
+        let _home = EnvVarGuard::set("HOME", home.to_string_lossy().to_string());
 
-        let modern = tmp
+        let modern = home
+            .join(".local")
+            .join("share")
             .join("opencode")
             .join(OPENCODE_STORAGE_DIRNAME)
             .join(MESSAGE_RECORDS_DIR);
-        let legacy = tmp
+        let legacy = home
+            .join(".local")
+            .join("share")
             .join("opencode")
             .join(OPENCODE_STORAGE_DIRNAME)
             .join(LEGACY_MESSAGE_RECORDS_DIR);

@@ -215,8 +215,6 @@ async fn opencode_studio_diagnostics(
         environment: serde_json::json!({
             "HOME": std::env::var("HOME").ok(),
             "USERPROFILE": std::env::var("USERPROFILE").ok(),
-            "XDG_CONFIG_HOME": std::env::var("XDG_CONFIG_HOME").ok(),
-            "XDG_DATA_HOME": std::env::var("XDG_DATA_HOME").ok(),
             "APPDATA": std::env::var("APPDATA").ok(),
             "LOCALAPPDATA": std::env::var("LOCALAPPDATA").ok(),
             "OPENCODE_STUDIO_DATA_DIR": std::env::var("OPENCODE_STUDIO_DATA_DIR").ok(),

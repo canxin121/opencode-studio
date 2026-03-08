@@ -402,7 +402,7 @@ mod tests {
         let _env_lock = ENV_LOCK.lock().unwrap();
         let tmp = unique_tmp_dir("attachment-cache-reuse");
         tokio::fs::create_dir_all(&tmp).await.unwrap();
-        let _xdg = EnvVarGuard::set("XDG_DATA_HOME", tmp.to_string_lossy().to_string());
+        let _home = EnvVarGuard::set("HOME", tmp.to_string_lossy().to_string());
 
         let source = tmp.join("workspace").join("hello.txt");
         if let Some(parent) = source.parent() {
@@ -429,7 +429,7 @@ mod tests {
         let _env_lock = ENV_LOCK.lock().unwrap();
         let tmp = unique_tmp_dir("attachment-cache-upload");
         tokio::fs::create_dir_all(&tmp).await.unwrap();
-        let _xdg = EnvVarGuard::set("XDG_DATA_HOME", tmp.to_string_lossy().to_string());
+        let _home = EnvVarGuard::set("HOME", tmp.to_string_lossy().to_string());
 
         let source = tmp.join("workspace").join("upload.bin");
         if let Some(parent) = source.parent() {

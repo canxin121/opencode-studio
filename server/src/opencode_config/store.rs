@@ -66,26 +66,7 @@ impl OpenCodeConfigStore {
     }
 
     fn opencode_config_dir_candidates(&self) -> Vec<PathBuf> {
-        let mut out = Vec::<PathBuf>::new();
-        out.push(self.opencode_config_dir());
-
-        if cfg!(windows)
-            && let Ok(dir) = std::env::var("APPDATA")
-        {
-            let trimmed = dir.trim();
-            if !trimmed.is_empty() {
-                out.push(PathBuf::from(trimmed).join("opencode"));
-            }
-        }
-
-        let mut deduped = Vec::<PathBuf>::new();
-        for path in out {
-            if deduped.iter().any(|existing| existing == &path) {
-                continue;
-            }
-            deduped.push(path);
-        }
-        deduped
+        vec![self.opencode_config_dir()]
     }
 
     fn user_config_file_candidates(&self) -> Vec<PathBuf> {
@@ -277,17 +258,17 @@ mod tests {
     }
 
     #[test]
-    fn config_file_user_uses_preferred_config_home_path() {
+    fn config_file_user_uses_home_config_dir_path() {
         let _env_lock = ENV_LOCK.lock().unwrap();
         let tmp =
             std::env::temp_dir().join(format!("opencode-config-store-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&tmp);
 
-        let xdg_config = tmp.join("xdg-config");
-        let preferred_dir = xdg_config.join("opencode");
+        let home = tmp.join("home");
+        let preferred_dir = home.join(".config").join("opencode");
         std::fs::create_dir_all(&preferred_dir).unwrap();
 
-        let _xdg = EnvVarGuard::set("XDG_CONFIG_HOME", xdg_config.to_string_lossy().to_string());
+        let _home = EnvVarGuard::set("HOME", home.to_string_lossy().to_string());
 
         let store = OpenCodeConfigStore::from_env();
         assert_eq!(
@@ -305,12 +286,12 @@ mod tests {
         ));
         let _ = std::fs::create_dir_all(&tmp);
 
-        let xdg_config = tmp.join("xdg-config");
-        let preferred_dir = xdg_config.join("opencode");
+        let home = tmp.join("home");
+        let preferred_dir = home.join(".config").join("opencode");
         std::fs::create_dir_all(&preferred_dir).unwrap();
         std::fs::write(preferred_dir.join("opencode.jsonc"), "{\n  // ok\n}\n").unwrap();
 
-        let _xdg = EnvVarGuard::set("XDG_CONFIG_HOME", xdg_config.to_string_lossy().to_string());
+        let _home = EnvVarGuard::set("HOME", home.to_string_lossy().to_string());
 
         let store = OpenCodeConfigStore::from_env();
         assert_eq!(
@@ -320,7 +301,7 @@ mod tests {
     }
 
     #[test]
-    fn config_file_user_prefers_xdg_style_home_over_appdata_when_both_exist() {
+    fn config_file_user_ignores_appdata_when_home_config_exists() {
         let _env_lock = ENV_LOCK.lock().unwrap();
         let tmp = std::env::temp_dir().join(format!(
             "opencode-config-store-home-priority-{}",
@@ -340,7 +321,6 @@ mod tests {
         std::fs::write(home_cfg.join("opencode.json"), "{}\n").unwrap();
         std::fs::write(app_cfg.join("opencode.json"), "{\"appdata\":true}\n").unwrap();
 
-        let _xdg = EnvVarGuard::set("XDG_CONFIG_HOME", "".to_string());
         let _home = EnvVarGuard::set("HOME", home.to_string_lossy().to_string());
         let _appdata = EnvVarGuard::set("APPDATA", appdata.to_string_lossy().to_string());
 

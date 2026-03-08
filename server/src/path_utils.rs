@@ -72,13 +72,6 @@ pub(crate) fn home_dir_path() -> Option<PathBuf> {
 }
 
 pub(crate) fn config_home_dir() -> PathBuf {
-    if let Ok(dir) = std::env::var("XDG_CONFIG_HOME") {
-        let trimmed = dir.trim();
-        if !trimmed.is_empty() {
-            return PathBuf::from(trimmed);
-        }
-    }
-
     if cfg!(windows)
         && let Ok(dir) = std::env::var("APPDATA")
     {
@@ -94,13 +87,6 @@ pub(crate) fn config_home_dir() -> PathBuf {
 }
 
 pub(crate) fn data_home_dir() -> PathBuf {
-    if let Ok(dir) = std::env::var("XDG_DATA_HOME") {
-        let trimmed = dir.trim();
-        if !trimmed.is_empty() {
-            return PathBuf::from(trimmed);
-        }
-    }
-
     home_dir_path()
         .map(|v| v.join(".local").join("share"))
         .unwrap_or_else(|| PathBuf::from("."))
@@ -129,13 +115,6 @@ pub(crate) fn cache_home_dir() -> PathBuf {
 }
 
 pub(crate) fn opencode_config_dir() -> PathBuf {
-    if let Ok(dir) = std::env::var("XDG_CONFIG_HOME") {
-        let trimmed = dir.trim();
-        if !trimmed.is_empty() {
-            return PathBuf::from(trimmed).join("opencode");
-        }
-    }
-
     home_dir_path()
         .map(|v| v.join(".config").join("opencode"))
         .unwrap_or_else(|| PathBuf::from(".").join("opencode"))
@@ -250,33 +229,33 @@ mod tests {
     }
 
     #[test]
-    fn opencode_data_dir_uses_data_home_without_legacy_fallback() {
+    fn opencode_data_dir_uses_home_share_dir() {
         let _env_lock = ENV_LOCK.lock().unwrap();
         let tmp =
             std::env::temp_dir().join(format!("opencode-path-utils-data-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&tmp);
 
-        let xdg_data = tmp.join("xdg-data");
-        let preferred = xdg_data.join("opencode");
+        let home = tmp.join("home");
+        let preferred = home.join(".local").join("share").join("opencode");
         std::fs::create_dir_all(&preferred).unwrap();
 
-        let _xdg = EnvVarGuard::set("XDG_DATA_HOME", xdg_data.to_string_lossy().to_string());
+        let _home = EnvVarGuard::set("HOME", home.to_string_lossy().to_string());
 
         assert_eq!(opencode_data_dir(), preferred);
     }
 
     #[test]
-    fn opencode_config_dir_uses_config_home_without_legacy_fallback() {
+    fn opencode_config_dir_uses_home_config_dir() {
         let _env_lock = ENV_LOCK.lock().unwrap();
         let tmp =
             std::env::temp_dir().join(format!("opencode-path-utils-config-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&tmp);
 
-        let xdg_config = tmp.join("xdg-config");
-        let preferred = xdg_config.join("opencode");
+        let home = tmp.join("home");
+        let preferred = home.join(".config").join("opencode");
         std::fs::create_dir_all(&preferred).unwrap();
 
-        let _xdg = EnvVarGuard::set("XDG_CONFIG_HOME", xdg_config.to_string_lossy().to_string());
+        let _home = EnvVarGuard::set("HOME", home.to_string_lossy().to_string());
 
         assert_eq!(opencode_config_dir(), preferred);
     }

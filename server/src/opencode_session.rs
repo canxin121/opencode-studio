@@ -1884,7 +1884,7 @@ mod tests {
 
         let tmp = unique_tmp_dir("sqlite-message-page");
         fs::create_dir_all(&tmp).await.unwrap();
-        let _xdg = EnvVarGuard::set("XDG_DATA_HOME", tmp.to_string_lossy().to_string());
+        let _home = EnvVarGuard::set("HOME", tmp.to_string_lossy().to_string());
 
         let db_path = opencode_db_path();
         if let Some(parent) = db_path.parent() {
@@ -2002,7 +2002,7 @@ mod tests {
 
         let tmp = unique_tmp_dir("sqlite-schema-compat");
         fs::create_dir_all(&tmp).await.unwrap();
-        let _xdg = EnvVarGuard::set("XDG_DATA_HOME", tmp.to_string_lossy().to_string());
+        let _home = EnvVarGuard::set("HOME", tmp.to_string_lossy().to_string());
 
         let db_path = opencode_db_path();
         if let Some(parent) = db_path.parent() {
@@ -2103,7 +2103,6 @@ mod tests {
         STORAGE_CACHE.clear();
 
         // Ensure we use the default HOME-based data dir.
-        let _xdg = EnvVarGuard::set("XDG_DATA_HOME", "".to_string());
 
         let sid = std::env::var("OPENCODE_STUDIO_TEST_SESSION_ID")
             .ok()
@@ -2126,7 +2125,7 @@ mod tests {
 
         let tmp = unique_tmp_dir("session-list");
         tokio::fs::create_dir_all(&tmp).await.unwrap();
-        let _xdg = EnvVarGuard::set("XDG_DATA_HOME", tmp.to_string_lossy().to_string());
+        let _home = EnvVarGuard::set("HOME", tmp.to_string_lossy().to_string());
 
         // Create two directories outside any git repo (project_id => global).
         let proj1 = tmp.join("proj1");
@@ -2134,7 +2133,7 @@ mod tests {
         tokio::fs::create_dir_all(&proj1).await.unwrap();
         tokio::fs::create_dir_all(&proj2).await.unwrap();
 
-        let storage = tmp.join("opencode").join("storage");
+        let storage = tmp.join(".local").join("share").join("opencode").join("storage");
         let session_dir = storage.join("sessions").join("global");
 
         // Three sessions in the same global project; two share the same directory.
@@ -2302,7 +2301,7 @@ mod tests {
 
         let tmp = unique_tmp_dir("session-list-strict");
         tokio::fs::create_dir_all(&tmp).await.unwrap();
-        let _xdg = EnvVarGuard::set("XDG_DATA_HOME", tmp.to_string_lossy().to_string());
+        let _home = EnvVarGuard::set("HOME", tmp.to_string_lossy().to_string());
 
         let root = tmp.join("workspace");
         let sub = root.join("sub");
@@ -2311,7 +2310,7 @@ mod tests {
         tokio::fs::create_dir_all(&sub).await.unwrap();
         tokio::fs::create_dir_all(&other).await.unwrap();
 
-        let storage = tmp.join("opencode").join("storage");
+        let storage = tmp.join(".local").join("share").join("opencode").join("storage");
         let session_dir = storage.join("sessions").join("global");
 
         write_json(
@@ -2459,12 +2458,12 @@ mod tests {
 
         let tmp = unique_tmp_dir("session-list-trailing-slash");
         tokio::fs::create_dir_all(&tmp).await.unwrap();
-        let _xdg = EnvVarGuard::set("XDG_DATA_HOME", tmp.to_string_lossy().to_string());
+        let _home = EnvVarGuard::set("HOME", tmp.to_string_lossy().to_string());
 
         let proj = tmp.join("proj");
         tokio::fs::create_dir_all(&proj).await.unwrap();
 
-        let storage = tmp.join("opencode").join("storage");
+        let storage = tmp.join(".local").join("share").join("opencode").join("storage");
         let session_dir = storage.join("sessions").join("global");
 
         write_json(
@@ -2522,18 +2521,26 @@ mod tests {
         let tmp = unique_tmp_dir("session-list-preferred-windows-home");
         tokio::fs::create_dir_all(&tmp).await.unwrap();
 
-        let xdg_data = tmp.join("xdg-data");
-        tokio::fs::create_dir_all(xdg_data.join("opencode").join("storage").join("sessions"))
+        let home = tmp.join("home");
+        tokio::fs::create_dir_all(
+            home.join(".local")
+                .join("share")
+                .join("opencode")
+                .join("storage")
+                .join("sessions"),
+        )
             .await
             .unwrap();
 
-        let _xdg = EnvVarGuard::set("XDG_DATA_HOME", xdg_data.to_string_lossy().to_string());
+        let _home = EnvVarGuard::set("HOME", home.to_string_lossy().to_string());
 
         let proj = tmp.join("proj");
         tokio::fs::create_dir_all(&proj).await.unwrap();
 
         write_json(
-            &xdg_data
+            &home
+                .join(".local")
+                .join("share")
                 .join("opencode")
                 .join("storage")
                 .join("sessions")
@@ -2585,17 +2592,16 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn session_list_directory_scope_reads_windows_drive_sessions_from_xdg_style_home() {
+    async fn session_list_directory_scope_reads_windows_drive_sessions_from_home_share() {
         let _env_lock = ENV_LOCK.lock().unwrap();
         STORAGE_CACHE.clear();
 
-        let tmp = unique_tmp_dir("session-list-win-drive-xdg-home");
+        let tmp = unique_tmp_dir("session-list-win-drive-home-share");
         tokio::fs::create_dir_all(&tmp).await.unwrap();
 
         let home = tmp.join("home");
         tokio::fs::create_dir_all(&home).await.unwrap();
 
-        let _xdg = EnvVarGuard::set("XDG_DATA_HOME", "".to_string());
         let _home = EnvVarGuard::set("HOME", home.to_string_lossy().to_string());
 
         write_json(
@@ -2656,7 +2662,7 @@ mod tests {
 
         let tmp = unique_tmp_dir("session-list-no-global-bucket");
         tokio::fs::create_dir_all(&tmp).await.unwrap();
-        let _xdg = EnvVarGuard::set("XDG_DATA_HOME", tmp.to_string_lossy().to_string());
+        let _home = EnvVarGuard::set("HOME", tmp.to_string_lossy().to_string());
 
         let proj = tmp.join("proj");
         let git_dir = proj.join(".git");
@@ -2665,7 +2671,7 @@ mod tests {
             .await
             .unwrap();
 
-        let storage = tmp.join("opencode").join("storage");
+        let storage = tmp.join(".local").join("share").join("opencode").join("storage");
 
         write_json(
             &storage
@@ -2736,7 +2742,7 @@ mod tests {
 
         let tmp = unique_tmp_dir("session-list-no-other-project-bucket");
         tokio::fs::create_dir_all(&tmp).await.unwrap();
-        let _xdg = EnvVarGuard::set("XDG_DATA_HOME", tmp.to_string_lossy().to_string());
+        let _home = EnvVarGuard::set("HOME", tmp.to_string_lossy().to_string());
 
         let proj = tmp.join("proj");
         let git_dir = proj.join(".git");
@@ -2745,7 +2751,7 @@ mod tests {
             .await
             .unwrap();
 
-        let storage = tmp.join("opencode").join("storage");
+        let storage = tmp.join(".local").join("share").join("opencode").join("storage");
 
         write_json(
             &storage
@@ -2819,12 +2825,12 @@ mod tests {
 
         let tmp = unique_tmp_dir("session-list-sqlite");
         tokio::fs::create_dir_all(&tmp).await.unwrap();
-        let _xdg = EnvVarGuard::set("XDG_DATA_HOME", tmp.to_string_lossy().to_string());
+        let _home = EnvVarGuard::set("HOME", tmp.to_string_lossy().to_string());
 
         let proj = tmp.join("proj");
         tokio::fs::create_dir_all(&proj).await.unwrap();
 
-        let db_path = tmp.join("opencode").join("storage").join("opencode.sqlite");
+        let db_path = tmp.join(".local").join("share").join("opencode").join("storage").join("opencode.sqlite");
         if let Some(parent) = db_path.parent() {
             tokio::fs::create_dir_all(parent).await.unwrap();
         }
@@ -2888,7 +2894,7 @@ mod tests {
 
         let tmp = unique_tmp_dir("session-list-sqlite-project-scope");
         tokio::fs::create_dir_all(&tmp).await.unwrap();
-        let _xdg = EnvVarGuard::set("XDG_DATA_HOME", tmp.to_string_lossy().to_string());
+        let _home = EnvVarGuard::set("HOME", tmp.to_string_lossy().to_string());
 
         let proj = tmp.join("proj");
         let git_dir = proj.join(".git");
@@ -2897,7 +2903,7 @@ mod tests {
             .await
             .unwrap();
 
-        let db_path = tmp.join("opencode").join("storage").join("opencode.sqlite");
+        let db_path = tmp.join(".local").join("share").join("opencode").join("storage").join("opencode.sqlite");
         if let Some(parent) = db_path.parent() {
             tokio::fs::create_dir_all(parent).await.unwrap();
         }
@@ -2975,14 +2981,14 @@ mod tests {
 
         let tmp = unique_tmp_dir("session-list-cross-dir-parent");
         tokio::fs::create_dir_all(&tmp).await.unwrap();
-        let _xdg = EnvVarGuard::set("XDG_DATA_HOME", tmp.to_string_lossy().to_string());
+        let _home = EnvVarGuard::set("HOME", tmp.to_string_lossy().to_string());
 
         let child_dir = tmp.join("child");
         let parent_dir = tmp.join("parent");
         tokio::fs::create_dir_all(&child_dir).await.unwrap();
         tokio::fs::create_dir_all(&parent_dir).await.unwrap();
 
-        let db_path = tmp.join("opencode").join("storage").join("opencode.sqlite");
+        let db_path = tmp.join(".local").join("share").join("opencode").join("storage").join("opencode.sqlite");
         if let Some(parent) = db_path.parent() {
             tokio::fs::create_dir_all(parent).await.unwrap();
         }
@@ -3068,7 +3074,7 @@ mod tests {
 
         let tmp = unique_tmp_dir("session-list-cross-dir-children");
         tokio::fs::create_dir_all(&tmp).await.unwrap();
-        let _xdg = EnvVarGuard::set("XDG_DATA_HOME", tmp.to_string_lossy().to_string());
+        let _home = EnvVarGuard::set("HOME", tmp.to_string_lossy().to_string());
 
         let parent_dir = tmp.join("parent");
         let child_dir_a = tmp.join("child-a");
@@ -3077,7 +3083,7 @@ mod tests {
         tokio::fs::create_dir_all(&child_dir_a).await.unwrap();
         tokio::fs::create_dir_all(&child_dir_b).await.unwrap();
 
-        let db_path = tmp.join("opencode").join("storage").join("opencode.sqlite");
+        let db_path = tmp.join(".local").join("share").join("opencode").join("storage").join("opencode.sqlite");
         if let Some(parent) = db_path.parent() {
             tokio::fs::create_dir_all(parent).await.unwrap();
         }
@@ -3181,12 +3187,12 @@ mod tests {
 
         let tmp = unique_tmp_dir("session-list-prune");
         tokio::fs::create_dir_all(&tmp).await.unwrap();
-        let _xdg = EnvVarGuard::set("XDG_DATA_HOME", tmp.to_string_lossy().to_string());
+        let _home = EnvVarGuard::set("HOME", tmp.to_string_lossy().to_string());
 
         let proj = tmp.join("proj");
         tokio::fs::create_dir_all(&proj).await.unwrap();
 
-        let storage = tmp.join("opencode").join("storage");
+        let storage = tmp.join(".local").join("share").join("opencode").join("storage");
         let session_dir = storage.join("sessions").join("global");
 
         write_json(
@@ -3256,12 +3262,12 @@ mod tests {
 
         let tmp = unique_tmp_dir("session-list-partial-write");
         tokio::fs::create_dir_all(&tmp).await.unwrap();
-        let _xdg = EnvVarGuard::set("XDG_DATA_HOME", tmp.to_string_lossy().to_string());
+        let _home = EnvVarGuard::set("HOME", tmp.to_string_lossy().to_string());
 
         let proj = tmp.join("proj");
         tokio::fs::create_dir_all(&proj).await.unwrap();
 
-        let storage = tmp.join("opencode").join("storage");
+        let storage = tmp.join(".local").join("share").join("opencode").join("storage");
         let session_path = storage.join("sessions").join("global").join("ses_1.json");
 
         write_json(
@@ -3359,9 +3365,9 @@ mod tests {
 
         let tmp = unique_tmp_dir("session-message-sqlite");
         tokio::fs::create_dir_all(&tmp).await.unwrap();
-        let _xdg = EnvVarGuard::set("XDG_DATA_HOME", tmp.to_string_lossy().to_string());
+        let _home = EnvVarGuard::set("HOME", tmp.to_string_lossy().to_string());
 
-        let db_path = tmp.join("opencode").join("storage").join("opencode.sqlite");
+        let db_path = tmp.join(".local").join("share").join("opencode").join("storage").join("opencode.sqlite");
         if let Some(parent) = db_path.parent() {
             tokio::fs::create_dir_all(parent).await.unwrap();
         }
@@ -3511,9 +3517,9 @@ mod tests {
 
         let tmp = unique_tmp_dir("session-message-sqlite-fallback");
         tokio::fs::create_dir_all(&tmp).await.unwrap();
-        let _xdg = EnvVarGuard::set("XDG_DATA_HOME", tmp.to_string_lossy().to_string());
+        let _home = EnvVarGuard::set("HOME", tmp.to_string_lossy().to_string());
 
-        let db_path = tmp.join("opencode").join("storage").join("opencode.sqlite");
+        let db_path = tmp.join(".local").join("share").join("opencode").join("storage").join("opencode.sqlite");
         if let Some(parent) = db_path.parent() {
             tokio::fs::create_dir_all(parent).await.unwrap();
         }
@@ -3523,7 +3529,7 @@ mod tests {
             .await
             .unwrap();
 
-        let storage = tmp.join("opencode").join("storage");
+        let storage = tmp.join(".local").join("share").join("opencode").join("storage");
         write_json(
             &storage.join("messages").join("ses_json").join("msg_1.json"),
             &serde_json::json!({
@@ -3602,9 +3608,9 @@ mod tests {
 
         let tmp = unique_tmp_dir("session-message-part-sqlite");
         tokio::fs::create_dir_all(&tmp).await.unwrap();
-        let _xdg = EnvVarGuard::set("XDG_DATA_HOME", tmp.to_string_lossy().to_string());
+        let _home = EnvVarGuard::set("HOME", tmp.to_string_lossy().to_string());
 
-        let db_path = tmp.join("opencode").join("storage").join("opencode.sqlite");
+        let db_path = tmp.join(".local").join("share").join("opencode").join("storage").join("opencode.sqlite");
         if let Some(parent) = db_path.parent() {
             tokio::fs::create_dir_all(parent).await.unwrap();
         }
@@ -3718,9 +3724,9 @@ mod tests {
 
         let tmp = unique_tmp_dir("session-message-list-degraded");
         tokio::fs::create_dir_all(&tmp).await.unwrap();
-        let _xdg = EnvVarGuard::set("XDG_DATA_HOME", tmp.to_string_lossy().to_string());
+        let _home = EnvVarGuard::set("HOME", tmp.to_string_lossy().to_string());
 
-        let storage = tmp.join("opencode").join("storage");
+        let storage = tmp.join(".local").join("share").join("opencode").join("storage");
         let message_dir = storage.join("messages").join("ses_1");
         let part_dir = storage.join("message-parts").join("ok_msg");
 
@@ -3807,9 +3813,9 @@ mod tests {
 
         let tmp = unique_tmp_dir("session-message-part-transient");
         tokio::fs::create_dir_all(&tmp).await.unwrap();
-        let _xdg = EnvVarGuard::set("XDG_DATA_HOME", tmp.to_string_lossy().to_string());
+        let _home = EnvVarGuard::set("HOME", tmp.to_string_lossy().to_string());
 
-        let storage = tmp.join("opencode").join("storage");
+        let storage = tmp.join(".local").join("share").join("opencode").join("storage");
         let message_dir = storage.join("messages").join("ses_2");
         let part_dir = storage.join("message-parts").join("msg_1");
 
