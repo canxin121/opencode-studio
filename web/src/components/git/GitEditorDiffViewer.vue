@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { RiLoader4Line, RiTextWrap } from '@remixicon/vue'
+import { RiFileTextLine, RiLoader4Line, RiSearchLine, RiTextWrap } from '@remixicon/vue'
 import { useI18n } from 'vue-i18n'
 
 import MonacoDiffEditor from '@/components/MonacoDiffEditor.vue'
 import { apiJson } from '@/lib/api'
-import Button from '@/components/ui/Button.vue'
 import IconButton from '@/components/ui/IconButton.vue'
 import { buildUnifiedDiffModel } from '@/features/git/diff/unifiedDiff'
 import type { GitCommitDiffResponse, GitCommitFileContentResponse, GitDiffMeta, GitDiffResponse } from '@/types/git'
@@ -412,12 +411,28 @@ watch(
           >
             <RiTextWrap class="h-4 w-4" />
           </IconButton>
-          <Button v-if="canOpenFile" variant="secondary" size="sm" class="h-7" @click="openFile">{{
-            t('git.ui.diffViewer.actions.openFile')
-          }}</Button>
-          <Button v-if="canRevealFile" variant="secondary" size="sm" class="h-7" @click="revealFile">{{
-            t('git.ui.diffViewer.actions.revealInFiles')
-          }}</Button>
+          <IconButton
+            v-if="canOpenFile"
+            variant="outline"
+            size="sm"
+            class="h-7 w-7 text-muted-foreground hover:bg-secondary/40 hover:text-foreground"
+            :tooltip="t('git.ui.diffViewer.actions.openFile')"
+            :aria-label="t('git.ui.diffViewer.actions.openFile')"
+            @click="openFile"
+          >
+            <RiFileTextLine class="h-4 w-4" />
+          </IconButton>
+          <IconButton
+            v-if="canRevealFile"
+            variant="outline"
+            size="sm"
+            class="h-7 w-7 text-muted-foreground hover:bg-secondary/40 hover:text-foreground"
+            :tooltip="t('git.ui.diffViewer.actions.revealInFiles')"
+            :aria-label="t('git.ui.diffViewer.actions.revealInFiles')"
+            @click="revealFile"
+          >
+            <RiSearchLine class="h-4 w-4" />
+          </IconButton>
         </div>
       </div>
 
@@ -468,6 +483,8 @@ watch(
   display: flex;
   gap: 8px;
   justify-content: space-between;
+  min-height: 32px;
+  padding: 0 8px;
 }
 
 .path {
@@ -477,6 +494,7 @@ watch(
   font-size: 11px;
   min-width: 0;
   overflow: hidden;
+  padding-left: 2px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

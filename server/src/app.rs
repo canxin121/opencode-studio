@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use axum::{
     Json, Router,
+    body::to_bytes,
     extract::Query,
     http::{HeaderValue, Method, header},
     middleware,
@@ -250,6 +251,8 @@ const SESSION_ACTIVITY_IDLE_RETENTION: std::time::Duration =
     std::time::Duration::from_secs(30 * 60);
 const SESSION_RUNTIME_IDLE_RETENTION: std::time::Duration = std::time::Duration::from_secs(30 * 60);
 const STATUS_RECONCILE_FETCH_CONCURRENCY: usize = 6;
+const STATUS_HYDRATE_LOOKUP_MAX_IDS: usize = 200;
+const STATUS_HYDRATE_RESPONSE_BODY_LIMIT: usize = 4 * 1024 * 1024;
 const OPENCODE_BOOTSTRAP_READY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
 const OPENCODE_BOOTSTRAP_RETRY_DELAY: std::time::Duration = std::time::Duration::from_secs(3);
 
@@ -344,6 +347,123 @@ async fn fetch_attention_session_ids(
     Some(parse_attention_session_ids(&payload))
 }
 
+async fn decode_json_response_payload(
+    response: axum::response::Response,
+) -> Option<serde_json::Value> {
+    if !response.status().is_success() {
+        return None;
+    }
+    let body = to_bytes(response.into_body(), STATUS_HYDRATE_RESPONSE_BODY_LIMIT)
+        .await
+        .ok()?;
+    serde_json::from_slice::<serde_json::Value>(&body).ok()
+}
+
+fn extract_sessions_from_payload(payload: &serde_json::Value) -> Vec<serde_json::Value> {
+    if let Some(arr) = payload.as_array() {
+        return arr.to_vec();
+    }
+    payload
+        .get("sessions")
+        .and_then(|value| value.as_array())
+        .map(|arr| arr.to_vec())
+        .unwrap_or_default()
+}
+
+fn parse_session_id(value: &serde_json::Value) -> Option<String> {
+    value
+        .get("id")
+        .and_then(|v| v.as_str())
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+}
+
+async fn hydrate_runtime_session_directory_mappings(
+    state: &Arc<AppState>,
+    session_ids: &HashSet<String>,
+) {
+    let mut missing = session_ids
+        .iter()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .filter(|value| {
+            state
+                .directory_session_index
+                .directory_for_session(value)
+                .is_none()
+        })
+        .collect::<Vec<_>>();
+    if missing.is_empty() {
+        return;
+    }
+    missing.sort();
+    missing.dedup();
+    if missing.len() > STATUS_HYDRATE_LOOKUP_MAX_IDS {
+        missing.truncate(STATUS_HYDRATE_LOOKUP_MAX_IDS);
+    }
+
+    let directories = {
+        let settings = state.settings.read().await;
+        settings
+            .projects
+            .iter()
+            .map(|project| project.path.trim().to_string())
+            .filter(|path| !path.is_empty())
+            .collect::<Vec<_>>()
+    };
+    if directories.is_empty() {
+        return;
+    }
+
+    let mut unresolved = missing.into_iter().collect::<HashSet<_>>();
+    for directory in directories {
+        if unresolved.is_empty() {
+            break;
+        }
+
+        let ids_csv = unresolved.iter().cloned().collect::<Vec<_>>().join(",");
+        if ids_csv.is_empty() {
+            break;
+        }
+
+        let response = match crate::opencode_session::session_list(
+            axum::extract::State(state.clone()),
+            axum::http::HeaderMap::new(),
+            Query(crate::opencode_session::SessionListQuery {
+                directory: Some(directory.clone()),
+                scope: Some("directory".to_string()),
+                roots: None,
+                start: None,
+                search: None,
+                offset: None,
+                limit: None,
+                include_total: None,
+                include_children: None,
+                ids: Some(ids_csv),
+                focus_session_id: None,
+            }),
+        )
+        .await
+        {
+            Ok(response) => response,
+            Err(_) => continue,
+        };
+
+        let Some(payload) = decode_json_response_payload(response).await else {
+            continue;
+        };
+
+        for session in extract_sessions_from_payload(&payload) {
+            state
+                .directory_session_index
+                .upsert_summary_from_value(&session);
+            if let Some(session_id) = parse_session_id(&session) {
+                unresolved.remove(&session_id);
+            }
+        }
+    }
+}
+
 fn reconcile_runtime_attention_from_sets(
     index: &crate::directory_session_index::DirectorySessionIndexManager,
     permission_session_ids: &HashSet<String>,
@@ -370,12 +490,12 @@ fn reconcile_runtime_attention_from_sets(
 async fn reconcile_runtime_attention_from_opencode(
     state: &Arc<AppState>,
     bridge: &crate::opencode::OpenCodeBridge,
-) {
+) -> Option<HashSet<String>> {
     let permissions = fetch_attention_session_ids(bridge, "/permission").await;
     let questions = fetch_attention_session_ids(bridge, "/question").await;
     let (Some(permission_session_ids), Some(question_session_ids)) = (permissions, questions)
     else {
-        return;
+        return None;
     };
 
     reconcile_runtime_attention_from_sets(
@@ -383,6 +503,10 @@ async fn reconcile_runtime_attention_from_opencode(
         &permission_session_ids,
         &question_session_ids,
     );
+
+    let mut all_attention = permission_session_ids;
+    all_attention.extend(question_session_ids);
+    Some(all_attention)
 }
 
 async fn reconcile_runtime_status_from_opencode(state: &Arc<AppState>) {
@@ -401,6 +525,7 @@ async fn reconcile_runtime_status_from_opencode(state: &Arc<AppState>) {
     };
 
     let mut status_reconciled = false;
+    let mut sessions_requiring_directory_hydration = HashSet::<String>::new();
 
     if directories.is_empty() {
         if let Some(payload) = fetch_session_status_map(&bridge, None).await {
@@ -408,6 +533,7 @@ async fn reconcile_runtime_status_from_opencode(state: &Arc<AppState>) {
                 .directory_session_index
                 .reconcile_runtime_status_map(&payload);
             state.session_activity.reconcile_busy_set(&busy);
+            sessions_requiring_directory_hydration.extend(busy);
             status_reconciled = true;
         }
     } else {
@@ -450,6 +576,7 @@ async fn reconcile_runtime_status_from_opencode(state: &Arc<AppState>) {
             state
                 .session_activity
                 .reconcile_busy_set_scoped(&busy, &scope);
+            sessions_requiring_directory_hydration.extend(busy.iter().cloned());
             status_reconciled = true;
         }
 
@@ -460,11 +587,21 @@ async fn reconcile_runtime_status_from_opencode(state: &Arc<AppState>) {
                 .directory_session_index
                 .reconcile_runtime_status_map(&payload);
             state.session_activity.reconcile_busy_set(&busy);
+            sessions_requiring_directory_hydration.extend(busy);
             status_reconciled = true;
         }
     }
 
-    reconcile_runtime_attention_from_opencode(state, &bridge).await;
+    if let Some(attention_session_ids) =
+        reconcile_runtime_attention_from_opencode(state, &bridge).await
+    {
+        sessions_requiring_directory_hydration.extend(attention_session_ids);
+    }
+
+    if !sessions_requiring_directory_hydration.is_empty() {
+        hydrate_runtime_session_directory_mappings(state, &sessions_requiring_directory_hydration)
+            .await;
+    }
 
     if !status_reconciled {
         tracing::debug!(

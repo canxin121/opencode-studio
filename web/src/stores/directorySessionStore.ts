@@ -41,6 +41,7 @@ type SidebarFooterKind = 'pinned' | 'recent' | 'running'
 const SIDEBAR_STATE_ENDPOINT = '/api/chat-sidebar/state'
 const SIDEBAR_COMMAND_ENDPOINT = '/api/chat-sidebar/commands'
 const SIDEBAR_RECOVERY_THROTTLE_MS = 1500
+const SIDEBAR_STATE_REQUEST_STALE_MS = 12000
 const SIDEBAR_RECOVERY_EVENT_TYPES = new Set([
   'session.created',
   'session.updated',
@@ -122,6 +123,7 @@ type SidebarInFlightVoidRequest = {
   key: string
   promise: Promise<void>
   controller: AbortController | null
+  startedAt: number
 }
 
 type SidebarCommandRequest =
@@ -179,6 +181,10 @@ function isAbortError(err: unknown): boolean {
   if (err instanceof DOMException) return err.name === 'AbortError'
   if (!err || typeof err !== 'object') return false
   return (err as { name?: unknown }).name === 'AbortError'
+}
+
+function inFlightRequestIsStale(request: SidebarInFlightVoidRequest): boolean {
+  return Date.now() - request.startedAt > SIDEBAR_STATE_REQUEST_STALE_MS
 }
 
 function normalizeFooterKind(raw: JsonValue): SidebarFooterKind | null {
@@ -917,7 +923,7 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     const stateUrl = buildSidebarStateUrl(persistedStateQuery, focusSessionId)
 
     const existingRequest = sidebarStateRequestInFlight
-    if (existingRequest?.key === stateUrl) {
+    if (existingRequest?.key === stateUrl && !inFlightRequestIsStale(existingRequest)) {
       return existingRequest.promise
     }
     if (existingRequest?.controller) {
@@ -947,6 +953,7 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
       key: stateUrl,
       promise: requestPromise,
       controller,
+      startedAt: Date.now(),
     }
     return requestPromise
   }
@@ -986,7 +993,18 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     }
   }
 
-  function scheduleSidebarRecoverySync(reason: string, delayMs = 120) {
+  function scheduleSidebarRecoverySync(reason: string, delayMs = 120, opts?: { force?: boolean }) {
+    if (opts?.force) {
+      if (sidebarRecoverySyncTimer !== null) {
+        window.clearTimeout(sidebarRecoverySyncTimer)
+        sidebarRecoverySyncTimer = null
+      }
+      lastSidebarRecoverySyncAt = Date.now()
+      scheduleSidebarStateSync(Math.max(0, Math.floor(delayMs)))
+      void reason
+      return
+    }
+
     const now = Date.now()
     const elapsed = now - lastSidebarRecoverySyncAt
     const throttleDelay = elapsed >= SIDEBAR_RECOVERY_THROTTLE_MS ? 0 : SIDEBAR_RECOVERY_THROTTLE_MS - elapsed
