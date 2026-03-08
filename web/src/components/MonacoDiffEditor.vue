@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 
+import EditorFindBar from '@/components/editor/EditorFindBar.vue'
+import { useMonacoFindSession } from '@/components/editor/useMonacoFindSession'
 import { loader } from '@/lib/monaco-editor'
 import type * as Monaco from 'monaco-editor'
 
@@ -58,6 +60,13 @@ const emit = defineEmits<{
 const containerRef = ref<HTMLElement | null>(null)
 const ready = ref(false)
 const isDark = ref(false)
+const isFindVisible = ref(false)
+const findQuery = ref('')
+const findCaseSensitive = ref(false)
+const findRegex = ref(false)
+const findWholeWord = ref(false)
+const activeFindPane = ref<'original' | 'modified'>('modified')
+const findBarRef = ref<InstanceType<typeof EditorFindBar> | null>(null)
 
 const monacoRef = shallowRef<typeof import('monaco-editor') | null>(null)
 const diffEditorRef = shallowRef<Monaco.editor.IStandaloneDiffEditor | null>(null)
@@ -68,6 +77,12 @@ let monacoSetup: Promise<void> | null = null
 let themeObserver: MutationObserver | null = null
 let diffUpdateListener: Monaco.IDisposable | null = null
 let modifiedLayoutListener: Monaco.IDisposable | null = null
+let originalKeydownListener: Monaco.IDisposable | null = null
+let modifiedKeydownListener: Monaco.IDisposable | null = null
+let originalFocusListener: Monaco.IDisposable | null = null
+let modifiedFocusListener: Monaco.IDisposable | null = null
+let originalModelChangeListener: Monaco.IDisposable | null = null
+let modifiedModelChangeListener: Monaco.IDisposable | null = null
 let hunkZoneIds: string[] = []
 let pendingHunkZoneRefresh = false
 let pendingFirstChangeReveal = true
@@ -76,6 +91,24 @@ let lastRevealModelKey = ''
 let lastRevealContentKey = ''
 let lastLineNumberOptionsKey = ''
 let disposed = false
+
+const originalFindSession = useMonacoFindSession(() => diffEditorRef.value?.getOriginalEditor() ?? null, {
+  query: findQuery,
+  caseSensitive: findCaseSensitive,
+  regex: findRegex,
+  wholeWord: findWholeWord,
+})
+
+const modifiedFindSession = useMonacoFindSession(() => diffEditorRef.value?.getModifiedEditor() ?? null, {
+  query: findQuery,
+  caseSensitive: findCaseSensitive,
+  regex: findRegex,
+  wholeWord: findWholeWord,
+})
+
+const activeFindSession = computed(() =>
+  activeFindPane.value === 'original' ? originalFindSession : modifiedFindSession,
+)
 
 function extname(path: string): string {
   const base = path.split('/').pop() || path
@@ -656,6 +689,69 @@ function requestFirstChangeReveal() {
   queueMicrotask(() => maybeRevealFirstDiffChange())
 }
 
+function syncFindSessions() {
+  if (!isFindVisible.value) return
+  originalFindSession.refresh()
+  modifiedFindSession.refresh()
+}
+
+function openFindBar(target: 'original' | 'modified') {
+  activeFindPane.value = target
+  isFindVisible.value = true
+  activeFindSession.value.seedQueryFromSelection()
+  originalFindSession.refresh({ revealCurrent: activeFindPane.value === 'original' })
+  modifiedFindSession.refresh({ revealCurrent: activeFindPane.value === 'modified' })
+  findBarRef.value?.focusInput(true)
+}
+
+function closeFindBar() {
+  if (!isFindVisible.value) return
+  isFindVisible.value = false
+  originalFindSession.clear()
+  modifiedFindSession.clear()
+  activeFindSession.value.focusEditor()
+}
+
+function runFindNext() {
+  if (!isFindVisible.value) return
+  activeFindSession.value.move(1)
+}
+
+function runFindPrevious() {
+  if (!isFindVisible.value) return
+  activeFindSession.value.move(-1)
+}
+
+function bindEditorFindEvents(
+  editor: Monaco.editor.IStandaloneCodeEditor,
+  side: 'original' | 'modified',
+  monaco: typeof import('monaco-editor'),
+) {
+  return {
+    keydown: editor.onKeyDown((event) => {
+      const isCtrlOrMeta = event.ctrlKey || event.metaKey
+      if (isCtrlOrMeta && event.keyCode === monaco.KeyCode.KeyF) {
+        event.preventDefault()
+        event.stopPropagation()
+        openFindBar(side)
+        return
+      }
+
+      if (event.keyCode === monaco.KeyCode.Escape && isFindVisible.value) {
+        event.preventDefault()
+        event.stopPropagation()
+        closeFindBar()
+      }
+    }),
+    focus: editor.onDidFocusEditorText(() => {
+      activeFindPane.value = side
+    }),
+    change: editor.onDidChangeModelContent(() => {
+      syncFindSessions()
+    }),
+  }
+}
+
 function syncModels() {
   if (disposed) return
   const monaco = monacoRef.value
@@ -799,13 +895,27 @@ onMounted(async () => {
   monaco.editor.setTheme(monacoTheme.value)
   syncModels()
   updateDiffEditorOptions()
-  modifiedLayoutListener = diffEditorRef.value.getModifiedEditor().onDidLayoutChange(() => {
+  const originalEditor = diffEditorRef.value.getOriginalEditor()
+  const modifiedEditor = diffEditorRef.value.getModifiedEditor()
+
+  const originalFindEvents = bindEditorFindEvents(originalEditor, 'original', monaco)
+  originalKeydownListener = originalFindEvents.keydown
+  originalFocusListener = originalFindEvents.focus
+  originalModelChangeListener = originalFindEvents.change
+
+  const modifiedFindEvents = bindEditorFindEvents(modifiedEditor, 'modified', monaco)
+  modifiedKeydownListener = modifiedFindEvents.keydown
+  modifiedFocusListener = modifiedFindEvents.focus
+  modifiedModelChangeListener = modifiedFindEvents.change
+
+  modifiedLayoutListener = modifiedEditor.onDidLayoutChange(() => {
     updateLineNumberOptions()
     maybeRevealFirstDiffChange()
   })
   diffUpdateListener = diffEditorRef.value.onDidUpdateDiff(() => {
     scheduleHunkActionZoneRefresh()
     maybeRevealFirstDiffChange()
+    syncFindSessions()
   })
   scheduleHunkActionZoneRefresh()
   maybeRevealFirstDiffChange()
@@ -822,6 +932,21 @@ onBeforeUnmount(() => {
 
   modifiedLayoutListener?.dispose()
   modifiedLayoutListener = null
+
+  originalKeydownListener?.dispose()
+  originalKeydownListener = null
+  modifiedKeydownListener?.dispose()
+  modifiedKeydownListener = null
+
+  originalFocusListener?.dispose()
+  originalFocusListener = null
+  modifiedFocusListener?.dispose()
+  modifiedFocusListener = null
+
+  originalModelChangeListener?.dispose()
+  originalModelChangeListener = null
+  modifiedModelChangeListener?.dispose()
+  modifiedModelChangeListener = null
 
   if (revealRetryFrame !== null && typeof cancelAnimationFrame === 'function') {
     cancelAnimationFrame(revealRetryFrame)
@@ -843,6 +968,9 @@ onBeforeUnmount(() => {
     originalModel?.dispose()
     modifiedModel?.dispose()
   })
+
+  originalFindSession.dispose()
+  modifiedFindSession.dispose()
 })
 
 watch(
@@ -867,6 +995,7 @@ watch(
   ],
   () => {
     syncModels()
+    syncFindSessions()
   },
 )
 
@@ -922,6 +1051,33 @@ watch(
   () => updateDiffEditorOptions(),
 )
 
+watch(isFindVisible, (visible) => {
+  if (!visible) {
+    originalFindSession.clear()
+    modifiedFindSession.clear()
+    return
+  }
+
+  originalFindSession.refresh({ revealCurrent: activeFindPane.value === 'original' })
+  modifiedFindSession.refresh({ revealCurrent: activeFindPane.value === 'modified' })
+  findBarRef.value?.focusInput(true)
+})
+
+watch([findQuery, findCaseSensitive, findRegex, findWholeWord], () => {
+  if (!isFindVisible.value) return
+  originalFindSession.refresh({ revealCurrent: activeFindPane.value === 'original' })
+  modifiedFindSession.refresh({ revealCurrent: activeFindPane.value === 'modified' })
+})
+
+watch(activeFindPane, (next) => {
+  if (!isFindVisible.value) return
+  if (next === 'original') {
+    originalFindSession.refresh({ revealCurrent: true })
+    return
+  }
+  modifiedFindSession.refresh({ revealCurrent: true })
+})
+
 watch(
   () => [props.originalStartLine, props.modifiedStartLine, props.originalLineNumbers, props.modifiedLineNumbers],
   () => updateLineNumberOptions(),
@@ -931,6 +1087,23 @@ watch(
 
 <template>
   <div class="monaco-diff-host" data-oc-text-editor-root="true" :data-files-theme="props.useFilesTheme ? '1' : '0'">
+    <EditorFindBar
+      v-if="isFindVisible"
+      ref="findBarRef"
+      v-model="findQuery"
+      :current-match="activeFindSession.currentMatch.value"
+      :match-count="activeFindSession.matchCount.value"
+      :invalid-regex="activeFindSession.invalidRegex.value"
+      :case-sensitive="findCaseSensitive"
+      :whole-word="findWholeWord"
+      :regex="findRegex"
+      @next="runFindNext"
+      @previous="runFindPrevious"
+      @toggle-case-sensitive="findCaseSensitive = !findCaseSensitive"
+      @toggle-whole-word="findWholeWord = !findWholeWord"
+      @toggle-regex="findRegex = !findRegex"
+      @close="closeFindBar"
+    />
     <div ref="containerRef" class="monaco-diff-container" :class="{ 'is-hidden': !ready }" />
     <div v-if="!ready" class="monaco-loading">Loading diff editor...</div>
   </div>

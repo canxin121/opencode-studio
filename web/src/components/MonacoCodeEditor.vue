@@ -2,6 +2,8 @@
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
+import EditorFindBar from '@/components/editor/EditorFindBar.vue'
+import { useMonacoFindSession } from '@/components/editor/useMonacoFindSession'
 import { VueMonacoEditor, loader } from '@/lib/monaco-editor'
 import type * as Monaco from 'monaco-editor'
 
@@ -48,9 +50,16 @@ const editorRef = shallowRef<Monaco.editor.IStandaloneCodeEditor | null>(null)
 const monacoRef = shallowRef<typeof import('monaco-editor') | null>(null)
 const ready = ref(false)
 const isDark = ref(false)
+const isFindVisible = ref(false)
+const findQuery = ref('')
+const findCaseSensitive = ref(false)
+const findRegex = ref(false)
+const findWholeWord = ref(false)
+const findBarRef = ref<InstanceType<typeof EditorFindBar> | null>(null)
 
 let contentListener: Monaco.IDisposable | null = null
 let scrollListener: Monaco.IDisposable | null = null
+let findKeydownListener: Monaco.IDisposable | null = null
 let monacoSetup: Promise<void> | null = null
 let themeObserver: MutationObserver | null = null
 
@@ -60,6 +69,13 @@ let lineMarkerDecorationCollection: Monaco.editor.IEditorDecorationsCollection |
 let diffDecorationCollection: Monaco.editor.IEditorDecorationsCollection | null = null
 let diffZoneIds: string[] = []
 let codeLensKey: string | null = null
+
+const findSession = useMonacoFindSession(() => editorRef.value, {
+  query: findQuery,
+  caseSensitive: findCaseSensitive,
+  regex: findRegex,
+  wholeWord: findWholeWord,
+})
 
 const INLINE_DECORATION_LIMIT = 8000
 const GIT_DECORATION_LIMIT = 4000
@@ -540,6 +556,9 @@ function handleMount(
   contentListener = editorInstance.onDidChangeModelContent((event: Monaco.editor.IModelContentChangedEvent) => {
     if (event.isFlush) return
     emit('user-edit')
+    if (isFindVisible.value) {
+      findSession.refresh()
+    }
   })
 
   scrollListener?.dispose()
@@ -565,6 +584,24 @@ function handleMount(
     })
   }
   scrollListener = editorInstance.onDidScrollChange(() => emitScroll())
+
+  findKeydownListener?.dispose()
+  findKeydownListener = editorInstance.onKeyDown((event) => {
+    const isCtrlOrMeta = event.ctrlKey || event.metaKey
+    if (isCtrlOrMeta && event.keyCode === monacoInstance.KeyCode.KeyF) {
+      event.preventDefault()
+      event.stopPropagation()
+      openFindBar()
+      return
+    }
+
+    if (event.keyCode === monacoInstance.KeyCode.Escape && isFindVisible.value) {
+      event.preventDefault()
+      event.stopPropagation()
+      closeFindBar()
+    }
+  })
+
   emitScroll()
   updateInlineDecorations()
   updateGitLineDecorations()
@@ -601,6 +638,33 @@ function insertText(text: string) {
   editor.focus()
 }
 
+function openFindBar() {
+  const editor = editorRef.value
+  if (!editor) return
+
+  isFindVisible.value = true
+  findSession.seedQueryFromSelection()
+  findSession.refresh({ revealCurrent: true })
+  findBarRef.value?.focusInput(true)
+}
+
+function closeFindBar() {
+  if (!isFindVisible.value) return
+  isFindVisible.value = false
+  findSession.clear()
+  findSession.focusEditor()
+}
+
+function runFindNext() {
+  if (!isFindVisible.value) return
+  findSession.move(1)
+}
+
+function runFindPrevious() {
+  if (!isFindVisible.value) return
+  findSession.move(-1)
+}
+
 defineExpose({
   getSelection,
   focus,
@@ -627,7 +691,24 @@ onBeforeUnmount(() => {
 
   contentListener?.dispose()
   scrollListener?.dispose()
+  findKeydownListener?.dispose()
   themeObserver?.disconnect()
+  findSession.dispose()
+})
+
+watch(isFindVisible, (visible) => {
+  if (!visible) {
+    findSession.clear()
+    return
+  }
+
+  findSession.refresh({ revealCurrent: true })
+  findBarRef.value?.focusInput(true)
+})
+
+watch([findQuery, findCaseSensitive, findRegex, findWholeWord], () => {
+  if (!isFindVisible.value) return
+  findSession.refresh({ revealCurrent: true })
 })
 
 watch(
@@ -723,11 +804,31 @@ watch(modelPath, () => {
   updateDiffZones()
   updateDiffDecorations()
   updateCodeLens()
+  if (isFindVisible.value) {
+    findSession.refresh({ revealCurrent: true })
+  }
 })
 </script>
 
 <template>
   <div class="monaco-host" data-oc-text-editor-root="true" :data-files-theme="props.useFilesTheme ? '1' : '0'">
+    <EditorFindBar
+      v-if="isFindVisible"
+      ref="findBarRef"
+      v-model="findQuery"
+      :current-match="findSession.currentMatch.value"
+      :match-count="findSession.matchCount.value"
+      :invalid-regex="findSession.invalidRegex.value"
+      :case-sensitive="findCaseSensitive"
+      :whole-word="findWholeWord"
+      :regex="findRegex"
+      @next="runFindNext"
+      @previous="runFindPrevious"
+      @toggle-case-sensitive="findCaseSensitive = !findCaseSensitive"
+      @toggle-whole-word="findWholeWord = !findWholeWord"
+      @toggle-regex="findRegex = !findRegex"
+      @close="closeFindBar"
+    />
     <div v-if="!ready" class="monaco-loading">{{ t('ui.codeEditor.loading') }}</div>
     <VueMonacoEditor
       v-else
@@ -752,6 +853,7 @@ watch(modelPath, () => {
 .monaco-host {
   height: 100%;
   min-height: 0;
+  position: relative;
   width: 100%;
 }
 
@@ -808,31 +910,8 @@ watch(modelPath, () => {
   color: oklch(var(--muted-foreground) / 0.85) !important;
 }
 
-:global(.monaco-host[data-files-theme='1'] .monaco-editor .find-widget) {
-  margin-top: 8px;
-  z-index: 20;
-}
-
-:global(.monaco-host[data-files-theme='1'] .monaco-editor .find-widget .monaco-inputbox input:focus),
-:global(.monaco-host[data-files-theme='1'] .monaco-editor .find-widget .monaco-inputbox input:focus-visible) {
-  outline: none !important;
-  box-shadow: none !important;
-}
-
 :global(.monaco-host[data-files-theme='1'] .monaco-editor .monaco-hover) {
   pointer-events: none;
-}
-
-:global(.monaco-host[data-files-theme='1'] .monaco-editor .find-widget > .button.codicon-widget-close),
-:global(.monaco-host[data-files-theme='1'] .monaco-editor .find-widget .button.toggle) {
-  z-index: 2;
-}
-
-:global(.monaco-host[data-files-theme='1'] .monaco-editor .find-widget .button) {
-  align-items: center;
-  display: inline-flex;
-  justify-content: center;
-  line-height: 1;
 }
 
 :global(.workbench-hover-container),
