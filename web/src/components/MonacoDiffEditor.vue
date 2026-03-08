@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch, withDefaults } from 'vue'
 
 import { loader } from '@/lib/monaco-editor'
 import type * as Monaco from 'monaco-editor'
@@ -21,24 +21,30 @@ type HunkAction = {
   disabled?: boolean
 }
 
-const props = defineProps<{
-  originalValue: string
-  modifiedValue: string
-  path?: string | null
-  originalPath?: string | null
-  modelId?: string | null
-  originalModelId?: string | null
-  languagePath?: string | null
-  wrap?: boolean
-  readOnly?: boolean
-  useFilesTheme?: boolean
-  hunkActions?: HunkAction[]
-  hunkActionsEnabled?: boolean
-  hunkActionsBusy?: boolean
-  activeHunkActionId?: string | null
-  activeHunkActionKind?: HunkActionKind | null
-  autoRevealFirstChange?: boolean
-}>()
+const props = withDefaults(
+  defineProps<{
+    originalValue: string
+    modifiedValue: string
+    path?: string | null
+    originalPath?: string | null
+    modelId?: string | null
+    originalModelId?: string | null
+    languagePath?: string | null
+    wrap?: boolean
+    readOnly?: boolean
+    useFilesTheme?: boolean
+    hunkActions?: HunkAction[]
+    hunkActionsEnabled?: boolean
+    hunkActionsBusy?: boolean
+    activeHunkActionId?: string | null
+    activeHunkActionKind?: HunkActionKind | null
+    autoRevealFirstChange?: boolean
+  }>(),
+  {
+    autoRevealFirstChange: true,
+    hunkActionsEnabled: true,
+  },
+)
 
 const emit = defineEmits<{
   (e: 'hunkAction', payload: { id: string; kind: HunkActionKind }): void

@@ -425,12 +425,140 @@ function extractHeaderPath(fileHeader: string[]): string {
   return ''
 }
 
+function extractPathFromDiffSource(source: string): string {
+  const lines = normalizeTextBlock(source).split('\n')
+
+  for (const rawLine of lines) {
+    const parsed = parseHeaderPath(normalizeLine(rawLine), '+++ ')
+    if (parsed) return parsed
+  }
+
+  for (const rawLine of lines) {
+    const parsed = parseHeaderPath(normalizeLine(rawLine), '--- ')
+    if (parsed) return parsed
+  }
+
+  for (const rawLine of lines) {
+    const line = normalizeLine(rawLine)
+    const match = line.match(/^diff --git\s+(\S+)\s+(\S+)$/)
+    if (!match) continue
+    const right = parseHeaderPath(`+++ ${match[2] || ''}`, '+++ ')
+    if (right) return right
+    const left = parseHeaderPath(`--- ${match[1] || ''}`, '--- ')
+    if (left) return left
+  }
+
+  return ''
+}
+
+function buildMonacoDiffFromRawUnified(source: string): {
+  original: string
+  modified: string
+  hasChanges: boolean
+} | null {
+  if (!source.trim()) return null
+
+  const lines = source.split('\n')
+  const original: string[] = []
+  const modified: string[] = []
+  let inHunk = false
+  let sawHunkHeader = false
+  let hasChanges = false
+
+  for (const rawLine of lines) {
+    const line = normalizeLine(rawLine)
+
+    if (line.startsWith('@@')) {
+      sawHunkHeader = true
+      inHunk = true
+      original.push(line)
+      modified.push(line)
+      continue
+    }
+
+    if (
+      line.startsWith('diff --git ') ||
+      line.startsWith('--- ') ||
+      line.startsWith('+++ ') ||
+      line.startsWith('index ') ||
+      line.startsWith('new file mode') ||
+      line.startsWith('deleted file mode') ||
+      line.startsWith('similarity index') ||
+      line.startsWith('dissimilarity index') ||
+      line.startsWith('rename from') ||
+      line.startsWith('rename to') ||
+      line.startsWith('copy from') ||
+      line.startsWith('copy to') ||
+      line.startsWith('old mode ') ||
+      line.startsWith('new mode ') ||
+      line.startsWith('Binary files ') ||
+      line.startsWith('GIT binary patch')
+    ) {
+      inHunk = false
+      original.push(line)
+      modified.push(line)
+      continue
+    }
+
+    if (inHunk) {
+      if (line.startsWith('+') && !line.startsWith('+++')) {
+        modified.push(line.slice(1))
+        hasChanges = true
+        continue
+      }
+
+      if (line.startsWith('-') && !line.startsWith('---')) {
+        original.push(line.slice(1))
+        hasChanges = true
+        continue
+      }
+
+      if (line.startsWith('\\')) {
+        continue
+      }
+
+      if (line.startsWith(' ') || line.startsWith('\t')) {
+        const content = line.slice(1)
+        original.push(content)
+        modified.push(content)
+        continue
+      }
+    }
+
+    original.push(line)
+    modified.push(line)
+  }
+
+  if (!sawHunkHeader || !hasChanges) {
+    return null
+  }
+
+  return {
+    original: original.join('\n'),
+    modified: modified.join('\n'),
+    hasChanges: true,
+  }
+}
+
 export function buildUnifiedMonacoDiffModel(diff: string, meta?: GitDiffMeta | null): UnifiedMonacoDiffModel {
-  const source = String(diff || '')
-    .replace(/\r\n/g, '\n')
-    .replace(/\r/g, '\n')
-  const parsed = buildUnifiedDiffModel(source, meta)
-  const path = extractHeaderPath(parsed.fileHeader) || 'activity.patch'
+  const source = normalizeTextBlock(diff)
+  const parsedFromMeta = meta && typeof meta === 'object' ? normalizeMeta(meta) : null
+  const pathFromSource = extractPathFromDiffSource(source)
+  const pathFromMeta = parsedFromMeta ? extractHeaderPath(parsedFromMeta.fileHeader) : ''
+  const path = pathFromSource || pathFromMeta || 'activity.patch'
+
+  const rawMonaco = buildMonacoDiffFromRawUnified(source)
+  if (rawMonaco) {
+    return {
+      modelId: `diff:${path}`,
+      path,
+      original: rawMonaco.original,
+      modified: rawMonaco.modified,
+      hasChanges: true,
+    }
+  }
+
+  const parsed = parsedFromMeta || buildUnifiedDiffModel(source, meta)
 
   if (!parsed.hunks.length) {
     return {

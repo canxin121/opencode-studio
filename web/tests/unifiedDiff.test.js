@@ -18,6 +18,22 @@ const SAMPLE_DIFF =
   '+new\n' +
   ' keep\n'
 
+const MULTI_FILE_DIFF =
+  'diff --git a/a.txt b/a.txt\n' +
+  'index 1111111..2222222 100644\n' +
+  '--- a/a.txt\n' +
+  '+++ b/a.txt\n' +
+  '@@ -1,1 +1,1 @@\n' +
+  '-old-a\n' +
+  '+new-a\n' +
+  'diff --git a/b.txt b/b.txt\n' +
+  'index 3333333..4444444 100644\n' +
+  '--- a/b.txt\n' +
+  '+++ b/b.txt\n' +
+  '@@ -2,1 +2,1 @@\n' +
+  '-old-b\n' +
+  '+new-b\n'
+
 test('buildUnifiedDiffModel parses unified diff fallback', () => {
   const parsed = buildUnifiedDiffModel(SAMPLE_DIFF)
   assert.equal(parsed.summary.files, 1)
@@ -70,6 +86,17 @@ test('buildUnifiedMonacoDiffModel builds Monaco-ready before/after text', () => 
   assert.equal(model.hasChanges, true)
   assert.match(model.original, /@@ -1,3 \+1,3 @@\nkeep\nold\nkeep/)
   assert.match(model.modified, /@@ -1,3 \+1,3 @@\nkeep\nnew\nkeep/)
+})
+
+test('buildUnifiedMonacoDiffModel keeps multi-file patches in one Monaco view', () => {
+  const model = buildUnifiedMonacoDiffModel(MULTI_FILE_DIFF)
+
+  assert.equal(model.path, 'a.txt')
+  assert.equal(model.hasChanges, true)
+  assert.match(model.original, /diff --git a\/a\.txt b\/a\.txt/)
+  assert.match(model.modified, /diff --git a\/b\.txt b\/b\.txt/)
+  assert.match(model.original, /old-a/)
+  assert.match(model.modified, /new-b/)
 })
 
 test('buildUnifiedMonacoDiffModel falls back to raw patch when hunks missing', () => {

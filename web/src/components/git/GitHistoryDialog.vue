@@ -12,7 +12,8 @@ import OptionPicker from '@/components/ui/OptionPicker.vue'
 import type { PickerOption } from '@/components/ui/pickerOption.types'
 import ScrollArea from '@/components/ui/ScrollArea.vue'
 import Skeleton from '@/components/ui/Skeleton.vue'
-import DiffViewer from '@/components/DiffViewer.vue'
+import MonacoDiffEditor from '@/components/MonacoDiffEditor.vue'
+import { buildUnifiedMonacoDiffModel } from '@/features/git/diff/unifiedDiff'
 
 import { formatDateTimeYMDHM } from '@/i18n/intl'
 
@@ -95,6 +96,10 @@ const selectedRefs = computed(() => props.selected?.refs || [])
 const selectedFileLabel = computed(() => props.selectedFile?.path || '')
 const refOptions = computed(() => (props.filterRefType === 'tag' ? props.tagOptions : props.branchOptions))
 const selectedDiffSummary = computed(() => summarizeCommitFiles(props.files || []))
+const selectedFileDiffModel = computed(() => buildUnifiedMonacoDiffModel(props.fileDiff || ''))
+const selectedFileDiffModelId = computed(() => `git-history:file:${selectedFileDiffModel.value.path}`)
+const commitDiffModel = computed(() => buildUnifiedMonacoDiffModel(props.diff || ''))
+const commitDiffModelId = computed(() => `git-history:commit:${commitDiffModel.value.path}`)
 
 const filterRefTypePickerOptions = computed<PickerOption[]>(() => [
   { value: 'branch', label: t('git.ui.dialogs.history.refType.branch') },
@@ -512,10 +517,15 @@ function onFilterRefTypeChange(value: string | number) {
                   {{ t('git.ui.dialogs.history.emptyDiff') }}
                 </div>
                 <div v-else class="h-[320px] min-h-0">
-                  <DiffViewer
-                    :diff="fileDiff"
-                    :output-format="'side-by-side'"
-                    :draw-file-list="false"
+                  <MonacoDiffEditor
+                    :original-value="selectedFileDiffModel.original"
+                    :modified-value="selectedFileDiffModel.modified"
+                    :path="selectedFileDiffModel.path"
+                    :language-path="selectedFileDiffModel.path"
+                    :model-id="selectedFileDiffModelId"
+                    :original-model-id="`${selectedFileDiffModelId}:base`"
+                    :use-files-theme="true"
+                    :read-only="true"
                     :wrap="wrapLines"
                   />
                 </div>
@@ -529,7 +539,17 @@ function onFilterRefTypeChange(value: string | number) {
                   {{ t('git.ui.dialogs.history.emptyDiff') }}
                 </div>
                 <div v-else class="h-[320px] min-h-0">
-                  <DiffViewer :diff="diff" :output-format="'side-by-side'" :draw-file-list="false" :wrap="wrapLines" />
+                  <MonacoDiffEditor
+                    :original-value="commitDiffModel.original"
+                    :modified-value="commitDiffModel.modified"
+                    :path="commitDiffModel.path"
+                    :language-path="commitDiffModel.path"
+                    :model-id="commitDiffModelId"
+                    :original-model-id="`${commitDiffModelId}:base`"
+                    :use-files-theme="true"
+                    :read-only="true"
+                    :wrap="wrapLines"
+                  />
                 </div>
               </div>
             </div>

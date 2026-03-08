@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { RiArrowLeftRightLine, RiTextWrap } from '@remixicon/vue'
 import { useI18n } from 'vue-i18n'
 
@@ -7,7 +7,8 @@ import Button from '@/components/ui/Button.vue'
 import FormDialog from '@/components/ui/FormDialog.vue'
 import IconButton from '@/components/ui/IconButton.vue'
 import Input from '@/components/ui/Input.vue'
-import DiffViewer from '@/components/DiffViewer.vue'
+import MonacoDiffEditor from '@/components/MonacoDiffEditor.vue'
+import { buildUnifiedMonacoDiffModel } from '@/features/git/diff/unifiedDiff'
 
 const { t } = useI18n()
 const wrapLines = ref(true)
@@ -21,6 +22,9 @@ const props = defineProps<{
   loading: boolean
   error: string | null
 }>()
+
+const compareDiffModel = computed(() => buildUnifiedMonacoDiffModel(props.diff || ''))
+const compareModelId = computed(() => `git-compare:${compareDiffModel.value.path}`)
 
 const emit = defineEmits<{
   (e: 'update:open', value: boolean): void
@@ -109,7 +113,17 @@ function onUpdateText(key: 'base' | 'head' | 'path', v: string | number) {
         <div v-else-if="loading" class="text-xs text-muted-foreground">{{ t('git.ui.diffViewer.loading') }}</div>
         <div v-else-if="!diff" class="text-xs text-muted-foreground">{{ t('git.ui.dialogs.compare.empty') }}</div>
         <div v-else class="h-[420px] min-h-0">
-          <DiffViewer :diff="diff" :output-format="'side-by-side'" :draw-file-list="false" :wrap="wrapLines" />
+          <MonacoDiffEditor
+            :original-value="compareDiffModel.original"
+            :modified-value="compareDiffModel.modified"
+            :path="compareDiffModel.path"
+            :language-path="compareDiffModel.path"
+            :model-id="compareModelId"
+            :original-model-id="`${compareModelId}:base`"
+            :use-files-theme="true"
+            :read-only="true"
+            :wrap="wrapLines"
+          />
         </div>
       </div>
     </div>

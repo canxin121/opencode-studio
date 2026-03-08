@@ -20,9 +20,10 @@
     "@guolao/vue-monaco-editor": "^1.6.0",
     "@remixicon/vue": "^4.7.0",
     "@vueuse/core": "^14.0.0",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "diff2html": "^3.4.55",
     "highlight.js": "^11.11.1",
     "katex": "^0.16.32",
     "markdown-it": "^14.1.0",
@@ -35,9 +36,7 @@
     "vue": "^3.5.24",
     "vue-i18n": "^11",
     "vue-router": "^5.0.0",
-    "vue-sonner": "^2.0.9",
-    "@xterm/addon-fit": "^0.11.0",
-    "@xterm/xterm": "^6.0.0"
+    "vue-sonner": "^2.0.9"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.0.0",

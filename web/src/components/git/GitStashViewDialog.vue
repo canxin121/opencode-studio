@@ -3,7 +3,8 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import Dialog from '@/components/ui/Dialog.vue'
-import DiffViewer from '@/components/DiffViewer.vue'
+import MonacoDiffEditor from '@/components/MonacoDiffEditor.vue'
+import { buildUnifiedMonacoDiffModel } from '@/features/git/diff/unifiedDiff'
 
 const { t } = useI18n()
 
@@ -26,6 +27,9 @@ function onUpdateOpen(v: boolean) {
 const dialogTitle = computed(() =>
   props.title ? t('git.ui.dialogs.stashDiff.titleWithRef', { ref: props.title }) : t('git.ui.dialogs.stashDiff.title'),
 )
+
+const stashDiffModel = computed(() => buildUnifiedMonacoDiffModel(props.diff || ''))
+const stashModelId = computed(() => `git-stash:${stashDiffModel.value.path}`)
 </script>
 
 <template>
@@ -44,8 +48,18 @@ const dialogTitle = computed(() =>
       >
         {{ error }}
       </div>
-      <div v-else-if="diff.trim()" class="max-h-[70vh] overflow-auto">
-        <DiffViewer :diff="diff" output-format="line-by-line" :draw-file-list="false" />
+      <div v-else-if="diff.trim()" class="h-[70vh] min-h-[20rem]">
+        <MonacoDiffEditor
+          :original-value="stashDiffModel.original"
+          :modified-value="stashDiffModel.modified"
+          :path="stashDiffModel.path"
+          :language-path="stashDiffModel.path"
+          :model-id="stashModelId"
+          :original-model-id="`${stashModelId}:base`"
+          :use-files-theme="true"
+          :read-only="true"
+          :wrap="false"
+        />
       </div>
       <div v-else class="text-xs text-muted-foreground">{{ t('git.ui.dialogs.stashDiff.empty') }}</div>
     </div>
