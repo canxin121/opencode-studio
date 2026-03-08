@@ -4,8 +4,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use axum::{
-    body::to_bytes,
     Json, Router,
+    body::to_bytes,
     extract::Query,
     http::{HeaderValue, Method, header},
     middleware,
@@ -347,7 +347,9 @@ async fn fetch_attention_session_ids(
     Some(parse_attention_session_ids(&payload))
 }
 
-async fn decode_json_response_payload(response: axum::response::Response) -> Option<serde_json::Value> {
+async fn decode_json_response_payload(
+    response: axum::response::Response,
+) -> Option<serde_json::Value> {
     if !response.status().is_success() {
         return None;
     }
@@ -452,7 +454,9 @@ async fn hydrate_runtime_session_directory_mappings(
         };
 
         for session in extract_sessions_from_payload(&payload) {
-            state.directory_session_index.upsert_summary_from_value(&session);
+            state
+                .directory_session_index
+                .upsert_summary_from_value(&session);
             if let Some(session_id) = parse_session_id(&session) {
                 unresolved.remove(&session_id);
             }
@@ -588,7 +592,9 @@ async fn reconcile_runtime_status_from_opencode(state: &Arc<AppState>) {
         }
     }
 
-    if let Some(attention_session_ids) = reconcile_runtime_attention_from_opencode(state, &bridge).await {
+    if let Some(attention_session_ids) =
+        reconcile_runtime_attention_from_opencode(state, &bridge).await
+    {
         sessions_requiring_directory_hydration.extend(attention_session_ids);
     }
 
