@@ -524,7 +524,6 @@ onBeforeUnmount(() => {
         <div class="flex h-8 items-center gap-0.5">
           <IconButton
             size="sm"
-            class="rounded-none bg-transparent shadow-none"
             :aria-label="String(t('workspaceDock.refresh'))"
             :tooltip="String(t('workspaceDock.refresh'))"
             :disabled="refreshing"
@@ -534,7 +533,6 @@ onBeforeUnmount(() => {
           </IconButton>
           <IconButton
             size="sm"
-            class="rounded-none bg-transparent shadow-none"
             :aria-label="String(t('terminal.session.create'))"
             :tooltip="String(t('terminal.session.create'))"
             :disabled="creating"
