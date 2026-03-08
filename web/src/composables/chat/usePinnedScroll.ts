@@ -5,6 +5,20 @@ import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
 // - Programmatic initial bottom landing on session switch
 // - Optional progressive "load older" when user scrolls to top
 
+export function shouldAutoLoadOlder(opts: {
+  canLoadOlder: boolean
+  suppressed: boolean
+  scrollTop: number
+  autoLoadUnlocked: boolean
+  atBottom: boolean
+}) {
+  if (!opts.canLoadOlder) return false
+  if (opts.suppressed) return false
+  if (!opts.autoLoadUnlocked) return false
+  if (opts.atBottom) return false
+  return opts.scrollTop <= 120
+}
+
 export function usePinnedScroll(opts: {
   bottomThresholdPx?: number
   // Called on every scroll update (used for nav index updates).
@@ -39,6 +53,7 @@ export function usePinnedScroll(opts: {
   // Throttle load-older and suppress auto-load during programmatic navigation.
   let lastLoadOlderAt = 0
   const suppressAutoLoadOlderUntil = ref(0)
+  const autoLoadOlderUnlocked = ref(false)
 
   // Batch auto-scroll work to at most once per frame while streaming.
   let scrollRaf: number | null = null
@@ -57,6 +72,7 @@ export function usePinnedScroll(opts: {
     // Also avoid triggering auto-load-older from a programmatic scroll.
     isAtBottom.value = true
     suppressAutoLoadOlderUntil.value = Date.now() + 1400
+    autoLoadOlderUnlocked.value = false
   }
 
   function scrollToBottom(behavior: ScrollBehavior = 'auto') {
@@ -141,13 +157,15 @@ export function usePinnedScroll(opts: {
   async function maybeLoadOlder() {
     const el = scrollEl.value
     if (!el) return
-    if (!opts.canLoadOlder?.()) return
-
-    // Don't auto-load while nav is performing a programmatic jump.
-    if (Date.now() < suppressAutoLoadOlderUntil.value) return
-
-    // Only trigger when near the very top.
-    if (el.scrollTop > 120) return
+    const canLoadOlder = !!opts.canLoadOlder?.()
+    const shouldAutoLoad = shouldAutoLoadOlder({
+      canLoadOlder,
+      suppressed: Date.now() < suppressAutoLoadOlderUntil.value,
+      scrollTop: el.scrollTop,
+      autoLoadUnlocked: autoLoadOlderUnlocked.value,
+      atBottom: isAtBottom.value,
+    })
+    if (!shouldAutoLoad) return
 
     void loadOlderAndPreserveViewport()
   }
@@ -155,6 +173,9 @@ export function usePinnedScroll(opts: {
   function handleScroll() {
     if (!scrollEl.value) return
     isAtBottom.value = isNearBottomNow()
+    if (!autoLoadOlderUnlocked.value && !isAtBottom.value) {
+      autoLoadOlderUnlocked.value = true
+    }
     opts.onScroll?.()
     void maybeLoadOlder()
   }
