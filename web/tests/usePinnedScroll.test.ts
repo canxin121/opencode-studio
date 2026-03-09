@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { shouldAutoLoadOlder } from '../src/composables/chat/usePinnedScroll'
+import { isScrollableY, shouldAutoLoadOlder } from '../src/composables/chat/usePinnedScroll'
 
 test('keeps initial entry pinned by blocking auto-load before user scrolls', () => {
   const shouldLoad = shouldAutoLoadOlder({
@@ -49,4 +49,17 @@ test('respects suppression window during programmatic navigation', () => {
   })
 
   assert.equal(shouldLoad, false)
+})
+
+test('isScrollableY returns false when container is missing', () => {
+  assert.equal(isScrollableY(null), false)
+})
+
+test('isScrollableY returns false when content is not scrollable', () => {
+  assert.equal(isScrollableY({ clientHeight: 400, scrollHeight: 400 }), false)
+  assert.equal(isScrollableY({ clientHeight: 400, scrollHeight: 401 }), false)
+})
+
+test('isScrollableY returns true when content exceeds viewport', () => {
+  assert.equal(isScrollableY({ clientHeight: 400, scrollHeight: 540 }), true)
 })

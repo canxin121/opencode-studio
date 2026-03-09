@@ -534,6 +534,7 @@ const {
   scrollToBottom,
   scheduleScrollToBottom,
   scrollToBottomOnceAfterLoad,
+  ensureInitialHistoryScrollable,
   handleScroll,
   navigableMessageIds,
   navIndex,
@@ -542,46 +543,6 @@ const {
   navPrev,
   navNext,
 } = scrollNav
-
-let ensureNavigableUserMessageSeq = 0
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    window.setTimeout(resolve, ms)
-  })
-}
-
-async function ensureNavigableUserMessageLoaded(sessionId?: string | null): Promise<void> {
-  const sid = String(sessionId ?? chat.selectedSessionId ?? '').trim()
-  if (!sid) return
-
-  const seq = ++ensureNavigableUserMessageSeq
-  let loadedPages = 0
-  const maxAutoPages = 64
-
-  while (loadedPages < maxAutoPages) {
-    if (seq !== ensureNavigableUserMessageSeq) return
-    if (String(chat.selectedSessionId || '').trim() !== sid) return
-
-    if (navigableMessageIds.value.length > 0) return
-    if (chat.selectedHistory.exhausted) return
-
-    if (chat.messagesLoading || chat.selectedHistory.loading) {
-      await sleep(30)
-      continue
-    }
-
-    const loaded = await chat.loadOlderMessages(sid)
-    loadedPages += 1
-    await nextTick()
-
-    if (seq !== ensureNavigableUserMessageSeq) return
-    if (String(chat.selectedSessionId || '').trim() !== sid) return
-    if (navigableMessageIds.value.length > 0) return
-    if (chat.selectedHistory.exhausted) return
-    if (!loaded) return
-  }
-}
 
 const composerLayout = useChatComposerLayout({
   ui,
@@ -1120,7 +1081,7 @@ watch(
     // and no reactive length change occurs.
     modelSelection.applySessionSelection()
 
-    void ensureNavigableUserMessageLoaded(sid)
+    void ensureInitialHistoryScrollable(sid)
   },
 )
 
@@ -1282,7 +1243,7 @@ onMounted(async () => {
   await loadCommands()
   navIndex.value = Math.max(0, navigableMessageIds.value.length - 1)
 
-  void ensureNavigableUserMessageLoaded(sid)
+  void ensureInitialHistoryScrollable(sid)
 
   commandPointerHandler = (event: MouseEvent | TouchEvent) => {
     const target = event.target as Node | null
