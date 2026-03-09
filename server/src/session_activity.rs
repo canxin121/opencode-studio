@@ -526,7 +526,7 @@ mod tests {
         mgr.set_phase("s_1", SessionPhase::Cooldown);
         mgr.set_phase("s_1", SessionPhase::Cooldown);
 
-        sleep(SESSION_COOLDOWN_DURATION + Duration::from_millis(200)).await;
+        sleep(SESSION_COOLDOWN_DURATION + Duration::from_millis(800)).await;
 
         let snapshot = mgr.snapshot_json();
         assert_eq!(

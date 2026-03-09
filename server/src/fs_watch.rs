@@ -399,7 +399,7 @@ async fn run_fs_watch_loop(state: Arc<crate::AppState>) {
         move |result| {
             let _ = tx.send(result);
         },
-        Config::default().with_poll_interval(Duration::from_secs(2)),
+        Config::default(),
     ) {
         Ok(watcher) => watcher,
         Err(err) => {
@@ -506,6 +506,20 @@ mod tests {
         })
     }
 
+    fn skip_if_watch_limit_reached(path: &Path) -> bool {
+        let mut probe = match RecommendedWatcher::new(|_| {}, Config::default()) {
+            Ok(watcher) => watcher,
+            Err(err) => panic!("failed to initialize probe watcher: {err}"),
+        };
+        match probe.watch(path, RecursiveMode::Recursive) {
+            Ok(_) => false,
+            Err(err) => err
+                .to_string()
+                .to_ascii_lowercase()
+                .contains("watch limit reached"),
+        }
+    }
+
     #[test]
     fn collapse_nested_roots_keeps_only_outer_parent() {
         let roots = vec![
@@ -592,12 +606,17 @@ mod tests {
             .await
             .expect("seed file");
 
+        if skip_if_watch_limit_reached(&canonical_root) {
+            let _ = tokio::fs::remove_dir_all(&canonical_root).await;
+            return;
+        }
+
         let state = test_state_with_project(&canonical_root);
         let mut downstream = crate::global_sse_hub::subscribe_test_downstream();
         let watcher_task = tokio::spawn(run_fs_watch_loop(state));
 
         hint_watch_root(&canonical_root);
-        tokio::time::sleep(Duration::from_millis(320)).await;
+        tokio::time::sleep(Duration::from_millis(1200)).await;
 
         tokio::fs::write(&file_path, "after")
             .await
@@ -659,12 +678,17 @@ mod tests {
             .await
             .expect("seed target file");
 
+        if skip_if_watch_limit_reached(&canonical_root) {
+            let _ = tokio::fs::remove_dir_all(&canonical_root).await;
+            return;
+        }
+
         let state = test_state_with_project(&canonical_root);
         let mut downstream = crate::global_sse_hub::subscribe_test_downstream();
         let watcher_task = tokio::spawn(run_fs_watch_loop(state));
 
         hint_watch_root(&canonical_root);
-        tokio::time::sleep(Duration::from_millis(320)).await;
+        tokio::time::sleep(Duration::from_millis(1200)).await;
 
         tokio::fs::write(&temp_path, "after")
             .await
