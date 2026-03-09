@@ -1030,8 +1030,7 @@ mod tests {
 
     #[test]
     fn installer_expected_asset_names_use_case_insensitive_target_detection() {
-        let windows =
-            installer_expected_asset_names("x86_64-pc-Windows-msvc", "main", "v1.2.0");
+        let windows = installer_expected_asset_names("x86_64-pc-Windows-msvc", "main", "v1.2.0");
         assert_eq!(
             windows,
             vec![
@@ -1049,7 +1048,8 @@ mod tests {
 
     #[test]
     fn installer_expected_asset_names_prerelease_windows_prefers_exe_only() {
-        let assets = installer_expected_asset_names("x86_64-pc-windows-msvc", "main", "v1.2.0-rc.1");
+        let assets =
+            installer_expected_asset_names("x86_64-pc-windows-msvc", "main", "v1.2.0-rc.1");
         assert_eq!(
             assets,
             vec!["opencode-studio-desktop-x86_64-pc-windows-msvc-v1.2.0-rc.1.exe".to_string()]
@@ -1059,7 +1059,9 @@ mod tests {
     #[test]
     fn parse_manager_from_asset_name_supports_multiple_patterns() {
         assert_eq!(
-            parse_manager_from_asset_name("opencode-studio-desktop-x86_64-pc-windows-msvc-v1.2.0-winget-.exe"),
+            parse_manager_from_asset_name(
+                "opencode-studio-desktop-x86_64-pc-windows-msvc-v1.2.0-winget-.exe"
+            ),
             Some("winget")
         );
         assert_eq!(

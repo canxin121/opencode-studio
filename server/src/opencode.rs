@@ -748,7 +748,10 @@ mod tests {
 
     #[test]
     fn format_http_base_url_normalizes_unspecified_bind_hosts() {
-        assert_eq!(format_http_base_url("0.0.0.0", 11434), "http://127.0.0.1:11434");
+        assert_eq!(
+            format_http_base_url("0.0.0.0", 11434),
+            "http://127.0.0.1:11434"
+        );
         assert_eq!(format_http_base_url("::", 11434), "http://[::1]:11434");
         assert_eq!(format_http_base_url("[::]", 11434), "http://[::1]:11434");
     }
