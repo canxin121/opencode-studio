@@ -31,6 +31,7 @@ import type { FlatTreeRow } from '@/features/sessions/model/tree'
 import { normalizeDirForCompare } from '@/features/sessions/model/labels'
 import { useSidebarLocate } from '@/layout/chatSidebar/useSidebarLocate'
 import { normalizeSidebarUiPrefsForUi } from '@/features/sessions/model/sidebarUiPrefs'
+import { buildRunningSessionRows } from '@/layout/chatSidebar/runningSessionRows'
 import { apiJson } from '@/lib/api'
 
 const props = defineProps<{ mobileVariant?: boolean }>()
@@ -985,6 +986,9 @@ const pagedRecentSessionRows = computed<ThreadSessionRow[]>(() =>
 const pagedRunningSessionRows = computed<ThreadSessionRow[]>(() =>
   ((runningFooterView.value.rows || []) as ThreadSessionRow[]).map(resolveSidebarRow),
 )
+const runningSessionRows = computed<ThreadSessionRow[]>(
+  () => buildRunningSessionRows(pagedRunningSessionRows.value, expandedParents.value) as ThreadSessionRow[],
+)
 
 watch(
   () => pinnedFooterView.value.page,
@@ -1795,7 +1799,7 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
           :page="runningSessionsPage"
           :paging="runningSessionsPaging"
           :loading="runningFooterLoading"
-          :runningSessionRows="pagedRunningSessionRows"
+          :runningSessionRows="runningSessionRows"
           :runningSessionsTotal="runningSessionsTotal"
           :runningSessionsPageCount="runningSessionsPageCount"
           :selectedSessionId="chat.selectedSessionId"
