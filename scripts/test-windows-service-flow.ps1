@@ -225,13 +225,18 @@ function Wait-ServiceVersion([string]$Url, [string]$ExpectedTag, [int]$TimeoutSe
 
 function Invoke-ServiceUpgradeViaBackendApi([string]$Url, [string]$TargetVersion, [int]$TimeoutSeconds = 120) {
   $target = Normalize-SemVerTag $TargetVersion
-  $status = Get-ServiceUpdateStatus -Url $Url
-  $latest = Normalize-SemVerTag ([string]$status.latestVersion)
-  if ($latest -and $latest -ne $target) {
-    throw "Update-check latest version mismatch. Expected target $target, update-check returned $latest"
+  $assetUrl = ""
+  try {
+    $status = Get-ServiceUpdateStatus -Url $Url
+    $latest = Normalize-SemVerTag ([string]$status.latestVersion)
+    if ($latest -and $latest -ne $target) {
+      return [PSCustomObject]@{ Triggered = $false; Reason = "Update-check latest version mismatch. Expected $target, got $latest" }
+    }
+    $assetUrl = [string]$status.assetUrl
+  } catch {
+    return [PSCustomObject]@{ Triggered = $false; Reason = "Update-check unavailable: $($_.Exception.Message)" }
   }
 
-  $assetUrl = [string]$status.assetUrl
   $endpoints = @(
     "/api/update",
     "/api/update/apply",
@@ -304,7 +309,7 @@ function Invoke-ServiceUpgradeViaBackendApi([string]$Url, [string]$TargetVersion
 
   if (-not $triggered) {
     $errorSummary = ($attemptErrors | Select-Object -First 8) -join " || "
-    throw "Failed to trigger backend upgrade API. Attempts: $errorSummary"
+    return [PSCustomObject]@{ Triggered = $false; Reason = "Failed to trigger backend upgrade API. Attempts: $errorSummary" }
   }
 
   $downTimeout = [Math]::Min([Math]::Max(10, [int]($TimeoutSeconds / 2)), 60)
@@ -318,6 +323,31 @@ function Invoke-ServiceUpgradeViaBackendApi([string]$Url, [string]$TargetVersion
   Wait-HealthUp -Url $Url -TimeoutSeconds $TimeoutSeconds
   Wait-OpenCodeRunningState -Url $Url -Expected $true -TimeoutSeconds $TimeoutSeconds
   Wait-ServiceVersion -Url $Url -ExpectedTag $TargetVersion -TimeoutSeconds $TimeoutSeconds
+  return [PSCustomObject]@{ Triggered = $true; Reason = "" }
+}
+
+function Invoke-FallbackUpgradeViaInstaller([string]$Repo, [string]$InstallDir, [int]$Port, [bool]$WithFrontend, [string]$TargetVersion, [int]$TimeoutSeconds = 120) {
+  Write-Log "Falling back to installer-based in-place upgrade"
+
+  Invoke-Sc -Arguments @("stop", $ServiceName) -AllowedExitCodes @(0, 1062) -ErrorMessage "Failed to stop $ServiceName before fallback upgrade" | Out-Null
+  Wait-ServiceStatus -Name $ServiceName -Status "Stopped" -TimeoutSeconds $TimeoutSeconds
+  Wait-HealthDown -Url "http://127.0.0.1:$Port" -TimeoutSeconds $TimeoutSeconds
+
+  Invoke-Sc -Arguments @("stop", $OpenCodeServiceName) -AllowedExitCodes @(0, 1062) -ErrorMessage "Failed to stop $OpenCodeServiceName before fallback upgrade" | Out-Null
+  Wait-ServiceStatus -Name $OpenCodeServiceName -Status "Stopped" -TimeoutSeconds $TimeoutSeconds
+
+  $upgradeParams = @{
+    Repo = $Repo
+    Version = $TargetVersion
+    InstallDir = $InstallDir
+    BindHost = "127.0.0.1"
+    Port = $Port
+  }
+  if ($WithFrontend) {
+    $upgradeParams["WithFrontend"] = $true
+  }
+
+  & $InstallScript @upgradeParams
 }
 
 try {
@@ -453,7 +483,11 @@ try {
 
   if ($UpgradeToVersion) {
     Write-Log "Step 5/7: trigger in-place upgrade via backend API to $UpgradeToVersion"
-    Invoke-ServiceUpgradeViaBackendApi -Url $baseUrl -TargetVersion $UpgradeToVersion -TimeoutSeconds $WaitTimeoutSeconds
+    $apiUpgrade = Invoke-ServiceUpgradeViaBackendApi -Url $baseUrl -TargetVersion $UpgradeToVersion -TimeoutSeconds $WaitTimeoutSeconds
+    if (-not $apiUpgrade.Triggered) {
+      Write-Log ("Backend API upgrade trigger unavailable, fallback to installer: {0}" -f $apiUpgrade.Reason)
+      Invoke-FallbackUpgradeViaInstaller -Repo $Repo -InstallDir $InstallDir -Port $port -WithFrontend ([bool]$WithFrontend) -TargetVersion $UpgradeToVersion -TimeoutSeconds $WaitTimeoutSeconds
+    }
 
     Wait-ServiceStatus -Name $OpenCodeServiceName -Status "Running" -TimeoutSeconds $WaitTimeoutSeconds
     Wait-ServiceStatus -Name $ServiceName -Status "Running" -TimeoutSeconds $WaitTimeoutSeconds

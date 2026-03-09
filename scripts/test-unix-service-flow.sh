@@ -10,6 +10,7 @@ INSTALL_DIR=""
 ALLOW_EXISTING_INSTALL_DIR="0"
 WAIT_TIMEOUT_SECS="90"
 UPGRADE_VIA_BACKEND_API="0"
+BACKEND_UPGRADE_RETRIES="4"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 INSTALL_SCRIPT="$SCRIPT_DIR/install-service.sh"
@@ -271,9 +272,11 @@ post_json() {
 response_looks_like_html() {
   local content_type="$1"
   local body="$2"
-  local content_type_lc="${content_type,,}"
+  local content_type_lc=""
   local trimmed=""
   local prefix=""
+
+  content_type_lc="$(printf '%s' "$content_type" | tr '[:upper:]' '[:lower:]')"
 
   if [[ "$content_type_lc" == *"text/html"* ]]; then
     return 0
@@ -281,8 +284,37 @@ response_looks_like_html() {
 
   trimmed="${body#"${body%%[![:space:]]*}"}"
   prefix="${trimmed:0:16}"
-  prefix="${prefix,,}"
+  prefix="$(printf '%s' "$prefix" | tr '[:upper:]' '[:lower:]')"
   [[ "$prefix" == "<html"* || "$prefix" == "<!doctype"* ]]
+}
+
+response_indicates_restarting() {
+  local body="$1"
+  local body_lc=""
+  body_lc="$(printf '%s' "$body" | tr '[:upper:]' '[:lower:]')"
+  [[ "$body_lc" == *"restarting"* ]]
+}
+
+run_reinstall_upgrade() {
+  local target_version="$1"
+
+  UPGRADE_ARGS=(
+    --repo "$REPO"
+    --version "$target_version"
+    --install-dir "$INSTALL_DIR"
+    --host 127.0.0.1
+    --port "$PORT"
+  )
+
+  if [[ "$OS" == "Linux" ]]; then
+    UPGRADE_ARGS+=(--mode "$MODE")
+  fi
+
+  if [[ "$WITH_FRONTEND" == "1" ]]; then
+    UPGRADE_ARGS+=(--with-frontend)
+  fi
+
+  bash "$INSTALL_SCRIPT" "${UPGRADE_ARGS[@]}"
 }
 
 trigger_backend_upgrade() {
@@ -297,6 +329,9 @@ trigger_backend_upgrade() {
   local response_body=""
   local rest=""
   local attempt_errors=()
+  local attempt=""
+  local retriable="0"
+  local retry_wait_secs="2"
   local candidate_endpoints=(
     "/api/update"
     "/api/update/apply"
@@ -308,30 +343,49 @@ trigger_backend_upgrade() {
   payload="$(build_upgrade_payload "$asset_url" "$target_tag")"
 
   for endpoint in "${candidate_endpoints[@]}"; do
-    result="$(post_json "$url$endpoint" "$payload")"
-    http_code="${result%%$'\t'*}"
-    rest="${result#*$'\t'}"
-    response_content_type="${rest%%$'\t'*}"
-    response_body="${rest#*$'\t'}"
+    for attempt in $(seq 1 "$BACKEND_UPGRADE_RETRIES"); do
+      result="$(post_json "$url$endpoint" "$payload")"
+      http_code="${result%%$'\t'*}"
+      rest="${result#*$'\t'}"
+      response_content_type="${rest%%$'\t'*}"
+      response_body="${rest#*$'\t'}"
+      retriable="0"
 
-    if [[ "$http_code" =~ ^2[0-9][0-9]$ ]]; then
-      if response_looks_like_html "$response_content_type" "$response_body"; then
-        attempt_errors+=("$endpoint -> HTTP $http_code (unexpected HTML response)")
+      if [[ "$http_code" =~ ^2[0-9][0-9]$ ]]; then
+        if response_looks_like_html "$response_content_type" "$response_body"; then
+          attempt_errors+=("$endpoint -> HTTP $http_code (unexpected HTML response)")
+          break
+        fi
+        log "Backend upgrade trigger accepted at $endpoint (HTTP $http_code)"
+        return 0
+      fi
+
+      if [[ "$http_code" == "503" ]] && response_indicates_restarting "$response_body"; then
+        retriable="1"
+      fi
+
+      if [[ "$http_code" == "503" || "$http_code" == "429" || "$http_code" == "502" || "$http_code" == "504" ]]; then
+        retriable="1"
+      fi
+
+      if [[ "$http_code" == "404" || "$http_code" == "405" ]]; then
+        attempt_errors+=("$endpoint -> HTTP $http_code")
+        break
+      fi
+
+      if [[ "$retriable" == "1" && "$attempt" -lt "$BACKEND_UPGRADE_RETRIES" ]]; then
+        log "Backend upgrade trigger not ready at $endpoint (HTTP $http_code), retrying (${attempt}/${BACKEND_UPGRADE_RETRIES})"
+        sleep "$retry_wait_secs"
         continue
       fi
-      log "Backend upgrade trigger accepted at $endpoint (HTTP $http_code)"
-      return 0
-    fi
 
-    if [[ "$http_code" == "404" || "$http_code" == "405" ]]; then
-      attempt_errors+=("$endpoint -> HTTP $http_code")
-      continue
-    fi
-
-    fail "Backend upgrade trigger failed at $endpoint (HTTP $http_code): ${response_body:-<empty>}"
+      attempt_errors+=("$endpoint -> HTTP $http_code (${response_body:-<empty>})")
+      break
+    done
   done
 
-  fail "No compatible backend upgrade endpoint accepted the request. Attempts: ${attempt_errors[*]:-none}"
+  log "Backend API trigger unavailable. Attempts: ${attempt_errors[*]:-none}"
+  return 1
 }
 
 assert_running_service_version() {
@@ -639,34 +693,28 @@ validate_health_payload "$BASE_URL"
 if [[ -n "$UPGRADE_TO_VERSION" ]]; then
   log "Step 5/7: upgrade service in-place to $UPGRADE_TO_VERSION"
   if [[ "$UPGRADE_VIA_BACKEND_API" == "1" ]]; then
-    UPGRADE_ASSET_URL="$(resolve_service_upgrade_asset_url "$BASE_URL" "$UPGRADE_TO_VERSION")"
-    log "Resolved service upgrade package from backend update-check"
-    trigger_backend_upgrade "$BASE_URL" "$UPGRADE_ASSET_URL" "$UPGRADE_TO_VERSION"
+    FALLBACK_REASON=""
+    UPGRADE_ASSET_URL=""
+    if UPGRADE_ASSET_URL="$(resolve_service_upgrade_asset_url "$BASE_URL" "$UPGRADE_TO_VERSION" 2>/dev/null)"; then
+      log "Resolved service upgrade package from backend update-check"
+      if ! trigger_backend_upgrade "$BASE_URL" "$UPGRADE_ASSET_URL" "$UPGRADE_TO_VERSION"; then
+        FALLBACK_REASON="backend API trigger unavailable"
+      fi
+    else
+      FALLBACK_REASON="update-check precondition failed"
+    fi
+
+    if [[ -n "$FALLBACK_REASON" ]]; then
+      log "Falling back to installer-based in-place upgrade: $FALLBACK_REASON"
+      run_reinstall_upgrade "$UPGRADE_TO_VERSION"
+    fi
   else
-    UPGRADE_ARGS=(
-      --repo "$REPO"
-      --version "$UPGRADE_TO_VERSION"
-      --install-dir "$INSTALL_DIR"
-      --host 127.0.0.1
-      --port "$PORT"
-    )
-
-    if [[ "$OS" == "Linux" ]]; then
-      UPGRADE_ARGS+=(--mode "$MODE")
-    fi
-
-    if [[ "$WITH_FRONTEND" == "1" ]]; then
-      UPGRADE_ARGS+=(--with-frontend)
-    fi
-
-    bash "$INSTALL_SCRIPT" "${UPGRADE_ARGS[@]}"
+    run_reinstall_upgrade "$UPGRADE_TO_VERSION"
   fi
 
   wait_for_health_up "$BASE_URL" "$WAIT_TIMEOUT_SECS" || fail "Service health endpoint did not recover after upgrade"
   validate_health_payload "$BASE_URL"
-  if [[ "$UPGRADE_VIA_BACKEND_API" == "1" ]]; then
-    assert_running_service_version "$BASE_URL" "$UPGRADE_TO_VERSION" "$WAIT_TIMEOUT_SECS"
-  fi
+  assert_running_service_version "$BASE_URL" "$UPGRADE_TO_VERSION" "$WAIT_TIMEOUT_SECS"
   assert_binary_version "$BIN_PATH" "$UPGRADE_TO_VERSION"
 
   if [[ "$OS" == "Linux" ]]; then
