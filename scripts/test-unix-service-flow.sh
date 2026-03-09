@@ -254,17 +254,35 @@ post_json() {
   local body_file=""
   local response_file=""
   local http_code=""
+  local response_content_type=""
   local response_body=""
 
   body_file="$(mktemp)"
   response_file="$(mktemp)"
   printf '%s' "$body" >"$body_file"
-  http_code="$(curl -sS --max-time 20 -X POST -H "Content-Type: application/json" --data-binary "@$body_file" -o "$response_file" -w '%{http_code}' "$endpoint" || true)"
+  IFS=$'\t' read -r http_code response_content_type <<<"$(curl -sS --max-time 20 -X POST -H "Content-Type: application/json" --data-binary "@$body_file" -o "$response_file" -w '%{http_code}\t%{content_type}' "$endpoint" || true)"
   response_body="$(<"$response_file")"
   response_body="${response_body//$'\n'/ }"
   rm -f "$body_file" "$response_file"
 
-  printf '%s\t%s\n' "$http_code" "$response_body"
+  printf '%s\t%s\t%s\n' "$http_code" "$response_content_type" "$response_body"
+}
+
+response_looks_like_html() {
+  local content_type="$1"
+  local body="$2"
+  local content_type_lc="${content_type,,}"
+  local trimmed=""
+  local prefix=""
+
+  if [[ "$content_type_lc" == *"text/html"* ]]; then
+    return 0
+  fi
+
+  trimmed="${body#"${body%%[![:space:]]*}"}"
+  prefix="${trimmed:0:16}"
+  prefix="${prefix,,}"
+  [[ "$prefix" == "<html"* || "$prefix" == "<!doctype"* ]]
 }
 
 trigger_backend_upgrade() {
@@ -275,11 +293,15 @@ trigger_backend_upgrade() {
   local endpoint=""
   local result=""
   local http_code=""
+  local response_content_type=""
   local response_body=""
+  local rest=""
+  local attempt_errors=()
   local candidate_endpoints=(
-    "/api/opencode-studio/service-update"
+    "/api/update"
+    "/api/update/apply"
+    "/api/service/update"
     "/api/opencode-studio/update-service"
-    "/api/opencode-studio/update/apply"
     "/api/opencode-studio/update"
   )
 
@@ -288,21 +310,28 @@ trigger_backend_upgrade() {
   for endpoint in "${candidate_endpoints[@]}"; do
     result="$(post_json "$url$endpoint" "$payload")"
     http_code="${result%%$'\t'*}"
-    response_body="${result#*$'\t'}"
+    rest="${result#*$'\t'}"
+    response_content_type="${rest%%$'\t'*}"
+    response_body="${rest#*$'\t'}"
 
     if [[ "$http_code" =~ ^2[0-9][0-9]$ ]]; then
+      if response_looks_like_html "$response_content_type" "$response_body"; then
+        attempt_errors+=("$endpoint -> HTTP $http_code (unexpected HTML response)")
+        continue
+      fi
       log "Backend upgrade trigger accepted at $endpoint (HTTP $http_code)"
       return 0
     fi
 
     if [[ "$http_code" == "404" || "$http_code" == "405" ]]; then
+      attempt_errors+=("$endpoint -> HTTP $http_code")
       continue
     fi
 
     fail "Backend upgrade trigger failed at $endpoint (HTTP $http_code): ${response_body:-<empty>}"
   done
 
-  fail "No compatible backend upgrade endpoint accepted the request under $url/api/opencode-studio/*"
+  fail "No compatible backend upgrade endpoint accepted the request. Attempts: ${attempt_errors[*]:-none}"
 }
 
 assert_running_service_version() {
