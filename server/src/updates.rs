@@ -474,8 +474,7 @@ fn compare_prerelease(a: &str, b: &str) -> Ordering {
 }
 
 fn runtime_target_triple() -> Option<String> {
-    runtime_target_triple_for(std::env::consts::OS, std::env::consts::ARCH)
-        .map(ToString::to_string)
+    runtime_target_triple_for(std::env::consts::OS, std::env::consts::ARCH).map(ToString::to_string)
 }
 
 fn runtime_target_triple_for(os: &str, arch: &str) -> Option<&'static str> {
