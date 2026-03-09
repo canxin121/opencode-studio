@@ -29,7 +29,7 @@ function classifyShortcut(event: KeyboardEvent, hasSelection: boolean): Shortcut
 
   if (ctrlOnly && key === 'v') return 'paste'
   if (noCtrlMetaAlt && event.shiftKey && isInsertKey(event)) return 'paste'
-  if (metaOnly && (key === 'c' || key === 'v')) return key === 'c' ? 'copy' : 'paste'
+  if (metaOnly && !event.shiftKey && (key === 'c' || key === 'v')) return key === 'c' ? 'copy' : 'paste'
 
   return null
 }
