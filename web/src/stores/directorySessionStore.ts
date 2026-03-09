@@ -1377,10 +1377,13 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     }
     error.value = null
     try {
-      const pageRaw = typeof opts?.page === 'number' && Number.isFinite(opts.page) ? opts.page : uiPrefs.value.directoriesPage
+      const pageRaw =
+        typeof opts?.page === 'number' && Number.isFinite(opts.page) ? opts.page : uiPrefs.value.directoriesPage
       const page = Math.max(0, Math.floor(Number(pageRaw || 0)))
       const pageSizeRaw =
-        typeof opts?.pageSize === 'number' && Number.isFinite(opts.pageSize) ? opts.pageSize : SIDEBAR_DIRECTORIES_PAGE_SIZE
+        typeof opts?.pageSize === 'number' && Number.isFinite(opts.pageSize)
+          ? opts.pageSize
+          : SIDEBAR_DIRECTORIES_PAGE_SIZE
       const pageSize = Math.max(1, Math.floor(Number(pageSizeRaw || SIDEBAR_DIRECTORIES_PAGE_SIZE)))
       const query =
         typeof opts?.query === 'string'
@@ -1473,12 +1476,12 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
       const pageSizeRaw =
         typeof opts?.pageSize === 'number' && Number.isFinite(opts.pageSize)
           ? opts.pageSize
-          : persistedStateQuery.limitPerDirectory ?? SIDEBAR_DIRECTORY_SESSIONS_PAGE_SIZE
+          : (persistedStateQuery.limitPerDirectory ?? SIDEBAR_DIRECTORY_SESSIONS_PAGE_SIZE)
       const pageSize = Math.max(1, Math.floor(Number(pageSizeRaw || SIDEBAR_DIRECTORY_SESSIONS_PAGE_SIZE)))
       const requestedPageRaw =
         typeof opts?.page === 'number' && Number.isFinite(opts.page)
           ? opts.page
-          : uiPrefs.value.sessionRootPageByDirectoryId[did] ?? 0
+          : (uiPrefs.value.sessionRootPageByDirectoryId[did] ?? 0)
       const page = setSessionRootPage(did, requestedPageRaw, pageSize)
 
       const params = new URLSearchParams()
