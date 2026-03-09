@@ -97,7 +97,7 @@ jobs:
 
       - name: Upload wrapper binary (Unix)
         if: "!startsWith(matrix.os, 'windows-')"
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: opencode-studio-wrapper-main-${{ matrix.target }}
           path: ${{ env.CARGO_TARGET_DIR }}/${{ matrix.target }}/release/opencode-studio-desktop
@@ -105,7 +105,7 @@ jobs:
 
       - name: Upload wrapper binary (Windows)
         if: startsWith(matrix.os, 'windows-')
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: opencode-studio-wrapper-main-${{ matrix.target }}
           path: ${{ env.CARGO_TARGET_DIR }}/${{ matrix.target }}/release/opencode-studio-desktop.exe
@@ -218,7 +218,7 @@ jobs:
 
       - name: Upload wrapper binary (Unix)
         if: "!startsWith(matrix.os, 'windows-')"
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: opencode-studio-wrapper-cef-${{ matrix.target }}
           path: ${{ env.CARGO_TARGET_DIR }}/${{ matrix.target }}/release/opencode-studio-desktop
@@ -226,7 +226,7 @@ jobs:
 
       - name: Upload wrapper binary (Windows)
         if: startsWith(matrix.os, 'windows-')
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: opencode-studio-wrapper-cef-${{ matrix.target }}
           path: ${{ env.CARGO_TARGET_DIR }}/${{ matrix.target }}/release/opencode-studio-desktop.exe
