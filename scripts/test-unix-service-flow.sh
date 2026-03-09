@@ -10,7 +10,6 @@ INSTALL_DIR=""
 ALLOW_EXISTING_INSTALL_DIR="0"
 WAIT_TIMEOUT_SECS="90"
 UPGRADE_VIA_BACKEND_API="0"
-BACKEND_UPGRADE_RETRIES="4"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 INSTALL_SCRIPT="$SCRIPT_DIR/install-service.sh"
@@ -288,13 +287,6 @@ response_looks_like_html() {
   [[ "$prefix" == "<html"* || "$prefix" == "<!doctype"* ]]
 }
 
-response_indicates_restarting() {
-  local body="$1"
-  local body_lc=""
-  body_lc="$(printf '%s' "$body" | tr '[:upper:]' '[:lower:]')"
-  [[ "$body_lc" == *"restarting"* ]]
-}
-
 run_reinstall_upgrade() {
   local target_version="$1"
 
@@ -317,21 +309,6 @@ run_reinstall_upgrade() {
   bash "$INSTALL_SCRIPT" "${UPGRADE_ARGS[@]}"
 }
 
-restart_service_after_reinstall_upgrade() {
-  if [[ "$OS" == "Linux" ]]; then
-    log "Restarting Linux service after installer fallback upgrade"
-    linux_service_cmd restart opencode-studio
-    return
-  fi
-
-  log "Restarting macOS service after installer fallback upgrade"
-  if ! launchctl kickstart -k "gui/$(id -u)/$MACOS_LABEL" >/dev/null 2>&1; then
-    log "macOS: kickstart failed, using unload/load fallback"
-    launchctl unload "$MACOS_PLIST" >/dev/null 2>&1 || true
-    launchctl load "$MACOS_PLIST"
-  fi
-}
-
 trigger_backend_upgrade() {
   local url="$1"
   local asset_url="$2"
@@ -344,63 +321,35 @@ trigger_backend_upgrade() {
   local response_body=""
   local rest=""
   local attempt_errors=()
-  local attempt=""
-  local retriable="0"
-  local retry_wait_secs="2"
   local candidate_endpoints=(
-    "/api/update"
-    "/api/update/apply"
-    "/api/service/update"
+    "/api/opencode-studio/service-update"
     "/api/opencode-studio/update-service"
+    "/api/opencode-studio/update/apply"
     "/api/opencode-studio/update"
   )
 
   payload="$(build_upgrade_payload "$asset_url" "$target_tag")"
 
   for endpoint in "${candidate_endpoints[@]}"; do
-    for attempt in $(seq 1 "$BACKEND_UPGRADE_RETRIES"); do
-      result="$(post_json "$url$endpoint" "$payload")"
-      http_code="${result%%$'\t'*}"
-      rest="${result#*$'\t'}"
-      response_content_type="${rest%%$'\t'*}"
-      response_body="${rest#*$'\t'}"
-      retriable="0"
+    result="$(post_json "$url$endpoint" "$payload")"
+    http_code="${result%%$'\t'*}"
+    rest="${result#*$'\t'}"
+    response_content_type="${rest%%$'\t'*}"
+    response_body="${rest#*$'\t'}"
 
-      if [[ "$http_code" =~ ^2[0-9][0-9]$ ]]; then
-        if response_looks_like_html "$response_content_type" "$response_body"; then
-          attempt_errors+=("$endpoint -> HTTP $http_code (unexpected HTML response)")
-          break
-        fi
-        log "Backend upgrade trigger accepted at $endpoint (HTTP $http_code)"
-        return 0
-      fi
-
-      if [[ "$http_code" == "503" ]] && response_indicates_restarting "$response_body"; then
-        retriable="1"
-      fi
-
-      if [[ "$http_code" == "503" || "$http_code" == "429" || "$http_code" == "502" || "$http_code" == "504" ]]; then
-        retriable="1"
-      fi
-
-      if [[ "$http_code" == "404" || "$http_code" == "405" ]]; then
-        attempt_errors+=("$endpoint -> HTTP $http_code")
-        break
-      fi
-
-      if [[ "$retriable" == "1" && "$attempt" -lt "$BACKEND_UPGRADE_RETRIES" ]]; then
-        log "Backend upgrade trigger not ready at $endpoint (HTTP $http_code), retrying (${attempt}/${BACKEND_UPGRADE_RETRIES})"
-        sleep "$retry_wait_secs"
+    if [[ "$http_code" =~ ^2[0-9][0-9]$ ]]; then
+      if response_looks_like_html "$response_content_type" "$response_body"; then
+        attempt_errors+=("$endpoint -> HTTP $http_code (unexpected HTML response)")
         continue
       fi
+      log "Backend upgrade trigger accepted at $endpoint (HTTP $http_code)"
+      return 0
+    fi
 
-      attempt_errors+=("$endpoint -> HTTP $http_code (${response_body:-<empty>})")
-      break
-    done
+    attempt_errors+=("$endpoint -> HTTP $http_code (${response_body:-<empty>})")
   done
 
-  log "Backend API trigger unavailable. Attempts: ${attempt_errors[*]:-none}"
-  return 1
+  fail "Backend API trigger failed. Attempts: ${attempt_errors[*]:-none}"
 }
 
 assert_running_service_version() {
@@ -707,31 +656,12 @@ validate_health_payload "$BASE_URL"
 
 if [[ -n "$UPGRADE_TO_VERSION" ]]; then
   log "Step 5/7: upgrade service in-place to $UPGRADE_TO_VERSION"
-  USED_INSTALLER_FALLBACK="0"
   if [[ "$UPGRADE_VIA_BACKEND_API" == "1" ]]; then
-    FALLBACK_REASON=""
-    UPGRADE_ASSET_URL=""
-    if UPGRADE_ASSET_URL="$(resolve_service_upgrade_asset_url "$BASE_URL" "$UPGRADE_TO_VERSION" 2>/dev/null)"; then
-      log "Resolved service upgrade package from backend update-check"
-      if ! trigger_backend_upgrade "$BASE_URL" "$UPGRADE_ASSET_URL" "$UPGRADE_TO_VERSION"; then
-        FALLBACK_REASON="backend API trigger unavailable"
-      fi
-    else
-      FALLBACK_REASON="update-check precondition failed"
-    fi
-
-    if [[ -n "$FALLBACK_REASON" ]]; then
-      log "Falling back to installer-based in-place upgrade: $FALLBACK_REASON"
-      run_reinstall_upgrade "$UPGRADE_TO_VERSION"
-      USED_INSTALLER_FALLBACK="1"
-    fi
+    UPGRADE_ASSET_URL="$(resolve_service_upgrade_asset_url "$BASE_URL" "$UPGRADE_TO_VERSION")"
+    log "Resolved service upgrade package from backend update-check"
+    trigger_backend_upgrade "$BASE_URL" "$UPGRADE_ASSET_URL" "$UPGRADE_TO_VERSION"
   else
     run_reinstall_upgrade "$UPGRADE_TO_VERSION"
-    USED_INSTALLER_FALLBACK="1"
-  fi
-
-  if [[ "$USED_INSTALLER_FALLBACK" == "1" ]]; then
-    restart_service_after_reinstall_upgrade
   fi
 
   wait_for_health_up "$BASE_URL" "$WAIT_TIMEOUT_SECS" || fail "Service health endpoint did not recover after upgrade"

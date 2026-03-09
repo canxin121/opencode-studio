@@ -122,23 +122,6 @@ function Assert-HealthPayload([object]$Payload) {
   }
 }
 
-function Wait-OpenCodeRunningState([string]$Url, [bool]$Expected, [int]$TimeoutSeconds = 60) {
-  $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
-  while ((Get-Date) -lt $deadline) {
-    try {
-      $payload = Get-HealthPayload -Url $Url
-      Assert-HealthPayload -Payload $payload
-      if ([bool]$payload.openCodeRunning -eq $Expected) {
-        return
-      }
-    } catch {
-    }
-    Start-Sleep -Seconds 1
-  }
-
-  throw "openCodeRunning did not become '$Expected' within ${TimeoutSeconds}s."
-}
-
 function New-RandomPort {
   $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Parse("127.0.0.1"), 0)
   $listener.Start()
@@ -225,23 +208,17 @@ function Wait-ServiceVersion([string]$Url, [string]$ExpectedTag, [int]$TimeoutSe
 
 function Invoke-ServiceUpgradeViaBackendApi([string]$Url, [string]$TargetVersion, [int]$TimeoutSeconds = 120) {
   $target = Normalize-SemVerTag $TargetVersion
-  $assetUrl = ""
-  try {
-    $status = Get-ServiceUpdateStatus -Url $Url
-    $latest = Normalize-SemVerTag ([string]$status.latestVersion)
-    if ($latest -and $latest -ne $target) {
-      return [PSCustomObject]@{ Triggered = $false; Reason = "Update-check latest version mismatch. Expected $target, got $latest" }
-    }
-    $assetUrl = [string]$status.assetUrl
-  } catch {
-    return [PSCustomObject]@{ Triggered = $false; Reason = "Update-check unavailable: $($_.Exception.Message)" }
+  $status = Get-ServiceUpdateStatus -Url $Url
+  $latest = Normalize-SemVerTag ([string]$status.latestVersion)
+  if ($latest -and $latest -ne $target) {
+    throw "Update-check latest version mismatch. Expected target $target, update-check returned $latest"
   }
+  $assetUrl = [string]$status.assetUrl
 
   $endpoints = @(
-    "/api/update",
-    "/api/update/apply",
-    "/api/service/update",
+    "/api/opencode-studio/service-update",
     "/api/opencode-studio/update-service",
+    "/api/opencode-studio/update/apply",
     "/api/opencode-studio/update"
   )
 
@@ -309,7 +286,7 @@ function Invoke-ServiceUpgradeViaBackendApi([string]$Url, [string]$TargetVersion
 
   if (-not $triggered) {
     $errorSummary = ($attemptErrors | Select-Object -First 8) -join " || "
-    return [PSCustomObject]@{ Triggered = $false; Reason = "Failed to trigger backend upgrade API. Attempts: $errorSummary" }
+    throw "Failed to trigger backend upgrade API. Attempts: $errorSummary"
   }
 
   $downTimeout = [Math]::Min([Math]::Max(10, [int]($TimeoutSeconds / 2)), 60)
@@ -321,33 +298,7 @@ function Invoke-ServiceUpgradeViaBackendApi([string]$Url, [string]$TargetVersion
   }
 
   Wait-HealthUp -Url $Url -TimeoutSeconds $TimeoutSeconds
-  Wait-OpenCodeRunningState -Url $Url -Expected $true -TimeoutSeconds $TimeoutSeconds
   Wait-ServiceVersion -Url $Url -ExpectedTag $TargetVersion -TimeoutSeconds $TimeoutSeconds
-  return [PSCustomObject]@{ Triggered = $true; Reason = "" }
-}
-
-function Invoke-FallbackUpgradeViaInstaller([string]$Repo, [string]$InstallDir, [int]$Port, [bool]$WithFrontend, [string]$TargetVersion, [int]$TimeoutSeconds = 120) {
-  Write-Log "Falling back to installer-based in-place upgrade"
-
-  Invoke-Sc -Arguments @("stop", $ServiceName) -AllowedExitCodes @(0, 1062) -ErrorMessage "Failed to stop $ServiceName before fallback upgrade" | Out-Null
-  Wait-ServiceStatus -Name $ServiceName -Status "Stopped" -TimeoutSeconds $TimeoutSeconds
-  Wait-HealthDown -Url "http://127.0.0.1:$Port" -TimeoutSeconds $TimeoutSeconds
-
-  Invoke-Sc -Arguments @("stop", $OpenCodeServiceName) -AllowedExitCodes @(0, 1062) -ErrorMessage "Failed to stop $OpenCodeServiceName before fallback upgrade" | Out-Null
-  Wait-ServiceStatus -Name $OpenCodeServiceName -Status "Stopped" -TimeoutSeconds $TimeoutSeconds
-
-  $upgradeParams = @{
-    Repo = $Repo
-    Version = $TargetVersion
-    InstallDir = $InstallDir
-    BindHost = "127.0.0.1"
-    Port = $Port
-  }
-  if ($WithFrontend) {
-    $upgradeParams["WithFrontend"] = $true
-  }
-
-  & $InstallScript @upgradeParams
 }
 
 try {
@@ -483,13 +434,8 @@ try {
 
   if ($UpgradeToVersion) {
     Write-Log "Step 5/7: trigger in-place upgrade via backend API to $UpgradeToVersion"
-    $apiUpgrade = Invoke-ServiceUpgradeViaBackendApi -Url $baseUrl -TargetVersion $UpgradeToVersion -TimeoutSeconds $WaitTimeoutSeconds
-    if (-not $apiUpgrade.Triggered) {
-      Write-Log ("Backend API upgrade trigger unavailable, fallback to installer: {0}" -f $apiUpgrade.Reason)
-      Invoke-FallbackUpgradeViaInstaller -Repo $Repo -InstallDir $InstallDir -Port $port -WithFrontend ([bool]$WithFrontend) -TargetVersion $UpgradeToVersion -TimeoutSeconds $WaitTimeoutSeconds
-    }
+    Invoke-ServiceUpgradeViaBackendApi -Url $baseUrl -TargetVersion $UpgradeToVersion -TimeoutSeconds $WaitTimeoutSeconds
 
-    Wait-ServiceStatus -Name $OpenCodeServiceName -Status "Running" -TimeoutSeconds $WaitTimeoutSeconds
     Wait-ServiceStatus -Name $ServiceName -Status "Running" -TimeoutSeconds $WaitTimeoutSeconds
     Wait-HealthUp -Url $baseUrl -TimeoutSeconds $WaitTimeoutSeconds
     $upgradedPayload = Get-HealthPayload -Url $baseUrl
