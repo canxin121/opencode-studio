@@ -358,14 +358,72 @@ pub struct GitCommitFile {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GitCommitFilesResponse {
     pub files: Vec<GitCommitFile>,
+    pub total: usize,
+    pub page: usize,
+    pub page_size: usize,
+    pub total_pages: usize,
+    pub has_prev: bool,
+    pub has_next: bool,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GitCommitFilesQuery {
     pub directory: Option<String>,
     pub commit: Option<String>,
+    pub page: Option<usize>,
+    pub page_size: Option<usize>,
+}
+
+const DEFAULT_COMMIT_FILES_PAGE_SIZE: usize = 200;
+const MAX_COMMIT_FILES_PAGE_SIZE: usize = 500;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct PaginationWindow {
+    total: usize,
+    page: usize,
+    page_size: usize,
+    total_pages: usize,
+    start: usize,
+    end: usize,
+    has_prev: bool,
+    has_next: bool,
+}
+
+fn resolve_pagination_window(
+    total: usize,
+    page: Option<usize>,
+    page_size: Option<usize>,
+    default_page_size: usize,
+    max_page_size: usize,
+) -> PaginationWindow {
+    let clamped_page_size = page_size
+        .unwrap_or(default_page_size)
+        .clamp(1, max_page_size.max(1));
+    let total_pages = if total == 0 {
+        1
+    } else {
+        total.div_ceil(clamped_page_size)
+    };
+    let clamped_page = page.unwrap_or(1).clamp(1, total_pages);
+    let start = (clamped_page - 1)
+        .saturating_mul(clamped_page_size)
+        .min(total);
+    let end = start.saturating_add(clamped_page_size).min(total);
+
+    PaginationWindow {
+        total,
+        page: clamped_page,
+        page_size: clamped_page_size,
+        total_pages,
+        start,
+        end,
+        has_prev: clamped_page > 1,
+        has_next: clamped_page < total_pages,
+    }
 }
 
 fn normalize_numstat_path(raw: &str) -> String {
@@ -578,7 +636,30 @@ pub async fn git_commit_files(Query(q): Query<GitCommitFilesQuery>) -> Response 
         });
     }
 
-    Json(GitCommitFilesResponse { files }).into_response()
+    let window = resolve_pagination_window(
+        files.len(),
+        q.page,
+        q.page_size,
+        DEFAULT_COMMIT_FILES_PAGE_SIZE,
+        MAX_COMMIT_FILES_PAGE_SIZE,
+    );
+
+    let files = files
+        .into_iter()
+        .skip(window.start)
+        .take(window.end.saturating_sub(window.start))
+        .collect();
+
+    Json(GitCommitFilesResponse {
+        files,
+        total: window.total,
+        page: window.page,
+        page_size: window.page_size,
+        total_pages: window.total_pages,
+        has_prev: window.has_prev,
+        has_next: window.has_next,
+    })
+    .into_response()
 }
 
 #[derive(Debug, Deserialize)]
@@ -891,7 +972,10 @@ pub async fn git_revert_commit(
 
 #[cfg(test)]
 mod tests {
-    use super::{decode_git_quoted_path, normalize_numstat_path, parse_numstat_line};
+    use super::{
+        DEFAULT_COMMIT_FILES_PAGE_SIZE, MAX_COMMIT_FILES_PAGE_SIZE, decode_git_quoted_path,
+        normalize_numstat_path, parse_numstat_line, resolve_pagination_window,
+    };
 
     #[test]
     fn decode_git_quoted_path_decodes_octal_utf8_sequences() {
@@ -925,5 +1009,56 @@ mod tests {
             parsed,
             Some((format!("src/{}{}.txt", '\u{4e2d}', '\u{6587}'), 12, 3))
         );
+    }
+
+    #[test]
+    fn resolve_pagination_window_uses_defaults() {
+        let window = resolve_pagination_window(
+            401,
+            None,
+            None,
+            DEFAULT_COMMIT_FILES_PAGE_SIZE,
+            MAX_COMMIT_FILES_PAGE_SIZE,
+        );
+        assert_eq!(window.page, 1);
+        assert_eq!(window.page_size, DEFAULT_COMMIT_FILES_PAGE_SIZE);
+        assert_eq!(window.total_pages, 3);
+        assert_eq!(window.start, 0);
+        assert_eq!(window.end, DEFAULT_COMMIT_FILES_PAGE_SIZE);
+        assert!(!window.has_prev);
+        assert!(window.has_next);
+    }
+
+    #[test]
+    fn resolve_pagination_window_clamps_requested_values() {
+        let window = resolve_pagination_window(
+            3,
+            Some(999),
+            Some(MAX_COMMIT_FILES_PAGE_SIZE + 77),
+            DEFAULT_COMMIT_FILES_PAGE_SIZE,
+            MAX_COMMIT_FILES_PAGE_SIZE,
+        );
+        assert_eq!(window.page, 1);
+        assert_eq!(window.page_size, MAX_COMMIT_FILES_PAGE_SIZE);
+        assert_eq!(window.total_pages, 1);
+        assert!(!window.has_prev);
+        assert!(!window.has_next);
+    }
+
+    #[test]
+    fn resolve_pagination_window_handles_empty_totals() {
+        let window = resolve_pagination_window(
+            0,
+            Some(7),
+            Some(0),
+            DEFAULT_COMMIT_FILES_PAGE_SIZE,
+            MAX_COMMIT_FILES_PAGE_SIZE,
+        );
+        assert_eq!(window.page, 1);
+        assert_eq!(window.total_pages, 1);
+        assert_eq!(window.start, 0);
+        assert_eq!(window.end, 0);
+        assert!(!window.has_prev);
+        assert!(!window.has_next);
     }
 }
