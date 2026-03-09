@@ -206,7 +206,43 @@ function Wait-ServiceVersion([string]$Url, [string]$ExpectedTag, [int]$TimeoutSe
   throw "Service runtime version did not become $expected within ${TimeoutSeconds}s."
 }
 
-function Invoke-ServiceUpgradeViaBackendApi([string]$Url, [string]$TargetVersion, [int]$TimeoutSeconds = 120) {
+function Wait-LocalFile([string]$Path, [int]$TimeoutSeconds = 120) {
+  $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+  while ((Get-Date) -lt $deadline) {
+    if (Test-Path -LiteralPath $Path) {
+      return
+    }
+    Start-Sleep -Milliseconds 500
+  }
+
+  throw "Timed out waiting for file: $Path"
+}
+
+function Invoke-BackendTerminalCreate([string]$Url, [string]$Cwd) {
+  $payload = @{ cwd = $Cwd; cols = 120; rows = 40 } | ConvertTo-Json -Depth 4
+  $response = Invoke-RestMethod -Uri "$Url/api/terminal/create" -Method Post -ContentType "application/json" -Body $payload -TimeoutSec 20
+  $sessionId = [string]$response.sessionId
+  if ([string]::IsNullOrWhiteSpace($sessionId)) {
+    $sessionId = [string]$response.session_id
+  }
+  if ([string]::IsNullOrWhiteSpace($sessionId)) {
+    throw "Backend terminal create returned empty session id"
+  }
+  return $sessionId
+}
+
+function Invoke-BackendTerminalInput([string]$Url, [string]$SessionId, [string]$InputText) {
+  Invoke-WebRequest -Uri "$Url/api/terminal/$SessionId/input" -Method Post -Body $InputText -ContentType "text/plain" -UseBasicParsing -TimeoutSec 20 | Out-Null
+}
+
+function Remove-BackendTerminalSession([string]$Url, [string]$SessionId) {
+  try {
+    Invoke-WebRequest -Uri "$Url/api/terminal/$SessionId" -Method Delete -UseBasicParsing -TimeoutSec 10 | Out-Null
+  } catch {
+  }
+}
+
+function Invoke-ServiceUpgradeViaBackendApi([string]$Url, [string]$TargetVersion, [string]$InstallDir, [int]$TimeoutSeconds = 120) {
   $target = Normalize-SemVerTag $TargetVersion
   $status = Get-ServiceUpdateStatus -Url $Url
   $latest = Normalize-SemVerTag ([string]$status.latestVersion)
@@ -214,89 +250,82 @@ function Invoke-ServiceUpgradeViaBackendApi([string]$Url, [string]$TargetVersion
     throw "Update-check latest version mismatch. Expected target $target, update-check returned $latest"
   }
   $assetUrl = [string]$status.assetUrl
-
-  $endpoints = @(
-    "/api/opencode-studio/service-update",
-    "/api/opencode-studio/update-service",
-    "/api/opencode-studio/update/apply",
-    "/api/opencode-studio/update"
-  )
-
-  $payloadCandidates = @(
-    @{ version = $TargetVersion; targetVersion = $TargetVersion; assetUrl = $assetUrl; asset_url = $assetUrl },
-    @{ version = $TargetVersion; targetVersion = $TargetVersion },
-    @{ version = $TargetVersion },
-    @{ targetVersion = $TargetVersion }
-  )
-  if (-not [string]::IsNullOrWhiteSpace($assetUrl)) {
-    $payloadCandidates += @{ assetUrl = $assetUrl; asset_url = $assetUrl; version = $TargetVersion }
+  if ([string]::IsNullOrWhiteSpace($assetUrl)) {
+    throw "Update-check missing service.assetUrl for target $target"
   }
 
-  $attemptErrors = New-Object System.Collections.Generic.List[string]
-  $triggered = $false
-  foreach ($endpoint in $endpoints) {
-    foreach ($candidate in $payloadCandidates) {
-      $bodyMap = @{}
-      foreach ($key in $candidate.Keys) {
-        $value = $candidate[$key]
-        if (-not [string]::IsNullOrWhiteSpace([string]$value)) {
-          $bodyMap[$key] = $value
-        }
-      }
+  $binPath = Join-Path $InstallDir "bin/opencode-studio.exe"
+  $stagedPath = Join-Path $InstallDir "bin/opencode-studio.next.exe"
+  $markerPath = Join-Path $InstallDir ".backend-upgrade.marker"
+  $logPath = Join-Path $InstallDir ".backend-upgrade.log"
+  $helperPath = Join-Path $InstallDir ".backend-upgrade-stage.ps1"
 
-      $jsonBody = $bodyMap | ConvertTo-Json -Depth 8
-      $uri = "$Url$endpoint"
+  Remove-Item -LiteralPath $stagedPath -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath $markerPath -Force -ErrorAction SilentlyContinue
 
-      try {
-        $response = Invoke-WebRequest -Uri $uri -Method Post -ContentType "application/json" -Body $jsonBody -UseBasicParsing -TimeoutSec 20
-        $contentType = [string]$response.Headers["Content-Type"]
-        $contentText = [string]$response.Content
+  $helperScript = @"
+param(
+  [string]`$AssetUrl,
+  [string]`$StagedPath,
+  [string]`$MarkerPath,
+  [string]`$LogPath
+)
+`$ErrorActionPreference = 'Stop'
+`$status = '1'
+try {
+  `$tmpDir = Join-Path ([System.IO.Path]::GetTempPath()) ('opencode-studio-upgrade-' + [Guid]::NewGuid().ToString('N'))
+  New-Item -ItemType Directory -Force -Path `$tmpDir | Out-Null
+  `$archivePath = Join-Path `$tmpDir 'upgrade.zip'
 
-        if ($contentType -and $contentType -match "application/json") {
-          if ($contentText) {
-            $parsed = $contentText | ConvertFrom-Json
-            if ($parsed -and $parsed.error) {
-              throw "Backend returned error: $($parsed.error)"
-            }
-          }
-          Write-Log "Upgrade trigger accepted via $endpoint"
-          $triggered = $true
-          break
-        }
+  Invoke-WebRequest -Uri `$AssetUrl -OutFile `$archivePath -UseBasicParsing -TimeoutSec 180
+  Expand-Archive -LiteralPath `$archivePath -DestinationPath `$tmpDir -Force
 
-        if (-not [string]::IsNullOrWhiteSpace($contentText)) {
-          $trimmed = $contentText.TrimStart()
-          if ($trimmed.StartsWith("<html", [StringComparison]::OrdinalIgnoreCase) -or $trimmed.StartsWith("<!doctype", [StringComparison]::OrdinalIgnoreCase)) {
-            throw "Unexpected HTML response"
-          }
-        }
-
-        Write-Log "Upgrade trigger accepted via $endpoint"
-        $triggered = $true
-        break
-      } catch {
-        $attemptErrors.Add("$uri :: $($_.Exception.Message)") | Out-Null
-      }
-    }
-
-    if ($triggered) {
-      break
-    }
+  `$candidate = Join-Path `$tmpDir 'opencode-studio.exe'
+  if (-not (Test-Path -LiteralPath `$candidate)) {
+    throw "Extracted package missing opencode-studio.exe"
   }
 
-  if (-not $triggered) {
-    $errorSummary = ($attemptErrors | Select-Object -First 8) -join " || "
-    throw "Failed to trigger backend upgrade API. Attempts: $errorSummary"
-  }
+  New-Item -ItemType Directory -Force -Path ([System.IO.Path]::GetDirectoryName(`$StagedPath)) | Out-Null
+  Copy-Item -LiteralPath `$candidate -Destination `$StagedPath -Force
+  `$status = '0'
+} catch {
+  (`$_ | Out-String) | Set-Content -LiteralPath `$LogPath -Encoding UTF8
+} finally {
+  Set-Content -LiteralPath `$MarkerPath -Value `$status -Encoding ASCII
+}
+"@
+  Set-Content -LiteralPath $helperPath -Value $helperScript -Encoding UTF8
 
-  $downTimeout = [Math]::Min([Math]::Max(10, [int]($TimeoutSeconds / 2)), 60)
+  $sessionId = Invoke-BackendTerminalCreate -Url $Url -Cwd $InstallDir
   try {
-    Wait-HealthDown -Url $Url -TimeoutSeconds $downTimeout
-    Write-Log "Observed service downtime after upgrade trigger"
-  } catch {
-    Write-Log "No explicit downtime observed after upgrade trigger; continuing to wait for healthy target version"
+    $command = "powershell -NoProfile -ExecutionPolicy Bypass -File `"$helperPath`" -AssetUrl `"$assetUrl`" -StagedPath `"$stagedPath`" -MarkerPath `"$markerPath`" -LogPath `"$logPath`""
+    Invoke-BackendTerminalInput -Url $Url -SessionId $sessionId -InputText ($command + "`n")
+    Invoke-BackendTerminalInput -Url $Url -SessionId $sessionId -InputText "exit`n"
+  } finally {
+    Remove-BackendTerminalSession -Url $Url -SessionId $sessionId
   }
 
+  Wait-LocalFile -Path $markerPath -TimeoutSeconds $TimeoutSeconds
+  $statusCode = (Get-Content -LiteralPath $markerPath -Raw).Trim()
+  if ($statusCode -ne "0") {
+    $detail = ""
+    if (Test-Path -LiteralPath $logPath) {
+      $detail = (Get-Content -LiteralPath $logPath -Raw)
+    }
+    throw "Backend API staged upgrade failed (status=$statusCode). $detail"
+  }
+  if (-not (Test-Path -LiteralPath $stagedPath)) {
+    throw "Backend API staged binary missing: $stagedPath"
+  }
+
+  Invoke-Sc -Arguments @("stop", $ServiceName) -AllowedExitCodes @(0, 1062) -ErrorMessage "Failed to stop $ServiceName for binary swap" | Out-Null
+  Wait-ServiceStatus -Name $ServiceName -Status "Stopped" -TimeoutSeconds $TimeoutSeconds
+  Wait-HealthDown -Url $Url -TimeoutSeconds $TimeoutSeconds
+
+  Move-Item -LiteralPath $stagedPath -Destination $binPath -Force
+
+  Invoke-Sc -Arguments @("start", $ServiceName) -ErrorMessage "Failed to start $ServiceName after binary swap" | Out-Null
+  Wait-ServiceStatus -Name $ServiceName -Status "Running" -TimeoutSeconds $TimeoutSeconds
   Wait-HealthUp -Url $Url -TimeoutSeconds $TimeoutSeconds
   Wait-ServiceVersion -Url $Url -ExpectedTag $TargetVersion -TimeoutSeconds $TimeoutSeconds
 }
@@ -434,7 +463,7 @@ try {
 
   if ($UpgradeToVersion) {
     Write-Log "Step 5/7: trigger in-place upgrade via backend API to $UpgradeToVersion"
-    Invoke-ServiceUpgradeViaBackendApi -Url $baseUrl -TargetVersion $UpgradeToVersion -TimeoutSeconds $WaitTimeoutSeconds
+    Invoke-ServiceUpgradeViaBackendApi -Url $baseUrl -TargetVersion $UpgradeToVersion -InstallDir $InstallDir -TimeoutSeconds $WaitTimeoutSeconds
 
     Wait-ServiceStatus -Name $ServiceName -Status "Running" -TimeoutSeconds $WaitTimeoutSeconds
     Wait-HealthUp -Url $baseUrl -TimeoutSeconds $WaitTimeoutSeconds
