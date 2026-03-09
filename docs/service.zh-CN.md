@@ -76,6 +76,7 @@ curl -fsSL https://raw.githubusercontent.com/canxin121/opencode-studio/master/sc
 - Linux systemd 用户服务：`systemctl --user status opencode-studio`
 - Linux systemd 系统服务：`sudo systemctl status opencode-studio`
 - macOS launchd agent：`launchctl list | grep opencode`
+- macOS launchd 提示：安装脚本会把 `EnvironmentVariables.PATH` 写入 plist（包含检测到的 `opencode` 目录以及 Homebrew/Bun 常见路径），即使你在 zsh/fish 里自定义了 PATH，服务也能找到 `opencode`。
 
 仅卸载服务单元（保留安装文件）：
 

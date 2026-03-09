@@ -77,6 +77,7 @@ After installation:
 - Linux systemd user service: `systemctl --user status opencode-studio`
 - Linux system service: `sudo systemctl status opencode-studio`
 - macOS launchd agent: `launchctl list | grep opencode`
+- macOS launchd note: installer writes `EnvironmentVariables.PATH` into the plist (including detected `opencode` dir plus Homebrew/Bun defaults), so `opencode` can be found even when your interactive shell uses custom zsh/fish PATH setup.
 
 Uninstall service unit only (keeps install files):
 

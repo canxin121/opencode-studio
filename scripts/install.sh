@@ -83,6 +83,64 @@ toml_quote_basic_string() {
 need() { command -v "$1" >/dev/null 2>&1 || { echo "Missing dependency: $1" >&2; exit 1; }; }
 need curl
 need tar
+if ! command -v opencode >/dev/null 2>&1; then
+  echo "Missing dependency: opencode" >&2
+  echo "Install OpenCode first, for example: curl -fsSL https://opencode.ai/install | bash" >&2
+  exit 1
+fi
+OPENCODE_BIN="$(command -v opencode)"
+OPENCODE_BIN_DIR="$(dirname "$OPENCODE_BIN")"
+
+plist_escape() {
+  local value="$1"
+  value="${value//&/&amp;}"
+  value="${value//</&lt;}"
+  value="${value//>/&gt;}"
+  value="${value//\"/&quot;}"
+  value="${value//\'/&apos;}"
+  printf '%s' "$value"
+}
+
+build_launchd_path() {
+  local opencode_bin_dir="$1"
+  local env_path="$2"
+
+  local entries=(
+    "$opencode_bin_dir"
+    "$HOME/.bun/bin"
+    "$HOME/.local/bin"
+    "/opt/homebrew/bin"
+    "/usr/local/bin"
+    "/usr/bin"
+    "/bin"
+    "/usr/sbin"
+    "/sbin"
+  )
+
+  if [[ -n "$env_path" ]]; then
+    local part
+    IFS=':' read -r -a path_parts <<<"$env_path"
+    for part in "${path_parts[@]}"; do
+      entries+=("$part")
+    done
+  fi
+
+  local out=""
+  local seen=":"
+  local item=""
+  for item in "${entries[@]}"; do
+    [[ -n "$item" ]] || continue
+    if [[ "$seen" != *":$item:"* ]]; then
+      seen+="$item:"
+      if [[ -z "$out" ]]; then
+        out="$item"
+      else
+        out+=":$item"
+      fi
+    fi
+  done
+  printf '%s' "$out"
+}
 
 OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
 ARCH="$(uname -m)"
@@ -360,6 +418,9 @@ EOF
 elif [[ "$OS" == "darwin" ]]; then
   PLIST="$HOME/Library/LaunchAgents/cn.cxits.opencode-studio.plist"
   mkdir -p "$(dirname "$PLIST")"
+  LAUNCHD_PATH="$(build_launchd_path "$OPENCODE_BIN_DIR" "${PATH:-}")"
+  LAUNCHD_PATH_XML="$(plist_escape "$LAUNCHD_PATH")"
+  HOME_XML="$(plist_escape "$HOME")"
 
   echo "Installing launchd user agent: $PLIST"
   cat >"$PLIST" <<EOF
@@ -375,6 +436,13 @@ elif [[ "$OS" == "darwin" ]]; then
     <string>--config</string>
     <string>$CONFIG_FILE</string>
   </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>$LAUNCHD_PATH_XML</string>
+    <key>HOME</key>
+    <string>$HOME_XML</string>
+  </dict>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
@@ -386,6 +454,7 @@ EOF
   launchctl unload "$PLIST" >/dev/null 2>&1 || true
   launchctl load "$PLIST"
   echo "Enabled autostart + loaded: launchctl list | grep opencode"
+  echo "Resolved OpenCode binary: $OPENCODE_BIN"
 else
   echo "Unsupported OS for service setup: $OS" >&2
   exit 1

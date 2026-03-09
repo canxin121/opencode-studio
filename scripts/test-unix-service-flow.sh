@@ -203,6 +203,8 @@ MACOS_PLIST="$HOME/Library/LaunchAgents/${MACOS_LABEL}.plist"
 
 verify_macos_service_present() {
   test -f "$MACOS_PLIST" || fail "Missing launchd plist: $MACOS_PLIST"
+  grep -q '<key>EnvironmentVariables</key>' "$MACOS_PLIST" || fail "launchd plist missing EnvironmentVariables"
+  grep -q '<key>PATH</key>' "$MACOS_PLIST" || fail "launchd plist missing PATH environment"
 }
 
 verify_macos_service_removed() {
