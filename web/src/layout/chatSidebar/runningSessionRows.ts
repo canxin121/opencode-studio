@@ -68,7 +68,7 @@ function resolvedParentById(rows: RunningSessionRow[]): Record<string, string | 
 
   for (const row of rows) {
     const explicit = parentIdFromRow(row)
-    if (explicit && explicit !== row.id && byId.has(explicit)) {
+    if (explicit && explicit !== row.id) {
       parentById[row.id] = explicit
       continue
     }
@@ -85,6 +85,7 @@ function visibleRowsByExpansion(
   expandedParents: Set<string>,
 ): Set<string> {
   const visible = new Set<string>()
+  const rowIds = new Set(rows.map((row) => row.id))
 
   for (const row of rows) {
     const parentId = parentById[row.id]
@@ -99,6 +100,10 @@ function visibleRowsByExpansion(
     while (cur) {
       if (seen.has(cur)) break
       seen.add(cur)
+      if (!rowIds.has(cur)) {
+        show = false
+        break
+      }
       if (!expandedParents.has(cur)) {
         show = false
         break

@@ -66,3 +66,19 @@ test('running session rows preserve standalone sessions', () => {
   assert.equal(out[0]?.isParent, false)
   assert.equal(out[0]?.depth, 0)
 })
+
+test('running session rows never surface child sessions as top-level roots', () => {
+  const childOnlyRows = [row({ id: 'child', session: { id: 'child', parentID: 'parent' } })]
+
+  const collapsed = buildRunningSessionRows(childOnlyRows, new Set())
+  assert.deepEqual(
+    collapsed.map((item) => item.id),
+    [],
+  )
+
+  const expandedWithMissingParent = buildRunningSessionRows(childOnlyRows, new Set(['parent']))
+  assert.deepEqual(
+    expandedWithMissingParent.map((item) => item.id),
+    [],
+  )
+})
