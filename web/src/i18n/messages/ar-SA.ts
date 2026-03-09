@@ -14,6 +14,7 @@ export default {
     saveFailed: 'فشل الحفظ',
     edit: 'تعديل',
     open: 'فتح',
+    reveal: 'إظهار',
     remove: 'إزالة',
     rename: 'إعادة تسمية',
     confirm: 'تأكيد',
@@ -36,6 +37,9 @@ export default {
     continue: 'متابعة',
     default: 'افتراضي',
     options: 'الخيارات',
+    copy: 'نسخ',
+    files: 'ملفات',
+    notSet: '(غير مضبوط)',
     unknown: 'غير معروف',
   },
   settings: {
@@ -51,6 +55,20 @@ export default {
           arSA: 'العربية (السعودية)',
           ptBR: 'البرتغالية (البرازيل)',
           frFR: 'الفرنسية (فرنسا)',
+        },
+      },
+    },
+    opencodeConfig: {
+      sections: {
+        formatter: {
+          lsp: {
+            options: {
+              mode: {
+                config: 'config',
+                disabled: 'disabled',
+              },
+            },
+          },
         },
       },
     },

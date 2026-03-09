@@ -18,6 +18,7 @@ export default {
     edit: 'Edit',
     open: 'Open',
     hide: 'Hide',
+    reveal: 'Reveal',
     from: 'From',
     to: 'To',
     remove: 'Remove',
@@ -56,6 +57,7 @@ export default {
     noActionsFound: 'No actions found.',
     noOptionsFound: 'No options found.',
     options: 'Options',
+    copy: 'Copy',
     copied: 'Copied',
     copyPath: 'Copy path',
     view: 'View',
@@ -73,10 +75,12 @@ export default {
     currentPage: 'Current page',
     previous: 'Prev',
     next: 'Next',
+    files: 'Files',
     unknown: 'Unknown',
     moveUp: 'Move up',
     moveDown: 'Move down',
     empty: 'Empty',
+    notSet: '(not set)',
     on: 'On',
     key: 'Key',
     value: 'Value',
@@ -1398,6 +1402,12 @@ export default {
             },
             search: {
               searchModes: 'Search modes',
+            },
+            options: {
+              mode: {
+                config: 'config',
+                disabled: 'disabled',
+              },
             },
             command: {
               panelTitle: 'LSP command',
