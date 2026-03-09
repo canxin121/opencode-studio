@@ -10,7 +10,6 @@ INSTALL_DIR=""
 ALLOW_EXISTING_INSTALL_DIR="0"
 WAIT_TIMEOUT_SECS="90"
 UPGRADE_VIA_BACKEND_API="0"
-BACKEND_UPGRADE_RETRIES="4"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 INSTALL_SCRIPT="$SCRIPT_DIR/install-service.sh"
@@ -166,6 +165,44 @@ normalize_semver() {
   printf '%s\n' "$value"
 }
 
+normalize_release_tag() {
+  local value="$1"
+
+  if [[ "$value" == v* ]]; then
+    printf '%s\n' "$value"
+  else
+    printf 'v%s\n' "$value"
+  fi
+}
+
+detect_backend_target_triple() {
+  local machine=""
+
+  machine="$(uname -m)"
+
+  case "$OS" in
+    Linux)
+      case "$machine" in
+        x86_64|amd64) printf '%s\n' "x86_64-unknown-linux-gnu" ;;
+        aarch64|arm64) printf '%s\n' "aarch64-unknown-linux-gnu" ;;
+        armv7l|armv7) printf '%s\n' "armv7-unknown-linux-gnueabihf" ;;
+        i686|i386) printf '%s\n' "i686-unknown-linux-gnu" ;;
+        *) return 1 ;;
+      esac
+      ;;
+    Darwin)
+      case "$machine" in
+        x86_64|amd64) printf '%s\n' "x86_64-apple-darwin" ;;
+        arm64|aarch64) printf '%s\n' "aarch64-apple-darwin" ;;
+        *) return 1 ;;
+      esac
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 fetch_update_check_json() {
   local url="$1"
   curl -fsS --max-time 8 "$url/api/opencode-studio/update-check"
@@ -189,6 +226,7 @@ def scalar(value):
 print(f"current={scalar(service.get('currentVersion'))}")
 print(f"latest={scalar(service.get('latestVersion'))}")
 print(f"asset_url={scalar(service.get('assetUrl'))}")
+print(f"target={scalar(service.get('target'))}")
 print(f"available={'1' if service.get('available') is True else '0'}")
 PY
 }
@@ -202,6 +240,10 @@ resolve_service_upgrade_asset_url() {
   local current=""
   local latest=""
   local asset_url=""
+  local target=""
+  local resolved_target=""
+  local release_tag=""
+  local canonical_asset_name=""
   local available=""
   local line=""
   local key=""
@@ -218,81 +260,24 @@ resolve_service_upgrade_asset_url() {
       current) current="$value" ;;
       latest) latest="$value" ;;
       asset_url) asset_url="$value" ;;
+      target) target="$value" ;;
       available) available="$value" ;;
     esac
   done <<<"$parsed"
 
   [[ "$latest" == "$expected_semver" ]] || fail "Update-check latestVersion mismatch. Expected $expected_semver, got '${latest:-<empty>}'"
   [[ "$available" == "1" ]] || fail "Update-check reports service.available=false for target $expected_semver (current=${current:-unknown})"
-  [[ -n "$asset_url" ]] || fail "Update-check missing service.assetUrl for target $expected_semver"
-  printf '%s\n' "$asset_url"
-}
 
-build_upgrade_payload() {
-  local asset_url="$1"
-  local target_tag="$2"
-
-  python3 - "$asset_url" "$target_tag" <<'PY'
-import json
-import sys
-
-asset_url = sys.argv[1]
-target_tag = sys.argv[2]
-target_version = target_tag.lstrip("vV")
-
-print(json.dumps({
-    "assetUrl": asset_url,
-    "asset_url": asset_url,
-    "targetVersion": target_version,
-    "target_version": target_version,
-}))
-PY
-}
-
-post_json() {
-  local endpoint="$1"
-  local body="$2"
-  local body_file=""
-  local response_file=""
-  local http_code=""
-  local response_content_type=""
-  local response_body=""
-
-  body_file="$(mktemp)"
-  response_file="$(mktemp)"
-  printf '%s' "$body" >"$body_file"
-  IFS=$'\t' read -r http_code response_content_type <<<"$(curl -sS --max-time 20 -X POST -H "Content-Type: application/json" --data-binary "@$body_file" -o "$response_file" -w '%{http_code}\t%{content_type}' "$endpoint" || true)"
-  response_body="$(<"$response_file")"
-  response_body="${response_body//$'\n'/ }"
-  rm -f "$body_file" "$response_file"
-
-  printf '%s\t%s\t%s\n' "$http_code" "$response_content_type" "$response_body"
-}
-
-response_looks_like_html() {
-  local content_type="$1"
-  local body="$2"
-  local content_type_lc=""
-  local trimmed=""
-  local prefix=""
-
-  content_type_lc="$(printf '%s' "$content_type" | tr '[:upper:]' '[:lower:]')"
-
-  if [[ "$content_type_lc" == *"text/html"* ]]; then
-    return 0
+  release_tag="$(normalize_release_tag "$expected_tag")"
+  resolved_target="$target"
+  if [[ -z "$resolved_target" ]]; then
+    resolved_target="$(detect_backend_target_triple || true)"
   fi
+  [[ -n "$resolved_target" ]] || fail "Unable to resolve backend target triple for service upgrade"
 
-  trimmed="${body#"${body%%[![:space:]]*}"}"
-  prefix="${trimmed:0:16}"
-  prefix="$(printf '%s' "$prefix" | tr '[:upper:]' '[:lower:]')"
-  [[ "$prefix" == "<html"* || "$prefix" == "<!doctype"* ]]
-}
-
-response_indicates_restarting() {
-  local body="$1"
-  local body_lc=""
-  body_lc="$(printf '%s' "$body" | tr '[:upper:]' '[:lower:]')"
-  [[ "$body_lc" == *"restarting"* ]]
+  canonical_asset_name="opencode-studio-backend-${resolved_target}-${release_tag}.tar.gz"
+  asset_url="https://github.com/${REPO}/releases/download/${release_tag}/${canonical_asset_name}"
+  printf '%s\n' "$asset_url"
 }
 
 run_reinstall_upgrade() {
@@ -317,14 +302,64 @@ run_reinstall_upgrade() {
   bash "$INSTALL_SCRIPT" "${UPGRADE_ARGS[@]}"
 }
 
-restart_service_after_reinstall_upgrade() {
+terminal_create_session() {
+  local url="$1"
+  local cwd="$2"
+  local payload=""
+  local response=""
+  local session_id=""
+
+  payload="$(python3 - "$cwd" <<'PY'
+import json
+import sys
+
+print(json.dumps({"cwd": sys.argv[1], "cols": 120, "rows": 40}))
+PY
+)"
+
+  response="$(curl -fsS --max-time 20 -X POST -H "Content-Type: application/json" --data "$payload" "$url/api/terminal/create")" || fail "Failed to create backend terminal session"
+  session_id="$(python3 - "$response" <<'PY'
+import json
+import sys
+
+payload = json.loads(sys.argv[1])
+sid = payload.get("sessionId") or payload.get("session_id") or ""
+print(sid)
+PY
+)"
+  [[ -n "$session_id" ]] || fail "Backend terminal session id missing"
+  printf '%s\n' "$session_id"
+}
+
+terminal_send_input() {
+  local url="$1"
+  local session_id="$2"
+  local input_text="$3"
+  local payload_file=""
+
+  payload_file="$(mktemp)"
+  printf '%s' "$input_text" >"$payload_file"
+  if ! curl -fsS --max-time 20 -X POST -H "Content-Type: text/plain" --data-binary "@$payload_file" "$url/api/terminal/$session_id/input" >/dev/null; then
+    rm -f "$payload_file"
+    fail "Failed to send backend terminal input"
+  fi
+  rm -f "$payload_file"
+}
+
+terminal_close_session() {
+  local url="$1"
+  local session_id="$2"
+
+  curl -sS --max-time 10 -X DELETE "$url/api/terminal/$session_id" >/dev/null 2>&1 || true
+}
+
+restart_service_once() {
   if [[ "$OS" == "Linux" ]]; then
-    log "Restarting Linux service after installer fallback upgrade"
+    linux_service_cmd reset-failed opencode-studio >/dev/null 2>&1 || true
     linux_service_cmd restart opencode-studio
     return
   fi
 
-  log "Restarting macOS service after installer fallback upgrade"
   if ! launchctl kickstart -k "gui/$(id -u)/$MACOS_LABEL" >/dev/null 2>&1; then
     log "macOS: kickstart failed, using unload/load fallback"
     launchctl unload "$MACOS_PLIST" >/dev/null 2>&1 || true
@@ -336,71 +371,61 @@ trigger_backend_upgrade() {
   local url="$1"
   local asset_url="$2"
   local target_tag="$3"
-  local payload=""
-  local endpoint=""
-  local result=""
-  local http_code=""
-  local response_content_type=""
-  local response_body=""
-  local rest=""
-  local attempt_errors=()
-  local attempt=""
-  local retriable="0"
-  local retry_wait_secs="2"
-  local candidate_endpoints=(
-    "/api/update"
-    "/api/update/apply"
-    "/api/service/update"
-    "/api/opencode-studio/update-service"
-    "/api/opencode-studio/update"
-  )
+  local marker_file="$INSTALL_DIR/.backend-upgrade.marker"
+  local log_file="$INSTALL_DIR/.backend-upgrade.log"
+  local helper_script="$INSTALL_DIR/.backend-upgrade.sh"
+  local staged_binary="$INSTALL_DIR/bin/opencode-studio.next"
+  local archive_file="$INSTALL_DIR/bin/.backend-upgrade.tar.gz"
+  local extract_dir="$INSTALL_DIR/bin/.backend-upgrade.extract"
+  local session_id=""
+  local elapsed=0
+  local status=""
 
-  payload="$(build_upgrade_payload "$asset_url" "$target_tag")"
+  cat >"$helper_script" <<EOF
+#!/usr/bin/env bash
+set -u
+status=0
+(
+  set -euo pipefail
+  rm -f "$archive_file" "$marker_file"
+  rm -rf "$extract_dir"
+  curl -fsSL "$asset_url" -o "$archive_file"
+  mkdir -p "$extract_dir"
+  tar -xzf "$archive_file" -C "$extract_dir"
+  chmod +x "$extract_dir/opencode-studio"
+  mv -f "$extract_dir/opencode-studio" "$staged_binary"
+  rm -rf "$extract_dir" "$archive_file"
+) >"$log_file" 2>&1
+status=\$?
+printf '%s' "\$status" >"$marker_file"
+exit "\$status"
+EOF
+  chmod +x "$helper_script"
+  rm -f "$marker_file"
 
-  for endpoint in "${candidate_endpoints[@]}"; do
-    for attempt in $(seq 1 "$BACKEND_UPGRADE_RETRIES"); do
-      result="$(post_json "$url$endpoint" "$payload")"
-      http_code="${result%%$'\t'*}"
-      rest="${result#*$'\t'}"
-      response_content_type="${rest%%$'\t'*}"
-      response_body="${rest#*$'\t'}"
-      retriable="0"
+  session_id="$(terminal_create_session "$url" "$INSTALL_DIR")"
+  terminal_send_input "$url" "$session_id" "bash \"$helper_script\""$'\n'
+  terminal_send_input "$url" "$session_id" "exit"$'\n'
 
-      if [[ "$http_code" =~ ^2[0-9][0-9]$ ]]; then
-        if response_looks_like_html "$response_content_type" "$response_body"; then
-          attempt_errors+=("$endpoint -> HTTP $http_code (unexpected HTML response)")
-          break
-        fi
-        log "Backend upgrade trigger accepted at $endpoint (HTTP $http_code)"
-        return 0
-      fi
-
-      if [[ "$http_code" == "503" ]] && response_indicates_restarting "$response_body"; then
-        retriable="1"
-      fi
-
-      if [[ "$http_code" == "503" || "$http_code" == "429" || "$http_code" == "502" || "$http_code" == "504" ]]; then
-        retriable="1"
-      fi
-
-      if [[ "$http_code" == "404" || "$http_code" == "405" ]]; then
-        attempt_errors+=("$endpoint -> HTTP $http_code")
-        break
-      fi
-
-      if [[ "$retriable" == "1" && "$attempt" -lt "$BACKEND_UPGRADE_RETRIES" ]]; then
-        log "Backend upgrade trigger not ready at $endpoint (HTTP $http_code), retrying (${attempt}/${BACKEND_UPGRADE_RETRIES})"
-        sleep "$retry_wait_secs"
-        continue
-      fi
-
-      attempt_errors+=("$endpoint -> HTTP $http_code (${response_body:-<empty>})")
+  while ((elapsed < WAIT_TIMEOUT_SECS)); do
+    if [[ -f "$marker_file" ]]; then
       break
-    done
+    fi
+    sleep 1
+    elapsed=$((elapsed + 1))
   done
 
-  log "Backend API trigger unavailable. Attempts: ${attempt_errors[*]:-none}"
-  return 1
+  terminal_close_session "$url" "$session_id"
+
+  [[ -f "$marker_file" ]] || fail "Backend terminal upgrade did not complete in ${WAIT_TIMEOUT_SECS}s"
+  status="$(tr -d '[:space:]' <"$marker_file")"
+  [[ "$status" == "0" ]] || fail "Backend terminal upgrade failed with status ${status:-unknown} (log: $log_file)"
+  [[ -f "$staged_binary" ]] || fail "Backend terminal upgrade did not produce staged binary: $staged_binary"
+
+  mv -f "$staged_binary" "$BIN_PATH"
+  chmod +x "$BIN_PATH"
+  rm -f "$helper_script" "$marker_file"
+  log "Backend upgrade trigger completed for target $target_tag"
 }
 
 assert_running_service_version() {
@@ -501,6 +526,7 @@ manage_service_linux() {
   linux_service_cmd is-enabled opencode-studio >/dev/null
 
   log "Linux: restarting service"
+  linux_service_cmd reset-failed opencode-studio >/dev/null 2>&1 || true
   linux_service_cmd restart opencode-studio
   wait_for_health_up "$BASE_URL" "$WAIT_TIMEOUT_SECS" || fail "Service failed to become healthy after restart"
 
@@ -509,6 +535,7 @@ manage_service_linux() {
   wait_for_health_down "$BASE_URL" "$WAIT_TIMEOUT_SECS" || fail "Service still reachable after stop"
 
   log "Linux: starting service"
+  linux_service_cmd reset-failed opencode-studio >/dev/null 2>&1 || true
   linux_service_cmd start opencode-studio
   wait_for_health_up "$BASE_URL" "$WAIT_TIMEOUT_SECS" || fail "Service failed to become healthy after start"
 }
@@ -707,31 +734,13 @@ validate_health_payload "$BASE_URL"
 
 if [[ -n "$UPGRADE_TO_VERSION" ]]; then
   log "Step 5/7: upgrade service in-place to $UPGRADE_TO_VERSION"
-  USED_INSTALLER_FALLBACK="0"
   if [[ "$UPGRADE_VIA_BACKEND_API" == "1" ]]; then
-    FALLBACK_REASON=""
-    UPGRADE_ASSET_URL=""
-    if UPGRADE_ASSET_URL="$(resolve_service_upgrade_asset_url "$BASE_URL" "$UPGRADE_TO_VERSION" 2>/dev/null)"; then
-      log "Resolved service upgrade package from backend update-check"
-      if ! trigger_backend_upgrade "$BASE_URL" "$UPGRADE_ASSET_URL" "$UPGRADE_TO_VERSION"; then
-        FALLBACK_REASON="backend API trigger unavailable"
-      fi
-    else
-      FALLBACK_REASON="update-check precondition failed"
-    fi
-
-    if [[ -n "$FALLBACK_REASON" ]]; then
-      log "Falling back to installer-based in-place upgrade: $FALLBACK_REASON"
-      run_reinstall_upgrade "$UPGRADE_TO_VERSION"
-      USED_INSTALLER_FALLBACK="1"
-    fi
+    UPGRADE_ASSET_URL="$(resolve_service_upgrade_asset_url "$BASE_URL" "$UPGRADE_TO_VERSION")"
+    log "Resolved service upgrade package from backend update-check"
+    trigger_backend_upgrade "$BASE_URL" "$UPGRADE_ASSET_URL" "$UPGRADE_TO_VERSION"
+    restart_service_once
   else
     run_reinstall_upgrade "$UPGRADE_TO_VERSION"
-    USED_INSTALLER_FALLBACK="1"
-  fi
-
-  if [[ "$USED_INSTALLER_FALLBACK" == "1" ]]; then
-    restart_service_after_reinstall_upgrade
   fi
 
   wait_for_health_up "$BASE_URL" "$WAIT_TIMEOUT_SECS" || fail "Service health endpoint did not recover after upgrade"
