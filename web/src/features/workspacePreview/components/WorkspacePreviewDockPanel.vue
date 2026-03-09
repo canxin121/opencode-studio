@@ -5,7 +5,12 @@ import { RiExternalLinkLine, RiLoader4Line, RiRefreshLine, RiSmartphoneLine, RiC
 
 import IconButton from '@/components/ui/IconButton.vue'
 import SegmentedButton from '@/components/ui/SegmentedButton.vue'
-import { buildPreviewFrameSrc, normalizePreviewUrl } from '@/features/workspacePreview/model/previewUrl'
+import { apiUrl } from '@/lib/api'
+import {
+  buildPreviewFrameSrc,
+  buildPreviewProxyPath,
+  normalizePreviewUrl,
+} from '@/features/workspacePreview/model/previewUrl'
 import { useDirectoryStore } from '@/stores/directory'
 import { useWorkspacePreviewStore } from '@/stores/workspacePreview'
 
@@ -27,9 +32,11 @@ let inputTimer: number | null = null
 let frameTimer: number | null = null
 let pollTimer: number | null = null
 let lastFrameUpdateAt = 0
+let frameRequestId = 0
 
 const hasActiveUrl = computed(() => Boolean(preview.activeUrl))
-const canOpenInWindow = computed(() => Boolean(preview.activeUrl))
+const proxyAccessPath = computed(() => buildPreviewProxyPath(preview.activeUrl))
+const canOpenInWindow = computed(() => Boolean(proxyAccessPath.value))
 const hasInvalidManualDraft = computed(() => Boolean(urlDraft.value.trim()) && !normalizePreviewUrl(urlDraft.value))
 
 const effectiveError = computed(() => {
@@ -40,6 +47,55 @@ const effectiveError = computed(() => {
 })
 
 const showEmptyState = computed(() => !hasActiveUrl.value && !preview.resolving && !effectiveError.value)
+
+function extractProxyErrorDetail(raw: string, contentType: string): string {
+  const body = String(raw || '').trim()
+  if (!body) return ''
+
+  const loweredType = String(contentType || '').toLowerCase()
+  if (loweredType.includes('application/json') || body.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(body) as Record<string, unknown>
+      const detail =
+        (typeof parsed.error === 'string' && parsed.error.trim()) ||
+        (typeof parsed.message === 'string' && parsed.message.trim()) ||
+        (parsed.error &&
+        typeof parsed.error === 'object' &&
+        typeof (parsed.error as { message?: unknown }).message === 'string'
+          ? String((parsed.error as { message?: unknown }).message || '').trim()
+          : '')
+      if (detail) return detail
+    } catch {
+      // Keep fallback text extraction below.
+    }
+  }
+
+  return body.replace(/\s+/g, ' ').slice(0, 180)
+}
+
+function formatProxyHttpError(status: number, detail: string): string {
+  const cleanDetail = String(detail || '').trim() || String(t('workspaceDock.preview.states.proxyHttpErrorNoDetail'))
+  return String(t('workspaceDock.preview.states.proxyHttpError', { status, detail: cleanDetail }))
+}
+
+async function probePreviewProxy(src: string): Promise<string> {
+  try {
+    const response = await fetch(apiUrl(src), {
+      method: 'GET',
+      credentials: 'include',
+      headers: {
+        accept: 'text/html,application/json;q=0.9,*/*;q=0.8',
+      },
+    })
+    if (response.ok) return ''
+
+    const body = await response.text().catch(() => '')
+    const detail = extractProxyErrorDetail(body, response.headers.get('content-type') || '')
+    return formatProxyHttpError(response.status, detail)
+  } catch {
+    return String(t('workspaceDock.preview.states.proxyRequestFailed'))
+  }
+}
 
 function clearInputTimer() {
   if (inputTimer === null) return
@@ -53,12 +109,31 @@ function clearFrameTimer() {
   frameTimer = null
 }
 
-function setFrameUrlNow() {
+async function setFrameUrlNow() {
   clearFrameTimer()
   const src = buildPreviewFrameSrc(preview.activeUrl, refreshToken.value)
-  frameSrc.value = src
   iframeError.value = ''
-  iframeLoading.value = Boolean(src)
+  if (!src) {
+    frameSrc.value = ''
+    iframeLoading.value = false
+    lastFrameUpdateAt = Date.now()
+    return
+  }
+
+  const requestId = ++frameRequestId
+  iframeLoading.value = true
+  const proxyError = await probePreviewProxy(src)
+  if (requestId !== frameRequestId) return
+
+  if (proxyError) {
+    frameSrc.value = ''
+    iframeLoading.value = false
+    iframeError.value = proxyError
+    lastFrameUpdateAt = Date.now()
+    return
+  }
+
+  frameSrc.value = src
   lastFrameUpdateAt = Date.now()
 }
 
@@ -68,7 +143,7 @@ function scheduleFrameUpdate() {
   const waitMs = Math.max(0, FRAME_UPDATE_THROTTLE_MS - elapsed)
   frameTimer = window.setTimeout(() => {
     frameTimer = null
-    setFrameUrlNow()
+    void setFrameUrlNow()
   }, waitMs)
 }
 
@@ -91,9 +166,9 @@ async function refreshPreview(opts?: { forceFrameReload?: boolean }) {
 }
 
 function openInNewWindow() {
-  const target = normalizePreviewUrl(preview.activeUrl)
-  if (!target) return
-  window.open(target, '_blank', 'noopener,noreferrer')
+  const src = buildPreviewFrameSrc(preview.activeUrl, refreshToken.value)
+  if (!src) return
+  window.open(src, '_blank', 'noopener,noreferrer')
 }
 
 function startAutoRefresh() {
@@ -193,9 +268,16 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="mt-2 flex items-center justify-between gap-2">
-        <p class="min-w-0 truncate font-mono text-[11px] text-muted-foreground">
-          {{ hasActiveUrl ? preview.activeUrl : t('workspaceDock.preview.urlEmpty') }}
-        </p>
+        <div class="min-w-0 flex-1 space-y-0.5 text-[11px] text-muted-foreground">
+          <p class="truncate">
+            {{ t('workspaceDock.preview.targetLabel') }}
+            <span class="font-mono">{{ hasActiveUrl ? preview.activeUrl : t('workspaceDock.preview.urlEmpty') }}</span>
+          </p>
+          <p class="truncate">
+            {{ t('workspaceDock.preview.proxyPathLabel') }}
+            <span class="font-mono">{{ proxyAccessPath || t('workspaceDock.preview.urlEmpty') }}</span>
+          </p>
+        </div>
         <div
           class="inline-flex items-center gap-0.5 rounded-md border border-sidebar-border/65 bg-sidebar-accent/35 p-0.5"
         >

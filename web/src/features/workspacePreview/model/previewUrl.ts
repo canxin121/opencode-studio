@@ -1,5 +1,7 @@
 export type WorkspacePreviewViewport = 'desktop' | 'mobile'
 
+const PREVIEW_PROXY_PATH = '/api/workspace/preview/proxy'
+
 export function normalizePreviewUrl(input: string): string {
   const raw = String(input || '').trim()
   if (!raw) return ''
@@ -32,10 +34,17 @@ export function resolvePreviewTarget(manualUrl: string, detectedUrl: string): st
   return normalizePreviewUrl(detectedUrl)
 }
 
-export function buildPreviewFrameSrc(url: string, refreshToken: number): string {
+export function buildPreviewProxyPath(url: string): string {
   const normalized = normalizePreviewUrl(url)
   if (!normalized) return ''
-  const parsed = new URL(normalized)
-  parsed.searchParams.set('__oc_preview_refresh', String(Math.max(0, Math.floor(refreshToken))))
-  return parsed.toString()
+  const params = new URLSearchParams()
+  params.set('target', normalized)
+  return `${PREVIEW_PROXY_PATH}?${params.toString()}`
+}
+
+export function buildPreviewFrameSrc(url: string, refreshToken: number): string {
+  const proxyPath = buildPreviewProxyPath(url)
+  if (!proxyPath) return ''
+  const token = String(Math.max(0, Math.floor(refreshToken)))
+  return `${proxyPath}&__oc_preview_refresh=${encodeURIComponent(token)}`
 }

@@ -23,5 +23,19 @@ test('resolvePreviewTarget prefers manual URL over detected URL', () => {
 
 test('buildPreviewFrameSrc appends refresh token to URL', () => {
   const src = buildPreviewFrameSrc('https://example.dev/path?x=1', 12)
-  assert.equal(src, 'https://example.dev/path?x=1&__oc_preview_refresh=12')
+  assert.equal(
+    src,
+    '/api/workspace/preview/proxy?target=https%3A%2F%2Fexample.dev%2Fpath%3Fx%3D1&__oc_preview_refresh=12',
+  )
+})
+
+test('buildPreviewFrameSrc does not return direct target URL', () => {
+  const src = buildPreviewFrameSrc('localhost:5173', 0)
+  assert.match(src, /^\/api\/workspace\/preview\/proxy\?/)
+  assert.equal(src.includes('http://localhost:5173/'), false)
+})
+
+test('buildPreviewFrameSrc returns empty for invalid target', () => {
+  assert.equal(buildPreviewFrameSrc('javascript:alert(1)', 1), '')
+  assert.equal(buildPreviewFrameSrc('', 1), '')
 })
