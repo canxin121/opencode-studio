@@ -1,6 +1,6 @@
 import { computed, nextTick, ref, watch, type Ref } from 'vue'
 
-import { usePinnedScroll } from '@/composables/chat/usePinnedScroll'
+import { isScrollableY, usePinnedScroll } from '@/composables/chat/usePinnedScroll'
 
 type UiLike = { isMobile: boolean; isMobilePointer: boolean }
 type ChatPartValue = unknown
@@ -12,6 +12,7 @@ type ChatMessageLike = {
 type ChatLike = {
   selectedSessionId: string | null
   messages: ChatMessageLike[]
+  messagesLoading: boolean
   selectedHistory: { loading: boolean; exhausted: boolean }
   loadOlderMessages: (sid: string) => Promise<boolean>
 }
@@ -65,6 +66,7 @@ export function useChatScrollNav(opts: {
   const navIndex = ref(0)
   let navRaf: number | null = null
   let navLockUntil = 0
+  let ensureInitialHistorySeq = 0
   const pendingPrevAnchorId = ref('')
   const pendingPrevSessionId = ref('')
 
@@ -231,6 +233,48 @@ export function useChatScrollNav(opts: {
     return chat.selectedHistory.exhausted ? String(n) : `${n}+`
   })
 
+  async function ensureInitialHistoryScrollable(sessionId?: string | null): Promise<void> {
+    const sid = String(sessionId ?? chat.selectedSessionId ?? '').trim()
+    if (!sid) return
+
+    const seq = ++ensureInitialHistorySeq
+    let loadedPages = 0
+    const maxAutoPages = 64
+
+    while (loadedPages < maxAutoPages) {
+      if (seq !== ensureInitialHistorySeq) return
+      if (String(chat.selectedSessionId || '').trim() !== sid) return
+
+      await scrollToBottomOnceAfterLoad(sid)
+      if (seq !== ensureInitialHistorySeq) return
+      if (String(chat.selectedSessionId || '').trim() !== sid) return
+
+      if (isScrollableY(scrollEl.value)) return
+      if (chat.selectedHistory.exhausted) return
+
+      if (chat.messagesLoading || chat.selectedHistory.loading || loadingOlder.value) {
+        await nextTick()
+        await sleep(24)
+        continue
+      }
+
+      const loaded = await chat.loadOlderMessages(sid)
+      loadedPages += 1
+      await nextTick()
+
+      if (seq !== ensureInitialHistorySeq) return
+      if (String(chat.selectedSessionId || '').trim() !== sid) return
+
+      scrollToBottom('auto')
+      if (isScrollableY(scrollEl.value)) return
+      if (chat.selectedHistory.exhausted) return
+
+      if (!loaded) {
+        await sleep(80)
+      }
+    }
+  }
+
   function navPrev() {
     void (async () => {
       const ids = navigableMessageIds.value
@@ -343,6 +387,7 @@ export function useChatScrollNav(opts: {
     navIndex,
     navBottomOffset,
     navTotalLabel,
+    ensureInitialHistoryScrollable,
     navPrev,
     navNext,
   }

@@ -19,6 +19,11 @@ export function shouldAutoLoadOlder(opts: {
   return opts.scrollTop <= 120
 }
 
+export function isScrollableY(el: Pick<HTMLElement, 'scrollHeight' | 'clientHeight'> | null | undefined): boolean {
+  if (!el) return false
+  return el.scrollHeight - el.clientHeight > 1
+}
+
 export function usePinnedScroll(opts: {
   bottomThresholdPx?: number
   // Called on every scroll update (used for nav index updates).
