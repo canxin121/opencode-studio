@@ -512,7 +512,7 @@ onBeforeUnmount(() => {
       <div class="relative flex items-center gap-1.5">
         <button
           type="button"
-          class="inline-flex h-8 min-w-0 flex-1 items-center justify-between gap-2 border-0 bg-transparent px-1.5 text-xs text-foreground transition-colors hover:bg-secondary/40 disabled:cursor-not-allowed disabled:opacity-60"
+          class="inline-flex h-8 min-w-0 flex-1 items-center justify-between gap-2 rounded-md border-0 bg-transparent px-1.5 text-xs text-foreground transition-colors hover:bg-secondary/40 disabled:cursor-not-allowed disabled:opacity-60"
           :disabled="loading || sessionItems.length === 0"
           :aria-label="sessionPickerLabel"
           @click.stop="setSessionMenuOpen(!sessionMenuOpen)"
