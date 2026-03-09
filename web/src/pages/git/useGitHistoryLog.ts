@@ -31,6 +31,13 @@ export function useGitHistoryLog(opts: { repoRoot: { value: string | null }; git
   const historyFilesLoading = ref(false)
   const historyFilesError = ref<string | null>(null)
   const historyFileSelected = ref<GitCommitFile | null>(null)
+  const historyFilesCurrentPage = ref(1)
+  const historyFilesKnownLastPage = ref(1)
+  const historyFilesExactLastPage = ref<number | null>(null)
+  const historyFilesHasMore = ref(false)
+  const historyFilesTotal = ref<number | null>(null)
+  const historyFilesServerPaged = ref(false)
+  const historyFilesLimit = 100
 
   const historyFilterPath = ref<string | null>(null)
   const historySearchDraft = ref('')
@@ -38,7 +45,15 @@ export function useGitHistoryLog(opts: { repoRoot: { value: string | null }; git
 
   const COMMIT_DETAILS_CACHE_LIMIT = 80
   const HISTORY_PAGE_CACHE_LIMIT = 60
-  type CommitDetailsCacheValue = { files: GitCommitFile[] }
+  type CommitDetailsCacheValue = {
+    files: GitCommitFile[]
+    currentPage: number
+    knownLastPage: number
+    exactLastPage: number | null
+    hasMore: boolean
+    total: number | null
+    serverPaged: boolean
+  }
   type HistoryPageCacheValue = { commits: GitLogCommit[]; hasMore: boolean }
   const commitDetailsCache = new Map<string, CommitDetailsCacheValue>()
   const historyPageCache = new Map<string, HistoryPageCacheValue>()
@@ -85,9 +100,21 @@ export function useGitHistoryLog(opts: { repoRoot: { value: string | null }; git
   function clearHistorySelectionState() {
     historySelected.value = null
     historyFiles.value = []
+    historyFilesLoading.value = false
     historyFilesError.value = null
     historyFileSelected.value = null
     activeCommitAbort?.abort()
+    activeCommitAbort = null
+    resetHistoryFilesPagination()
+  }
+
+  function resetHistoryFilesPagination() {
+    historyFilesCurrentPage.value = 1
+    historyFilesKnownLastPage.value = 1
+    historyFilesExactLastPage.value = null
+    historyFilesHasMore.value = false
+    historyFilesTotal.value = null
+    historyFilesServerPaged.value = false
   }
 
   function updateHistoryPageBounds(page: number, hasMore: boolean) {
@@ -179,21 +206,39 @@ export function useGitHistoryLog(opts: { repoRoot: { value: string | null }; git
   }
 
   async function selectCommit(commit: GitLogCommit) {
-    const dir = repoRoot.value
-    if (!dir) return
     const hash = String(commit?.hash || '').trim()
     if (!hash) return
-    const commitCacheKey = `${dir}::${hash}`
 
     historySelected.value = commit
     historyFileSelected.value = null
     historyFiles.value = []
     historyFilesError.value = null
+    resetHistoryFilesPagination()
 
-    const cached = commitDetailsCache.get(commitCacheKey)
-    if (cached) {
-      historyFiles.value = cached.files
-      return
+    await loadCommitFilesPage(1)
+  }
+
+  async function loadCommitFilesPage(page = 1, force = false) {
+    const dir = repoRoot.value
+    const hash = String(historySelected.value?.hash || '').trim()
+    if (!dir || !hash) return
+
+    const targetPage = Math.max(1, Math.floor(Number(page) || 1))
+    const commitCacheKey = `${dir}::${hash}::${targetPage}`
+    if (!force) {
+      const cached = commitDetailsCache.get(commitCacheKey)
+      if (cached) {
+        historyFiles.value = cached.files
+        historyFilesCurrentPage.value = cached.currentPage
+        historyFilesKnownLastPage.value = cached.knownLastPage
+        historyFilesExactLastPage.value = cached.exactLastPage
+        historyFilesHasMore.value = cached.hasMore
+        historyFilesTotal.value = cached.total
+        historyFilesServerPaged.value = cached.serverPaged
+        historyFilesLoading.value = false
+        historyFilesError.value = null
+        return
+      }
     }
 
     activeCommitAbort?.abort()
@@ -206,14 +251,112 @@ export function useGitHistoryLog(opts: { repoRoot: { value: string | null }; git
       const filesResp = await gitJson<GitCommitFilesResponse>(
         'commit-files',
         dir,
-        { commit: hash },
+        {
+          commit: hash,
+          offset: (targetPage - 1) * historyFilesLimit,
+          limit: historyFilesLimit,
+          page: targetPage,
+          pageSize: historyFilesLimit,
+        },
         { signal: abortController.signal },
       )
 
       if (requestSeq !== selectCommitSeq || abortController.signal.aborted) return
 
-      historyFiles.value = Array.isArray(filesResp?.files) ? filesResp.files : []
-      setBoundedCache(commitDetailsCache, commitCacheKey, { files: historyFiles.value }, COMMIT_DETAILS_CACHE_LIMIT)
+      const files = Array.isArray(filesResp?.files) ? filesResp.files : []
+      const hasPagingMeta =
+        filesResp?.hasMore !== undefined ||
+        filesResp?.nextOffset !== undefined ||
+        filesResp?.offset !== undefined ||
+        filesResp?.limit !== undefined ||
+        filesResp?.page !== undefined ||
+        filesResp?.pageSize !== undefined ||
+        filesResp?.total !== undefined ||
+        filesResp?.totalPages !== undefined
+
+      let pageFiles = files
+      let currentPage = targetPage
+      let knownLastPage = 1
+      let exactLastPage: number | null = null
+      let hasMore = false
+      let total: number | null = null
+
+      if (hasPagingMeta) {
+        const responseLimit = Math.max(
+          1,
+          Math.floor(Number(filesResp?.pageSize ?? filesResp?.limit) || historyFilesLimit),
+        )
+        const responsePage = Math.floor(Number(filesResp?.page) || 0)
+        const responseOffset = Number(filesResp?.offset)
+        if (responsePage > 0) {
+          currentPage = responsePage
+        } else if (Number.isFinite(responseOffset)) {
+          currentPage = Math.max(1, Math.floor(responseOffset / responseLimit) + 1)
+        }
+
+        const responseTotal = Number(filesResp?.total)
+        if (Number.isFinite(responseTotal) && responseTotal >= 0) {
+          total = Math.floor(responseTotal)
+        }
+
+        const responseTotalPages = Math.floor(Number(filesResp?.totalPages) || 0)
+        if (responseTotalPages > 0) {
+          knownLastPage = responseTotalPages
+          exactLastPage = responseTotalPages
+          hasMore = currentPage < responseTotalPages
+        } else if (total !== null) {
+          const totalPages = Math.max(1, Math.ceil(total / responseLimit))
+          knownLastPage = totalPages
+          exactLastPage = totalPages
+          hasMore = currentPage < totalPages
+        } else {
+          hasMore = Boolean(filesResp?.hasMore)
+          knownLastPage = hasMore
+            ? Math.max(historyFilesKnownLastPage.value, currentPage + 1)
+            : Math.max(historyFilesKnownLastPage.value, currentPage)
+          exactLastPage = hasMore ? null : currentPage
+        }
+      } else {
+        const totalCount = files.length
+        const totalPages = Math.max(1, Math.ceil(totalCount / historyFilesLimit))
+        currentPage = Math.max(1, Math.min(targetPage, totalPages))
+        const start = (currentPage - 1) * historyFilesLimit
+        pageFiles = files.slice(start, start + historyFilesLimit)
+        knownLastPage = totalPages
+        exactLastPage = totalPages
+        hasMore = currentPage < totalPages
+        total = totalCount
+      }
+
+      historyFiles.value = pageFiles
+      if (historyFileSelected.value) {
+        const selectedPath = historyFileSelected.value.path
+        const stillVisible = pageFiles.some((file) => file.path === selectedPath)
+        if (!stillVisible) {
+          historyFileSelected.value = null
+        }
+      }
+      historyFilesCurrentPage.value = currentPage
+      historyFilesKnownLastPage.value = knownLastPage
+      historyFilesExactLastPage.value = exactLastPage
+      historyFilesHasMore.value = hasMore
+      historyFilesTotal.value = total
+      historyFilesServerPaged.value = hasPagingMeta
+
+      setBoundedCache(
+        commitDetailsCache,
+        commitCacheKey,
+        {
+          files: pageFiles,
+          currentPage,
+          knownLastPage,
+          exactLastPage,
+          hasMore,
+          total,
+          serverPaged: hasPagingMeta,
+        },
+        COMMIT_DETAILS_CACHE_LIMIT,
+      )
     } catch (err) {
       if (requestSeq !== selectCommitSeq || isAbortError(err)) return
       const msg = err instanceof Error ? err.message : String(err)
@@ -230,6 +373,24 @@ export function useGitHistoryLog(opts: { repoRoot: { value: string | null }; git
 
   function selectCommitFile(file: GitCommitFile) {
     historyFileSelected.value = file
+  }
+
+  async function loadMoreCommitFiles() {
+    const nextPage = historyFilesCurrentPage.value + 1
+    const hasKnownPage = nextPage <= historyFilesKnownLastPage.value
+    if (!historyFilesHasMore.value && !hasKnownPage) return
+    await loadCommitFilesPage(nextPage)
+  }
+
+  async function loadPreviousCommitFilesPage() {
+    if (historyFilesCurrentPage.value <= 1) return
+    await loadCommitFilesPage(historyFilesCurrentPage.value - 1)
+  }
+
+  async function loadCommitFilesAtPage(page: number) {
+    const next = Math.max(1, Math.floor(Number(page) || 1))
+    if (next === historyFilesCurrentPage.value && historyFiles.value.length > 0) return
+    await loadCommitFilesPage(next)
   }
 
   function clearSelectedFile() {
@@ -312,6 +473,13 @@ export function useGitHistoryLog(opts: { repoRoot: { value: string | null }; git
     historyFilesLoading,
     historyFilesError,
     historyFileSelected,
+    historyFilesCurrentPage,
+    historyFilesKnownLastPage,
+    historyFilesExactLastPage,
+    historyFilesHasMore,
+    historyFilesTotal,
+    historyFilesServerPaged,
+    historyFilesLimit,
     historyFilterPath,
     historySearchDraft,
     historySearchQuery,
@@ -326,6 +494,10 @@ export function useGitHistoryLog(opts: { repoRoot: { value: string | null }; git
     loadPreviousHistoryPage,
     loadMoreHistory,
     selectCommit,
+    loadCommitFilesPage,
+    loadMoreCommitFiles,
+    loadPreviousCommitFilesPage,
+    loadCommitFilesAtPage,
     selectCommitFile,
     clearSelectedFile,
   }
