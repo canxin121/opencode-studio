@@ -226,42 +226,6 @@ function Wait-ServiceVersion([string]$Url, [string]$ExpectedTag, [int]$TimeoutSe
   throw "Service runtime version did not become $expected within ${TimeoutSeconds}s."
 }
 
-function Wait-LocalFile([string]$Path, [int]$TimeoutSeconds = 120) {
-  $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
-  while ((Get-Date) -lt $deadline) {
-    if (Test-Path -LiteralPath $Path) {
-      return
-    }
-    Start-Sleep -Milliseconds 500
-  }
-
-  throw "Timed out waiting for file: $Path"
-}
-
-function Invoke-BackendTerminalCreate([string]$Url, [string]$Cwd) {
-  $payload = @{ cwd = $Cwd; cols = 120; rows = 40 } | ConvertTo-Json -Depth 4
-  $response = Invoke-RestMethod -Uri "$Url/api/terminal/create" -Method Post -ContentType "application/json" -Body $payload -TimeoutSec 20
-  $sessionId = [string]$response.sessionId
-  if ([string]::IsNullOrWhiteSpace($sessionId)) {
-    $sessionId = [string]$response.session_id
-  }
-  if ([string]::IsNullOrWhiteSpace($sessionId)) {
-    throw "Backend terminal create returned empty session id"
-  }
-  return $sessionId
-}
-
-function Invoke-BackendTerminalInput([string]$Url, [string]$SessionId, [string]$InputText) {
-  Invoke-WebRequest -Uri "$Url/api/terminal/$SessionId/input" -Method Post -Body $InputText -ContentType "text/plain" -UseBasicParsing -TimeoutSec 20 | Out-Null
-}
-
-function Remove-BackendTerminalSession([string]$Url, [string]$SessionId) {
-  try {
-    Invoke-WebRequest -Uri "$Url/api/terminal/$SessionId" -Method Delete -UseBasicParsing -TimeoutSec 10 | Out-Null
-  } catch {
-  }
-}
-
 function Invoke-ServiceUpgradeViaBackendApi([string]$Url, [string]$Repo, [string]$TargetVersion, [string]$InstallDir, [int]$TimeoutSeconds = 120) {
   $target = Normalize-SemVerTag $TargetVersion
   $status = Get-ServiceUpdateStatus -Url $Url
@@ -280,65 +244,26 @@ function Invoke-ServiceUpgradeViaBackendApi([string]$Url, [string]$Repo, [string
 
   $binPath = Join-Path $InstallDir "bin/opencode-studio.exe"
   $stagedPath = Join-Path $InstallDir "bin/opencode-studio.next.exe"
-  $markerPath = Join-Path $InstallDir ".backend-upgrade.marker"
-  $logPath = Join-Path $InstallDir ".backend-upgrade.log"
-  $helperPath = Join-Path $InstallDir ".backend-upgrade-stage.ps1"
 
   Remove-Item -LiteralPath $stagedPath -Force -ErrorAction SilentlyContinue
-  Remove-Item -LiteralPath $markerPath -Force -ErrorAction SilentlyContinue
-
-  $helperScript = @"
-param(
-  [string]`$AssetUrl,
-  [string]`$StagedPath,
-  [string]`$MarkerPath,
-  [string]`$LogPath
-)
-`$ErrorActionPreference = 'Stop'
-`$status = '1'
-try {
-  `$tmpDir = Join-Path ([System.IO.Path]::GetTempPath()) ('opencode-studio-upgrade-' + [Guid]::NewGuid().ToString('N'))
-  New-Item -ItemType Directory -Force -Path `$tmpDir | Out-Null
-  `$archivePath = Join-Path `$tmpDir 'upgrade.zip'
-
-  Invoke-WebRequest -Uri `$AssetUrl -OutFile `$archivePath -UseBasicParsing -TimeoutSec 180
-  Expand-Archive -LiteralPath `$archivePath -DestinationPath `$tmpDir -Force
-
-  `$candidate = Join-Path `$tmpDir 'opencode-studio.exe'
-  if (-not (Test-Path -LiteralPath `$candidate)) {
-    throw "Extracted package missing opencode-studio.exe"
-  }
-
-  New-Item -ItemType Directory -Force -Path ([System.IO.Path]::GetDirectoryName(`$StagedPath)) | Out-Null
-  Copy-Item -LiteralPath `$candidate -Destination `$StagedPath -Force
-  `$status = '0'
-} catch {
-  (`$_ | Out-String) | Set-Content -LiteralPath `$LogPath -Encoding UTF8
-} finally {
-  Set-Content -LiteralPath `$MarkerPath -Value `$status -Encoding ASCII
-}
-"@
-  Set-Content -LiteralPath $helperPath -Value $helperScript -Encoding UTF8
-
-  $sessionId = Invoke-BackendTerminalCreate -Url $Url -Cwd $InstallDir
+  $tmpDir = Join-Path $env:TEMP ("opencode-studio-upgrade-" + [Guid]::NewGuid().ToString("N"))
+  New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
   try {
-    $powershellExe = Join-Path $env:WINDIR "System32\WindowsPowerShell\v1.0\powershell.exe"
-    $command = "& `"$powershellExe`" -NoProfile -ExecutionPolicy Bypass -File `"$helperPath`" -AssetUrl `"$assetUrl`" -StagedPath `"$stagedPath`" -MarkerPath `"$markerPath`" -LogPath `"$logPath`""
-    Invoke-BackendTerminalInput -Url $Url -SessionId $sessionId -InputText ($command + "`n")
-    Invoke-BackendTerminalInput -Url $Url -SessionId $sessionId -InputText "exit`n"
-    Wait-LocalFile -Path $markerPath -TimeoutSeconds $TimeoutSeconds
+    $archivePath = Join-Path $tmpDir "upgrade.zip"
+    Invoke-WebRequest -Uri $assetUrl -OutFile $archivePath -UseBasicParsing -TimeoutSec 180
+    Expand-Archive -LiteralPath $archivePath -DestinationPath $tmpDir -Force
+
+    $candidate = Join-Path $tmpDir "opencode-studio.exe"
+    if (-not (Test-Path -LiteralPath $candidate)) {
+      throw "Extracted package missing opencode-studio.exe"
+    }
+
+    New-Item -ItemType Directory -Force -Path ([System.IO.Path]::GetDirectoryName($stagedPath)) | Out-Null
+    Copy-Item -LiteralPath $candidate -Destination $stagedPath -Force
   } finally {
-    Remove-BackendTerminalSession -Url $Url -SessionId $sessionId
+    Remove-Item -LiteralPath $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
   }
 
-  $statusCode = (Get-Content -LiteralPath $markerPath -Raw).Trim()
-  if ($statusCode -ne "0") {
-    $detail = ""
-    if (Test-Path -LiteralPath $logPath) {
-      $detail = (Get-Content -LiteralPath $logPath -Raw)
-    }
-    throw "Backend API staged upgrade failed (status=$statusCode). $detail"
-  }
   if (-not (Test-Path -LiteralPath $stagedPath)) {
     throw "Backend API staged binary missing: $stagedPath"
   }

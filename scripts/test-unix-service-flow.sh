@@ -355,6 +355,7 @@ terminal_close_session() {
 
 restart_service_once() {
   if [[ "$OS" == "Linux" ]]; then
+    linux_service_cmd reset-failed opencode-studio >/dev/null 2>&1 || true
     linux_service_cmd restart opencode-studio
     return
   fi
@@ -525,6 +526,7 @@ manage_service_linux() {
   linux_service_cmd is-enabled opencode-studio >/dev/null
 
   log "Linux: restarting service"
+  linux_service_cmd reset-failed opencode-studio >/dev/null 2>&1 || true
   linux_service_cmd restart opencode-studio
   wait_for_health_up "$BASE_URL" "$WAIT_TIMEOUT_SECS" || fail "Service failed to become healthy after restart"
 
@@ -533,6 +535,7 @@ manage_service_linux() {
   wait_for_health_down "$BASE_URL" "$WAIT_TIMEOUT_SECS" || fail "Service still reachable after stop"
 
   log "Linux: starting service"
+  linux_service_cmd reset-failed opencode-studio >/dev/null 2>&1 || true
   linux_service_cmd start opencode-studio
   wait_for_health_up "$BASE_URL" "$WAIT_TIMEOUT_SECS" || fail "Service failed to become healthy after start"
 }
