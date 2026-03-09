@@ -455,6 +455,18 @@ fn windows_home_env_defaults() -> Option<String> {
                 .map(|v| v.trim().to_string())
                 .filter(|v| !v.is_empty())
         })
+        .or_else(|| {
+            let drive = std::env::var("HOMEDRIVE").ok().unwrap_or_default();
+            let path = std::env::var("HOMEPATH").ok().unwrap_or_default();
+            let joined = format!("{}{}", drive.trim(), path.trim())
+                .trim()
+                .to_string();
+            if joined.is_empty() {
+                None
+            } else {
+                Some(joined)
+            }
+        })
 }
 
 async fn forward_child_output(label: &'static str, stream: impl tokio::io::AsyncRead + Unpin) {
@@ -627,10 +639,14 @@ mod tests {
         let _env_lock = ENV_LOCK.lock().unwrap();
         let old_userprofile = std::env::var("USERPROFILE").ok();
         let old_home = std::env::var("HOME").ok();
+        let old_homedrive = std::env::var("HOMEDRIVE").ok();
+        let old_homepath = std::env::var("HOMEPATH").ok();
 
         unsafe {
             std::env::set_var("USERPROFILE", r"C:\Users\Alice");
             std::env::remove_var("HOME");
+            std::env::remove_var("HOMEDRIVE");
+            std::env::remove_var("HOMEPATH");
         }
 
         let home = windows_home_env_defaults().expect("defaults");
@@ -647,6 +663,102 @@ mod tests {
             } else {
                 std::env::remove_var("HOME");
             }
+            if let Some(v) = old_homedrive {
+                std::env::set_var("HOMEDRIVE", v);
+            } else {
+                std::env::remove_var("HOMEDRIVE");
+            }
+            if let Some(v) = old_homepath {
+                std::env::set_var("HOMEPATH", v);
+            } else {
+                std::env::remove_var("HOMEPATH");
+            }
         }
+    }
+
+    #[test]
+    fn windows_home_env_defaults_prefers_home_over_userprofile() {
+        let _env_lock = ENV_LOCK.lock().unwrap();
+        let old_userprofile = std::env::var("USERPROFILE").ok();
+        let old_home = std::env::var("HOME").ok();
+
+        unsafe {
+            std::env::set_var("HOME", r"C:\Users\Primary");
+            std::env::set_var("USERPROFILE", r"C:\Users\Fallback");
+        }
+
+        let home = windows_home_env_defaults().expect("defaults");
+        assert_eq!(home, r"C:\Users\Primary");
+
+        unsafe {
+            if let Some(v) = old_userprofile {
+                std::env::set_var("USERPROFILE", v);
+            } else {
+                std::env::remove_var("USERPROFILE");
+            }
+            if let Some(v) = old_home {
+                std::env::set_var("HOME", v);
+            } else {
+                std::env::remove_var("HOME");
+            }
+        }
+    }
+
+    #[test]
+    fn windows_home_env_defaults_uses_homedrive_homepath_when_needed() {
+        let _env_lock = ENV_LOCK.lock().unwrap();
+        let old_userprofile = std::env::var("USERPROFILE").ok();
+        let old_home = std::env::var("HOME").ok();
+        let old_homedrive = std::env::var("HOMEDRIVE").ok();
+        let old_homepath = std::env::var("HOMEPATH").ok();
+
+        unsafe {
+            std::env::remove_var("HOME");
+            std::env::set_var("USERPROFILE", "   ");
+            std::env::set_var("HOMEDRIVE", " C: ");
+            std::env::set_var("HOMEPATH", " \\Users\\Alice ");
+        }
+
+        let home = windows_home_env_defaults().expect("defaults");
+        assert_eq!(home, r"C:\Users\Alice");
+
+        unsafe {
+            if let Some(v) = old_userprofile {
+                std::env::set_var("USERPROFILE", v);
+            } else {
+                std::env::remove_var("USERPROFILE");
+            }
+            if let Some(v) = old_home {
+                std::env::set_var("HOME", v);
+            } else {
+                std::env::remove_var("HOME");
+            }
+            if let Some(v) = old_homedrive {
+                std::env::set_var("HOMEDRIVE", v);
+            } else {
+                std::env::remove_var("HOMEDRIVE");
+            }
+            if let Some(v) = old_homepath {
+                std::env::set_var("HOMEPATH", v);
+            } else {
+                std::env::remove_var("HOMEPATH");
+            }
+        }
+    }
+
+    #[test]
+    fn format_http_base_url_normalizes_unspecified_bind_hosts() {
+        assert_eq!(
+            format_http_base_url("0.0.0.0", 11434),
+            "http://127.0.0.1:11434"
+        );
+        assert_eq!(format_http_base_url("::", 11434), "http://[::1]:11434");
+        assert_eq!(format_http_base_url("[::]", 11434), "http://[::1]:11434");
+    }
+
+    #[test]
+    fn format_http_base_url_handles_ipv6_inputs() {
+        assert_eq!(format_http_base_url("::1", 9999), "http://[::1]:9999");
+        assert_eq!(format_http_base_url("[::1]", 9999), "http://[::1]:9999");
     }
 }

@@ -489,7 +489,7 @@ fn runtime_target_triple_for(os: &str, arch: &str) -> Option<&'static str> {
 }
 
 fn service_asset_name(target: &str) -> String {
-    if target.contains("windows") {
+    if is_windows_target(target) {
         format!("opencode-studio-{target}.zip")
     } else {
         format!("opencode-studio-{target}.tar.gz")
@@ -505,10 +505,14 @@ fn find_asset_url(assets: &[GithubReleaseAsset], name: &str) -> Option<String> {
 
 fn build_service_update_command(asset_url: Option<&str>) -> Option<String> {
     let url = nonempty(asset_url)?;
-    if std::env::consts::OS == "windows" {
-        Some(format!("curl -fL \"{url}\" -o opencode-studio.zip"))
+    Some(build_service_update_command_for(std::env::consts::OS, &url))
+}
+
+fn build_service_update_command_for(os: &str, url: &str) -> String {
+    if os == "windows" {
+        format!("curl -fL \"{url}\" -o opencode-studio.zip")
     } else {
-        Some(format!("curl -fL \"{url}\" -o opencode-studio.tar.gz"))
+        format!("curl -fL \"{url}\" -o opencode-studio.tar.gz")
     }
 }
 
@@ -594,14 +598,14 @@ fn installer_expected_asset_names(target: &str, channel: &str, release_tag: &str
     let suffix = if channel == "cef" { "-cef" } else { "" };
     let stem = format!("opencode-studio-desktop-{target}{suffix}-{release_tag}");
 
-    if target.contains("windows") {
+    if is_windows_target(target) {
         if release_tag.contains('-') {
             return vec![format!("{stem}.exe")];
         }
         return vec![format!("{stem}.msi"), format!("{stem}.exe")];
     }
 
-    if target.contains("apple") || target.contains("darwin") {
+    if is_macos_target(target) {
         return vec![format!("{stem}.dmg")];
     }
 
@@ -614,6 +618,15 @@ fn installer_expected_asset_names(target: &str, channel: &str, release_tag: &str
 
 fn release_asset_url(repo: &str, release_tag: &str, asset_name: &str) -> String {
     format!("{GITHUB_WEB_BASE}/{repo}/releases/download/{release_tag}/{asset_name}")
+}
+
+fn is_windows_target(target: &str) -> bool {
+    target.to_ascii_lowercase().contains("windows")
+}
+
+fn is_macos_target(target: &str) -> bool {
+    let lower = target.to_ascii_lowercase();
+    lower.contains("apple") || lower.contains("darwin")
 }
 
 fn classify_asset_identity(asset_name: &str) -> Option<AssetIdentity> {
@@ -991,5 +1004,105 @@ mod tests {
                 "opencode-studio-desktop-aarch64-unknown-linux-gnu-v1.2.0.rpm".to_string(),
             ]
         );
+    }
+
+    #[test]
+    fn runtime_target_triple_for_maps_windows_and_unknown() {
+        assert_eq!(
+            runtime_target_triple_for("windows", "x86_64"),
+            Some("x86_64-pc-windows-msvc")
+        );
+        assert_eq!(runtime_target_triple_for("windows", "aarch64"), None);
+        assert_eq!(runtime_target_triple_for("freebsd", "x86_64"), None);
+    }
+
+    #[test]
+    fn service_asset_name_handles_case_insensitive_windows_targets() {
+        assert_eq!(
+            service_asset_name("x86_64-pc-Windows-msvc"),
+            "opencode-studio-x86_64-pc-Windows-msvc.zip"
+        );
+        assert_eq!(
+            service_asset_name("x86_64-unknown-linux-gnu"),
+            "opencode-studio-x86_64-unknown-linux-gnu.tar.gz"
+        );
+    }
+
+    #[test]
+    fn installer_expected_asset_names_use_case_insensitive_target_detection() {
+        let windows = installer_expected_asset_names("x86_64-pc-Windows-msvc", "main", "v1.2.0");
+        assert_eq!(
+            windows,
+            vec![
+                "opencode-studio-desktop-x86_64-pc-Windows-msvc-v1.2.0.msi".to_string(),
+                "opencode-studio-desktop-x86_64-pc-Windows-msvc-v1.2.0.exe".to_string(),
+            ]
+        );
+
+        let mac = installer_expected_asset_names("AARCH64-APPLE-DARWIN", "main", "v1.2.0");
+        assert_eq!(
+            mac,
+            vec!["opencode-studio-desktop-AARCH64-APPLE-DARWIN-v1.2.0.dmg".to_string()]
+        );
+    }
+
+    #[test]
+    fn installer_expected_asset_names_prerelease_windows_prefers_exe_only() {
+        let assets =
+            installer_expected_asset_names("x86_64-pc-windows-msvc", "main", "v1.2.0-rc.1");
+        assert_eq!(
+            assets,
+            vec!["opencode-studio-desktop-x86_64-pc-windows-msvc-v1.2.0-rc.1.exe".to_string()]
+        );
+    }
+
+    #[test]
+    fn parse_manager_from_asset_name_supports_multiple_patterns() {
+        assert_eq!(
+            parse_manager_from_asset_name(
+                "opencode-studio-desktop-x86_64-pc-windows-msvc-v1.2.0-winget-.exe"
+            ),
+            Some("winget")
+        );
+        assert_eq!(
+            parse_manager_from_asset_name("opencode-studio.desktop.scoop.installer.exe"),
+            Some("scoop")
+        );
+        assert_eq!(
+            parse_manager_from_asset_name("opencode_studio_brew_pkg.dmg"),
+            Some("brew")
+        );
+    }
+
+    #[test]
+    fn build_service_update_command_for_varies_by_os() {
+        assert_eq!(
+            build_service_update_command_for("windows", "https://example.invalid/a.zip"),
+            "curl -fL \"https://example.invalid/a.zip\" -o opencode-studio.zip"
+        );
+        assert_eq!(
+            build_service_update_command_for("linux", "https://example.invalid/a.tar.gz"),
+            "curl -fL \"https://example.invalid/a.tar.gz\" -o opencode-studio.tar.gz"
+        );
+    }
+
+    #[test]
+    fn installer_assets_for_target_falls_back_to_expected_urls() {
+        let assets = installer_assets_for_target(
+            &[],
+            "canxin121/opencode-studio",
+            "x86_64-pc-windows-msvc",
+            "main",
+            "v1.2.0",
+        );
+
+        assert_eq!(assets.len(), 2);
+        assert_eq!(assets[0].installer_type, "msi");
+        assert_eq!(assets[0].manager, "direct");
+        assert_eq!(
+            assets[0].url,
+            "https://github.com/canxin121/opencode-studio/releases/download/v1.2.0/opencode-studio-desktop-x86_64-pc-windows-msvc-v1.2.0.msi"
+        );
+        assert_eq!(assets[1].installer_type, "exe");
     }
 }
