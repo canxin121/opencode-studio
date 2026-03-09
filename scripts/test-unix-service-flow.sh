@@ -566,12 +566,20 @@ macos_detect_service_legacy_list() {
   launchctl list 2>/dev/null | grep -q "$MACOS_LABEL"
 }
 
+macos_enable_service_known_domains() {
+  local domain=""
+
+  while IFS= read -r domain; do
+    [[ -n "$domain" ]] || continue
+    launchctl enable "$domain/$MACOS_LABEL" >/dev/null 2>&1 || true
+  done < <(macos_launchctl_domains)
+}
+
 macos_bootout_service() {
   local domain=""
 
   while IFS= read -r domain; do
     [[ -n "$domain" ]] || continue
-    launchctl disable "$domain/$MACOS_LABEL" >/dev/null 2>&1 || true
     launchctl bootout "$domain/$MACOS_LABEL" >/dev/null 2>&1 || true
     launchctl bootout "$domain" "$MACOS_PLIST" >/dev/null 2>&1 || true
   done < <(macos_launchctl_domains)
@@ -592,6 +600,7 @@ macos_bootstrap_service() {
   done < <(macos_launchctl_domains)
 
   launchctl load "$MACOS_PLIST" >/dev/null 2>&1 || return 1
+  macos_enable_service_known_domains
   macos_detect_service_domain || true
   return 0
 }

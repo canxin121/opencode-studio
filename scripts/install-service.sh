@@ -184,7 +184,16 @@ macos_launchctl_bootout_existing() {
     [[ -n "$domain" ]] || continue
     launchctl bootout "$domain/$label" >/dev/null 2>&1 || true
     launchctl bootout "$domain" "$plist" >/dev/null 2>&1 || true
-    launchctl disable "$domain/$label" >/dev/null 2>&1 || true
+  done < <(macos_launchctl_domains)
+}
+
+macos_launchctl_enable_known_domains() {
+  local label="$1"
+  local domain=""
+
+  while IFS= read -r domain; do
+    [[ -n "$domain" ]] || continue
+    launchctl enable "$domain/$label" >/dev/null 2>&1 || true
   done < <(macos_launchctl_domains)
 }
 
@@ -524,6 +533,7 @@ EOF
   if [[ -z "$LAUNCH_DOMAIN" ]]; then
     echo "launchctl bootstrap failed; trying legacy load fallback"
     launchctl load "$PLIST"
+    macos_launchctl_enable_known_domains "$LABEL"
     LAUNCH_DOMAIN="$(macos_launchctl_detect_loaded_domain "$LABEL" || true)"
   fi
 
