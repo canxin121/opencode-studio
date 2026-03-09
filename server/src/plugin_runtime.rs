@@ -800,7 +800,14 @@ fn resolve_bridge_invocation(
     let mut cwd = default_cwd;
     let mut env = HashMap::<String, String>::new();
     let command_tokens = match bridge_value {
-        Value::String(raw) => vec![raw.trim().to_string()],
+        Value::String(raw) => parse_bridge_command_string(raw, &cwd).map_err(|message| {
+            action_failure(
+                StatusCode::BAD_REQUEST,
+                "invalid_bridge_config",
+                message,
+                None,
+            )
+        })?,
         Value::Array(values) => parse_command_token_array(values).map_err(|message| {
             action_failure(
                 StatusCode::BAD_REQUEST,
@@ -869,7 +876,7 @@ fn resolve_bridge_invocation(
                 }
             }
 
-            parse_command_tokens_from_bridge_object(map).map_err(|message| {
+            parse_command_tokens_from_bridge_object(map, &cwd).map_err(|message| {
                 action_failure(
                     StatusCode::BAD_REQUEST,
                     "invalid_bridge_config",
@@ -923,21 +930,116 @@ fn resolve_bridge_program(raw: &str, cwd: &Path) -> String {
     resolved.to_string_lossy().into_owned()
 }
 
+fn parse_bridge_command_string(raw: &str, cwd: &Path) -> Result<Vec<String>, String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err("bridge command must not be empty".to_string());
+    }
+
+    if trimmed.chars().any(char::is_whitespace)
+        && bridge_string_points_to_existing_program(trimmed, cwd)
+    {
+        return Ok(vec![trimmed.to_string()]);
+    }
+
+    tokenize_bridge_command(trimmed)
+}
+
+fn bridge_string_points_to_existing_program(raw: &str, cwd: &Path) -> bool {
+    let resolved = resolve_bridge_program(raw, cwd);
+    Path::new(&resolved).is_file()
+}
+
+fn tokenize_bridge_command(raw: &str) -> Result<Vec<String>, String> {
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    enum QuoteState {
+        None,
+        Single,
+        Double,
+    }
+
+    let mut state = QuoteState::None;
+    let mut current = String::new();
+    let mut out = Vec::<String>::new();
+    let mut chars = raw.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        match state {
+            QuoteState::None => {
+                if ch.is_whitespace() {
+                    if !current.is_empty() {
+                        out.push(std::mem::take(&mut current));
+                    }
+                    continue;
+                }
+
+                match ch {
+                    '\'' => state = QuoteState::Single,
+                    '"' => state = QuoteState::Double,
+                    '\\' => {
+                        if let Some(next) = chars.peek().copied()
+                            && (next == '\\' || next == '"' || next == '\'' || next.is_whitespace())
+                        {
+                            current.push(next);
+                            let _ = chars.next();
+                        } else {
+                            current.push(ch);
+                        }
+                    }
+                    _ => current.push(ch),
+                }
+            }
+            QuoteState::Single => {
+                if ch == '\'' {
+                    state = QuoteState::None;
+                } else {
+                    current.push(ch);
+                }
+            }
+            QuoteState::Double => {
+                if ch == '"' {
+                    state = QuoteState::None;
+                } else if ch == '\\' {
+                    if let Some(next) = chars.peek().copied()
+                        && (next == '\\' || next == '"')
+                    {
+                        current.push(next);
+                        let _ = chars.next();
+                    } else {
+                        current.push(ch);
+                    }
+                } else {
+                    current.push(ch);
+                }
+            }
+        }
+    }
+
+    if state != QuoteState::None {
+        return Err("bridge command contains unmatched quotes".to_string());
+    }
+
+    if !current.is_empty() {
+        out.push(current);
+    }
+
+    if out.is_empty() {
+        return Err("bridge command must not be empty".to_string());
+    }
+
+    Ok(out)
+}
+
 fn parse_command_tokens_from_bridge_object(
     map: &serde_json::Map<String, Value>,
+    cwd: &Path,
 ) -> Result<Vec<String>, String> {
     let Some(command_value) = map.get("command") else {
         return Err("bridge.command is required when bridge is an object".to_string());
     };
 
     let mut tokens = match command_value {
-        Value::String(raw) => {
-            let token = raw.trim();
-            if token.is_empty() {
-                return Err("bridge.command must not be empty".to_string());
-            }
-            vec![token.to_string()]
-        }
+        Value::String(raw) => parse_bridge_command_string(raw, cwd)?,
         Value::Array(values) => parse_command_token_array(values)?,
         _ => return Err("bridge.command must be a string or array of strings".to_string()),
     };
@@ -1760,10 +1862,25 @@ mod tests {
         extract_events_from_poll_result, normalize_specs, resolve_bridge_invocation,
         resolve_manifest_path, sanitize_plugin_id,
     };
-    use serde_json::json;
+    use serde_json::{Value, json};
     use std::path::PathBuf;
     use std::time::Duration;
     use tempfile::tempdir;
+
+    fn ready_plugin_with_manifest(root: PathBuf, manifest: Value) -> RegisteredPlugin {
+        RegisteredPlugin {
+            id: "opencode-planpilot".to_string(),
+            spec: "file:///tmp/planpilot/src/index.ts".to_string(),
+            status: PluginStatus::Ready,
+            root_path: Some(root.clone()),
+            manifest_path: Some(root.join("studio.manifest.json")),
+            manifest: Some(manifest),
+            display_name: Some("Planpilot".to_string()),
+            version: Some("1.0.0".to_string()),
+            capabilities: vec!["chat.sidebar".to_string()],
+            error: None,
+        }
+    }
 
     #[test]
     fn normalize_specs_trims_and_dedupes() {
@@ -1994,6 +2111,64 @@ mod tests {
                 .ends_with(cwd.file_name().expect("cwd file name"))
         );
         assert_eq!(bridge.timeout, Duration::from_millis(3400));
+    }
+
+    #[test]
+    fn resolve_bridge_invocation_splits_bridge_string_command() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let cwd = temp.path().to_path_buf();
+
+        let plugin = ready_plugin_with_manifest(
+            cwd,
+            json!({
+                "id": "opencode-planpilot",
+                "bridge": "node dist/studio-bridge.js --stdio"
+            }),
+        );
+
+        let bridge = resolve_bridge_invocation(&plugin).expect("bridge invocation");
+        assert_eq!(bridge.program, "node");
+        assert_eq!(bridge.args, vec!["dist/studio-bridge.js", "--stdio"]);
+    }
+
+    #[test]
+    fn resolve_bridge_invocation_parses_quoted_command_string_in_object() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let cwd = temp.path().to_path_buf();
+
+        let plugin = ready_plugin_with_manifest(
+            cwd,
+            json!({
+                "id": "opencode-planpilot",
+                "bridge": {
+                    "command": "node \"dist/my bridge.js\" --stdio"
+                }
+            }),
+        );
+
+        let bridge = resolve_bridge_invocation(&plugin).expect("bridge invocation");
+        assert_eq!(bridge.program, "node");
+        assert_eq!(bridge.args, vec!["dist/my bridge.js", "--stdio"]);
+    }
+
+    #[test]
+    fn resolve_bridge_invocation_keeps_existing_program_path_with_spaces() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let cwd = temp.path().to_path_buf();
+        let bridge_file = cwd.join("mock bridge");
+        std::fs::write(&bridge_file, "#!/bin/sh\nexit 0\n").expect("write bridge file");
+
+        let plugin = ready_plugin_with_manifest(
+            cwd,
+            json!({
+                "id": "opencode-planpilot",
+                "bridge": bridge_file.to_string_lossy().to_string()
+            }),
+        );
+
+        let bridge = resolve_bridge_invocation(&plugin).expect("bridge invocation");
+        assert_eq!(bridge.program, bridge_file.to_string_lossy().to_string());
+        assert!(bridge.args.is_empty());
     }
 
     #[test]
