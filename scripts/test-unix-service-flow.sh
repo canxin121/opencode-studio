@@ -3,6 +3,7 @@ set -euo pipefail
 
 REPO="canxin121/opencode-studio"
 VERSION=""
+UPGRADE_TO_VERSION=""
 WITH_FRONTEND="0"
 MODE="user"
 INSTALL_DIR=""
@@ -29,6 +30,7 @@ Options:
   --mode user|system              Linux service mode to test (default: user).
   --repo owner/repo               Release source repo (default: canxin121/opencode-studio).
   --version vX.Y.Z                Pin release version (default: latest).
+  --upgrade-to-version vX.Y.Z     Upgrade in-place to this version after install checks.
   --install-dir PATH              Install dir for test run (default: random temp dir).
   --allow-existing-install-dir    Allow using an existing install dir.
   --wait-timeout SECONDS          Health wait timeout (default: 90).
@@ -39,8 +41,9 @@ What it validates:
   2) Verify installed files and generated config values.
   3) Verify /health endpoint and response shape.
   4) Exercise service management operations (status/restart/stop/start).
-  5) Uninstall while keeping files, then verify files remain.
-  6) Uninstall with --remove-install-dir, then verify files are removed.
+  5) (Optional) Upgrade in-place to a target version and verify service health.
+  6) Uninstall while keeping files, then verify files remain.
+  7) Uninstall with --remove-install-dir, then verify files are removed.
 
 Notes:
   - Linux/macOS only.
@@ -154,6 +157,37 @@ print("health payload validated")
 PY
 }
 
+normalize_semver() {
+  local value="$1"
+  value="${value#v}"
+  printf '%s\n' "$value"
+}
+
+extract_binary_version() {
+  local bin_path="$1"
+  local output=""
+
+  output="$($bin_path --version 2>/dev/null || true)"
+  if [[ "$output" =~ ([0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?) ]]; then
+    printf '%s\n' "${BASH_REMATCH[1]}"
+    return 0
+  fi
+
+  fail "Failed to parse binary version from: $output"
+}
+
+assert_binary_version() {
+  local bin_path="$1"
+  local expected_tag="$2"
+  local expected_semver=""
+  local actual_semver=""
+
+  expected_semver="$(normalize_semver "$expected_tag")"
+  actual_semver="$(extract_binary_version "$bin_path")"
+
+  [[ "$actual_semver" == "$expected_semver" ]] || fail "Binary version mismatch. Expected $expected_semver, got $actual_semver"
+}
+
 linux_service_cmd() {
   if [[ "$MODE" == "system" ]]; then
     sudo systemctl "$@"
@@ -249,6 +283,7 @@ while [[ $# -gt 0 ]]; do
     --mode) MODE="$2"; shift 2 ;;
     --repo) REPO="$2"; shift 2 ;;
     --version) VERSION="$2"; shift 2 ;;
+    --upgrade-to-version) UPGRADE_TO_VERSION="$2"; shift 2 ;;
     --install-dir) INSTALL_DIR="$2"; shift 2 ;;
     --allow-existing-install-dir) ALLOW_EXISTING_INSTALL_DIR="1"; shift ;;
     --wait-timeout) WAIT_TIMEOUT_SECS="$2"; shift 2 ;;
@@ -263,6 +298,14 @@ fi
 
 if ! [[ "$WAIT_TIMEOUT_SECS" =~ ^[0-9]+$ ]] || ((WAIT_TIMEOUT_SECS < 5)); then
   fail "Invalid --wait-timeout '$WAIT_TIMEOUT_SECS'. Expected integer >= 5."
+fi
+
+if [[ -n "$UPGRADE_TO_VERSION" && -z "$VERSION" ]]; then
+  fail "--upgrade-to-version requires --version so the test can validate upgrade behavior"
+fi
+
+if [[ -n "$UPGRADE_TO_VERSION" && "$UPGRADE_TO_VERSION" == "$VERSION" ]]; then
+  fail "--upgrade-to-version must differ from --version"
 fi
 
 if [[ "$OS" != "Linux" && "$OS" != "Darwin" ]]; then
@@ -326,6 +369,12 @@ log "Install dir: $INSTALL_DIR"
 log "Random port: $PORT"
 log "Install mode: $MODE"
 log "With frontend: $WITH_FRONTEND"
+if [[ -n "$VERSION" ]]; then
+  log "Install version: $VERSION"
+fi
+if [[ -n "$UPGRADE_TO_VERSION" ]]; then
+  log "Upgrade target version: $UPGRADE_TO_VERSION"
+fi
 
 log "Step 1/6: install service"
 bash "$INSTALL_SCRIPT" "${INSTALL_ARGS[@]}"
@@ -351,6 +400,10 @@ else
   fi
 fi
 
+if [[ -n "$VERSION" ]]; then
+  assert_binary_version "$BIN_PATH" "$VERSION"
+fi
+
 if [[ "$OS" == "Linux" ]]; then
   verify_linux_service_present
 else
@@ -369,7 +422,39 @@ else
 fi
 validate_health_payload "$BASE_URL"
 
-log "Step 5/6: uninstall service but keep install files"
+if [[ -n "$UPGRADE_TO_VERSION" ]]; then
+  UPGRADE_ARGS=(
+    --repo "$REPO"
+    --version "$UPGRADE_TO_VERSION"
+    --install-dir "$INSTALL_DIR"
+    --host 127.0.0.1
+    --port "$PORT"
+  )
+
+  if [[ "$OS" == "Linux" ]]; then
+    UPGRADE_ARGS+=(--mode "$MODE")
+  fi
+
+  if [[ "$WITH_FRONTEND" == "1" ]]; then
+    UPGRADE_ARGS+=(--with-frontend)
+  fi
+
+  log "Step 5/7: upgrade service in-place to $UPGRADE_TO_VERSION"
+  bash "$INSTALL_SCRIPT" "${UPGRADE_ARGS[@]}"
+
+  wait_for_health_up "$BASE_URL" "$WAIT_TIMEOUT_SECS" || fail "Service health endpoint did not recover after upgrade"
+  validate_health_payload "$BASE_URL"
+  assert_binary_version "$BIN_PATH" "$UPGRADE_TO_VERSION"
+
+  if [[ "$OS" == "Linux" ]]; then
+    manage_service_linux
+  else
+    manage_service_macos
+  fi
+  validate_health_payload "$BASE_URL"
+fi
+
+log "Step 6/7: uninstall service but keep install files"
 bash "$UNINSTALL_SCRIPT" --install-dir "$INSTALL_DIR"
 
 if [[ "$OS" == "Linux" ]]; then
@@ -382,7 +467,7 @@ assert_path_exists "$INSTALL_DIR"
 assert_path_exists "$BIN_PATH"
 assert_path_exists "$CONFIG_PATH"
 
-log "Step 6/6: uninstall service and remove install files"
+log "Step 7/7: uninstall service and remove install files"
 bash "$UNINSTALL_SCRIPT" --install-dir "$INSTALL_DIR" --remove-install-dir
 assert_path_not_exists "$INSTALL_DIR"
 

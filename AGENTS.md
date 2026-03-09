@@ -63,18 +63,28 @@ cargo test -q --locked --manifest-path server/Cargo.toml
 
 ### Service installer end-to-end (CI job: `service-installers`)
 
+All platforms first resolve stable release tags from GitHub Releases (`latest` and previous stable),
+then validate install -> upgrade -> uninstall using those tags.
+
 Linux:
 
 ```bash
 bun add -g opencode-ai@latest
-bash scripts/test-unix-service-flow.sh --mode system
+bash scripts/test-unix-service-flow.sh --mode system --version <previous-stable-tag> --upgrade-to-version <latest-stable-tag>
+```
+
+macOS:
+
+```bash
+bun add -g opencode-ai@latest
+bash scripts/test-unix-service-flow.sh --version <previous-stable-tag> --upgrade-to-version <latest-stable-tag>
 ```
 
 Windows (elevated PowerShell):
 
 ```powershell
 bun add -g opencode-ai@latest
-pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/test-windows-service-flow.ps1
+pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/test-windows-service-flow.ps1 -Version <previous-stable-tag> -UpgradeToVersion <latest-stable-tag>
 ```
 
 ## Acceptance Criteria
