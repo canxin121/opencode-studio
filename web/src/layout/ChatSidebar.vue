@@ -91,9 +91,51 @@ function setsEquivalent(left: Set<string>, right: Set<string>): boolean {
   return true
 }
 
+function mapsEquivalent(left: Map<string, boolean>, right: Map<string, boolean>): boolean {
+  if (left === right) return true
+  if (left.size !== right.size) return false
+  for (const [key, value] of left.entries()) {
+    if (right.get(key) !== value) return false
+  }
+  return true
+}
+
+function applyPendingBooleanOverlay(base: Set<string>, overlay: Map<string, boolean>): { next: Set<string>; acknowledgedIds: string[] } {
+  const next = new Set(base)
+  const acknowledgedIds: string[] = []
+
+  for (const [id, target] of overlay.entries()) {
+    const current = next.has(id)
+    if (current === target) {
+      acknowledgedIds.push(id)
+      continue
+    }
+    if (target) {
+      next.add(id)
+    } else {
+      next.delete(id)
+    }
+  }
+
+  return { next, acknowledgedIds }
+}
+
 function applyUiPrefsToLocal(prefsRaw: Parameters<typeof normalizeSidebarUiPrefsForUi>[0]) {
   const prefs = normalizeSidebarUiPrefsForUi(prefsRaw)
-  const nextPinnedSessionIds = prefs.pinnedSessionIds.slice()
+  let pinPendingTargets = pinCommandPendingTargets.value
+  const pinnedFromPrefs = toIdSet(prefs.pinnedSessionIds)
+  const pinnedOverlayResult = applyPendingBooleanOverlay(pinnedFromPrefs, pinPendingTargets)
+  if (pinnedOverlayResult.acknowledgedIds.length > 0) {
+    const nextPendingTargets = new Map(pinPendingTargets)
+    for (const sessionId of pinnedOverlayResult.acknowledgedIds) {
+      nextPendingTargets.delete(sessionId)
+    }
+    if (!mapsEquivalent(pinPendingTargets, nextPendingTargets)) {
+      pinCommandPendingTargets.value = nextPendingTargets
+      pinPendingTargets = nextPendingTargets
+    }
+  }
+  const nextPinnedSessionIds = Array.from(pinnedOverlayResult.next)
   if (!stringArraysEquivalent(pinnedSessionIds.value, nextPinnedSessionIds)) {
     pinnedSessionIds.value = nextPinnedSessionIds
   }
@@ -107,7 +149,20 @@ function applyUiPrefsToLocal(prefsRaw: Parameters<typeof normalizeSidebarUiPrefs
     collapsedDirectories.value = nextCollapsedDirectories
   }
 
-  const nextExpandedParents = toIdSet(prefs.expandedParentSessionIds)
+  let expandPendingTargets = expandCommandPendingTargets.value
+  const expandedFromPrefs = toIdSet(prefs.expandedParentSessionIds)
+  const expandedOverlayResult = applyPendingBooleanOverlay(expandedFromPrefs, expandPendingTargets)
+  if (expandedOverlayResult.acknowledgedIds.length > 0) {
+    const nextPendingTargets = new Map(expandPendingTargets)
+    for (const sessionId of expandedOverlayResult.acknowledgedIds) {
+      nextPendingTargets.delete(sessionId)
+    }
+    if (!mapsEquivalent(expandPendingTargets, nextPendingTargets)) {
+      expandCommandPendingTargets.value = nextPendingTargets
+      expandPendingTargets = nextPendingTargets
+    }
+  }
+  const nextExpandedParents = expandedOverlayResult.next
   if (!setsEquivalent(expandedParents.value, nextExpandedParents)) {
     expandedParents.value = nextExpandedParents
   }
@@ -158,9 +213,11 @@ const pinnedSessionsOpenUpdating = ref(false)
 const directoryPage = ref(initialPrefs.directoriesPage)
 const directoryPaging = ref(false)
 const pinCommandPendingIds = ref<Set<string>>(new Set())
+const pinCommandPendingTargets = ref<Map<string, boolean>>(new Map())
 const collapseCommandPendingIds = ref<Set<string>>(new Set())
 const directoryExpandLoadingIds = ref<Set<string>>(new Set())
 const expandCommandPendingIds = ref<Set<string>>(new Set())
+const expandCommandPendingTargets = ref<Map<string, boolean>>(new Map())
 
 // Directory entry type lives in '@/features/sessions/model/types'.
 
@@ -755,19 +812,32 @@ async function togglePin(id: string) {
   if (pinCommandPendingIds.value.has(sid)) return
 
   const nextPinned = !pinnedSessionIds.value.includes(sid)
+  const pendingTargets = new Map(pinCommandPendingTargets.value)
+  pendingTargets.set(sid, nextPinned)
+  pinCommandPendingTargets.value = pendingTargets
+  applyUiPrefsToLocal(directorySessions.uiPrefs)
+
   const pending = new Set(pinCommandPendingIds.value)
   pending.add(sid)
   pinCommandPendingIds.value = pending
+
+  let commandOk = false
   try {
-    const ok = await directorySessions.commandSetSessionPinned(sid, nextPinned, { silent: true })
-    if (!ok) {
-      await revalidateSidebarState(undefined, { silent: true })
-    }
+    commandOk = await directorySessions.commandSetSessionPinned(sid, nextPinned, { silent: true })
   } finally {
     const next = new Set(pinCommandPendingIds.value)
     next.delete(sid)
     pinCommandPendingIds.value = next
   }
+
+  if (commandOk) return
+
+  const revertTargets = new Map(pinCommandPendingTargets.value)
+  if (revertTargets.delete(sid)) {
+    pinCommandPendingTargets.value = revertTargets
+    applyUiPrefsToLocal(directorySessions.uiPrefs)
+  }
+  await revalidateSidebarState(undefined, { silent: true })
 }
 
 const sessionsLoading = computed(() => {
@@ -1429,19 +1499,32 @@ async function toggleExpandedParent(sessionId: string) {
   if (expandCommandPendingIds.value.has(id)) return
 
   const nextExpanded = !expandedParents.value.has(id)
+  const pendingTargets = new Map(expandCommandPendingTargets.value)
+  pendingTargets.set(id, nextExpanded)
+  expandCommandPendingTargets.value = pendingTargets
+  applyUiPrefsToLocal(directorySessions.uiPrefs)
+
   const pending = new Set(expandCommandPendingIds.value)
   pending.add(id)
   expandCommandPendingIds.value = pending
+
+  let commandOk = false
   try {
-    const ok = await directorySessions.commandSetSessionExpanded(id, nextExpanded, { silent: true })
-    if (!ok) {
-      await revalidateSidebarState(undefined, { silent: true })
-    }
+    commandOk = await directorySessions.commandSetSessionExpanded(id, nextExpanded, { silent: true })
   } finally {
     const next = new Set(expandCommandPendingIds.value)
     next.delete(id)
     expandCommandPendingIds.value = next
   }
+
+  if (commandOk) return
+
+  const revertTargets = new Map(expandCommandPendingTargets.value)
+  if (revertTargets.delete(id)) {
+    expandCommandPendingTargets.value = revertTargets
+    applyUiPrefsToLocal(directorySessions.uiPrefs)
+  }
+  await revalidateSidebarState(undefined, { silent: true })
 }
 
 function ensureAncestorsExpanded(parentById: Record<string, string | null>, sessionId: string) {
