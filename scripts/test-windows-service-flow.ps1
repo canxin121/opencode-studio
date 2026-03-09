@@ -149,6 +149,26 @@ function Normalize-SemVerTag([string]$Value) {
   return $Value.Trim().TrimStart("v")
 }
 
+function Normalize-ReleaseTag([string]$Value) {
+  if ($null -eq $Value) {
+    return ""
+  }
+  $trimmed = $Value.Trim()
+  if ($trimmed.StartsWith("v", [StringComparison]::OrdinalIgnoreCase)) {
+    return "v$($trimmed.TrimStart('v', 'V'))"
+  }
+  return "v$trimmed"
+}
+
+function Get-BackendTargetTriple {
+  $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
+  switch ($arch) {
+    ([System.Runtime.InteropServices.Architecture]::X64) { return "x86_64-pc-windows-msvc" }
+    ([System.Runtime.InteropServices.Architecture]::Arm64) { return "aarch64-pc-windows-msvc" }
+    default { throw "Unsupported Windows architecture for backend upgrade asset resolution: $arch" }
+  }
+}
+
 function Get-BinaryVersion([string]$BinaryPath) {
   $output = & $BinaryPath --version 2>&1
   $combined = (($output | ForEach-Object { $_.ToString().Trim() }) -join " ").Trim()
@@ -242,17 +262,21 @@ function Remove-BackendTerminalSession([string]$Url, [string]$SessionId) {
   }
 }
 
-function Invoke-ServiceUpgradeViaBackendApi([string]$Url, [string]$TargetVersion, [string]$InstallDir, [int]$TimeoutSeconds = 120) {
+function Invoke-ServiceUpgradeViaBackendApi([string]$Url, [string]$Repo, [string]$TargetVersion, [string]$InstallDir, [int]$TimeoutSeconds = 120) {
   $target = Normalize-SemVerTag $TargetVersion
   $status = Get-ServiceUpdateStatus -Url $Url
   $latest = Normalize-SemVerTag ([string]$status.latestVersion)
   if ($latest -and $latest -ne $target) {
     throw "Update-check latest version mismatch. Expected target $target, update-check returned $latest"
   }
-  $assetUrl = [string]$status.assetUrl
-  if ([string]::IsNullOrWhiteSpace($assetUrl)) {
-    throw "Update-check missing service.assetUrl for target $target"
+
+  $releaseTag = Normalize-ReleaseTag $TargetVersion
+  $targetTriple = [string]$status.target
+  if ([string]::IsNullOrWhiteSpace($targetTriple)) {
+    $targetTriple = Get-BackendTargetTriple
   }
+  $assetName = "opencode-studio-backend-$targetTriple-$releaseTag.zip"
+  $assetUrl = "https://github.com/$Repo/releases/download/$releaseTag/$assetName"
 
   $binPath = Join-Path $InstallDir "bin/opencode-studio.exe"
   $stagedPath = Join-Path $InstallDir "bin/opencode-studio.next.exe"
@@ -298,7 +322,8 @@ try {
 
   $sessionId = Invoke-BackendTerminalCreate -Url $Url -Cwd $InstallDir
   try {
-    $command = "powershell -NoProfile -ExecutionPolicy Bypass -File `"$helperPath`" -AssetUrl `"$assetUrl`" -StagedPath `"$stagedPath`" -MarkerPath `"$markerPath`" -LogPath `"$logPath`""
+    $powershellExe = Join-Path $env:WINDIR "System32\WindowsPowerShell\v1.0\powershell.exe"
+    $command = "& `"$powershellExe`" -NoProfile -ExecutionPolicy Bypass -File `"$helperPath`" -AssetUrl `"$assetUrl`" -StagedPath `"$stagedPath`" -MarkerPath `"$markerPath`" -LogPath `"$logPath`""
     Invoke-BackendTerminalInput -Url $Url -SessionId $sessionId -InputText ($command + "`n")
     Invoke-BackendTerminalInput -Url $Url -SessionId $sessionId -InputText "exit`n"
     Wait-LocalFile -Path $markerPath -TimeoutSeconds $TimeoutSeconds
@@ -463,7 +488,7 @@ try {
 
   if ($UpgradeToVersion) {
     Write-Log "Step 5/7: trigger in-place upgrade via backend API to $UpgradeToVersion"
-    Invoke-ServiceUpgradeViaBackendApi -Url $baseUrl -TargetVersion $UpgradeToVersion -InstallDir $InstallDir -TimeoutSeconds $WaitTimeoutSeconds
+    Invoke-ServiceUpgradeViaBackendApi -Url $baseUrl -Repo $Repo -TargetVersion $UpgradeToVersion -InstallDir $InstallDir -TimeoutSeconds $WaitTimeoutSeconds
 
     Wait-ServiceStatus -Name $ServiceName -Status "Running" -TimeoutSeconds $WaitTimeoutSeconds
     Wait-HealthUp -Url $baseUrl -TimeoutSeconds $WaitTimeoutSeconds

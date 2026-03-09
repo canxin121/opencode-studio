@@ -165,6 +165,44 @@ normalize_semver() {
   printf '%s\n' "$value"
 }
 
+normalize_release_tag() {
+  local value="$1"
+
+  if [[ "$value" == v* ]]; then
+    printf '%s\n' "$value"
+  else
+    printf 'v%s\n' "$value"
+  fi
+}
+
+detect_backend_target_triple() {
+  local machine=""
+
+  machine="$(uname -m)"
+
+  case "$OS" in
+    Linux)
+      case "$machine" in
+        x86_64|amd64) printf '%s\n' "x86_64-unknown-linux-gnu" ;;
+        aarch64|arm64) printf '%s\n' "aarch64-unknown-linux-gnu" ;;
+        armv7l|armv7) printf '%s\n' "armv7-unknown-linux-gnueabihf" ;;
+        i686|i386) printf '%s\n' "i686-unknown-linux-gnu" ;;
+        *) return 1 ;;
+      esac
+      ;;
+    Darwin)
+      case "$machine" in
+        x86_64|amd64) printf '%s\n' "x86_64-apple-darwin" ;;
+        arm64|aarch64) printf '%s\n' "aarch64-apple-darwin" ;;
+        *) return 1 ;;
+      esac
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 fetch_update_check_json() {
   local url="$1"
   curl -fsS --max-time 8 "$url/api/opencode-studio/update-check"
@@ -188,6 +226,7 @@ def scalar(value):
 print(f"current={scalar(service.get('currentVersion'))}")
 print(f"latest={scalar(service.get('latestVersion'))}")
 print(f"asset_url={scalar(service.get('assetUrl'))}")
+print(f"target={scalar(service.get('target'))}")
 print(f"available={'1' if service.get('available') is True else '0'}")
 PY
 }
@@ -201,6 +240,10 @@ resolve_service_upgrade_asset_url() {
   local current=""
   local latest=""
   local asset_url=""
+  local target=""
+  local resolved_target=""
+  local release_tag=""
+  local canonical_asset_name=""
   local available=""
   local line=""
   local key=""
@@ -217,13 +260,23 @@ resolve_service_upgrade_asset_url() {
       current) current="$value" ;;
       latest) latest="$value" ;;
       asset_url) asset_url="$value" ;;
+      target) target="$value" ;;
       available) available="$value" ;;
     esac
   done <<<"$parsed"
 
   [[ "$latest" == "$expected_semver" ]] || fail "Update-check latestVersion mismatch. Expected $expected_semver, got '${latest:-<empty>}'"
   [[ "$available" == "1" ]] || fail "Update-check reports service.available=false for target $expected_semver (current=${current:-unknown})"
-  [[ -n "$asset_url" ]] || fail "Update-check missing service.assetUrl for target $expected_semver"
+
+  release_tag="$(normalize_release_tag "$expected_tag")"
+  resolved_target="$target"
+  if [[ -z "$resolved_target" ]]; then
+    resolved_target="$(detect_backend_target_triple || true)"
+  fi
+  [[ -n "$resolved_target" ]] || fail "Unable to resolve backend target triple for service upgrade"
+
+  canonical_asset_name="opencode-studio-backend-${resolved_target}-${release_tag}.tar.gz"
+  asset_url="https://github.com/${REPO}/releases/download/${release_tag}/${canonical_asset_name}"
   printf '%s\n' "$asset_url"
 }
 
@@ -331,7 +384,7 @@ trigger_backend_upgrade() {
 #!/usr/bin/env bash
 set -u
 status=0
-{
+(
   set -euo pipefail
   rm -f "$archive_file" "$marker_file"
   rm -rf "$extract_dir"
@@ -341,7 +394,8 @@ status=0
   chmod +x "$extract_dir/opencode-studio"
   mv -f "$extract_dir/opencode-studio" "$staged_binary"
   rm -rf "$extract_dir" "$archive_file"
-} >"$log_file" 2>&1 || status=\$?
+) >"$log_file" 2>&1
+status=\$?
 printf '%s' "\$status" >"$marker_file"
 exit "\$status"
 EOF
