@@ -153,6 +153,56 @@ build_launchd_path() {
   printf '%s' "$out"
 }
 
+macos_launchctl_domains() {
+  local uid
+  uid="$(id -u)"
+  printf 'gui/%s\n' "$uid"
+  printf 'user/%s\n' "$uid"
+}
+
+macos_launchctl_detect_loaded_domain() {
+  local label="$1"
+  local domain=""
+
+  while IFS= read -r domain; do
+    [[ -n "$domain" ]] || continue
+    if launchctl print "$domain/$label" >/dev/null 2>&1; then
+      printf '%s\n' "$domain"
+      return 0
+    fi
+  done < <(macos_launchctl_domains)
+
+  return 1
+}
+
+macos_launchctl_bootout_existing() {
+  local label="$1"
+  local plist="$2"
+  local domain=""
+
+  while IFS= read -r domain; do
+    [[ -n "$domain" ]] || continue
+    launchctl bootout "$domain/$label" >/dev/null 2>&1 || true
+    launchctl bootout "$domain" "$plist" >/dev/null 2>&1 || true
+    launchctl disable "$domain/$label" >/dev/null 2>&1 || true
+  done < <(macos_launchctl_domains)
+}
+
+macos_launchctl_bootstrap() {
+  local plist="$1"
+  local domain=""
+
+  while IFS= read -r domain; do
+    [[ -n "$domain" ]] || continue
+    if launchctl bootstrap "$domain" "$plist" >/dev/null 2>&1; then
+      printf '%s\n' "$domain"
+      return 0
+    fi
+  done < <(macos_launchctl_domains)
+
+  return 1
+}
+
 OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
 ARCH="$(uname -m)"
 
@@ -433,6 +483,7 @@ EOF
     echo "systemctl not found; installed binary but did not create a service." >&2
   fi
 elif [[ "$OS" == "darwin" ]]; then
+  LABEL="cn.cxits.opencode-studio"
   PLIST="$HOME/Library/LaunchAgents/cn.cxits.opencode-studio.plist"
   mkdir -p "$(dirname "$PLIST")"
   LAUNCHD_PATH="$(build_launchd_path "$OPENCODE_BIN_DIR" "${PATH:-}")"
@@ -468,9 +519,25 @@ elif [[ "$OS" == "darwin" ]]; then
 </plist>
 EOF
 
-  launchctl unload "$PLIST" >/dev/null 2>&1 || true
-  launchctl load "$PLIST"
-  echo "Service loaded. Use: launchctl list | grep opencode"
+  macos_launchctl_bootout_existing "$LABEL" "$PLIST"
+  LAUNCH_DOMAIN="$(macos_launchctl_bootstrap "$PLIST" || true)"
+  if [[ -z "$LAUNCH_DOMAIN" ]]; then
+    echo "launchctl bootstrap failed; trying legacy load fallback"
+    launchctl load "$PLIST"
+    LAUNCH_DOMAIN="$(macos_launchctl_detect_loaded_domain "$LABEL" || true)"
+  fi
+
+  if [[ -n "$LAUNCH_DOMAIN" ]]; then
+    launchctl enable "$LAUNCH_DOMAIN/$LABEL" >/dev/null 2>&1 || true
+    launchctl kickstart -k "$LAUNCH_DOMAIN/$LABEL" >/dev/null 2>&1 || \
+      launchctl kickstart "$LAUNCH_DOMAIN/$LABEL" >/dev/null 2>&1 || \
+      launchctl start "$LABEL" >/dev/null 2>&1 || true
+    echo "Service loaded in domain: $LAUNCH_DOMAIN"
+  else
+    echo "Service loaded via legacy launchctl flow"
+  fi
+
+  echo "Use: launchctl print gui/$(id -u)/$LABEL"
   echo "Resolved OpenCode binary: $OPENCODE_BIN"
 fi
 
