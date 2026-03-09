@@ -34,6 +34,7 @@ mod terminal_ui_state;
 mod test_support;
 mod ui_auth;
 mod updates;
+mod workspace_preview;
 
 pub(crate) use app::AppState;
 pub(crate) use error::{ApiResult, AppError};

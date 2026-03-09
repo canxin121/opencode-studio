@@ -97,6 +97,13 @@ async function initPreviewPanel() {
 - Persist preview sessions to local state store for restart recovery.
 - Include optional screenshot capability and tunnel metadata.
 
+## 为何必须 proxy-only
+
+- 浏览器里的前端不能再直接请求 `127.0.0.1:<port>` 这类本地地址：当 Studio 由远端 origin 承载时，用户设备与该 origin 的网络拓扑不一致，直接访问会出现不可达或命中错误主机。
+- 统一走当前 Studio origin 的 `/api/workspace/preview/proxy`，可以把预览流量限制在后端可控边界内，并复用现有鉴权与审计链路。
+- 代理层会强制 `http/https + loopback(host)` 目标校验，并剥离 `set-cookie` 等高风险响应头，避免把本地服务 cookie 注入到 Studio 上下文。
+- 代理响应增加 `frame-ancestors 'self'` / `X-Frame-Options: SAMEORIGIN`，确保仅允许在当前 Studio 页面内嵌，降低点击劫持和跨站嵌入风险。
+
 ## Repo and Bootstrapping Status
 
 - Draft plugin repo created at `/home/canxin/Git/opencode_dir/opencode-web-preview`.

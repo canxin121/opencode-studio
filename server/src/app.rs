@@ -1031,6 +1031,18 @@ pub(crate) async fn run(args: crate::Args) {
             "/directories/{directory_id}/sessions",
             get(crate::chat_sidebar::directory_sessions_by_id_get),
         )
+        .route(
+            "/workspace/preview",
+            get(crate::workspace_preview::workspace_preview_get),
+        )
+        .route(
+            "/workspace/preview-url",
+            get(crate::workspace_preview::workspace_preview_url_get),
+        )
+        .route(
+            "/workspace/preview/proxy",
+            get(crate::workspace_preview::workspace_preview_proxy_get),
+        )
         // OpenCode Studio session list + filtered message history
         .route(
             "/session",
