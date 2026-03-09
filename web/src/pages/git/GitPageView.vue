@@ -468,6 +468,9 @@ const {
   historyFilesLoading,
   historyFilesError,
   historyFileSelected,
+  historyFilesCurrentPage,
+  historyFilesKnownLastPage,
+  historyFilesExactLastPage,
   historyFilterPath,
   historySearchDraft,
   openFileHistory,
@@ -476,6 +479,7 @@ const {
   applyHistoryFilters,
   loadHistoryPage,
   selectCommit,
+  loadCommitFilesAtPage,
   selectCommitFile,
   clearSelectedFile,
 
@@ -689,6 +693,14 @@ const historyPaginationTotalPages = computed(() => {
   return historyHasMore.value ? known + 1 : known
 })
 
+const historyFilesPaginationTotalPages = computed(() => {
+  if (historyFilesExactLastPage.value !== null) {
+    return Math.max(1, historyFilesExactLastPage.value)
+  }
+  const known = Math.max(historyFilesKnownLastPage.value, historyFilesCurrentPage.value)
+  return known
+})
+
 const historySelectedMeta = computed(() => {
   const commit = historySelected.value
   if (!commit) return ''
@@ -788,6 +800,12 @@ function setHistoryPage(page: number) {
   const next = Math.max(1, Math.floor(page))
   if (next === historyCurrentPage.value && historyCommits.value.length > 0) return
   void loadHistoryPage(next)
+}
+
+function setHistoryFilesPage(page: number) {
+  const next = Math.max(1, Math.floor(page))
+  if (next === historyFilesCurrentPage.value && historyFiles.value.length > 0) return
+  void loadCommitFilesAtPage(next)
 }
 
 function onApplyHistoryFilters() {
@@ -1870,13 +1888,10 @@ void diffPaneRef
             </div>
 
             <div class="rounded-sm border border-sidebar-border/60 overflow-hidden">
-              <div class="flex items-center justify-between border-b border-sidebar-border/50 px-2 py-1">
+              <div class="border-b border-sidebar-border/50 px-2 py-1">
                 <div class="text-[11px] font-medium text-muted-foreground">
                   {{ t('git.ui.dialogs.history.sections.files') }}
                 </div>
-                <MiniActionButton size="xs" :disabled="!historyFileSelected" @click="clearSelectedFile">{{
-                  t('git.ui.dialogs.history.actions.allFiles')
-                }}</MiniActionButton>
               </div>
               <div v-if="historyFilesError" class="px-2 py-2 text-xs text-destructive">{{ historyFilesError }}</div>
               <div v-else-if="historyFilesLoading" class="px-2 py-2 text-xs text-muted-foreground">
@@ -1905,6 +1920,21 @@ void diffPaneRef
                     >
                   </div>
                 </button>
+              </div>
+              <div
+                v-if="historySelected && historyFilesPaginationTotalPages > 1"
+                class="border-t border-sidebar-border/50 px-1 py-0.5"
+              >
+                <PaginationControls
+                  class="w-full justify-center"
+                  :page="historyFilesCurrentPage"
+                  :total-pages="historyFilesPaginationTotalPages"
+                  :disabled="historyFilesLoading"
+                  :prev-label="t('common.previousPage')"
+                  :next-label="t('common.nextPage')"
+                  :page-input-label="t('common.currentPage')"
+                  @update:page="setHistoryFilesPage"
+                />
               </div>
             </div>
           </template>

@@ -235,6 +235,10 @@ export interface GitCommitFilesResponse {
   totalPages: number
   hasPrev: boolean
   hasNext: boolean
+  hasMore?: boolean
+  nextOffset?: number
+  offset?: number
+  limit?: number
 }
 
 export interface GitBlameLine {
