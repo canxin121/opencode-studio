@@ -1860,17 +1860,17 @@ mod tests {
     use super::{
         PluginStatus, RegisteredPlugin, discover_plugins, extract_cursor_from_poll_result,
         extract_events_from_poll_result, normalize_specs, resolve_bridge_invocation,
-        resolve_manifest_path, sanitize_plugin_id,
+        resolve_bridge_program, resolve_manifest_path, sanitize_plugin_id,
     };
     use serde_json::{Value, json};
     use std::path::PathBuf;
     use std::time::Duration;
     use tempfile::tempdir;
 
-    fn ready_plugin_with_manifest(root: PathBuf, manifest: Value) -> RegisteredPlugin {
+    fn plugin_with_manifest(root: PathBuf, manifest: Value) -> RegisteredPlugin {
         RegisteredPlugin {
             id: "opencode-planpilot".to_string(),
-            spec: "file:///tmp/planpilot/src/index.ts".to_string(),
+            spec: "file:./src/index.ts".to_string(),
             status: PluginStatus::Ready,
             root_path: Some(root.clone()),
             manifest_path: Some(root.join("studio.manifest.json")),
@@ -1880,6 +1880,10 @@ mod tests {
             capabilities: vec!["chat.sidebar".to_string()],
             error: None,
         }
+    }
+
+    fn ready_plugin_with_manifest(root: PathBuf, manifest: Value) -> RegisteredPlugin {
+        plugin_with_manifest(root, manifest)
     }
 
     #[test]
@@ -2190,6 +2194,123 @@ mod tests {
 
         let err = resolve_bridge_invocation(&plugin).expect_err("expected missing bridge error");
         assert_eq!(err.code, "plugin_bridge_missing");
+    }
+
+    #[test]
+    fn resolve_bridge_invocation_validates_bridge_command_and_args_boundaries() {
+        let temp = tempdir().expect("tempdir");
+        let root = temp.path().to_path_buf();
+
+        let missing_command = plugin_with_manifest(
+            root.clone(),
+            json!({
+                "id": "opencode-planpilot",
+                "bridge": {
+                    "args": ["--stdio"]
+                }
+            }),
+        );
+        let err =
+            resolve_bridge_invocation(&missing_command).expect_err("missing bridge.command error");
+        assert_eq!(err.code, "invalid_bridge_config");
+        assert_eq!(
+            err.message,
+            "bridge.command is required when bridge is an object"
+        );
+
+        let empty_command = plugin_with_manifest(
+            root.clone(),
+            json!({
+                "id": "opencode-planpilot",
+                "bridge": {
+                    "command": "   "
+                }
+            }),
+        );
+        let err = resolve_bridge_invocation(&empty_command).expect_err("empty command error");
+        assert_eq!(err.message, "bridge.command must not be empty");
+
+        let bad_args_type = plugin_with_manifest(
+            root.clone(),
+            json!({
+                "id": "opencode-planpilot",
+                "bridge": {
+                    "command": "node",
+                    "args": "--stdio"
+                }
+            }),
+        );
+        let err = resolve_bridge_invocation(&bad_args_type).expect_err("args type error");
+        assert_eq!(err.message, "bridge.args must be an array of strings");
+
+        let bad_args_token = plugin_with_manifest(
+            root,
+            json!({
+                "id": "opencode-planpilot",
+                "bridge": {
+                    "command": ["node"],
+                    "args": ["--stdio", 7]
+                }
+            }),
+        );
+        let err = resolve_bridge_invocation(&bad_args_token).expect_err("args token error");
+        assert_eq!(
+            err.message,
+            "bridge command token at index 1 must be a string"
+        );
+    }
+
+    #[test]
+    fn resolve_bridge_program_handles_relative_absolute_and_non_path_commands() {
+        let temp = tempdir().expect("tempdir");
+        let root = temp.path().to_path_buf();
+        let relative_command = "scripts/bridge.js";
+        let absolute_command = root.join("bin").join("bridge");
+        let absolute_command_raw = absolute_command.to_string_lossy().to_string();
+
+        let relative_program = resolve_bridge_program(relative_command, &root);
+        let non_path_program = resolve_bridge_program("node", &root);
+        let absolute_program = resolve_bridge_program(&absolute_command_raw, &root);
+
+        assert_eq!(
+            PathBuf::from(relative_program),
+            root.join("scripts").join("bridge.js")
+        );
+        assert_eq!(non_path_program, "node");
+        assert_eq!(PathBuf::from(absolute_program), absolute_command);
+    }
+
+    #[test]
+    fn resolve_bridge_invocation_preserves_env_for_path_assembly_regression() {
+        let temp = tempdir().expect("tempdir");
+        let root = temp.path().to_path_buf();
+        let custom_bin = root.join("custom-bin").to_string_lossy().to_string();
+
+        let plugin = plugin_with_manifest(
+            root.clone(),
+            json!({
+                "id": "opencode-planpilot",
+                "bridge": {
+                    "command": "node",
+                    "args": ["./dist/studio-bridge.js"],
+                    "env": {
+                        "PATH": custom_bin,
+                        "OPENCODE_PLUGIN_MODE": "bridge",
+                        "": "ignored"
+                    }
+                }
+            }),
+        );
+
+        let bridge = resolve_bridge_invocation(&plugin).expect("bridge invocation");
+        assert_eq!(bridge.program, "node");
+        assert_eq!(bridge.args, vec!["./dist/studio-bridge.js"]);
+        assert_eq!(bridge.env.get("PATH"), Some(&custom_bin));
+        assert_eq!(
+            bridge.env.get("OPENCODE_PLUGIN_MODE"),
+            Some(&"bridge".to_string())
+        );
+        assert!(!bridge.env.contains_key(""));
     }
 
     #[test]
