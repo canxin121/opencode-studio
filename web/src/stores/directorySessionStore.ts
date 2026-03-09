@@ -40,6 +40,11 @@ type SidebarFooterKind = 'pinned' | 'recent' | 'running'
 
 const SIDEBAR_STATE_ENDPOINT = '/api/chat-sidebar/state'
 const SIDEBAR_COMMAND_ENDPOINT = '/api/chat-sidebar/commands'
+const SIDEBAR_FOOTER_ENDPOINT = '/api/chat-sidebar/footer'
+const SIDEBAR_DIRECTORIES_ENDPOINT = '/api/directories'
+const SIDEBAR_DIRECTORIES_PAGE_SIZE = 15
+const SIDEBAR_FOOTER_PAGE_SIZE = 10
+const SIDEBAR_DIRECTORY_SESSIONS_PAGE_SIZE = 10
 const SIDEBAR_RECOVERY_THROTTLE_MS = 1500
 const SIDEBAR_STATE_REQUEST_STALE_MS = 12000
 const SIDEBAR_RECOVERY_EVENT_TYPES = new Set([
@@ -185,6 +190,14 @@ function isAbortError(err: unknown): boolean {
 
 function inFlightRequestIsStale(request: SidebarInFlightVoidRequest): boolean {
   return Date.now() - request.startedAt > SIDEBAR_STATE_REQUEST_STALE_MS
+}
+
+function readNonNegativeInt(raw: JsonValue | undefined): number | null {
+  const n = Number(raw)
+  if (!Number.isFinite(n)) return null
+  const value = Math.floor(n)
+  if (value < 0) return null
+  return value
 }
 
 function normalizeFooterKind(raw: JsonValue): SidebarFooterKind | null {
@@ -673,6 +686,7 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
   let sidebarRecoverySyncTimer: number | null = null
   let lastSidebarRecoverySyncAt = 0
   let sidebarStateRequestInFlight: SidebarInFlightVoidRequest | null = null
+  let lastAppliedDeltaSeq = 0
 
   const visibleDirectories = computed<DirectoryEntry[]>(() => {
     return directoryOrder.value
@@ -714,6 +728,100 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     return true
   }
 
+  function applyUiPrefsPatch(patchRaw: JsonValue): boolean {
+    const patchRecord = asRecord(patchRaw)
+    if (!patchRecord) return false
+
+    const incomingVersion = readNonNegativeInt(patchRecord.version as JsonValue)
+    const incomingUpdatedAt = readNonNegativeInt(patchRecord.updatedAt as JsonValue)
+    const currentVersion = Math.max(0, Math.floor(Number(uiPrefs.value.version || 0)))
+    const currentUpdatedAt = Math.max(0, Math.floor(Number(uiPrefs.value.updatedAt || 0)))
+    if (incomingVersion !== null && incomingVersion < currentVersion) return false
+    if (incomingVersion !== null && incomingVersion === currentVersion) {
+      if (incomingUpdatedAt !== null && incomingUpdatedAt < currentUpdatedAt) return false
+    }
+
+    const nextPatch: Partial<ChatSidebarUiPrefs> = {}
+
+    if (incomingVersion !== null) {
+      nextPatch.version = incomingVersion
+    }
+    if (incomingUpdatedAt !== null) {
+      nextPatch.updatedAt = incomingUpdatedAt
+    }
+
+    if (hasOwn(patchRecord, 'collapsedDirectoryIds')) {
+      nextPatch.collapsedDirectoryIds = Array.isArray(patchRecord.collapsedDirectoryIds)
+        ? patchRecord.collapsedDirectoryIds.map((value) => String(value || '').trim()).filter(Boolean)
+        : []
+    }
+    if (hasOwn(patchRecord, 'expandedParentSessionIds')) {
+      nextPatch.expandedParentSessionIds = Array.isArray(patchRecord.expandedParentSessionIds)
+        ? patchRecord.expandedParentSessionIds.map((value) => String(value || '').trim()).filter(Boolean)
+        : []
+    }
+    if (hasOwn(patchRecord, 'pinnedSessionIds')) {
+      nextPatch.pinnedSessionIds = Array.isArray(patchRecord.pinnedSessionIds)
+        ? patchRecord.pinnedSessionIds.map((value) => String(value || '').trim()).filter(Boolean)
+        : []
+    }
+
+    const directoriesPage = readNonNegativeInt(patchRecord.directoriesPage as JsonValue)
+    if (directoriesPage !== null) {
+      nextPatch.directoriesPage = directoriesPage
+    }
+
+    const pagePatch = asRecord((patchRecord.sessionRootPageByDirectoryIdPatch ?? null) as JsonValue)
+    if (pagePatch) {
+      const nextMap = { ...uiPrefs.value.sessionRootPageByDirectoryId }
+      let changed = false
+      for (const [directoryIdRaw, pageRaw] of Object.entries(pagePatch)) {
+        const directoryId = String(directoryIdRaw || '').trim()
+        if (!directoryId) continue
+        const page = readNonNegativeInt(pageRaw)
+        if (page === null) continue
+        if (nextMap[directoryId] !== page) {
+          nextMap[directoryId] = page
+          changed = true
+        }
+      }
+      if (changed) {
+        nextPatch.sessionRootPageByDirectoryId = nextMap
+      }
+    }
+
+    if (hasOwn(patchRecord, 'pinnedSessionsOpen')) {
+      nextPatch.pinnedSessionsOpen = patchRecord.pinnedSessionsOpen === true
+    }
+    const pinnedSessionsPage = readNonNegativeInt(patchRecord.pinnedSessionsPage as JsonValue)
+    if (pinnedSessionsPage !== null) {
+      nextPatch.pinnedSessionsPage = pinnedSessionsPage
+    }
+
+    if (hasOwn(patchRecord, 'recentSessionsOpen')) {
+      nextPatch.recentSessionsOpen = patchRecord.recentSessionsOpen === true
+    }
+    const recentSessionsPage = readNonNegativeInt(patchRecord.recentSessionsPage as JsonValue)
+    if (recentSessionsPage !== null) {
+      nextPatch.recentSessionsPage = recentSessionsPage
+    }
+
+    if (hasOwn(patchRecord, 'runningSessionsOpen')) {
+      nextPatch.runningSessionsOpen = patchRecord.runningSessionsOpen === true
+    }
+    const runningSessionsPage = readNonNegativeInt(patchRecord.runningSessionsPage as JsonValue)
+    if (runningSessionsPage !== null) {
+      nextPatch.runningSessionsPage = runningSessionsPage
+    }
+
+    const next = normalizeUiPrefs(patchChatSidebarUiPrefs(uiPrefs.value, nextPatch))
+    if (jsonValueEquivalent(uiPrefs.value as JsonValue, next as JsonValue)) {
+      return false
+    }
+    uiPrefs.value = next
+    return true
+  }
+
   async function executeSidebarCommand(
     command: SidebarCommandRequest,
     opts?: SidebarCommandRuntimeOpts,
@@ -729,7 +837,7 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
         headers: {
           'content-type': 'application/json',
         },
-        body: JSON.stringify({ commands: [command] }),
+        body: JSON.stringify({ commands: [command], compact: true }),
       })
       const payloadRecord = asRecord(payload as JsonValue) || {}
       if (hasOwn(payloadRecord, 'preferences')) {
@@ -738,7 +846,8 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
 
       const deltaRecord = asRecord(payloadRecord.delta as JsonValue)
       const deltaOps = (deltaRecord?.ops as JsonValue) || []
-      await applySidebarDeltaOps(deltaOps)
+      const deltaSeq = readNonNegativeInt((deltaRecord?.seq ?? null) as JsonValue)
+      await applySidebarDeltaOps(deltaOps, deltaSeq)
 
       return true
     } catch (err) {
@@ -1024,9 +1133,14 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     }, waitMs)
   }
 
-  async function applySidebarDeltaOps(opsRaw: JsonValue): Promise<boolean> {
+  async function applySidebarDeltaOps(opsRaw: JsonValue, deltaSeq?: number | null): Promise<boolean> {
     const opsList = Array.isArray(opsRaw) ? opsRaw : []
-    if (opsList.length === 0) return true
+    if (opsList.length === 0) {
+      if (typeof deltaSeq === 'number' && Number.isFinite(deltaSeq) && deltaSeq > lastAppliedDeltaSeq) {
+        lastAppliedDeltaSeq = Math.floor(deltaSeq)
+      }
+      return true
+    }
 
     let invalidateState = false
     let invalidateDirectoriesPage = false
@@ -1035,6 +1149,8 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     const footerKinds = new Set<SidebarFooterKind>()
     const appliedDirectoryViews = new Map<string, DirectorySidebarView>()
     const directoryIdsWithInlineView = new Set<string>()
+    const appliedFooterViews = new Map<SidebarFooterKind, SidebarFooterView>()
+    const footerKindsWithInlineView = new Set<SidebarFooterKind>()
 
     for (const opRaw of opsList) {
       const op = asRecord(opRaw)
@@ -1052,6 +1168,10 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
       }
       if (type === 'invalidatePreferences') {
         invalidatePreferences = true
+        continue
+      }
+      if (type === 'applyPreferences') {
+        applyUiPrefsPatch((op.patch ?? null) as JsonValue)
         continue
       }
       if (type === 'invalidateDirectory') {
@@ -1086,6 +1206,14 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
         directoryIdsWithInlineView.add(did)
         continue
       }
+      if (type === 'applyFooterView') {
+        const kind = normalizeFooterKind(op.kind as JsonValue)
+        if (!kind) continue
+        const view = normalizeSidebarFooterView((op.view ?? null) as JsonValue)
+        appliedFooterViews.set(kind, view)
+        footerKindsWithInlineView.add(kind)
+        continue
+      }
 
       // Unknown op -> safest fallback.
       invalidateState = true
@@ -1093,11 +1221,17 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
 
     if (invalidateState) {
       await revalidateFromStateApi()
+      if (typeof deltaSeq === 'number' && Number.isFinite(deltaSeq) && deltaSeq > lastAppliedDeltaSeq) {
+        lastAppliedDeltaSeq = Math.floor(deltaSeq)
+      }
       return true
     }
 
     for (const directoryId of directoryIdsWithInlineView) {
       directoryIds.delete(directoryId)
+    }
+    for (const kind of footerKindsWithInlineView) {
+      footerKinds.delete(kind)
     }
 
     if (appliedDirectoryViews.size > 0) {
@@ -1133,8 +1267,82 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
       }
     }
 
-    if (invalidatePreferences || invalidateDirectoriesPage || directoryIds.size > 0 || footerKinds.size > 0) {
+    if (appliedFooterViews.size > 0) {
+      const pinnedView = appliedFooterViews.get('pinned')
+      const recentView = appliedFooterViews.get('recent')
+      const runningView = appliedFooterViews.get('running')
+
+      if (pinnedView && !footerViewEquivalent(pinnedFooterView.value, pinnedView)) {
+        pinnedFooterView.value = pinnedView
+      }
+      if (recentView && !footerViewEquivalent(recentFooterView.value, recentView)) {
+        recentFooterView.value = recentView
+      }
+      if (runningView && !footerViewEquivalent(runningFooterView.value, runningView)) {
+        runningFooterView.value = runningView
+      }
+    }
+
+    const targetedFetchCount =
+      (invalidateDirectoriesPage ? 1 : 0) + directoryIds.size + footerKinds.size + (invalidatePreferences ? 1 : 0)
+
+    if (invalidatePreferences || targetedFetchCount > 8) {
       await revalidateFromStateApi()
+      if (typeof deltaSeq === 'number' && Number.isFinite(deltaSeq) && deltaSeq > lastAppliedDeltaSeq) {
+        lastAppliedDeltaSeq = Math.floor(deltaSeq)
+      }
+      return true
+    }
+
+    let needFullFallback = false
+    if (invalidateDirectoriesPage) {
+      const ok = await revalidateDirectoriesPageFromApi({
+        page: uiPrefs.value.directoriesPage,
+        query: persistedStateQuery.directoryQuery,
+        silent: true,
+      })
+      if (!ok) needFullFallback = true
+    }
+
+    if (!needFullFallback && directoryIds.size > 0) {
+      const directoryTasks = [...directoryIds].map((directoryId) =>
+        revalidateDirectorySessionPageFromApi(directoryId, {
+          page: uiPrefs.value.sessionRootPageByDirectoryId[directoryId],
+          pageSize: persistedStateQuery.limitPerDirectory,
+          silent: true,
+        }),
+      )
+      const results = await Promise.allSettled(directoryTasks)
+      if (results.some((result) => result.status !== 'fulfilled' || result.value !== true)) {
+        needFullFallback = true
+      }
+    }
+
+    if (!needFullFallback && footerKinds.size > 0) {
+      const footerTasks = [...footerKinds].map((kind) =>
+        revalidateFooterFromApi(kind, {
+          page:
+            kind === 'pinned'
+              ? uiPrefs.value.pinnedSessionsPage
+              : kind === 'recent'
+                ? uiPrefs.value.recentSessionsPage
+                : uiPrefs.value.runningSessionsPage,
+          pageSize: SIDEBAR_FOOTER_PAGE_SIZE,
+          silent: true,
+        }),
+      )
+      const results = await Promise.allSettled(footerTasks)
+      if (results.some((result) => result.status !== 'fulfilled' || result.value !== true)) {
+        needFullFallback = true
+      }
+    }
+
+    if (needFullFallback) {
+      await revalidateFromStateApi()
+    }
+
+    if (typeof deltaSeq === 'number' && Number.isFinite(deltaSeq) && deltaSeq > lastAppliedDeltaSeq) {
+      lastAppliedDeltaSeq = Math.floor(deltaSeq)
     }
 
     return true
@@ -1164,13 +1372,40 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     query?: string
     silent?: boolean
   }): Promise<boolean> {
-    return revalidateFromApi(
-      {
-        directoriesPage: opts?.page,
-        directoryQuery: opts?.query,
-      },
-      { silent: opts?.silent },
-    )
+    if (!opts?.silent) {
+      loading.value = true
+    }
+    error.value = null
+    try {
+      const pageRaw = typeof opts?.page === 'number' && Number.isFinite(opts.page) ? opts.page : uiPrefs.value.directoriesPage
+      const page = Math.max(0, Math.floor(Number(pageRaw || 0)))
+      const pageSizeRaw =
+        typeof opts?.pageSize === 'number' && Number.isFinite(opts.pageSize) ? opts.pageSize : SIDEBAR_DIRECTORIES_PAGE_SIZE
+      const pageSize = Math.max(1, Math.floor(Number(pageSizeRaw || SIDEBAR_DIRECTORIES_PAGE_SIZE)))
+      const query =
+        typeof opts?.query === 'string'
+          ? opts.query.trim()
+          : typeof persistedStateQuery.directoryQuery === 'string'
+            ? persistedStateQuery.directoryQuery.trim()
+            : ''
+
+      const params = new URLSearchParams()
+      params.set('offset', String(page * pageSize))
+      params.set('limit', String(pageSize))
+      if (query) {
+        params.set('query', query)
+      }
+      const payload = await apiJson<JsonValue>(`${SIDEBAR_DIRECTORIES_ENDPOINT}?${params.toString()}`)
+      applyDirectoriesPagePayload(payload)
+      return true
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : String(err)
+      return false
+    } finally {
+      if (!opts?.silent) {
+        loading.value = false
+      }
+    }
   }
 
   function applyChatSidebarDeltaEvent(evt: SseEvent) {
@@ -1178,9 +1413,13 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     if (type !== 'chat-sidebar.delta') return
     const evtRecord = asRecord(evt as JsonValue) || {}
     const properties = asRecord(evtRecord.properties as JsonValue) || {}
+    const deltaSeq = readNonNegativeInt((properties.seq ?? evtRecord.seq ?? null) as JsonValue)
+    if (deltaSeq !== null && deltaSeq <= lastAppliedDeltaSeq) {
+      return
+    }
     const delta = asRecord((properties.delta ?? evtRecord.delta) as JsonValue)
     const ops = (delta?.ops as JsonValue) || []
-    void applySidebarDeltaOps(ops).catch(() => {
+    void applySidebarDeltaOps(ops, deltaSeq).catch(() => {
       scheduleSidebarRecoverySync('delta-apply-failed', 100)
     })
   }
@@ -1224,17 +1463,135 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     directoryId: string,
     opts?: { page?: number; pageSize?: number; silent?: boolean },
   ): Promise<boolean> {
-    void directoryId
-    void opts
-    return revalidateFromApi(undefined, { silent: opts?.silent })
+    const did = String(directoryId || '').trim()
+    if (!did) return false
+    if (!opts?.silent) {
+      loading.value = true
+    }
+    error.value = null
+    try {
+      const pageSizeRaw =
+        typeof opts?.pageSize === 'number' && Number.isFinite(opts.pageSize)
+          ? opts.pageSize
+          : persistedStateQuery.limitPerDirectory ?? SIDEBAR_DIRECTORY_SESSIONS_PAGE_SIZE
+      const pageSize = Math.max(1, Math.floor(Number(pageSizeRaw || SIDEBAR_DIRECTORY_SESSIONS_PAGE_SIZE)))
+      const requestedPageRaw =
+        typeof opts?.page === 'number' && Number.isFinite(opts.page)
+          ? opts.page
+          : uiPrefs.value.sessionRootPageByDirectoryId[did] ?? 0
+      const page = setSessionRootPage(did, requestedPageRaw, pageSize)
+
+      const params = new URLSearchParams()
+      params.set('scope', 'directory')
+      params.set('roots', 'true')
+      params.set('includeChildren', 'true')
+      params.set('includeTotal', 'true')
+      params.set('offset', String(page * pageSize))
+      params.set('limit', String(pageSize))
+      const payload = await apiJson<JsonValue>(
+        `${SIDEBAR_DIRECTORIES_ENDPOINT}/${encodeURIComponent(did)}/sessions?${params.toString()}`,
+      )
+      const payloadRecord = asRecord(payload) || {}
+      const sectionRaw = (payloadRecord.sidebarView ?? payloadRecord.sidebar_view) as JsonValue
+      const section = normalizeDirectorySidebarSection(sectionRaw, did)
+      if (!section) return false
+
+      const previousSection = directorySidebarById.value[did]
+      if (!previousSection || !directorySidebarViewEquivalent(previousSection, section)) {
+        directorySidebarById.value = {
+          ...directorySidebarById.value,
+          [did]: section,
+        }
+      }
+
+      const previousRootPage = Math.max(0, Math.floor(Number(uiPrefs.value.sessionRootPageByDirectoryId[did] || 0)))
+      if (previousRootPage !== section.rootPage) {
+        const nextMap = {
+          ...uiPrefs.value.sessionRootPageByDirectoryId,
+          [did]: section.rootPage,
+        }
+        uiPrefs.value = normalizeUiPrefs(
+          patchChatSidebarUiPrefs(uiPrefs.value, {
+            sessionRootPageByDirectoryId: nextMap,
+          }),
+        )
+      }
+
+      return true
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : String(err)
+      return false
+    } finally {
+      if (!opts?.silent) {
+        loading.value = false
+      }
+    }
   }
 
   async function revalidateFooterFromApi(
     kind: SidebarFooterKind,
     opts?: { page?: number; pageSize?: number; silent?: boolean },
   ): Promise<boolean> {
-    void kind
-    return revalidateFromApi(undefined, { silent: opts?.silent })
+    if (!opts?.silent) {
+      loading.value = true
+    }
+    error.value = null
+    try {
+      const targetKind: SidebarFooterKind = kind
+      const pageRaw =
+        typeof opts?.page === 'number' && Number.isFinite(opts.page)
+          ? opts.page
+          : targetKind === 'pinned'
+            ? uiPrefs.value.pinnedSessionsPage
+            : targetKind === 'recent'
+              ? uiPrefs.value.recentSessionsPage
+              : uiPrefs.value.runningSessionsPage
+      const page = Math.max(0, Math.floor(Number(pageRaw || 0)))
+      const pageSizeRaw =
+        typeof opts?.pageSize === 'number' && Number.isFinite(opts.pageSize) ? opts.pageSize : SIDEBAR_FOOTER_PAGE_SIZE
+      const pageSize = Math.max(1, Math.floor(Number(pageSizeRaw || SIDEBAR_FOOTER_PAGE_SIZE)))
+
+      const params = new URLSearchParams()
+      params.set('kind', targetKind)
+      params.set('page', String(page))
+      params.set('pageSize', String(pageSize))
+      const payload = await apiJson<JsonValue>(`${SIDEBAR_FOOTER_ENDPOINT}?${params.toString()}`)
+      const payloadRecord = asRecord(payload) || {}
+      const view = normalizeSidebarFooterView((payloadRecord.view ?? null) as JsonValue)
+
+      if (targetKind === 'pinned') {
+        if (!footerViewEquivalent(pinnedFooterView.value, view)) {
+          pinnedFooterView.value = view
+        }
+      } else if (targetKind === 'recent') {
+        if (!footerViewEquivalent(recentFooterView.value, view)) {
+          recentFooterView.value = view
+        }
+      } else {
+        if (!footerViewEquivalent(runningFooterView.value, view)) {
+          runningFooterView.value = view
+        }
+      }
+
+      const patch: Partial<ChatSidebarUiPrefs> = {}
+      if (targetKind === 'pinned') {
+        patch.pinnedSessionsPage = view.page
+      } else if (targetKind === 'recent') {
+        patch.recentSessionsPage = view.page
+      } else {
+        patch.runningSessionsPage = view.page
+      }
+      uiPrefs.value = normalizeUiPrefs(patchChatSidebarUiPrefs(uiPrefs.value, patch))
+
+      return true
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : String(err)
+      return false
+    } finally {
+      if (!opts?.silent) {
+        loading.value = false
+      }
+    }
   }
 
   async function resolveDirectoryForSession(
@@ -1390,6 +1747,7 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
       sidebarStateRequestInFlight.controller.abort()
     }
     sidebarStateRequestInFlight = null
+    lastAppliedDeltaSeq = 0
 
     persistedStateQuery = {}
 

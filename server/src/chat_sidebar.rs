@@ -420,14 +420,17 @@ pub(crate) enum ChatSidebarCommandsRequest {
     List(Vec<ChatSidebarCommandRequest>),
     Wrapped {
         commands: Vec<ChatSidebarCommandRequest>,
+        #[serde(default)]
+        compact: Option<bool>,
     },
 }
 
 impl ChatSidebarCommandsRequest {
-    fn into_commands(self) -> Vec<ChatSidebarCommandRequest> {
+    fn into_parts(self) -> (Vec<ChatSidebarCommandRequest>, bool) {
         match self {
-            Self::Single(command) => vec![command],
-            Self::List(commands) | Self::Wrapped { commands } => commands,
+            Self::Single(command) => (vec![command], false),
+            Self::List(commands) => (commands, false),
+            Self::Wrapped { commands, compact } => (commands, compact.unwrap_or(false)),
         }
     }
 }
@@ -437,6 +440,14 @@ impl ChatSidebarCommandsRequest {
 pub(crate) struct ChatSidebarSessionSearchQuery {
     pub query: Option<String>,
     pub limit: Option<usize>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ChatSidebarFooterQuery {
+    pub kind: Option<String>,
+    pub page: Option<usize>,
+    pub page_size: Option<usize>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -504,6 +515,13 @@ struct ChatSidebarSessionSearchResponse {
     items: Vec<ChatSidebarSessionSearchHitWire>,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ChatSidebarFooterResponse {
+    kind: String,
+    view: SidebarFooterViewWire,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SidebarSessionRowWire {
@@ -533,9 +551,9 @@ pub(crate) struct DirectorySidebarViewWire {
     recent_root_ids: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SidebarFooterViewWire {
+pub(crate) struct SidebarFooterViewWire {
     total: usize,
     page: usize,
     page_count: usize,
@@ -575,13 +593,45 @@ struct ChatSidebarStateResponse {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ChatSidebarDeltaWire {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    seq: Option<u64>,
     ops: Vec<ChatSidebarPatchOp>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ChatSidebarPreferencesPatchWire {
+    version: u64,
+    updated_at: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    collapsed_directory_ids: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    expanded_parent_session_ids: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pinned_session_ids: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    directories_page: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    session_root_page_by_directory_id_patch: Option<BTreeMap<String, usize>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pinned_sessions_open: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pinned_sessions_page: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    recent_sessions_open: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    recent_sessions_page: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    running_sessions_open: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    running_sessions_page: Option<usize>,
 }
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ChatSidebarCommandsResponse {
-    preferences: SessionsSidebarPreferences,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    preferences: Option<SessionsSidebarPreferences>,
     seq: u64,
     delta: ChatSidebarDeltaWire,
 }
@@ -607,6 +657,15 @@ pub(crate) enum ChatSidebarPatchOp {
     },
     #[serde(rename = "invalidateFooter")]
     Footer { kind: String },
+    #[serde(rename = "applyPreferences")]
+    PreferencesPatch {
+        patch: ChatSidebarPreferencesPatchWire,
+    },
+    #[serde(rename = "applyFooterView")]
+    FooterView {
+        kind: String,
+        view: SidebarFooterViewWire,
+    },
 }
 
 fn chat_sidebar_delta_latest_seq() -> u64 {
@@ -2468,6 +2527,52 @@ async fn chat_sidebar_recent_index_page(
     Json(page(items, offset, limit)).into_response()
 }
 
+pub(crate) async fn chat_sidebar_footer_get(
+    State(state): State<Arc<crate::AppState>>,
+    Query(query): Query<ChatSidebarFooterQuery>,
+) -> Response {
+    let kind_raw = query.kind.as_deref().unwrap_or("");
+    let Some(kind) = ChatSidebarFooterKind::parse(kind_raw) else {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "error": "invalid footer kind",
+                "expected": ["pinned", "recent", "running"]
+            })),
+        )
+            .into_response();
+    };
+
+    let configured = {
+        let settings = state.settings.read().await;
+        configured_directories(&settings)
+    };
+    let mut preferences = chat_sidebar_preferences_snapshot().await;
+    let page = query.page.unwrap_or(match kind {
+        ChatSidebarFooterKind::Pinned => preferences.pinned_sessions_page,
+        ChatSidebarFooterKind::Recent => preferences.recent_sessions_page,
+        ChatSidebarFooterKind::Running => preferences.running_sessions_page,
+    });
+    match kind {
+        ChatSidebarFooterKind::Pinned => preferences.pinned_sessions_page = page,
+        ChatSidebarFooterKind::Recent => preferences.recent_sessions_page = page,
+        ChatSidebarFooterKind::Running => preferences.running_sessions_page = page,
+    }
+    let _ = query.page_size;
+
+    let op = build_footer_view_patch_op(&state, &preferences, &configured, kind);
+
+    let ChatSidebarPatchOp::FooterView { kind, view } = op else {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": "failed to build footer view"})),
+        )
+            .into_response();
+    };
+
+    Json(ChatSidebarFooterResponse { kind, view }).into_response()
+}
+
 pub(crate) async fn chat_sidebar_session_search(
     State(state): State<Arc<crate::AppState>>,
     Query(query): Query<ChatSidebarSessionSearchQuery>,
@@ -2915,48 +3020,291 @@ fn set_toggle_membership(list: &mut Vec<String>, value: &str, enabled: bool) {
     }
 }
 
-fn sidebar_patch_ops_for_command(command: &ChatSidebarCommandRequest) -> Vec<ChatSidebarPatchOp> {
+fn build_preferences_patch_for_commands(
+    commands: &[ChatSidebarCommandRequest],
+    normalized_kinds: &[Option<String>],
+    preferences: &SessionsSidebarPreferences,
+) -> ChatSidebarPreferencesPatchWire {
+    let mut patch = ChatSidebarPreferencesPatchWire {
+        version: preferences.version,
+        updated_at: preferences.updated_at,
+        ..ChatSidebarPreferencesPatchWire::default()
+    };
+
+    let mut session_root_page_by_directory_id_patch = BTreeMap::<String, usize>::new();
+
+    for (idx, command) in commands.iter().enumerate() {
+        let normalized = normalized_kinds.get(idx).and_then(|value| value.as_deref());
+        match command {
+            ChatSidebarCommandRequest::DirectoriesPage { .. } => {
+                patch.directories_page = Some(preferences.directories_page);
+            }
+            ChatSidebarCommandRequest::DirectoryCollapsed { .. } => {
+                patch.collapsed_directory_ids = Some(preferences.collapsed_directory_ids.clone());
+            }
+            ChatSidebarCommandRequest::DirectoryRootPage { directory_id, .. } => {
+                let did = directory_id.trim();
+                if did.is_empty() {
+                    continue;
+                }
+                let page = preferences
+                    .session_root_page_by_directory_id
+                    .get(did)
+                    .copied()
+                    .unwrap_or(0);
+                session_root_page_by_directory_id_patch.insert(did.to_string(), page);
+            }
+            ChatSidebarCommandRequest::SessionPinned { .. } => {
+                patch.pinned_session_ids = Some(preferences.pinned_session_ids.clone());
+            }
+            ChatSidebarCommandRequest::SessionExpanded { .. } => {
+                patch.expanded_parent_session_ids =
+                    Some(preferences.expanded_parent_session_ids.clone());
+            }
+            ChatSidebarCommandRequest::FooterOpen { kind, .. } => {
+                let kind = normalized
+                    .or_else(|| normalize_footer_kind(kind))
+                    .unwrap_or("pinned");
+                match kind {
+                    "pinned" => patch.pinned_sessions_open = Some(preferences.pinned_sessions_open),
+                    "recent" => patch.recent_sessions_open = Some(preferences.recent_sessions_open),
+                    "running" => {
+                        patch.running_sessions_open = Some(preferences.running_sessions_open)
+                    }
+                    _ => {}
+                }
+            }
+            ChatSidebarCommandRequest::FooterPage { kind, .. } => {
+                let kind = normalized
+                    .or_else(|| normalize_footer_kind(kind))
+                    .unwrap_or("pinned");
+                match kind {
+                    "pinned" => patch.pinned_sessions_page = Some(preferences.pinned_sessions_page),
+                    "recent" => patch.recent_sessions_page = Some(preferences.recent_sessions_page),
+                    "running" => {
+                        patch.running_sessions_page = Some(preferences.running_sessions_page)
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    if !session_root_page_by_directory_id_patch.is_empty() {
+        patch.session_root_page_by_directory_id_patch =
+            Some(session_root_page_by_directory_id_patch);
+    }
+
+    patch
+}
+
+fn resolve_sidebar_directory_id_for_session(
+    state: &Arc<crate::AppState>,
+    directory_id_by_path: &BTreeMap<String, String>,
+    session_id: &str,
+) -> Option<String> {
+    let sid = session_id.trim();
+    if sid.is_empty() {
+        return None;
+    }
+
+    let from_summary = state
+        .directory_session_index
+        .summary(sid)
+        .map(|summary| summary.directory_path);
+    let from_runtime = state.directory_session_index.directory_for_session(sid);
+
+    from_summary
+        .or(from_runtime)
+        .and_then(|path| normalize_path_for_match(&path))
+        .and_then(|path_key| directory_id_by_path.get(&path_key).cloned())
+}
+
+fn build_footer_view_patch_op(
+    state: &Arc<crate::AppState>,
+    preferences: &SessionsSidebarPreferences,
+    configured: &[DirectoryWire],
+    kind: ChatSidebarFooterKind,
+) -> ChatSidebarPatchOp {
+    let all_directories = all_known_sidebar_directories(state, configured);
+    let directories_by_id = normalize_directory_wires_by_id(&all_directories);
+    let directory_id_by_path = normalize_directory_id_by_path(&all_directories);
+    let expanded_parent_ids = preferences
+        .expanded_parent_session_ids
+        .iter()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .collect::<HashSet<_>>();
+
+    let page_size = SIDEBAR_STATE_FOOTER_PAGE_SIZE_DEFAULT;
+
+    let (root_ids, root_hints, page) = match kind {
+        ChatSidebarFooterKind::Pinned => {
+            let root_ids = preferences
+                .pinned_session_ids
+                .iter()
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty())
+                .collect::<Vec<_>>();
+            let mut hints = BTreeMap::<String, DirectoryWire>::new();
+            for root_id in &root_ids {
+                let Some(summary) = state.directory_session_index.summary(root_id) else {
+                    continue;
+                };
+                if let Some(directory) = directory_wire_for_path(
+                    &summary.directory_path,
+                    &directory_id_by_path,
+                    &directories_by_id,
+                ) {
+                    hints.insert(root_id.clone(), directory);
+                }
+            }
+            (root_ids, hints, preferences.pinned_sessions_page)
+        }
+        ChatSidebarFooterKind::Recent => {
+            let items = build_recent_index_items(state);
+            let mut root_ids = Vec::<String>::new();
+            let mut hints = BTreeMap::<String, DirectoryWire>::new();
+            for item in items {
+                let sid = item.session_id.trim();
+                if sid.is_empty() {
+                    continue;
+                }
+                root_ids.push(sid.to_string());
+                if let Some(directory) = directories_by_id
+                    .get(item.directory_id.trim())
+                    .cloned()
+                    .or_else(|| {
+                        directory_wire_for_path(
+                            item.directory_path.as_str(),
+                            &directory_id_by_path,
+                            &directories_by_id,
+                        )
+                    })
+                {
+                    hints.insert(sid.to_string(), directory);
+                }
+            }
+            (root_ids, hints, preferences.recent_sessions_page)
+        }
+        ChatSidebarFooterKind::Running => {
+            let runtime_by_session_id = state.directory_session_index.runtime_snapshot_json();
+            let items = build_running_index_items_from_runtime(
+                state,
+                &runtime_by_session_id,
+                &directory_id_by_path,
+            );
+            let mut root_ids = Vec::<String>::new();
+            let mut hints = BTreeMap::<String, DirectoryWire>::new();
+            for item in items {
+                let sid = item.session_id.trim();
+                if sid.is_empty() {
+                    continue;
+                }
+                root_ids.push(sid.to_string());
+                if let Some(directory) = item
+                    .directory_id
+                    .as_ref()
+                    .map(|value| value.trim())
+                    .filter(|value| !value.is_empty())
+                    .and_then(|did| directories_by_id.get(did).cloned())
+                    .or_else(|| {
+                        item.directory_path.as_deref().and_then(|path| {
+                            directory_wire_for_path(path, &directory_id_by_path, &directories_by_id)
+                        })
+                    })
+                {
+                    hints.insert(sid.to_string(), directory);
+                }
+            }
+            (root_ids, hints, preferences.running_sessions_page)
+        }
+    };
+
+    let ctx = SidebarFooterBuildCtx {
+        state,
+        expanded_parent_ids: &expanded_parent_ids,
+        directories_by_id: &directories_by_id,
+        directory_id_by_path: &directory_id_by_path,
+        root_directory_hint: &root_hints,
+    };
+
+    let view = build_sidebar_footer_view(&ctx, &root_ids, page, page_size);
+    ChatSidebarPatchOp::FooterView {
+        kind: kind.as_str().to_string(),
+        view,
+    }
+}
+
+fn sidebar_patch_ops_for_command(
+    command: &ChatSidebarCommandRequest,
+    affected_directory_id: Option<&str>,
+) -> Vec<ChatSidebarPatchOp> {
     match command {
-        ChatSidebarCommandRequest::DirectoriesPage { .. } => vec![
-            ChatSidebarPatchOp::Preferences,
-            ChatSidebarPatchOp::DirectoriesPage,
-        ],
-        ChatSidebarCommandRequest::DirectoryCollapsed { directory_id, .. } => vec![
-            ChatSidebarPatchOp::Preferences,
-            ChatSidebarPatchOp::Directory {
+        ChatSidebarCommandRequest::DirectoriesPage { .. } => {
+            vec![ChatSidebarPatchOp::DirectoriesPage]
+        }
+        ChatSidebarCommandRequest::DirectoryCollapsed {
+            directory_id,
+            collapsed,
+        } => {
+            if *collapsed {
+                Vec::new()
+            } else {
+                vec![ChatSidebarPatchOp::Directory {
+                    directory_id: directory_id.trim().to_string(),
+                }]
+            }
+        }
+        ChatSidebarCommandRequest::DirectoryRootPage { directory_id, .. } => {
+            vec![ChatSidebarPatchOp::Directory {
                 directory_id: directory_id.trim().to_string(),
-            },
-        ],
-        ChatSidebarCommandRequest::DirectoryRootPage { directory_id, .. } => vec![
-            ChatSidebarPatchOp::Preferences,
-            ChatSidebarPatchOp::Directory {
-                directory_id: directory_id.trim().to_string(),
-            },
-        ],
-        ChatSidebarCommandRequest::SessionPinned { .. } => vec![
-            ChatSidebarPatchOp::Preferences,
-            ChatSidebarPatchOp::DirectoriesPage,
-            ChatSidebarPatchOp::Footer {
+            }]
+        }
+        ChatSidebarCommandRequest::SessionPinned { .. } => {
+            let mut ops = Vec::new();
+            if let Some(directory_id) = affected_directory_id.map(|value| value.trim())
+                && !directory_id.is_empty()
+            {
+                ops.push(ChatSidebarPatchOp::Directory {
+                    directory_id: directory_id.to_string(),
+                });
+            } else {
+                ops.push(ChatSidebarPatchOp::State);
+            }
+            ops.push(ChatSidebarPatchOp::Footer {
                 kind: "pinned".to_string(),
-            },
-        ],
-        ChatSidebarCommandRequest::SessionExpanded { .. } => vec![
-            ChatSidebarPatchOp::Preferences,
-            ChatSidebarPatchOp::DirectoriesPage,
-            ChatSidebarPatchOp::Footer {
+            });
+            ops
+        }
+        ChatSidebarCommandRequest::SessionExpanded { .. } => {
+            let mut ops = Vec::new();
+            if let Some(directory_id) = affected_directory_id.map(|value| value.trim())
+                && !directory_id.is_empty()
+            {
+                ops.push(ChatSidebarPatchOp::Directory {
+                    directory_id: directory_id.to_string(),
+                });
+            } else {
+                ops.push(ChatSidebarPatchOp::State);
+            }
+            ops.push(ChatSidebarPatchOp::Footer {
                 kind: "pinned".to_string(),
-            },
-            ChatSidebarPatchOp::Footer {
+            });
+            ops.push(ChatSidebarPatchOp::Footer {
                 kind: "recent".to_string(),
-            },
-            ChatSidebarPatchOp::Footer {
+            });
+            ops.push(ChatSidebarPatchOp::Footer {
                 kind: "running".to_string(),
-            },
-        ],
+            });
+            ops
+        }
         ChatSidebarCommandRequest::FooterOpen { kind, .. }
         | ChatSidebarCommandRequest::FooterPage { kind, .. } => {
-            let mut ops = vec![ChatSidebarPatchOp::Preferences];
-            if let Some(kind) = normalize_footer_kind(kind) {
+            let mut ops = Vec::new();
+            if matches!(command, ChatSidebarCommandRequest::FooterPage { .. })
+                && let Some(kind) = normalize_footer_kind(kind)
+            {
                 ops.push(ChatSidebarPatchOp::Footer {
                     kind: kind.to_string(),
                 });
@@ -3015,8 +3363,11 @@ fn build_patch_directory_view_op_from_cache(
 }
 
 fn sidebar_patch_data_ops_for_command(
+    state: &Arc<crate::AppState>,
     command: &ChatSidebarCommandRequest,
     preferences: &SessionsSidebarPreferences,
+    configured: &[DirectoryWire],
+    affected_directory_id: Option<&str>,
 ) -> Vec<ChatSidebarPatchOp> {
     match command {
         ChatSidebarCommandRequest::DirectoryRootPage { directory_id, .. } => {
@@ -3046,19 +3397,96 @@ fn sidebar_patch_data_ops_for_command(
                     .collect()
             }
         }
+        ChatSidebarCommandRequest::SessionPinned { .. } => {
+            let mut ops = Vec::<ChatSidebarPatchOp>::new();
+            if let Some(directory_id) = affected_directory_id.map(|value| value.trim())
+                && !directory_id.is_empty()
+            {
+                let root_page = preferences
+                    .session_root_page_by_directory_id
+                    .get(directory_id)
+                    .copied()
+                    .unwrap_or(0);
+                if let Some(op) =
+                    build_patch_directory_view_op_from_cache(directory_id, root_page, preferences)
+                {
+                    ops.push(op);
+                }
+            }
+            ops.push(build_footer_view_patch_op(
+                state,
+                preferences,
+                configured,
+                ChatSidebarFooterKind::Pinned,
+            ));
+            ops
+        }
+        ChatSidebarCommandRequest::SessionExpanded { .. } => {
+            let mut ops = Vec::<ChatSidebarPatchOp>::new();
+            if let Some(directory_id) = affected_directory_id.map(|value| value.trim())
+                && !directory_id.is_empty()
+            {
+                let root_page = preferences
+                    .session_root_page_by_directory_id
+                    .get(directory_id)
+                    .copied()
+                    .unwrap_or(0);
+                if let Some(op) =
+                    build_patch_directory_view_op_from_cache(directory_id, root_page, preferences)
+                {
+                    ops.push(op);
+                }
+            }
+            ops.push(build_footer_view_patch_op(
+                state,
+                preferences,
+                configured,
+                ChatSidebarFooterKind::Pinned,
+            ));
+            ops.push(build_footer_view_patch_op(
+                state,
+                preferences,
+                configured,
+                ChatSidebarFooterKind::Recent,
+            ));
+            ops.push(build_footer_view_patch_op(
+                state,
+                preferences,
+                configured,
+                ChatSidebarFooterKind::Running,
+            ));
+            ops
+        }
+        ChatSidebarCommandRequest::FooterPage { kind, .. } => {
+            let Some(kind) = normalize_footer_kind(kind) else {
+                return Vec::new();
+            };
+            let kind = match kind {
+                "pinned" => ChatSidebarFooterKind::Pinned,
+                "recent" => ChatSidebarFooterKind::Recent,
+                "running" => ChatSidebarFooterKind::Running,
+                _ => return Vec::new(),
+            };
+            vec![build_footer_view_patch_op(
+                state,
+                preferences,
+                configured,
+                kind,
+            )]
+        }
         _ => Vec::new(),
     }
 }
 
-pub(crate) fn publish_chat_sidebar_delta_event(ops: Vec<ChatSidebarPatchOp>) -> bool {
+pub(crate) fn publish_chat_sidebar_delta_event(ops: Vec<ChatSidebarPatchOp>) -> Option<u64> {
     if ops.is_empty() {
-        return false;
+        return None;
     }
 
     let seq = chat_sidebar_delta_next_seq();
 
     if crate::global_sse_hub::downstream_client_count() == 0 {
-        return false;
+        return Some(seq);
     }
 
     let payload = serde_json::to_string(&json!({
@@ -3073,13 +3501,14 @@ pub(crate) fn publish_chat_sidebar_delta_event(ops: Vec<ChatSidebarPatchOp>) -> 
     .unwrap_or_else(|_| "{}".to_string());
 
     crate::global_sse_hub::publish_downstream_json(&payload);
-    true
+    Some(seq)
 }
 
 pub(crate) async fn chat_sidebar_commands_post(
+    State(state): State<Arc<crate::AppState>>,
     Json(request): Json<ChatSidebarCommandsRequest>,
 ) -> crate::ApiResult<Response> {
-    let commands = request.into_commands();
+    let (commands, compact) = request.into_parts();
     if commands.is_empty() {
         return Ok((
             StatusCode::BAD_REQUEST,
@@ -3216,18 +3645,60 @@ pub(crate) async fn chat_sidebar_commands_post(
         Err(response) => return Ok(response),
     };
 
-    let mut ops = Vec::<ChatSidebarPatchOp>::new();
+    let configured = {
+        let settings = state.settings.read().await;
+        configured_directories(&settings)
+    };
+    let directory_id_by_path = normalize_directory_id_by_path(&configured);
+    let mut affected_directory_ids = Vec::<Option<String>>::with_capacity(commands.len());
     for command in &commands {
-        ops.extend(sidebar_patch_ops_for_command(command));
-        ops.extend(sidebar_patch_data_ops_for_command(command, &preferences));
+        let affected = match command {
+            ChatSidebarCommandRequest::DirectoryCollapsed { directory_id, .. }
+            | ChatSidebarCommandRequest::DirectoryRootPage { directory_id, .. } => {
+                trim_non_empty(directory_id)
+            }
+            ChatSidebarCommandRequest::SessionPinned { session_id, .. }
+            | ChatSidebarCommandRequest::SessionExpanded { session_id, .. } => {
+                resolve_sidebar_directory_id_for_session(&state, &directory_id_by_path, session_id)
+            }
+            _ => None,
+        };
+        affected_directory_ids.push(affected);
     }
-    let _ = publish_chat_sidebar_delta_event(ops.clone());
+
+    let preferences_patch =
+        build_preferences_patch_for_commands(&commands, &normalized_kinds, &preferences);
+
+    let mut ops = Vec::<ChatSidebarPatchOp>::new();
+    ops.push(ChatSidebarPatchOp::PreferencesPatch {
+        patch: preferences_patch,
+    });
+    for (idx, command) in commands.iter().enumerate() {
+        let affected_directory_id = affected_directory_ids
+            .get(idx)
+            .and_then(|value| value.as_deref());
+        ops.extend(sidebar_patch_ops_for_command(
+            command,
+            affected_directory_id,
+        ));
+        ops.extend(sidebar_patch_data_ops_for_command(
+            &state,
+            command,
+            &preferences,
+            &configured,
+            affected_directory_id,
+        ));
+    }
+    let delta_seq = publish_chat_sidebar_delta_event(ops.clone());
 
     let seq = crate::directory_sessions::directory_sessions_latest_seq();
     Ok(Json(ChatSidebarCommandsResponse {
-        preferences,
+        preferences: if compact { None } else { Some(preferences) },
         seq,
-        delta: ChatSidebarDeltaWire { ops },
+        delta: ChatSidebarDeltaWire {
+            seq: delta_seq,
+            ops,
+        },
     })
     .into_response())
 }

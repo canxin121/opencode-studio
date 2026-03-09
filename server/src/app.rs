@@ -1019,6 +1019,10 @@ pub(crate) async fn run(args: crate::Args) {
             get(crate::chat_sidebar::chat_sidebar_session_search),
         )
         .route(
+            "/chat-sidebar/footer",
+            get(crate::chat_sidebar::chat_sidebar_footer_get),
+        )
+        .route(
             "/sessions/summaries",
             get(crate::chat_sidebar::sessions_summaries_get),
         )
