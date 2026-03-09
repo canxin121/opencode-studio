@@ -301,11 +301,11 @@ try {
     $command = "powershell -NoProfile -ExecutionPolicy Bypass -File `"$helperPath`" -AssetUrl `"$assetUrl`" -StagedPath `"$stagedPath`" -MarkerPath `"$markerPath`" -LogPath `"$logPath`""
     Invoke-BackendTerminalInput -Url $Url -SessionId $sessionId -InputText ($command + "`n")
     Invoke-BackendTerminalInput -Url $Url -SessionId $sessionId -InputText "exit`n"
+    Wait-LocalFile -Path $markerPath -TimeoutSeconds $TimeoutSeconds
   } finally {
     Remove-BackendTerminalSession -Url $Url -SessionId $sessionId
   }
 
-  Wait-LocalFile -Path $markerPath -TimeoutSeconds $TimeoutSeconds
   $statusCode = (Get-Content -LiteralPath $markerPath -Raw).Trim()
   if ($statusCode -ne "0") {
     $detail = ""

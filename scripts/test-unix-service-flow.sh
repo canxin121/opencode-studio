@@ -351,7 +351,6 @@ EOF
   session_id="$(terminal_create_session "$url" "$INSTALL_DIR")"
   terminal_send_input "$url" "$session_id" "bash \"$helper_script\""$'\n'
   terminal_send_input "$url" "$session_id" "exit"$'\n'
-  terminal_close_session "$url" "$session_id"
 
   while ((elapsed < WAIT_TIMEOUT_SECS)); do
     if [[ -f "$marker_file" ]]; then
@@ -360,6 +359,8 @@ EOF
     sleep 1
     elapsed=$((elapsed + 1))
   done
+
+  terminal_close_session "$url" "$session_id"
 
   [[ -f "$marker_file" ]] || fail "Backend terminal upgrade did not complete in ${WAIT_TIMEOUT_SECS}s"
   status="$(tr -d '[:space:]' <"$marker_file")"
