@@ -15,6 +15,7 @@ export default {
     edit: 'Editar',
     open: 'Abrir',
     hide: 'Ocultar',
+    reveal: 'Mostrar',
     remove: 'Quitar',
     rename: 'Renombrar',
     confirm: 'Confirmar',
@@ -34,6 +35,9 @@ export default {
     previousPage: 'Pagina anterior',
     nextPage: 'Pagina siguiente',
     currentPage: 'Pagina actual',
+    copy: 'Copiar',
+    files: 'Archivos',
+    notSet: '(sin configurar)',
     yes: 'Si',
     no: 'No',
     unknown: 'Desconocido',
@@ -51,6 +55,20 @@ export default {
           arSA: 'Arabe (Arabia Saudita)',
           ptBR: 'Portugues (Brasil)',
           frFR: 'Frances (Francia)',
+        },
+      },
+    },
+    opencodeConfig: {
+      sections: {
+        formatter: {
+          lsp: {
+            options: {
+              mode: {
+                config: 'config',
+                disabled: 'disabled',
+              },
+            },
+          },
         },
       },
     },

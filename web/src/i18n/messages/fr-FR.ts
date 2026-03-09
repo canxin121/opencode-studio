@@ -14,6 +14,7 @@ export default {
     edit: 'Modifier',
     open: 'Ouvrir',
     hide: 'Masquer',
+    reveal: 'Afficher',
     remove: 'Retirer',
     rename: 'Renommer',
     confirm: 'Confirmer',
@@ -38,14 +39,17 @@ export default {
     later: 'Plus tard',
     select: 'Selectionner',
     copied: 'Copie',
+    copy: 'Copier',
     previous: 'Precedent',
     next: 'Suivant',
     previousPage: 'Page precedente',
     nextPage: 'Page suivante',
     currentPage: 'Page actuelle',
+    files: 'Fichiers',
     unknown: 'Inconnu',
     yes: 'Oui',
     no: 'Non',
+    notSet: '(non defini)',
     key: 'Cle',
     value: 'Valeur',
   },
@@ -62,6 +66,20 @@ export default {
           arSA: 'Arabe',
           ptBR: 'Portugais (Bresil)',
           frFR: 'Francais',
+        },
+      },
+    },
+    opencodeConfig: {
+      sections: {
+        formatter: {
+          lsp: {
+            options: {
+              mode: {
+                config: 'config',
+                disabled: 'disabled',
+              },
+            },
+          },
         },
       },
     },
