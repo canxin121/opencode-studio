@@ -317,6 +317,21 @@ run_reinstall_upgrade() {
   bash "$INSTALL_SCRIPT" "${UPGRADE_ARGS[@]}"
 }
 
+restart_service_after_reinstall_upgrade() {
+  if [[ "$OS" == "Linux" ]]; then
+    log "Restarting Linux service after installer fallback upgrade"
+    linux_service_cmd restart opencode-studio
+    return
+  fi
+
+  log "Restarting macOS service after installer fallback upgrade"
+  if ! launchctl kickstart -k "gui/$(id -u)/$MACOS_LABEL" >/dev/null 2>&1; then
+    log "macOS: kickstart failed, using unload/load fallback"
+    launchctl unload "$MACOS_PLIST" >/dev/null 2>&1 || true
+    launchctl load "$MACOS_PLIST"
+  fi
+}
+
 trigger_backend_upgrade() {
   local url="$1"
   local asset_url="$2"
@@ -692,6 +707,7 @@ validate_health_payload "$BASE_URL"
 
 if [[ -n "$UPGRADE_TO_VERSION" ]]; then
   log "Step 5/7: upgrade service in-place to $UPGRADE_TO_VERSION"
+  USED_INSTALLER_FALLBACK="0"
   if [[ "$UPGRADE_VIA_BACKEND_API" == "1" ]]; then
     FALLBACK_REASON=""
     UPGRADE_ASSET_URL=""
@@ -707,9 +723,15 @@ if [[ -n "$UPGRADE_TO_VERSION" ]]; then
     if [[ -n "$FALLBACK_REASON" ]]; then
       log "Falling back to installer-based in-place upgrade: $FALLBACK_REASON"
       run_reinstall_upgrade "$UPGRADE_TO_VERSION"
+      USED_INSTALLER_FALLBACK="1"
     fi
   else
     run_reinstall_upgrade "$UPGRADE_TO_VERSION"
+    USED_INSTALLER_FALLBACK="1"
+  fi
+
+  if [[ "$USED_INSTALLER_FALLBACK" == "1" ]]; then
+    restart_service_after_reinstall_upgrade
   fi
 
   wait_for_health_up "$BASE_URL" "$WAIT_TIMEOUT_SECS" || fail "Service health endpoint did not recover after upgrade"
