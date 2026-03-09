@@ -318,6 +318,13 @@ try {
   if ($UpgradeToVersion) {
     Write-Log "Step 5/7: upgrade service in-place to $UpgradeToVersion"
 
+    Invoke-Sc -Arguments @("stop", $ServiceName) -AllowedExitCodes @(0, 1062) -ErrorMessage "Failed to stop $ServiceName before upgrade" | Out-Null
+    Wait-ServiceStatus -Name $ServiceName -Status "Stopped" -TimeoutSeconds $WaitTimeoutSeconds
+    Wait-HealthDown -Url $baseUrl -TimeoutSeconds $WaitTimeoutSeconds
+
+    Invoke-Sc -Arguments @("stop", $OpenCodeServiceName) -AllowedExitCodes @(0, 1062) -ErrorMessage "Failed to stop $OpenCodeServiceName before upgrade" | Out-Null
+    Wait-ServiceStatus -Name $OpenCodeServiceName -Status "Stopped" -TimeoutSeconds $WaitTimeoutSeconds
+
     $upgradeParams = @{
       Repo = $Repo
       Version = $UpgradeToVersion

@@ -100,7 +100,10 @@ function mapsEquivalent(left: Map<string, boolean>, right: Map<string, boolean>)
   return true
 }
 
-function applyPendingBooleanOverlay(base: Set<string>, overlay: Map<string, boolean>): { next: Set<string>; acknowledgedIds: string[] } {
+function applyPendingBooleanOverlay(
+  base: Set<string>,
+  overlay: Map<string, boolean>,
+): { next: Set<string>; acknowledgedIds: string[] } {
   const next = new Set(base)
   const acknowledgedIds: string[] = []
 
