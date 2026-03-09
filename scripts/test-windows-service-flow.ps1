@@ -1,6 +1,7 @@
 Param(
   [string]$Repo = "canxin121/opencode-studio",
   [string]$Version = "",
+  [string]$UpgradeToVersion = "",
   [switch]$WithFrontend,
   [string]$InstallDir = "",
   [ValidateRange(10, 300)]
@@ -158,7 +159,39 @@ function Wait-PathAbsent([string]$Path, [int]$TimeoutSeconds = 60) {
   throw "Path still exists after waiting ${TimeoutSeconds}s: $Path"
 }
 
+function Normalize-SemVerTag([string]$Value) {
+  if ($null -eq $Value) {
+    return ""
+  }
+  return $Value.Trim().TrimStart("v")
+}
+
+function Get-BinaryVersion([string]$BinaryPath) {
+  $output = & $BinaryPath --version 2>&1
+  $combined = (($output | ForEach-Object { $_.ToString().Trim() }) -join " ").Trim()
+  $match = [regex]::Match($combined, '([0-9]+\.[0-9]+\.[0-9]+(?:[.-][0-9A-Za-z.-]+)?)')
+  if (-not $match.Success) {
+    throw "Failed to parse binary version from output: $combined"
+  }
+  return $match.Groups[1].Value
+}
+
+function Assert-BinaryVersion([string]$BinaryPath, [string]$ExpectedTag) {
+  $expected = Normalize-SemVerTag $ExpectedTag
+  $actual = Get-BinaryVersion -BinaryPath $BinaryPath
+  if ($actual -ne $expected) {
+    throw "Binary version mismatch. Expected $expected, got $actual"
+  }
+}
+
 try {
+  if ($UpgradeToVersion -and -not $Version) {
+    throw "-UpgradeToVersion requires -Version so the test can validate upgrade behavior."
+  }
+  if ($UpgradeToVersion -and $UpgradeToVersion -eq $Version) {
+    throw "-UpgradeToVersion must differ from -Version."
+  }
+
   Assert-Administrator
   Require-Command "opencode"
   Require-Command "sc.exe"
@@ -183,6 +216,12 @@ try {
   Write-Log "Install dir: $InstallDir"
   Write-Log "Random port: $port"
   Write-Log "With frontend: $WithFrontend"
+  if ($Version) {
+    Write-Log "Install version: $Version"
+  }
+  if ($UpgradeToVersion) {
+    Write-Log "Upgrade target version: $UpgradeToVersion"
+  }
 
   $installParams = @{
     Repo = $Repo
@@ -234,6 +273,10 @@ try {
     }
   }
 
+  if ($Version) {
+    Assert-BinaryVersion -BinaryPath $binPath -ExpectedTag $Version
+  }
+
   if (-not (Test-ServiceExists $ServiceName)) {
     throw "Service missing after install: $ServiceName"
   }
@@ -272,7 +315,43 @@ try {
   Wait-ServiceStatus -Name $ServiceName -Status "Running" -TimeoutSeconds $WaitTimeoutSeconds
   Wait-HealthUp -Url $baseUrl -TimeoutSeconds $WaitTimeoutSeconds
 
-  Write-Log "Step 5/6: uninstall services but keep install files"
+  if ($UpgradeToVersion) {
+    Write-Log "Step 5/7: upgrade service in-place to $UpgradeToVersion"
+
+    Invoke-Sc -Arguments @("stop", $ServiceName) -AllowedExitCodes @(0, 1062) -ErrorMessage "Failed to stop $ServiceName before upgrade" | Out-Null
+    Wait-ServiceStatus -Name $ServiceName -Status "Stopped" -TimeoutSeconds $WaitTimeoutSeconds
+    Wait-HealthDown -Url $baseUrl -TimeoutSeconds $WaitTimeoutSeconds
+
+    Invoke-Sc -Arguments @("stop", $OpenCodeServiceName) -AllowedExitCodes @(0, 1062) -ErrorMessage "Failed to stop $OpenCodeServiceName before upgrade" | Out-Null
+    Wait-ServiceStatus -Name $OpenCodeServiceName -Status "Stopped" -TimeoutSeconds $WaitTimeoutSeconds
+
+    $upgradeParams = @{
+      Repo = $Repo
+      Version = $UpgradeToVersion
+      InstallDir = $InstallDir
+      BindHost = "127.0.0.1"
+      Port = $port
+    }
+    if ($WithFrontend) {
+      $upgradeParams["WithFrontend"] = $true
+    }
+
+    & $InstallScript @upgradeParams
+    Wait-HealthUp -Url $baseUrl -TimeoutSeconds $WaitTimeoutSeconds
+    $upgradedPayload = Get-HealthPayload -Url $baseUrl
+    Assert-HealthPayload -Payload $upgradedPayload
+    Assert-BinaryVersion -BinaryPath $binPath -ExpectedTag $UpgradeToVersion
+
+    Invoke-Sc -Arguments @("stop", $ServiceName) -AllowedExitCodes @(0, 1062) -ErrorMessage "Failed to stop $ServiceName after upgrade" | Out-Null
+    Wait-ServiceStatus -Name $ServiceName -Status "Stopped" -TimeoutSeconds $WaitTimeoutSeconds
+    Wait-HealthDown -Url $baseUrl -TimeoutSeconds $WaitTimeoutSeconds
+
+    Invoke-Sc -Arguments @("start", $ServiceName) -ErrorMessage "Failed to start $ServiceName after upgrade" | Out-Null
+    Wait-ServiceStatus -Name $ServiceName -Status "Running" -TimeoutSeconds $WaitTimeoutSeconds
+    Wait-HealthUp -Url $baseUrl -TimeoutSeconds $WaitTimeoutSeconds
+  }
+
+  Write-Log "Step 6/7: uninstall services but keep install files"
   & $UninstallScript -InstallDir $InstallDir
   if (Test-ServiceExists $ServiceName) {
     throw "Service still exists after uninstall: $ServiceName"
@@ -287,7 +366,7 @@ try {
     throw "Installed binary should still exist after keep-files uninstall: $binPath"
   }
 
-  Write-Log "Step 6/6: uninstall services and remove install files"
+  Write-Log "Step 7/7: uninstall services and remove install files"
   & $UninstallScript -InstallDir $InstallDir -RemoveInstallDir
   Wait-PathAbsent -Path $InstallDir -TimeoutSeconds $WaitTimeoutSeconds
 

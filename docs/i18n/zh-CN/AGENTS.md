@@ -49,18 +49,28 @@ python3 -m json.tool desktop/src-tauri/capabilities/default.json >/dev/null
 
 ### 服务安装端到端（对应 CI job: `service-installers`）
 
+三平台都会先从 GitHub Releases 解析稳定版本标签（`latest` 与前一个稳定版），
+再基于这两个版本验证 install -> upgrade -> uninstall 关键链路。
+
 Linux：
 
 ```bash
 bun add -g opencode-ai@latest
-bash scripts/test-unix-service-flow.sh --mode system
+bash scripts/test-unix-service-flow.sh --mode system --version <previous-stable-tag> --upgrade-to-version <latest-stable-tag>
+```
+
+macOS：
+
+```bash
+bun add -g opencode-ai@latest
+bash scripts/test-unix-service-flow.sh --version <previous-stable-tag> --upgrade-to-version <latest-stable-tag>
 ```
 
 Windows（管理员权限 PowerShell）：
 
 ```powershell
 bun add -g opencode-ai@latest
-pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/test-windows-service-flow.ps1
+pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/test-windows-service-flow.ps1 -Version <previous-stable-tag> -UpgradeToVersion <latest-stable-tag>
 ```
 
 ## 验收判定
