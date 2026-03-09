@@ -526,6 +526,7 @@ async fn kill_process_on_port(port: u16) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::ENV_LOCK;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     #[test]
@@ -623,6 +624,7 @@ mod tests {
 
     #[test]
     fn windows_home_env_defaults_uses_userprofile_when_home_missing() {
+        let _env_lock = ENV_LOCK.lock().unwrap();
         let old_userprofile = std::env::var("USERPROFILE").ok();
         let old_home = std::env::var("HOME").ok();
 
