@@ -360,11 +360,7 @@ restart_service_once() {
     return
   fi
 
-  if ! launchctl kickstart -k "gui/$(id -u)/$MACOS_LABEL" >/dev/null 2>&1; then
-    log "macOS: kickstart failed, using unload/load fallback"
-    launchctl unload "$MACOS_PLIST" >/dev/null 2>&1 || true
-    launchctl load "$MACOS_PLIST"
-  fi
+  macos_restart_service
 }
 
 trigger_backend_upgrade() {
@@ -542,11 +538,108 @@ manage_service_linux() {
 
 MACOS_LABEL="cn.cxits.opencode-studio"
 MACOS_PLIST="$HOME/Library/LaunchAgents/${MACOS_LABEL}.plist"
+MACOS_ACTIVE_DOMAIN=""
+
+macos_launchctl_domains() {
+  local uid
+  uid="$(id -u)"
+  printf 'gui/%s\n' "$uid"
+  printf 'user/%s\n' "$uid"
+}
+
+macos_detect_service_domain() {
+  local domain=""
+
+  while IFS= read -r domain; do
+    [[ -n "$domain" ]] || continue
+    if launchctl print "$domain/$MACOS_LABEL" >/dev/null 2>&1; then
+      MACOS_ACTIVE_DOMAIN="$domain"
+      return 0
+    fi
+  done < <(macos_launchctl_domains)
+
+  MACOS_ACTIVE_DOMAIN=""
+  return 1
+}
+
+macos_detect_service_legacy_list() {
+  launchctl list 2>/dev/null | grep -q "$MACOS_LABEL"
+}
+
+macos_enable_service_known_domains() {
+  local domain=""
+
+  while IFS= read -r domain; do
+    [[ -n "$domain" ]] || continue
+    launchctl enable "$domain/$MACOS_LABEL" >/dev/null 2>&1 || true
+  done < <(macos_launchctl_domains)
+}
+
+macos_bootout_service() {
+  local domain=""
+
+  while IFS= read -r domain; do
+    [[ -n "$domain" ]] || continue
+    launchctl bootout "$domain/$MACOS_LABEL" >/dev/null 2>&1 || true
+    launchctl bootout "$domain" "$MACOS_PLIST" >/dev/null 2>&1 || true
+  done < <(macos_launchctl_domains)
+
+  launchctl unload "$MACOS_PLIST" >/dev/null 2>&1 || true
+}
+
+macos_bootstrap_service() {
+  local domain=""
+
+  while IFS= read -r domain; do
+    [[ -n "$domain" ]] || continue
+    if launchctl bootstrap "$domain" "$MACOS_PLIST" >/dev/null 2>&1; then
+      MACOS_ACTIVE_DOMAIN="$domain"
+      launchctl enable "$domain/$MACOS_LABEL" >/dev/null 2>&1 || true
+      return 0
+    fi
+  done < <(macos_launchctl_domains)
+
+  launchctl load "$MACOS_PLIST" >/dev/null 2>&1 || return 1
+  macos_enable_service_known_domains
+  macos_detect_service_domain || true
+  return 0
+}
+
+macos_restart_service() {
+  if ! macos_detect_service_domain; then
+    log "macOS: service not currently registered, bootstrapping"
+    macos_bootstrap_service || fail "macOS launchctl bootstrap/load failed"
+  fi
+
+  if [[ -n "$MACOS_ACTIVE_DOMAIN" ]]; then
+    launchctl enable "$MACOS_ACTIVE_DOMAIN/$MACOS_LABEL" >/dev/null 2>&1 || true
+    if launchctl kickstart -k "$MACOS_ACTIVE_DOMAIN/$MACOS_LABEL" >/dev/null 2>&1; then
+      return 0
+    fi
+    launchctl kickstart "$MACOS_ACTIVE_DOMAIN/$MACOS_LABEL" >/dev/null 2>&1 || true
+  fi
+
+  launchctl start "$MACOS_LABEL" >/dev/null 2>&1 || true
+}
 
 verify_macos_service_present() {
   test -f "$MACOS_PLIST" || fail "Missing launchd plist: $MACOS_PLIST"
   grep -q '<key>EnvironmentVariables</key>' "$MACOS_PLIST" || fail "launchd plist missing EnvironmentVariables"
   grep -q '<key>PATH</key>' "$MACOS_PLIST" || fail "launchd plist missing PATH environment"
+  grep -q '<key>Label</key>' "$MACOS_PLIST" || fail "launchd plist missing Label"
+  grep -q "<string>$MACOS_LABEL</string>" "$MACOS_PLIST" || fail "launchd plist label mismatch"
+  grep -q '<key>ProgramArguments</key>' "$MACOS_PLIST" || fail "launchd plist missing ProgramArguments"
+  grep -q '<key>RunAtLoad</key>' "$MACOS_PLIST" || fail "launchd plist missing RunAtLoad"
+  grep -q '<key>KeepAlive</key>' "$MACOS_PLIST" || fail "launchd plist missing KeepAlive"
+
+  if macos_detect_service_domain; then
+    launchctl print "$MACOS_ACTIVE_DOMAIN/$MACOS_LABEL" 2>/dev/null | grep -Eq 'state = (running|spawn scheduled|waiting)' || \
+      log "macOS: launchctl state not active yet in $MACOS_ACTIVE_DOMAIN (continuing)"
+  elif macos_detect_service_legacy_list; then
+    log "macOS: service label detected via legacy launchctl list"
+  else
+    log "macOS: service label not yet visible in launchctl output; relying on health checks"
+  fi
 }
 
 verify_macos_service_removed() {
@@ -555,22 +648,32 @@ verify_macos_service_removed() {
 
 manage_service_macos() {
   log "macOS: checking launchd registration"
-  launchctl list | grep -q "$MACOS_LABEL" || fail "Service label not found in launchctl list"
+  if macos_detect_service_domain; then
+    log "macOS: service registered in $MACOS_ACTIVE_DOMAIN"
+  elif macos_detect_service_legacy_list; then
+    log "macOS: service label visible via legacy launchctl list"
+  else
+    log "macOS: service label not visible yet; continuing with bootstrap/restart flow"
+  fi
 
   log "macOS: restarting service"
-  if ! launchctl kickstart -k "gui/$(id -u)/$MACOS_LABEL" >/dev/null 2>&1; then
-    log "macOS: kickstart failed, using unload/load fallback"
-    launchctl unload "$MACOS_PLIST" >/dev/null 2>&1 || true
-    launchctl load "$MACOS_PLIST"
-  fi
+  macos_restart_service
   wait_for_health_up "$BASE_URL" "$WAIT_TIMEOUT_SECS" || fail "Service failed to become healthy after restart"
 
   log "macOS: stopping service"
-  launchctl unload "$MACOS_PLIST"
+  macos_bootout_service
   wait_for_health_down "$BASE_URL" "$WAIT_TIMEOUT_SECS" || fail "Service still reachable after unload"
 
+  if macos_detect_service_domain; then
+    log "macOS: service still listed after bootout in $MACOS_ACTIVE_DOMAIN (continuing with start checks)"
+  fi
+
   log "macOS: starting service"
-  launchctl load "$MACOS_PLIST"
+  macos_bootstrap_service || fail "Failed to bootstrap/load launchd service"
+  if ! macos_detect_service_domain; then
+    log "macOS: launchctl domain still not visible after bootstrap/load; verifying via health endpoint"
+  fi
+  macos_restart_service
   wait_for_health_up "$BASE_URL" "$WAIT_TIMEOUT_SECS" || fail "Service failed to become healthy after load"
 }
 

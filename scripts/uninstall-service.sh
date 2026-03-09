@@ -93,6 +93,28 @@ remove_install_dir_with_retry() {
   return 1
 }
 
+macos_launchctl_domains() {
+  local uid
+  uid="$(id -u)"
+  printf 'gui/%s\n' "$uid"
+  printf 'user/%s\n' "$uid"
+}
+
+macos_launchctl_remove_label() {
+  local label="$1"
+  local plist="$2"
+  local domain=""
+
+  while IFS= read -r domain; do
+    [[ -n "$domain" ]] || continue
+    launchctl disable "$domain/$label" >/dev/null 2>&1 || true
+    launchctl bootout "$domain/$label" >/dev/null 2>&1 || true
+    launchctl bootout "$domain" "$plist" >/dev/null 2>&1 || true
+  done < <(macos_launchctl_domains)
+
+  launchctl unload "$plist" >/dev/null 2>&1 || true
+}
+
 OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
 
 if [[ "$OS" == "linux" ]]; then
@@ -108,8 +130,9 @@ if [[ "$OS" == "linux" ]]; then
     sudo systemctl daemon-reload >/dev/null 2>&1 || true
   fi
 elif [[ "$OS" == "darwin" ]]; then
+  LABEL="cn.cxits.opencode-studio"
   PLIST="$HOME/Library/LaunchAgents/cn.cxits.opencode-studio.plist"
-  launchctl unload "$PLIST" >/dev/null 2>&1 || true
+  macos_launchctl_remove_label "$LABEL" "$PLIST"
   rm -f "$PLIST" || true
 fi
 

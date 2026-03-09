@@ -474,13 +474,16 @@ fn compare_prerelease(a: &str, b: &str) -> Ordering {
 }
 
 fn runtime_target_triple() -> Option<String> {
-    let os = std::env::consts::OS;
-    let arch = std::env::consts::ARCH;
+    runtime_target_triple_for(std::env::consts::OS, std::env::consts::ARCH).map(ToString::to_string)
+}
+
+fn runtime_target_triple_for(os: &str, arch: &str) -> Option<&'static str> {
     match (os, arch) {
-        ("linux", "x86_64") => Some("x86_64-unknown-linux-gnu".to_string()),
-        ("macos", "x86_64") => Some("x86_64-apple-darwin".to_string()),
-        ("macos", "aarch64") => Some("aarch64-apple-darwin".to_string()),
-        ("windows", "x86_64") => Some("x86_64-pc-windows-msvc".to_string()),
+        ("linux", "x86_64") => Some("x86_64-unknown-linux-gnu"),
+        ("linux", "aarch64") => Some("aarch64-unknown-linux-gnu"),
+        ("macos", "x86_64") => Some("x86_64-apple-darwin"),
+        ("macos", "aarch64") => Some("aarch64-apple-darwin"),
+        ("windows", "x86_64") => Some("x86_64-pc-windows-msvc"),
         _ => None,
     }
 }
@@ -948,5 +951,45 @@ mod tests {
                 .expect("rpm identity");
         assert_eq!(rpm.installer_type, "rpm");
         assert_eq!(rpm.manager, "dnf");
+    }
+
+    #[test]
+    fn runtime_target_triple_for_maps_linux_and_macos_variants() {
+        assert_eq!(
+            runtime_target_triple_for("linux", "x86_64"),
+            Some("x86_64-unknown-linux-gnu")
+        );
+        assert_eq!(
+            runtime_target_triple_for("linux", "aarch64"),
+            Some("aarch64-unknown-linux-gnu")
+        );
+        assert_eq!(
+            runtime_target_triple_for("macos", "x86_64"),
+            Some("x86_64-apple-darwin")
+        );
+        assert_eq!(
+            runtime_target_triple_for("macos", "aarch64"),
+            Some("aarch64-apple-darwin")
+        );
+    }
+
+    #[test]
+    fn installer_expected_asset_names_match_macos_and_linux_formats() {
+        let mac_assets = installer_expected_asset_names("aarch64-apple-darwin", "main", "v1.2.0");
+        assert_eq!(
+            mac_assets,
+            vec!["opencode-studio-desktop-aarch64-apple-darwin-v1.2.0.dmg".to_string()]
+        );
+
+        let linux_assets =
+            installer_expected_asset_names("aarch64-unknown-linux-gnu", "main", "v1.2.0");
+        assert_eq!(
+            linux_assets,
+            vec![
+                "opencode-studio-desktop-aarch64-unknown-linux-gnu-v1.2.0.AppImage".to_string(),
+                "opencode-studio-desktop-aarch64-unknown-linux-gnu-v1.2.0.deb".to_string(),
+                "opencode-studio-desktop-aarch64-unknown-linux-gnu-v1.2.0.rpm".to_string(),
+            ]
+        );
     }
 }
