@@ -6,7 +6,7 @@ import { getLocalString, setLocalString } from '@/lib/persist'
 import { localStorageKeys } from '@/lib/persistence/storageKeys'
 
 export type MainTab = MainTabId
-export type WorkspaceDockPanel = 'git' | 'terminal'
+export type WorkspaceDockPanel = 'git' | 'terminal' | 'preview'
 export type WorkspaceDockPlacement = 'right' | 'bottom'
 
 const STORAGE_SIDEBAR_OPEN = localStorageKeys.ui.sidebarOpen
@@ -57,7 +57,11 @@ export const useUiStore = defineStore('ui', () => {
   watch(isWorkspaceDockOpen, (v) => setLocalString(STORAGE_WORKSPACE_DOCK_OPEN, v ? 'true' : 'false'))
 
   const workspaceDockPanel = ref<WorkspaceDockPanel>(
-    getLocalString(STORAGE_WORKSPACE_DOCK_PANEL) === 'terminal' ? 'terminal' : 'git',
+    (() => {
+      const saved = getLocalString(STORAGE_WORKSPACE_DOCK_PANEL)
+      if (saved === 'terminal' || saved === 'preview') return saved
+      return 'git'
+    })(),
   )
   watch(workspaceDockPanel, (v) => setLocalString(STORAGE_WORKSPACE_DOCK_PANEL, v))
 
