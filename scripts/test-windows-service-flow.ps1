@@ -236,10 +236,6 @@ try {
     $installParams["WithFrontend"] = $true
   }
 
-  if ($Version) {
-    Assert-BinaryVersion -BinaryPath $binPath -ExpectedTag $Version
-  }
-
   Write-Log "Step 1/6: install service"
   & $InstallScript @installParams
   $installCompleted = $true
@@ -275,6 +271,10 @@ try {
     if ($configText -match '(?m)^ui_dir\s*=\s*') {
       throw "ui_dir should not be present when -WithFrontend is not set"
     }
+  }
+
+  if ($Version) {
+    Assert-BinaryVersion -BinaryPath $binPath -ExpectedTag $Version
   }
 
   if (-not (Test-ServiceExists $ServiceName)) {
