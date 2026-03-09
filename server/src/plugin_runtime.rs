@@ -2228,7 +2228,7 @@ mod tests {
             }),
         );
         let err = resolve_bridge_invocation(&empty_command).expect_err("empty command error");
-        assert_eq!(err.message, "bridge.command must not be empty");
+        assert_eq!(err.message, "bridge command must not be empty");
 
         let bad_args_type = plugin_with_manifest(
             root.clone(),
