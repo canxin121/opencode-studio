@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import EditorFindBar from '@/components/editor/EditorFindBar.vue'
@@ -52,9 +52,11 @@ const ready = ref(false)
 const isDark = ref(false)
 const isFindVisible = ref(false)
 const findQuery = ref('')
+const findReplaceValue = ref('')
 const findCaseSensitive = ref(false)
 const findRegex = ref(false)
 const findWholeWord = ref(false)
+const isReplaceVisible = ref(false)
 const findBarRef = ref<InstanceType<typeof EditorFindBar> | null>(null)
 
 let contentListener: Monaco.IDisposable | null = null
@@ -537,6 +539,7 @@ const editorOptions = computed<Monaco.editor.IStandaloneEditorConstructionOption
 }))
 
 const monacoTheme = computed(() => (isDark.value ? 'vs-dark' : 'vs'))
+const canReplace = computed(() => !Boolean(props.readOnly))
 
 function updateThemeFromDom() {
   if (typeof document === 'undefined') return
@@ -595,6 +598,13 @@ function handleMount(
       return
     }
 
+    if (isCtrlOrMeta && event.keyCode === monacoInstance.KeyCode.KeyH) {
+      event.preventDefault()
+      event.stopPropagation()
+      openReplaceBar()
+      return
+    }
+
     if (event.keyCode === monacoInstance.KeyCode.Escape && isFindVisible.value) {
       event.preventDefault()
       event.stopPropagation()
@@ -638,19 +648,44 @@ function insertText(text: string) {
   editor.focus()
 }
 
-function openFindBar() {
+function openFindBar(showReplace = false) {
   const editor = editorRef.value
   if (!editor) return
 
   isFindVisible.value = true
+  if (showReplace && canReplace.value) {
+    isReplaceVisible.value = true
+  }
   findSession.seedQueryFromSelection()
   findSession.refresh({ revealCurrent: true })
+  if (showReplace && canReplace.value) {
+    findBarRef.value?.focusReplace(true)
+    return
+  }
   findBarRef.value?.focusInput(true)
+}
+
+function openReplaceBar() {
+  if (!canReplace.value) {
+    openFindBar()
+    return
+  }
+  openFindBar(true)
+  nextTick(() => findBarRef.value?.focusReplace(true))
+}
+
+function toggleReplaceControls() {
+  if (!canReplace.value) return
+  const nextVisible = !isReplaceVisible.value
+  isReplaceVisible.value = nextVisible
+  if (!nextVisible) return
+  nextTick(() => findBarRef.value?.focusReplace(true))
 }
 
 function closeFindBar() {
   if (!isFindVisible.value) return
   isFindVisible.value = false
+  isReplaceVisible.value = false
   findSession.clear()
   findSession.focusEditor()
 }
@@ -663,6 +698,20 @@ function runFindNext() {
 function runFindPrevious() {
   if (!isFindVisible.value) return
   findSession.move(-1)
+}
+
+function runReplaceCurrent() {
+  if (!isFindVisible.value || !canReplace.value) return
+  const changed = findSession.replaceCurrent(findReplaceValue.value, { revealCurrent: true })
+  if (!changed) return
+  nextTick(() => findBarRef.value?.focusReplace())
+}
+
+function runReplaceAll() {
+  if (!isFindVisible.value || !canReplace.value) return
+  const replaced = findSession.replaceAll(findReplaceValue.value, { revealCurrent: true })
+  if (replaced < 1) return
+  nextTick(() => findBarRef.value?.focusReplace())
 }
 
 defineExpose({
@@ -703,6 +752,10 @@ watch(isFindVisible, (visible) => {
   }
 
   findSession.refresh({ revealCurrent: true })
+  if (isReplaceVisible.value && canReplace.value) {
+    findBarRef.value?.focusReplace(true)
+    return
+  }
   findBarRef.value?.focusInput(true)
 })
 
@@ -731,6 +784,9 @@ watch(
 watch(
   () => props.readOnly,
   (readOnly) => {
+    if (readOnly) {
+      isReplaceVisible.value = false
+    }
     if (!editorRef.value) return
     editorRef.value.updateOptions({ readOnly: Boolean(readOnly) })
   },
@@ -816,14 +872,23 @@ watch(modelPath, () => {
       v-if="isFindVisible"
       ref="findBarRef"
       v-model="findQuery"
+      :replace-value="findReplaceValue"
       :current-match="findSession.currentMatch.value"
       :match-count="findSession.matchCount.value"
       :invalid-regex="findSession.invalidRegex.value"
       :case-sensitive="findCaseSensitive"
       :whole-word="findWholeWord"
       :regex="findRegex"
+      :replace-visible="isReplaceVisible"
+      :replace-allowed="canReplace"
+      :replace-current-disabled="!canReplace || findSession.matchCount.value < 1 || findSession.invalidRegex.value"
+      :replace-all-disabled="!canReplace || findSession.matchCount.value < 1 || findSession.invalidRegex.value"
+      @update:replace-value="findReplaceValue = $event"
       @next="runFindNext"
       @previous="runFindPrevious"
+      @toggle-replace="toggleReplaceControls"
+      @replace="runReplaceCurrent"
+      @replace-all="runReplaceAll"
       @toggle-case-sensitive="findCaseSensitive = !findCaseSensitive"
       @toggle-whole-word="findWholeWord = !findWholeWord"
       @toggle-regex="findRegex = !findRegex"

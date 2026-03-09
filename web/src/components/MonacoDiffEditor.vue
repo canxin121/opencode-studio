@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 
 import EditorFindBar from '@/components/editor/EditorFindBar.vue'
 import { useMonacoFindSession } from '@/components/editor/useMonacoFindSession'
@@ -62,9 +62,11 @@ const ready = ref(false)
 const isDark = ref(false)
 const isFindVisible = ref(false)
 const findQuery = ref('')
+const findReplaceValue = ref('')
 const findCaseSensitive = ref(false)
 const findRegex = ref(false)
 const findWholeWord = ref(false)
+const isReplaceVisible = ref(false)
 const activeFindPane = ref<'original' | 'modified'>('modified')
 const findBarRef = ref<InstanceType<typeof EditorFindBar> | null>(null)
 
@@ -109,6 +111,8 @@ const modifiedFindSession = useMonacoFindSession(() => diffEditorRef.value?.getM
 const activeFindSession = computed(() =>
   activeFindPane.value === 'original' ? originalFindSession : modifiedFindSession,
 )
+const replaceAllowed = computed(() => !Boolean(props.readOnly))
+const activePaneReplaceAllowed = computed(() => replaceAllowed.value && activeFindPane.value === 'modified')
 
 function extname(path: string): string {
   const base = path.split('/').pop() || path
@@ -695,18 +699,51 @@ function syncFindSessions() {
   modifiedFindSession.refresh()
 }
 
-function openFindBar(target: 'original' | 'modified') {
+function openFindBar(target: 'original' | 'modified', showReplace = false) {
   activeFindPane.value = target
   isFindVisible.value = true
+  if (showReplace && replaceAllowed.value) {
+    isReplaceVisible.value = true
+  }
   activeFindSession.value.seedQueryFromSelection()
   originalFindSession.refresh({ revealCurrent: activeFindPane.value === 'original' })
   modifiedFindSession.refresh({ revealCurrent: activeFindPane.value === 'modified' })
+  if (showReplace && replaceAllowed.value) {
+    findBarRef.value?.focusReplace(true)
+    return
+  }
   findBarRef.value?.focusInput(true)
+}
+
+function openReplaceBar(target: 'original' | 'modified') {
+  if (!replaceAllowed.value) {
+    openFindBar(target)
+    return
+  }
+  const nextPane = target === 'original' ? 'modified' : target
+  openFindBar(nextPane, true)
+  if (nextPane === 'modified') {
+    diffEditorRef.value?.getModifiedEditor().focus()
+  }
+  nextTick(() => findBarRef.value?.focusReplace(true))
+}
+
+function toggleReplaceControls() {
+  if (!replaceAllowed.value) return
+  const nextVisible = !isReplaceVisible.value
+  isReplaceVisible.value = nextVisible
+  if (!nextVisible) return
+  if (activeFindPane.value === 'original') {
+    activeFindPane.value = 'modified'
+    diffEditorRef.value?.getModifiedEditor().focus()
+  }
+  nextTick(() => findBarRef.value?.focusReplace(true))
 }
 
 function closeFindBar() {
   if (!isFindVisible.value) return
   isFindVisible.value = false
+  isReplaceVisible.value = false
   originalFindSession.clear()
   modifiedFindSession.clear()
   activeFindSession.value.focusEditor()
@@ -722,6 +759,22 @@ function runFindPrevious() {
   activeFindSession.value.move(-1)
 }
 
+function runReplaceCurrent() {
+  if (!isFindVisible.value || !activePaneReplaceAllowed.value) return
+  const changed = activeFindSession.value.replaceCurrent(findReplaceValue.value, { revealCurrent: true })
+  if (!changed) return
+  syncFindSessions()
+  nextTick(() => findBarRef.value?.focusReplace())
+}
+
+function runReplaceAll() {
+  if (!isFindVisible.value || !activePaneReplaceAllowed.value) return
+  const changed = activeFindSession.value.replaceAll(findReplaceValue.value, { revealCurrent: true })
+  if (changed < 1) return
+  syncFindSessions()
+  nextTick(() => findBarRef.value?.focusReplace())
+}
+
 function bindEditorFindEvents(
   editor: Monaco.editor.IStandaloneCodeEditor,
   side: 'original' | 'modified',
@@ -734,6 +787,13 @@ function bindEditorFindEvents(
         event.preventDefault()
         event.stopPropagation()
         openFindBar(side)
+        return
+      }
+
+      if (isCtrlOrMeta && event.keyCode === monaco.KeyCode.KeyH) {
+        event.preventDefault()
+        event.stopPropagation()
+        openReplaceBar(side)
         return
       }
 
@@ -1048,7 +1108,12 @@ watch(
 
 watch(
   () => props.readOnly,
-  () => updateDiffEditorOptions(),
+  (readOnly) => {
+    updateDiffEditorOptions()
+    if (readOnly) {
+      isReplaceVisible.value = false
+    }
+  },
 )
 
 watch(isFindVisible, (visible) => {
@@ -1060,6 +1125,10 @@ watch(isFindVisible, (visible) => {
 
   originalFindSession.refresh({ revealCurrent: activeFindPane.value === 'original' })
   modifiedFindSession.refresh({ revealCurrent: activeFindPane.value === 'modified' })
+  if (isReplaceVisible.value && replaceAllowed.value) {
+    findBarRef.value?.focusReplace(true)
+    return
+  }
   findBarRef.value?.focusInput(true)
 })
 
@@ -1091,14 +1160,27 @@ watch(
       v-if="isFindVisible"
       ref="findBarRef"
       v-model="findQuery"
+      :replace-value="findReplaceValue"
       :current-match="activeFindSession.currentMatch.value"
       :match-count="activeFindSession.matchCount.value"
       :invalid-regex="activeFindSession.invalidRegex.value"
       :case-sensitive="findCaseSensitive"
       :whole-word="findWholeWord"
       :regex="findRegex"
+      :replace-visible="isReplaceVisible"
+      :replace-allowed="replaceAllowed"
+      :replace-current-disabled="
+        !activePaneReplaceAllowed || activeFindSession.matchCount.value < 1 || activeFindSession.invalidRegex.value
+      "
+      :replace-all-disabled="
+        !activePaneReplaceAllowed || activeFindSession.matchCount.value < 1 || activeFindSession.invalidRegex.value
+      "
+      @update:replace-value="findReplaceValue = $event"
       @next="runFindNext"
       @previous="runFindPrevious"
+      @toggle-replace="toggleReplaceControls"
+      @replace="runReplaceCurrent"
+      @replace-all="runReplaceAll"
       @toggle-case-sensitive="findCaseSensitive = !findCaseSensitive"
       @toggle-whole-word="findWholeWord = !findWholeWord"
       @toggle-regex="findRegex = !findRegex"

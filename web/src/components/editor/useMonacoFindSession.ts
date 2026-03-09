@@ -21,6 +21,8 @@ export interface MonacoFindSession {
   readonly invalidRegex: Ref<boolean>
   refresh: (options?: MonacoFindRefreshOptions) => void
   move: (direction: SearchDirection) => void
+  replaceCurrent: (replaceValue: string, options?: MonacoFindRefreshOptions) => boolean
+  replaceAll: (replaceValue: string, options?: MonacoFindRefreshOptions) => number
   seedQueryFromSelection: () => boolean
   clear: () => void
   focusEditor: () => void
@@ -30,6 +32,11 @@ export interface MonacoFindSession {
 interface DecorationsState {
   all: Monaco.editor.IEditorDecorationsCollection | null
   current: Monaco.editor.IEditorDecorationsCollection | null
+}
+
+interface BuiltSearchInput {
+  searchString: string
+  isRegex: boolean
 }
 
 function escapeRegex(value: string): string {
@@ -145,7 +152,7 @@ export function useMonacoFindSession(
     if (focusEditor) editor.focus()
   }
 
-  function buildSearchInput() {
+  function buildSearchInput(): BuiltSearchInput | null {
     const raw = options.query.value
     if (!raw) return null
 
@@ -160,6 +167,16 @@ export function useMonacoFindSession(
     return {
       searchString: wrapped,
       isRegex: true,
+    }
+  }
+
+  function buildReplacementRegex(searchInput: BuiltSearchInput): RegExp | null {
+    if (!searchInput.isRegex) return null
+    try {
+      const flags = options.caseSensitive.value ? 'u' : 'iu'
+      return new RegExp(searchInput.searchString, flags)
+    } catch {
+      return null
     }
   }
 
@@ -225,6 +242,90 @@ export function useMonacoFindSession(
     applyCurrentSelection(nextIndex, true)
   }
 
+  function replaceCurrent(replaceValue: string, refreshOptions: MonacoFindRefreshOptions = {}): boolean {
+    const editor = getEditor()
+    const model = editor?.getModel()
+    if (!editor || !model) return false
+
+    const searchInput = buildSearchInput()
+    if (!searchInput) return false
+
+    if (!ranges.length) {
+      refresh({ revealCurrent: true })
+    }
+    if (!ranges.length || invalidRegex.value) return false
+
+    const replacementRegex = buildReplacementRegex(searchInput)
+    if (searchInput.isRegex && !replacementRegex) {
+      invalidRegex.value = true
+      return false
+    }
+
+    const activeIndex = Math.min(Math.max(0, currentMatch.value - 1), ranges.length - 1)
+    const active = ranges[activeIndex]
+    if (!active) return false
+
+    const sourceText = model.getValueInRange(active.range)
+    const nextText = replacementRegex ? sourceText.replace(replacementRegex, replaceValue) : replaceValue
+
+    editor.pushUndoStop()
+    const applied = editor.executeEdits('oc-find-replace', [
+      {
+        range: active.range,
+        text: nextText,
+        forceMoveMarkers: true,
+      },
+    ])
+    editor.pushUndoStop()
+
+    if (!applied) return false
+
+    const revealCurrent = refreshOptions.revealCurrent ?? true
+    refresh({ revealCurrent, focusEditor: refreshOptions.focusEditor })
+    return true
+  }
+
+  function replaceAll(replaceValue: string, refreshOptions: MonacoFindRefreshOptions = {}): number {
+    const editor = getEditor()
+    const model = editor?.getModel()
+    if (!editor || !model) return 0
+
+    const searchInput = buildSearchInput()
+    if (!searchInput) return 0
+
+    if (!ranges.length) {
+      refresh()
+    }
+    if (!ranges.length || invalidRegex.value) return 0
+
+    const replacementRegex = buildReplacementRegex(searchInput)
+    if (searchInput.isRegex && !replacementRegex) {
+      invalidRegex.value = true
+      return 0
+    }
+
+    const edits = [...ranges].reverse().map((entry) => {
+      const sourceText = model.getValueInRange(entry.range)
+      const nextText = replacementRegex ? sourceText.replace(replacementRegex, replaceValue) : replaceValue
+      return {
+        range: entry.range,
+        text: nextText,
+        forceMoveMarkers: true,
+      }
+    })
+
+    if (!edits.length) return 0
+
+    editor.pushUndoStop()
+    const applied = editor.executeEdits('oc-find-replace-all', edits)
+    editor.pushUndoStop()
+    if (!applied) return 0
+
+    const revealCurrent = refreshOptions.revealCurrent ?? true
+    refresh({ revealCurrent, focusEditor: refreshOptions.focusEditor })
+    return edits.length
+  }
+
   function seedQueryFromSelection(): boolean {
     const editor = getEditor()
     const model = editor?.getModel()
@@ -259,6 +360,8 @@ export function useMonacoFindSession(
     invalidRegex,
     refresh,
     move,
+    replaceCurrent,
+    replaceAll,
     seedQueryFromSelection,
     clear,
     focusEditor,
