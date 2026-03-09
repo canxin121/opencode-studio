@@ -27,14 +27,10 @@ jobs:
         run: python3 scripts/version_sync.py check
 
   web:
-    name: Web (${{ matrix.task }})
+    name: Web
     needs: version
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        task: [fmt, typecheck, build, test]
     steps:
       - uses: actions/checkout@v6
 
@@ -64,30 +60,22 @@ jobs:
         run: bun install --cwd web --frozen-lockfile
 
       - name: Web format check
-        if: matrix.task == 'fmt'
         run: bun run --cwd web fmt:check -- --cache --cache-location .prettier-cache
 
       - name: Web typecheck
-        if: matrix.task == 'typecheck'
         run: bun run --cwd web vue-tsc -b
 
       - name: Web build
-        if: matrix.task == 'build'
         run: bun run --cwd web vite build
 
       - name: Web tests
-        if: matrix.task == 'test'
         run: bun test --cwd web
 
   rust:
-    name: Rust (${{ matrix.task }})
+    name: Rust
     needs: version
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        task: [fmt, clippy, test]
     steps:
       - uses: actions/checkout@v6
 
@@ -104,19 +92,15 @@ jobs:
           cache-workspace-crates: true
 
       - name: Rust format check
-        if: matrix.task == 'fmt'
         run: cargo fmt --all -- --check
 
       - name: Rust clippy
-        if: matrix.task == 'clippy'
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
       - name: Rust tests
-        if: matrix.task == 'test'
         run: cargo test -q --locked --manifest-path server/Cargo.toml
 
       - name: Validate desktop config JSON
-        if: matrix.task == 'test'
         run: |
           python3 -m json.tool desktop/src-tauri/tauri.conf.json >/dev/null
           python3 -m json.tool desktop/src-tauri/tauri.conf.full.json >/dev/null
