@@ -80,14 +80,29 @@ jobs:
         run: bun test --cwd web
 
   rust:
-    name: Rust (${{ matrix.task }})
+    name: Rust (${{ matrix.task }} / ${{ matrix.platform }})
     needs: version
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        task: [fmt, clippy, test]
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            task: fmt
+          - os: ubuntu-latest
+            platform: linux
+            task: clippy
+          - os: ubuntu-latest
+            platform: linux
+            task: test
+          - os: macos-latest
+            platform: macos
+            task: test
+          - os: windows-latest
+            platform: windows
+            task: test
     steps:
       - uses: actions/checkout@v6
 
@@ -116,7 +131,7 @@ jobs:
         run: cargo test -q --locked --manifest-path server/Cargo.toml
 
       - name: Validate desktop config JSON
-        if: matrix.task == 'test'
+        if: matrix.task == 'test' && runner.os == 'Linux'
         run: |
           python3 -m json.tool desktop/src-tauri/tauri.conf.json >/dev/null
           python3 -m json.tool desktop/src-tauri/tauri.conf.full.json >/dev/null
