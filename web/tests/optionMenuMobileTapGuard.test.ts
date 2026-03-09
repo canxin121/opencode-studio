@@ -19,9 +19,9 @@ test('plugin OptionMenu captures pointer/click and avoids click-through', () => 
     optionMenuSource.includes('const bottomEdge = viewportTop + viewportHeight - safeBottom - MOBILE_SHEET_MARGIN_PX'),
   )
   assert.ok(optionMenuSource.includes('const maxHeight = Math.max(0, bottomEdge - topInset)'))
-  assert.ok(
-    optionMenuSource.includes('const top = Math.max(topInset, bottomEdge - panelHeight, topInset + centeredOffset)'),
-  )
+  assert.ok(optionMenuSource.includes('const centeredTop = topInset + centeredOffset'))
+  assert.ok(optionMenuSource.includes('const maxTop = Math.max(topInset, bottomEdge - panelHeight)'))
+  assert.ok(optionMenuSource.includes('const top = Math.min(maxTop, Math.max(topInset, centeredTop))'))
   assert.ok(optionMenuSource.includes('class="flex-1 min-h-0 overflow-auto px-2 py-1.5"'))
   assert.ok(!optionMenuSource.includes('--oc-bottom-nav-height'))
 

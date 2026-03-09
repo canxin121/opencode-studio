@@ -382,7 +382,9 @@ async function syncMobileSheetPosition() {
   const panelHeight = Math.min(maxHeight, Math.max(0, panel.scrollHeight))
 
   const centeredOffset = Math.max(0, Math.round((maxHeight - panelHeight) / 2))
-  const top = Math.max(topInset, bottomEdge - panelHeight, topInset + centeredOffset)
+  const centeredTop = topInset + centeredOffset
+  const maxTop = Math.max(topInset, bottomEdge - panelHeight)
+  const top = Math.min(maxTop, Math.max(topInset, centeredTop))
 
   mobileSheetStyle.value = {
     top: `${Math.round(top)}px`,
