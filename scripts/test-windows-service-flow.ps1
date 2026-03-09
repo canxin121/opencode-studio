@@ -184,6 +184,142 @@ function Assert-BinaryVersion([string]$BinaryPath, [string]$ExpectedTag) {
   }
 }
 
+function Get-UpdateCheckPayload([string]$Url) {
+  return Invoke-RestMethod -Uri "$Url/api/opencode-studio/update-check" -TimeoutSec 10
+}
+
+function Get-ServiceUpdateStatus([string]$Url) {
+  $payload = Get-UpdateCheckPayload -Url $Url
+  if (-not $payload -or -not $payload.service) {
+    throw "Update-check payload missing service status"
+  }
+  return $payload.service
+}
+
+function Assert-ServiceVersion([string]$Url, [string]$ExpectedTag) {
+  $expected = Normalize-SemVerTag $ExpectedTag
+  $status = Get-ServiceUpdateStatus -Url $Url
+  $actual = Normalize-SemVerTag ([string]$status.currentVersion)
+  if ($actual -ne $expected) {
+    throw "Service runtime version mismatch. Expected $expected, got $actual"
+  }
+}
+
+function Wait-ServiceVersion([string]$Url, [string]$ExpectedTag, [int]$TimeoutSeconds = 120) {
+  $expected = Normalize-SemVerTag $ExpectedTag
+  $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+  while ((Get-Date) -lt $deadline) {
+    try {
+      $status = Get-ServiceUpdateStatus -Url $Url
+      $actual = Normalize-SemVerTag ([string]$status.currentVersion)
+      if ($actual -eq $expected) {
+        return
+      }
+    } catch {
+    }
+    Start-Sleep -Seconds 2
+  }
+
+  throw "Service runtime version did not become $expected within ${TimeoutSeconds}s."
+}
+
+function Invoke-ServiceUpgradeViaBackendApi([string]$Url, [string]$TargetVersion, [int]$TimeoutSeconds = 120) {
+  $target = Normalize-SemVerTag $TargetVersion
+  $status = Get-ServiceUpdateStatus -Url $Url
+  $latest = Normalize-SemVerTag ([string]$status.latestVersion)
+  if ($latest -and $latest -ne $target) {
+    throw "Update-check latest version mismatch. Expected target $target, update-check returned $latest"
+  }
+
+  $assetUrl = [string]$status.assetUrl
+  $endpoints = @(
+    "/api/update",
+    "/api/update/apply",
+    "/api/service/update",
+    "/api/opencode-studio/update-service",
+    "/api/opencode-studio/update"
+  )
+
+  $payloadCandidates = @(
+    @{ version = $TargetVersion; targetVersion = $TargetVersion; assetUrl = $assetUrl; asset_url = $assetUrl },
+    @{ version = $TargetVersion; targetVersion = $TargetVersion },
+    @{ version = $TargetVersion },
+    @{ targetVersion = $TargetVersion }
+  )
+  if (-not [string]::IsNullOrWhiteSpace($assetUrl)) {
+    $payloadCandidates += @{ assetUrl = $assetUrl; asset_url = $assetUrl; version = $TargetVersion }
+  }
+
+  $attemptErrors = New-Object System.Collections.Generic.List[string]
+  $triggered = $false
+  foreach ($endpoint in $endpoints) {
+    foreach ($candidate in $payloadCandidates) {
+      $bodyMap = @{}
+      foreach ($key in $candidate.Keys) {
+        $value = $candidate[$key]
+        if (-not [string]::IsNullOrWhiteSpace([string]$value)) {
+          $bodyMap[$key] = $value
+        }
+      }
+
+      $jsonBody = $bodyMap | ConvertTo-Json -Depth 8
+      $uri = "$Url$endpoint"
+
+      try {
+        $response = Invoke-WebRequest -Uri $uri -Method Post -ContentType "application/json" -Body $jsonBody -UseBasicParsing -TimeoutSec 20
+        $contentType = [string]$response.Headers["Content-Type"]
+        $contentText = [string]$response.Content
+
+        if ($contentType -and $contentType -match "application/json") {
+          if ($contentText) {
+            $parsed = $contentText | ConvertFrom-Json
+            if ($parsed -and $parsed.error) {
+              throw "Backend returned error: $($parsed.error)"
+            }
+          }
+          Write-Log "Upgrade trigger accepted via $endpoint"
+          $triggered = $true
+          break
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($contentText)) {
+          $trimmed = $contentText.TrimStart()
+          if ($trimmed.StartsWith("<html", [StringComparison]::OrdinalIgnoreCase) -or $trimmed.StartsWith("<!doctype", [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Unexpected HTML response"
+          }
+        }
+
+        Write-Log "Upgrade trigger accepted via $endpoint"
+        $triggered = $true
+        break
+      } catch {
+        $attemptErrors.Add("$uri :: $($_.Exception.Message)") | Out-Null
+      }
+    }
+
+    if ($triggered) {
+      break
+    }
+  }
+
+  if (-not $triggered) {
+    $errorSummary = ($attemptErrors | Select-Object -First 8) -join " || "
+    throw "Failed to trigger backend upgrade API. Attempts: $errorSummary"
+  }
+
+  $downTimeout = [Math]::Min([Math]::Max(10, [int]($TimeoutSeconds / 2)), 60)
+  try {
+    Wait-HealthDown -Url $Url -TimeoutSeconds $downTimeout
+    Write-Log "Observed service downtime after upgrade trigger"
+  } catch {
+    Write-Log "No explicit downtime observed after upgrade trigger; continuing to wait for healthy target version"
+  }
+
+  Wait-HealthUp -Url $Url -TimeoutSeconds $TimeoutSeconds
+  Wait-OpenCodeRunningState -Url $Url -Expected $true -TimeoutSeconds $TimeoutSeconds
+  Wait-ServiceVersion -Url $Url -ExpectedTag $TargetVersion -TimeoutSeconds $TimeoutSeconds
+}
+
 try {
   if ($UpgradeToVersion -and -not $Version) {
     throw "-UpgradeToVersion requires -Version so the test can validate upgrade behavior."
@@ -316,30 +452,15 @@ try {
   Wait-HealthUp -Url $baseUrl -TimeoutSeconds $WaitTimeoutSeconds
 
   if ($UpgradeToVersion) {
-    Write-Log "Step 5/7: upgrade service in-place to $UpgradeToVersion"
+    Write-Log "Step 5/7: trigger in-place upgrade via backend API to $UpgradeToVersion"
+    Invoke-ServiceUpgradeViaBackendApi -Url $baseUrl -TargetVersion $UpgradeToVersion -TimeoutSeconds $WaitTimeoutSeconds
 
-    Invoke-Sc -Arguments @("stop", $ServiceName) -AllowedExitCodes @(0, 1062) -ErrorMessage "Failed to stop $ServiceName before upgrade" | Out-Null
-    Wait-ServiceStatus -Name $ServiceName -Status "Stopped" -TimeoutSeconds $WaitTimeoutSeconds
-    Wait-HealthDown -Url $baseUrl -TimeoutSeconds $WaitTimeoutSeconds
-
-    Invoke-Sc -Arguments @("stop", $OpenCodeServiceName) -AllowedExitCodes @(0, 1062) -ErrorMessage "Failed to stop $OpenCodeServiceName before upgrade" | Out-Null
-    Wait-ServiceStatus -Name $OpenCodeServiceName -Status "Stopped" -TimeoutSeconds $WaitTimeoutSeconds
-
-    $upgradeParams = @{
-      Repo = $Repo
-      Version = $UpgradeToVersion
-      InstallDir = $InstallDir
-      BindHost = "127.0.0.1"
-      Port = $port
-    }
-    if ($WithFrontend) {
-      $upgradeParams["WithFrontend"] = $true
-    }
-
-    & $InstallScript @upgradeParams
+    Wait-ServiceStatus -Name $OpenCodeServiceName -Status "Running" -TimeoutSeconds $WaitTimeoutSeconds
+    Wait-ServiceStatus -Name $ServiceName -Status "Running" -TimeoutSeconds $WaitTimeoutSeconds
     Wait-HealthUp -Url $baseUrl -TimeoutSeconds $WaitTimeoutSeconds
     $upgradedPayload = Get-HealthPayload -Url $baseUrl
     Assert-HealthPayload -Payload $upgradedPayload
+    Assert-ServiceVersion -Url $baseUrl -ExpectedTag $UpgradeToVersion
     Assert-BinaryVersion -BinaryPath $binPath -ExpectedTag $UpgradeToVersion
 
     Invoke-Sc -Arguments @("stop", $ServiceName) -AllowedExitCodes @(0, 1062) -ErrorMessage "Failed to stop $ServiceName after upgrade" | Out-Null
