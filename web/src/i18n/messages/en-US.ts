@@ -44,6 +44,7 @@ export default {
     reload: 'Reload',
     unlock: 'Unlock',
     continue: 'Continue',
+    back: 'Back',
     abort: 'Abort',
     later: 'Later',
     nextSteps: 'Next steps',
@@ -286,6 +287,9 @@ export default {
       staged: 'Staged',
       unstaged: 'Changed',
       untracked: 'Untracked',
+    },
+    files: {
+      tab: 'Files',
     },
     terminal: {
       tab: 'Terminal',

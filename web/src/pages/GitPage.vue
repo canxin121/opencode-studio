@@ -995,6 +995,10 @@ function resolveRepoFilePath(path: string): string | null {
 function openFileInFiles(path: string) {
   const abs = resolveRepoFilePath(path)
   if (!abs) return
+  if (props.embedded) {
+    ui.requestWorkspaceDockFile(abs, 'open')
+    return
+  }
   void router.push({
     path: '/files',
     query: {
@@ -1007,6 +1011,10 @@ function openFileInFiles(path: string) {
 function revealFileInFiles(path: string) {
   const abs = resolveRepoFilePath(path)
   if (!abs) return
+  if (props.embedded) {
+    ui.requestWorkspaceDockFile(abs, 'reveal')
+    return
+  }
   void router.push({
     path: '/files',
     query: {

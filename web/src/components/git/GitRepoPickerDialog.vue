@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
+import { RiCloseLine, RiLoader4Line, RiRefreshLine } from '@remixicon/vue'
 
 import Button from '@/components/ui/Button.vue'
 import Dialog from '@/components/ui/Dialog.vue'
+import IconButton from '@/components/ui/IconButton.vue'
 import ScrollArea from '@/components/ui/ScrollArea.vue'
 import Skeleton from '@/components/ui/Skeleton.vue'
 
@@ -47,15 +49,18 @@ function onUpdateOpen(v: boolean) {
   >
     <div class="space-y-3 min-w-0 max-w-full overflow-x-hidden">
       <div class="flex flex-wrap items-center gap-2 min-w-0 max-w-full">
-        <Button
-          variant="secondary"
+        <IconButton
+          variant="ghost"
           size="sm"
-          class="max-w-full whitespace-normal break-words text-left h-auto py-1.5"
+          class="h-7 w-7 shrink-0"
+          :tooltip="reposLoading ? t('common.reloading') : t('common.refresh')"
+          :aria-label="reposLoading ? t('common.reloading') : t('common.refresh')"
           @click="$emit('refresh')"
           :disabled="reposLoading"
         >
-          {{ t('common.refresh') }}
-        </Button>
+          <RiLoader4Line v-if="reposLoading" class="h-4 w-4 animate-spin" />
+          <RiRefreshLine v-else class="h-4 w-4" />
+        </IconButton>
         <Button
           size="sm"
           class="max-w-full whitespace-normal break-words text-left h-auto py-1.5"
@@ -115,15 +120,15 @@ function onUpdateOpen(v: boolean) {
               <div class="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground uppercase tracking-wide">
                 {{ r.kind }}
               </div>
-              <Button
-                variant="ghost"
+              <IconButton
                 size="sm"
-                class="h-6 px-2 text-[10px]"
-                :title="t('git.ui.dialogs.repoPicker.actions.closeRepo')"
+                class="h-6 w-6"
+                :tooltip="t('git.ui.dialogs.repoPicker.actions.closeRepo')"
+                :aria-label="t('git.ui.dialogs.repoPicker.actions.closeRepo')"
                 @click.stop="$emit('closeRepo', r.relative || '.')"
               >
-                {{ t('common.close') }}
-              </Button>
+                <RiCloseLine class="h-3.5 w-3.5" />
+              </IconButton>
             </div>
           </button>
         </div>

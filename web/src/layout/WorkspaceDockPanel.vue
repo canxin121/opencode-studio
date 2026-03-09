@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { RiCloseLine, RiGitMergeLine, RiRefreshLine, RiTerminalBoxLine } from '@remixicon/vue'
+import { RiCloseLine, RiFileTextLine, RiGitMergeLine, RiRefreshLine, RiTerminalBoxLine } from '@remixicon/vue'
 
+import FilesPage from '@/pages/FilesPage.vue'
 import GitPage from '@/pages/GitPage.vue'
 import { useUiStore } from '@/stores/ui'
 import IconButton from '@/components/ui/IconButton.vue'
@@ -15,12 +16,17 @@ if (ui.workspaceDockPlacement !== 'right') {
   ui.setWorkspaceDockPlacement('right')
 }
 
+const filesDockRef = ref<{ refresh: () => Promise<void> | void } | null>(null)
 const gitDockRef = ref<{ refresh: () => Promise<void> | void } | null>(null)
 const terminalDockRef = ref<{ refresh: () => Promise<void> | void } | null>(null)
 
 function refreshActivePanel() {
   if (ui.workspaceDockPanel === 'git') {
     void gitDockRef.value?.refresh()
+    return
+  }
+  if (ui.workspaceDockPanel === 'files') {
+    void filesDockRef.value?.refresh()
     return
   }
   void terminalDockRef.value?.refresh()
@@ -45,6 +51,19 @@ function refreshActivePanel() {
             >
               <RiGitMergeLine class="h-3.5 w-3.5" />
               {{ t('workspaceDock.git.tab') }}
+            </button>
+            <button
+              type="button"
+              class="inline-flex items-center gap-1 rounded-sm px-2 py-1 text-xs font-medium transition-colors"
+              :class="
+                ui.workspaceDockPanel === 'files'
+                  ? 'bg-secondary text-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              "
+              @click="ui.setWorkspaceDockPanel('files')"
+            >
+              <RiFileTextLine class="h-3.5 w-3.5" />
+              {{ t('workspaceDock.files.tab') }}
             </button>
             <button
               type="button"
@@ -85,6 +104,10 @@ function refreshActivePanel() {
       <Transition name="fade" mode="out-in">
         <div v-if="ui.workspaceDockPanel === 'git'" key="git" class="min-h-0 flex-1 overflow-hidden">
           <GitPage ref="gitDockRef" embedded />
+        </div>
+
+        <div v-else-if="ui.workspaceDockPanel === 'files'" key="files" class="min-h-0 flex-1 overflow-hidden">
+          <FilesPage ref="filesDockRef" embedded />
         </div>
 
         <div v-else key="terminal" class="min-h-0 flex-1 overflow-hidden">

@@ -44,6 +44,7 @@ export default {
     reload: '重新加载',
     unlock: '解锁',
     continue: '继续',
+    back: '返回',
     abort: '中止',
     later: '稍后',
     nextSteps: '下一步',
@@ -286,6 +287,9 @@ export default {
       staged: '已暂存',
       unstaged: '已修改',
       untracked: '未跟踪',
+    },
+    files: {
+      tab: '文件',
     },
     terminal: {
       tab: '终端',

@@ -2,9 +2,11 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
+import { RiArrowLeftSLine } from '@remixicon/vue'
 import Button from '@/components/ui/Button.vue'
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import FormDialog from '@/components/ui/FormDialog.vue'
+import IconButton from '@/components/ui/IconButton.vue'
 import Input from '@/components/ui/Input.vue'
 import SearchInput from '@/components/ui/SearchInput.vue'
 import SegmentedButton from '@/components/ui/SegmentedButton.vue'
@@ -98,6 +100,15 @@ import { useToastsStore } from '@/stores/toasts'
 import { useDirectoryStore, type FsChangeEvent } from '@/stores/directory'
 import { useUiStore } from '@/stores/ui'
 
+const props = withDefaults(
+  defineProps<{
+    embedded?: boolean
+  }>(),
+  {
+    embedded: false,
+  },
+)
+
 const STORAGE_FILES_SHOW_HIDDEN = localStorageKeys.files.showHidden
 const STORAGE_FILES_RESPECT_GITIGNORE = localStorageKeys.files.respectGitignore
 const STORAGE_FILES_AUTOSAVE = localStorageKeys.files.autosave
@@ -132,6 +143,7 @@ const { t } = useI18n()
 const projectRoot = computed(() => directoryStore.currentDirectory || '')
 const root = computed(() => trimTrailingSlashes(normalizePath((projectRoot.value || '').trim())))
 const isMobile = computed(() => ui.isMobile)
+const embeddedView = ref<'list' | 'viewer'>(props.embedded ? 'list' : 'viewer')
 
 const showHidden = ref(localStorage.getItem(STORAGE_FILES_SHOW_HIDDEN) === 'true')
 const respectGitignore = ref(localStorage.getItem(STORAGE_FILES_RESPECT_GITIGNORE) !== 'false')
@@ -385,7 +397,10 @@ const wrapLines = ref(true)
 const isSaving = ref(false)
 const uploading = ref(false)
 const showMobileViewer = ref(false)
-const showFilesSidebar = computed(() => (isMobile.value ? ui.isSessionSwitcherOpen : ui.isSidebarOpen))
+const showFilesSidebar = computed(() => {
+  if (props.embedded) return embeddedView.value === 'list'
+  return isMobile.value ? ui.isSessionSwitcherOpen : ui.isSidebarOpen
+})
 
 const blameEnabled = ref(localStorage.getItem(STORAGE_FILES_VIEWER_BLAME_VISIBLE) === 'true')
 const timelineVisibilityPreference = ref(localStorage.getItem(STORAGE_FILES_VIEWER_TIMELINE_VISIBLE) === 'true')
@@ -653,10 +668,20 @@ watch(
   },
 )
 
+watch(
+  () => [props.embedded, selectedFile.value?.path] as const,
+  ([embedded, path]) => {
+    if (!embedded) return
+    embeddedView.value = path ? 'viewer' : 'list'
+  },
+  { immediate: true },
+)
+
 let rootRestoreSeq = 0
 let openFileSeq = 0
 let pageMounted = false
 const handledGitNavigationKey = ref('')
+const handledWorkspaceDockFileRequestSeq = ref(0)
 
 function isStaleRootRestore(seq: number, rootPath: string): boolean {
   return seq !== rootRestoreSeq || root.value !== rootPath
@@ -1125,6 +1150,17 @@ function parseGitNavigationAction(value: unknown): GitNavigationAction {
   return routeQueryValue(value) === 'reveal' ? 'reveal' : 'open'
 }
 
+function showEmbeddedFileList() {
+  if (!props.embedded) return
+  embeddedView.value = 'list'
+}
+
+function showEmbeddedFileViewer() {
+  if (!props.embedded) return
+  if (!selectedFile.value) return
+  embeddedView.value = 'viewer'
+}
+
 function resolveGitNavigationPath(rawPath: string, workspaceRoot: string): string {
   const normalized = normalizePath(String(rawPath || '').trim())
   if (!normalized) return ''
@@ -1170,8 +1206,17 @@ async function applyGitNavigationQuery() {
   if (handledGitNavigationKey.value === key) return
   handledGitNavigationKey.value = key
 
+  await applyGitNavigationTarget(gitPathRaw, action)
+  clearGitNavigationQuery()
+}
+
+async function applyGitNavigationTarget(rawPath: string, action: GitNavigationAction) {
+  const workspaceRoot = root.value
+  if (!workspaceRoot) return
+
+  const targetPath = resolveGitNavigationPath(rawPath, workspaceRoot)
+
   if (!targetPath || isPathHiddenInFiles(targetPath)) {
-    clearGitNavigationQuery()
     return
   }
 
@@ -1182,18 +1227,19 @@ async function applyGitNavigationQuery() {
 
   if (action === 'open') {
     await openFile(buildFileNode(targetPath))
-    clearGitNavigationQuery()
     return
   }
 
   selectOnlyPath(targetPath)
   highlightedPath.value = targetPath
   selectedDirectoryPath.value = normalizePath(targetPath.split('/').slice(0, -1).join('/')) || workspaceRoot
+  if (props.embedded) {
+    embeddedView.value = 'list'
+  }
   if (isMobile.value) {
     showMobileViewer.value = false
   }
   persistExplorerSoon()
-  clearGitNavigationQuery()
 }
 
 async function restoreSelectedFile(rootPath: string, seq: number) {
@@ -2570,6 +2616,9 @@ async function openFile(node: FileNode) {
   if (isMobile.value) {
     showMobileViewer.value = true
   }
+  if (props.embedded) {
+    showEmbeddedFileViewer()
+  }
 
   const previewMode = detectPreviewMode(node.path)
   if (previewMode === 'image' || previewMode === 'pdf' || previewMode === 'audio' || previewMode === 'video') {
@@ -3498,6 +3547,26 @@ watch(
 )
 
 watch(
+  () => [root.value, ui.workspaceDockFileRequestSeq] as const,
+  () => {
+    if (!props.embedded) return
+    if (!pageMounted) return
+
+    const requestSeq = Number(ui.workspaceDockFileRequestSeq || 0)
+    if (!Number.isFinite(requestSeq)) return
+    if (requestSeq <= handledWorkspaceDockFileRequestSeq.value) return
+    if (!root.value) return
+
+    handledWorkspaceDockFileRequestSeq.value = requestSeq
+    const request = ui.workspaceDockFileRequest
+    if (!request?.path) return
+
+    const action: GitNavigationAction = request.action === 'reveal' ? 'reveal' : 'open'
+    void applyGitNavigationTarget(request.path, action)
+  },
+)
+
+watch(
   () => [root.value, selectedFile.value?.path] as const,
   ([rootPath, path]) => {
     const conflict = fileRefreshConflict.value
@@ -3550,6 +3619,15 @@ watch(
     }
   },
 )
+
+async function refresh() {
+  await refreshRoot()
+  await refreshCurrentFile({ source: 'manual', silent: true })
+}
+
+defineExpose({
+  refresh,
+})
 
 onMounted(async () => {
   pageMounted = true
@@ -3679,12 +3757,12 @@ onMounted(async () => {
           <div class="flex min-h-0 flex-1 gap-0" :class="isMobile ? 'flex-col' : ''">
             <div
               class="relative min-h-0 overflow-hidden m-0 p-0"
-              :class="isMobile ? 'flex-1' : 'flex-shrink-0'"
-              :style="isMobile ? undefined : { width: `${ui.sidebarWidth}px` }"
+              :class="isMobile || props.embedded ? 'flex-1' : 'flex-shrink-0'"
+              :style="isMobile || props.embedded ? undefined : { width: `${ui.sidebarWidth}px` }"
               v-show="showFilesSidebar"
             >
               <div
-                v-if="!isMobile"
+                v-if="!isMobile && !props.embedded"
                 class="absolute right-0 top-0 z-10 h-full w-1 cursor-col-resize hover:bg-primary/40"
                 @pointerdown="startDesktopSidebarResize"
               />
@@ -4004,7 +4082,25 @@ onMounted(async () => {
               </FilesExplorerPane>
             </div>
 
-            <div class="flex-1 min-h-0 overflow-hidden m-0 p-0" v-show="!isMobile || !ui.isSessionSwitcherOpen">
+            <div
+              class="flex-1 min-h-0 overflow-hidden m-0 p-0"
+              v-show="props.embedded ? embeddedView === 'viewer' : !isMobile || !ui.isSessionSwitcherOpen"
+            >
+              <div v-if="props.embedded" class="flex items-center gap-2 border-b border-sidebar-border/50 px-2 py-1.5">
+                <IconButton
+                  variant="ghost"
+                  size="sm"
+                  class="h-7 w-7"
+                  :tooltip="t('common.back')"
+                  :aria-label="t('common.back')"
+                  @click="showEmbeddedFileList"
+                >
+                  <RiArrowLeftSLine class="h-4 w-4" />
+                </IconButton>
+                <div class="truncate text-xs text-muted-foreground">
+                  {{ displaySelectedPath || t('files.explorer.title') }}
+                </div>
+              </div>
               <FileViewerPane
                 v-model:showMobileViewer="showMobileViewer"
                 v-model:autoSaveEnabled="autoSaveEnabled"
@@ -4064,7 +4160,7 @@ onMounted(async () => {
                 :refresh-timeline="refreshFileTimeline"
                 :select-timeline-commit="selectFileTimelineCommit"
                 :open-timeline="openFileTimeline"
-                :open-sidebar="() => ui.setSessionSwitcherOpen(true)"
+                :open-sidebar="props.embedded ? showEmbeddedFileList : () => ui.setSessionSwitcherOpen(true)"
                 :refresh-file="() => refreshCurrentFile({ source: 'manual' })"
                 :save="() => save()"
                 :confirm-large-file-load="confirmLargeFileLoad"

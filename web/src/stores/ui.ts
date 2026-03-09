@@ -6,8 +6,13 @@ import { getLocalString, setLocalString } from '@/lib/persist'
 import { localStorageKeys } from '@/lib/persistence/storageKeys'
 
 export type MainTab = MainTabId
-export type WorkspaceDockPanel = 'git' | 'terminal'
+export type WorkspaceDockPanel = 'git' | 'files' | 'terminal'
 export type WorkspaceDockPlacement = 'right' | 'bottom'
+export type WorkspaceDockFileAction = 'open' | 'reveal'
+export type WorkspaceDockFileRequest = {
+  path: string
+  action: WorkspaceDockFileAction
+}
 
 const STORAGE_SIDEBAR_OPEN = localStorageKeys.ui.sidebarOpen
 const STORAGE_SIDEBAR_WIDTH = localStorageKeys.ui.sidebarWidth
@@ -57,9 +62,16 @@ export const useUiStore = defineStore('ui', () => {
   watch(isWorkspaceDockOpen, (v) => setLocalString(STORAGE_WORKSPACE_DOCK_OPEN, v ? 'true' : 'false'))
 
   const workspaceDockPanel = ref<WorkspaceDockPanel>(
-    getLocalString(STORAGE_WORKSPACE_DOCK_PANEL) === 'terminal' ? 'terminal' : 'git',
+    (() => {
+      const raw = getLocalString(STORAGE_WORKSPACE_DOCK_PANEL).trim()
+      if (raw === 'terminal' || raw === 'files') return raw
+      return 'git'
+    })(),
   )
   watch(workspaceDockPanel, (v) => setLocalString(STORAGE_WORKSPACE_DOCK_PANEL, v))
+
+  const workspaceDockFileRequest = ref<WorkspaceDockFileRequest | null>(null)
+  const workspaceDockFileRequestSeq = ref(0)
 
   const workspaceDockPlacement = ref<WorkspaceDockPlacement>('right')
   watch(workspaceDockPlacement, (v) => setLocalString(STORAGE_WORKSPACE_DOCK_PLACEMENT, v))
@@ -168,6 +180,20 @@ export const useUiStore = defineStore('ui', () => {
     workspaceDockPanel.value = panel
   }
 
+  function requestWorkspaceDockFile(path: string, action: WorkspaceDockFileAction = 'open') {
+    const targetPath = String(path || '').trim()
+    if (!targetPath) return
+
+    workspaceDockPanel.value = 'files'
+    workspaceDockPlacement.value = 'right'
+    isWorkspaceDockOpen.value = true
+    workspaceDockFileRequest.value = {
+      path: targetPath,
+      action: action === 'reveal' ? 'reveal' : 'open',
+    }
+    workspaceDockFileRequestSeq.value += 1
+  }
+
   function setWorkspaceDockPlacement(_placement: WorkspaceDockPlacement) {
     workspaceDockPlacement.value = 'right'
   }
@@ -240,6 +266,8 @@ export const useUiStore = defineStore('ui', () => {
     sidebarLocateSeq,
     sidebarLocateSessionId,
     workspaceDockPanel,
+    workspaceDockFileRequest,
+    workspaceDockFileRequestSeq,
     workspaceDockPlacement,
     workspaceDockWidth,
     workspaceDockHeight,
@@ -256,6 +284,7 @@ export const useUiStore = defineStore('ui', () => {
     setWorkspaceDockOpen,
     toggleWorkspaceDock,
     setWorkspaceDockPanel,
+    requestWorkspaceDockFile,
     setWorkspaceDockPlacement,
     openAndLocateSessionInSidebar,
     clearSidebarLocateRequest,
