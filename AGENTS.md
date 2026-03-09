@@ -38,6 +38,8 @@ bun test --cwd web
 
 ### Rust (CI job: `rust`)
 
+Linux (fmt + clippy + tests + desktop JSON validation):
+
 ```bash
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --locked -- -D warnings
@@ -45,6 +47,18 @@ cargo test -q --locked --manifest-path server/Cargo.toml
 python3 -m json.tool desktop/src-tauri/tauri.conf.json >/dev/null
 python3 -m json.tool desktop/src-tauri/tauri.conf.full.json >/dev/null
 python3 -m json.tool desktop/src-tauri/capabilities/default.json >/dev/null
+```
+
+macOS (server/plugin runtime tests):
+
+```bash
+cargo test -q --locked --manifest-path server/Cargo.toml
+```
+
+Windows (server/plugin runtime tests):
+
+```powershell
+cargo test -q --locked --manifest-path server/Cargo.toml
 ```
 
 ### Service installer end-to-end (CI job: `service-installers`)
