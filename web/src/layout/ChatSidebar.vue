@@ -986,8 +986,8 @@ const pagedRecentSessionRows = computed<ThreadSessionRow[]>(() =>
 const pagedRunningSessionRows = computed<ThreadSessionRow[]>(() =>
   ((runningFooterView.value.rows || []) as ThreadSessionRow[]).map(resolveSidebarRow),
 )
-const runningSessionRows = computed<ThreadSessionRow[]>(() =>
-  buildRunningSessionRows(pagedRunningSessionRows.value, expandedParents.value) as ThreadSessionRow[],
+const runningSessionRows = computed<ThreadSessionRow[]>(
+  () => buildRunningSessionRows(pagedRunningSessionRows.value, expandedParents.value) as ThreadSessionRow[],
 )
 
 watch(
