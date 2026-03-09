@@ -130,7 +130,7 @@ jobs:
             release-assets/opencode-studio-web-dist-${{ env.RELEASE_TAG }}.zip
 
       - name: Upload web dist artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: opencode-studio-web-dist
           path: |
@@ -400,7 +400,7 @@ jobs:
 
       - name: Upload backend artifact
         if: ${{ matrix.build_tool != 'cross' || !((github.event_name == 'workflow_dispatch' && github.event.inputs.tag == 'v0.1.0') || (github.event_name != 'workflow_dispatch' && github.ref_name == 'v0.1.0')) }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: opencode-studio-backend-${{ matrix.target }}
           path: |
@@ -521,7 +521,7 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev || sudo apt-get install -y libwebkit2gtk-4.0-dev
 
       - name: Download web dist
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: opencode-studio-web-dist
           path: release-assets
@@ -579,7 +579,7 @@ jobs:
 
       - name: Download backend artifact (full only)
         if: matrix.flavor == 'full'
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: opencode-studio-backend-${{ matrix.target }}
           path: release-assets/backend
@@ -864,7 +864,7 @@ jobs:
             ${{ runner.os }}-tauri-cef-
 
       - name: Download web dist
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: opencode-studio-web-dist
           path: release-assets
@@ -930,7 +930,7 @@ jobs:
 
       - name: Download backend artifact (full only)
         if: matrix.flavor == 'full'
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: opencode-studio-backend-${{ matrix.target }}
           path: release-assets/backend

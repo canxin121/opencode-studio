@@ -63,7 +63,7 @@ jobs:
           (cd web && zip -r ../release-assets/opencode-studio-web-dist.zip dist)
 
       - name: Upload web artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: opencode-studio-web-dist
           path: release-assets/*
@@ -168,7 +168,7 @@ jobs:
         run: ./scripts/build-backend-release.sh --target ${{ matrix.target }} --out-dir release-assets --build-tool ${{ matrix.build_tool }}
 
       - name: Upload backend artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: opencode-studio-backend-${{ matrix.target }}
           path: |
@@ -247,7 +247,7 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev || sudo apt-get install -y libwebkit2gtk-4.0-dev
 
       - name: Download web dist
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: opencode-studio-web-dist
           path: release-assets
@@ -305,7 +305,7 @@ jobs:
 
       - name: Download backend artifact (full only)
         if: matrix.flavor == 'full'
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: opencode-studio-backend-${{ matrix.target }}
           path: release-assets/backend
@@ -434,7 +434,7 @@ jobs:
           }
 
       - name: Upload desktop artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: opencode-studio-desktop-${{ matrix.target }}${{ matrix.suffix }}
           path: release-assets/opencode-studio-desktop-*
@@ -525,7 +525,7 @@ jobs:
             ${{ runner.os }}-tauri-cef-
 
       - name: Download web dist
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: opencode-studio-web-dist
           path: release-assets
@@ -591,7 +591,7 @@ jobs:
 
       - name: Download backend artifact (full only)
         if: matrix.flavor == 'full'
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: opencode-studio-backend-${{ matrix.target }}
           path: release-assets/backend
@@ -712,7 +712,7 @@ jobs:
           }
 
       - name: Upload desktop artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: opencode-studio-desktop-${{ matrix.target }}${{ matrix.suffix }}
           path: release-assets/opencode-studio-desktop-*
