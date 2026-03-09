@@ -9,6 +9,7 @@ MODE="user"
 INSTALL_DIR=""
 ALLOW_EXISTING_INSTALL_DIR="0"
 WAIT_TIMEOUT_SECS="90"
+UPGRADE_VIA_BACKEND_API="0"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 INSTALL_SCRIPT="$SCRIPT_DIR/install-service.sh"
@@ -34,6 +35,7 @@ Options:
   --install-dir PATH              Install dir for test run (default: random temp dir).
   --allow-existing-install-dir    Allow using an existing install dir.
   --wait-timeout SECONDS          Health wait timeout (default: 90).
+  --upgrade-via-backend-api       Trigger upgrade via backend API instead of reinstall script.
   -h, --help                      Show this help message.
 
 What it validates:
@@ -163,6 +165,187 @@ normalize_semver() {
   printf '%s\n' "$value"
 }
 
+fetch_update_check_json() {
+  local url="$1"
+  curl -fsS --max-time 8 "$url/api/opencode-studio/update-check"
+}
+
+parse_update_check_snapshot() {
+  local update_json="$1"
+
+  python3 - "$update_json" <<'PY'
+import json
+import sys
+
+payload = json.loads(sys.argv[1])
+service = payload.get("service") or {}
+
+def scalar(value):
+    if value is None:
+        return ""
+    return str(value).strip()
+
+print(f"current={scalar(service.get('currentVersion'))}")
+print(f"latest={scalar(service.get('latestVersion'))}")
+print(f"asset_url={scalar(service.get('assetUrl'))}")
+print(f"available={'1' if service.get('available') is True else '0'}")
+PY
+}
+
+resolve_service_upgrade_asset_url() {
+  local url="$1"
+  local expected_tag="$2"
+  local expected_semver=""
+  local update_json=""
+  local parsed=""
+  local current=""
+  local latest=""
+  local asset_url=""
+  local available=""
+  local line=""
+  local key=""
+  local value=""
+
+  expected_semver="$(normalize_semver "$expected_tag")"
+  update_json="$(fetch_update_check_json "$url")"
+  parsed="$(parse_update_check_snapshot "$update_json")"
+
+  while IFS= read -r line; do
+    key="${line%%=*}"
+    value="${line#*=}"
+    case "$key" in
+      current) current="$value" ;;
+      latest) latest="$value" ;;
+      asset_url) asset_url="$value" ;;
+      available) available="$value" ;;
+    esac
+  done <<<"$parsed"
+
+  [[ "$latest" == "$expected_semver" ]] || fail "Update-check latestVersion mismatch. Expected $expected_semver, got '${latest:-<empty>}'"
+  [[ "$available" == "1" ]] || fail "Update-check reports service.available=false for target $expected_semver (current=${current:-unknown})"
+  [[ -n "$asset_url" ]] || fail "Update-check missing service.assetUrl for target $expected_semver"
+  printf '%s\n' "$asset_url"
+}
+
+build_upgrade_payload() {
+  local asset_url="$1"
+  local target_tag="$2"
+
+  python3 - "$asset_url" "$target_tag" <<'PY'
+import json
+import sys
+
+asset_url = sys.argv[1]
+target_tag = sys.argv[2]
+target_version = target_tag.lstrip("vV")
+
+print(json.dumps({
+    "assetUrl": asset_url,
+    "asset_url": asset_url,
+    "targetVersion": target_version,
+    "target_version": target_version,
+}))
+PY
+}
+
+post_json() {
+  local endpoint="$1"
+  local body="$2"
+  local body_file=""
+  local response_file=""
+  local http_code=""
+  local response_body=""
+
+  body_file="$(mktemp)"
+  response_file="$(mktemp)"
+  printf '%s' "$body" >"$body_file"
+  http_code="$(curl -sS --max-time 20 -X POST -H "Content-Type: application/json" --data-binary "@$body_file" -o "$response_file" -w '%{http_code}' "$endpoint" || true)"
+  response_body="$(<"$response_file")"
+  response_body="${response_body//$'\n'/ }"
+  rm -f "$body_file" "$response_file"
+
+  printf '%s\t%s\n' "$http_code" "$response_body"
+}
+
+trigger_backend_upgrade() {
+  local url="$1"
+  local asset_url="$2"
+  local target_tag="$3"
+  local payload=""
+  local endpoint=""
+  local result=""
+  local http_code=""
+  local response_body=""
+  local candidate_endpoints=(
+    "/api/opencode-studio/service-update"
+    "/api/opencode-studio/update-service"
+    "/api/opencode-studio/update/apply"
+    "/api/opencode-studio/update"
+  )
+
+  payload="$(build_upgrade_payload "$asset_url" "$target_tag")"
+
+  for endpoint in "${candidate_endpoints[@]}"; do
+    result="$(post_json "$url$endpoint" "$payload")"
+    http_code="${result%%$'\t'*}"
+    response_body="${result#*$'\t'}"
+
+    if [[ "$http_code" =~ ^2[0-9][0-9]$ ]]; then
+      log "Backend upgrade trigger accepted at $endpoint (HTTP $http_code)"
+      return 0
+    fi
+
+    if [[ "$http_code" == "404" || "$http_code" == "405" ]]; then
+      continue
+    fi
+
+    fail "Backend upgrade trigger failed at $endpoint (HTTP $http_code): ${response_body:-<empty>}"
+  done
+
+  fail "No compatible backend upgrade endpoint accepted the request under $url/api/opencode-studio/*"
+}
+
+assert_running_service_version() {
+  local url="$1"
+  local expected_tag="$2"
+  local timeout_secs="$3"
+  local expected_semver=""
+  local elapsed=0
+  local update_json=""
+  local current_version=""
+  local latest_version=""
+  local line=""
+  local key=""
+  local value=""
+
+  expected_semver="$(normalize_semver "$expected_tag")"
+
+  while ((elapsed < timeout_secs)); do
+    update_json="$(fetch_update_check_json "$url" 2>/dev/null || true)"
+    if [[ -n "$update_json" ]]; then
+      current_version=""
+      latest_version=""
+      while IFS= read -r line; do
+        key="${line%%=*}"
+        value="${line#*=}"
+        case "$key" in
+          current) current_version="$value" ;;
+          latest) latest_version="$value" ;;
+        esac
+      done < <(parse_update_check_snapshot "$update_json" 2>/dev/null || true)
+
+      if [[ "$current_version" == "$expected_semver" ]]; then
+        return 0
+      fi
+    fi
+
+    sleep 1
+    elapsed=$((elapsed + 1))
+  done
+
+  fail "Running service version mismatch after upgrade. Expected $expected_semver, got current=${current_version:-unknown}, latest=${latest_version:-unknown}"
+}
+
 extract_binary_version() {
   local bin_path="$1"
   local output=""
@@ -287,6 +470,7 @@ while [[ $# -gt 0 ]]; do
     --install-dir) INSTALL_DIR="$2"; shift 2 ;;
     --allow-existing-install-dir) ALLOW_EXISTING_INSTALL_DIR="1"; shift ;;
     --wait-timeout) WAIT_TIMEOUT_SECS="$2"; shift 2 ;;
+    --upgrade-via-backend-api) UPGRADE_VIA_BACKEND_API="1"; shift ;;
     -h|--help) usage; exit 0 ;;
     *) fail "Unknown arg: $1" ;;
   esac
@@ -375,6 +559,7 @@ fi
 if [[ -n "$UPGRADE_TO_VERSION" ]]; then
   log "Upgrade target version: $UPGRADE_TO_VERSION"
 fi
+log "Upgrade strategy: $( [[ "$UPGRADE_VIA_BACKEND_API" == "1" ]] && printf 'backend API' || printf 'reinstall script' )"
 
 log "Step 1/6: install service"
 bash "$INSTALL_SCRIPT" "${INSTALL_ARGS[@]}"
@@ -423,27 +608,36 @@ fi
 validate_health_payload "$BASE_URL"
 
 if [[ -n "$UPGRADE_TO_VERSION" ]]; then
-  UPGRADE_ARGS=(
-    --repo "$REPO"
-    --version "$UPGRADE_TO_VERSION"
-    --install-dir "$INSTALL_DIR"
-    --host 127.0.0.1
-    --port "$PORT"
-  )
-
-  if [[ "$OS" == "Linux" ]]; then
-    UPGRADE_ARGS+=(--mode "$MODE")
-  fi
-
-  if [[ "$WITH_FRONTEND" == "1" ]]; then
-    UPGRADE_ARGS+=(--with-frontend)
-  fi
-
   log "Step 5/7: upgrade service in-place to $UPGRADE_TO_VERSION"
-  bash "$INSTALL_SCRIPT" "${UPGRADE_ARGS[@]}"
+  if [[ "$UPGRADE_VIA_BACKEND_API" == "1" ]]; then
+    UPGRADE_ASSET_URL="$(resolve_service_upgrade_asset_url "$BASE_URL" "$UPGRADE_TO_VERSION")"
+    log "Resolved service upgrade package from backend update-check"
+    trigger_backend_upgrade "$BASE_URL" "$UPGRADE_ASSET_URL" "$UPGRADE_TO_VERSION"
+  else
+    UPGRADE_ARGS=(
+      --repo "$REPO"
+      --version "$UPGRADE_TO_VERSION"
+      --install-dir "$INSTALL_DIR"
+      --host 127.0.0.1
+      --port "$PORT"
+    )
+
+    if [[ "$OS" == "Linux" ]]; then
+      UPGRADE_ARGS+=(--mode "$MODE")
+    fi
+
+    if [[ "$WITH_FRONTEND" == "1" ]]; then
+      UPGRADE_ARGS+=(--with-frontend)
+    fi
+
+    bash "$INSTALL_SCRIPT" "${UPGRADE_ARGS[@]}"
+  fi
 
   wait_for_health_up "$BASE_URL" "$WAIT_TIMEOUT_SECS" || fail "Service health endpoint did not recover after upgrade"
   validate_health_payload "$BASE_URL"
+  if [[ "$UPGRADE_VIA_BACKEND_API" == "1" ]]; then
+    assert_running_service_version "$BASE_URL" "$UPGRADE_TO_VERSION" "$WAIT_TIMEOUT_SECS"
+  fi
   assert_binary_version "$BIN_PATH" "$UPGRADE_TO_VERSION"
 
   if [[ "$OS" == "Linux" ]]; then

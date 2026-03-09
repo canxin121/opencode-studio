@@ -180,13 +180,13 @@ jobs:
         if: runner.os == 'Linux'
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: bash scripts/test-unix-service-flow.sh --mode system --version "${{ steps.service-versions.outputs.previous }}" --upgrade-to-version "${{ steps.service-versions.outputs.latest }}"
+        run: bash scripts/test-unix-service-flow.sh --mode system --version "${{ steps.service-versions.outputs.previous }}" --upgrade-to-version "${{ steps.service-versions.outputs.latest }}" --upgrade-via-backend-api
 
       - name: Run macOS service flow test
         if: runner.os == 'macOS'
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: bash scripts/test-unix-service-flow.sh --version "${{ steps.service-versions.outputs.previous }}" --upgrade-to-version "${{ steps.service-versions.outputs.latest }}"
+        run: bash scripts/test-unix-service-flow.sh --version "${{ steps.service-versions.outputs.previous }}" --upgrade-to-version "${{ steps.service-versions.outputs.latest }}" --upgrade-via-backend-api
 
       - name: Run Windows service flow test
         if: runner.os == 'Windows'
