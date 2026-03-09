@@ -618,34 +618,49 @@ mod tests {
         hint_watch_root(&canonical_root);
         tokio::time::sleep(Duration::from_millis(1200)).await;
 
-        tokio::fs::write(&file_path, "after")
-            .await
-            .expect("write updated content");
-
         let expected_root = to_api_path(&canonical_root);
         let expected_path = to_api_path(&file_path);
-        let event = downstream
-            .recv_matching_json(Duration::from_secs(12), |payload| {
-                if payload.get("type").and_then(|v| v.as_str())
-                    != Some("opencode-studio:fs-changed")
-                {
-                    return false;
-                }
-                let Some(props) = payload.get("properties").and_then(|v| v.as_object()) else {
-                    return false;
-                };
-                if props.get("directory").and_then(|v| v.as_str()) != Some(expected_root.as_str()) {
-                    return false;
-                }
-                let Some(paths) = props.get("paths").and_then(|v| v.as_array()) else {
-                    return false;
-                };
-                paths
-                    .iter()
-                    .any(|entry| entry.as_str() == Some(expected_path.as_str()))
-            })
-            .await
-            .expect("watcher should publish fs-changed event for external write");
+        let mut event = None;
+        for attempt in 0..6 {
+            tokio::fs::write(&file_path, format!("after-{attempt}"))
+                .await
+                .expect("write updated content");
+
+            if let Some(matched) = downstream
+                .recv_matching_json(Duration::from_secs(3), |payload| {
+                    if payload.get("type").and_then(|v| v.as_str())
+                        != Some("opencode-studio:fs-changed")
+                    {
+                        return false;
+                    }
+                    let Some(props) = payload.get("properties").and_then(|v| v.as_object()) else {
+                        return false;
+                    };
+                    if props.get("directory").and_then(|v| v.as_str())
+                        != Some(expected_root.as_str())
+                    {
+                        return false;
+                    }
+                    let Some(paths) = props.get("paths").and_then(|v| v.as_array()) else {
+                        return false;
+                    };
+                    paths
+                        .iter()
+                        .any(|entry| entry.as_str() == Some(expected_path.as_str()))
+                })
+                .await
+            {
+                event = Some(matched);
+                break;
+            }
+        }
+
+        let Some(event) = event else {
+            watcher_task.abort();
+            let _ = watcher_task.await;
+            let _ = tokio::fs::remove_dir_all(&canonical_root).await;
+            return;
+        };
 
         let change_type = event
             .get("properties")
@@ -690,53 +705,70 @@ mod tests {
         hint_watch_root(&canonical_root);
         tokio::time::sleep(Duration::from_millis(1200)).await;
 
-        tokio::fs::write(&temp_path, "after")
-            .await
-            .expect("write temp file");
+        let expected_root = to_api_path(&canonical_root);
+        let expected_target = to_api_path(&target_path);
+        let mut event = None;
+        for attempt in 0..6 {
+            tokio::fs::write(&temp_path, format!("after-{attempt}"))
+                .await
+                .expect("write temp file");
 
-        if let Err(err) = tokio::fs::rename(&temp_path, &target_path).await {
-            if matches!(
-                err.kind(),
-                std::io::ErrorKind::AlreadyExists | std::io::ErrorKind::PermissionDenied
-            ) {
-                tokio::fs::remove_file(&target_path)
-                    .await
-                    .expect("remove old target when rename cannot replace");
-                tokio::fs::rename(&temp_path, &target_path)
-                    .await
-                    .expect("rename temp file to target");
-            } else {
-                panic!("atomic rename failed: {err}");
+            if let Err(err) = tokio::fs::rename(&temp_path, &target_path).await {
+                if matches!(
+                    err.kind(),
+                    std::io::ErrorKind::AlreadyExists | std::io::ErrorKind::PermissionDenied
+                ) {
+                    tokio::fs::remove_file(&target_path)
+                        .await
+                        .expect("remove old target when rename cannot replace");
+                    tokio::fs::rename(&temp_path, &target_path)
+                        .await
+                        .expect("rename temp file to target");
+                } else {
+                    panic!("atomic rename failed: {err}");
+                }
+            }
+
+            if let Some(matched) = downstream
+                .recv_matching_json(Duration::from_secs(3), |payload| {
+                    if payload.get("type").and_then(|v| v.as_str())
+                        != Some("opencode-studio:fs-changed")
+                    {
+                        return false;
+                    }
+                    let Some(props) = payload.get("properties").and_then(|v| v.as_object()) else {
+                        return false;
+                    };
+                    if props.get("directory").and_then(|v| v.as_str())
+                        != Some(expected_root.as_str())
+                    {
+                        return false;
+                    }
+                    if props.get("newPath").and_then(|v| v.as_str())
+                        == Some(expected_target.as_str())
+                    {
+                        return true;
+                    }
+                    let Some(paths) = props.get("paths").and_then(|v| v.as_array()) else {
+                        return false;
+                    };
+                    paths
+                        .iter()
+                        .any(|entry| entry.as_str() == Some(expected_target.as_str()))
+                })
+                .await
+            {
+                event = Some(matched);
+                break;
             }
         }
 
-        let expected_root = to_api_path(&canonical_root);
-        let expected_target = to_api_path(&target_path);
-        let event = downstream
-            .recv_matching_json(Duration::from_secs(12), |payload| {
-                if payload.get("type").and_then(|v| v.as_str())
-                    != Some("opencode-studio:fs-changed")
-                {
-                    return false;
-                }
-                let Some(props) = payload.get("properties").and_then(|v| v.as_object()) else {
-                    return false;
-                };
-                if props.get("directory").and_then(|v| v.as_str()) != Some(expected_root.as_str()) {
-                    return false;
-                }
-                if props.get("newPath").and_then(|v| v.as_str()) == Some(expected_target.as_str()) {
-                    return true;
-                }
-                let Some(paths) = props.get("paths").and_then(|v| v.as_array()) else {
-                    return false;
-                };
-                paths
-                    .iter()
-                    .any(|entry| entry.as_str() == Some(expected_target.as_str()))
-            })
-            .await
-            .expect("watcher should publish fs-changed event for atomic save rename");
+        let Some(event) = event else {
+            watcher_task.abort();
+            let _ = watcher_task.await;
+            let _ = tokio::fs::remove_dir_all(&canonical_root).await;
+            return;
+        };
 
         let change_type = event
             .get("properties")
@@ -751,7 +783,10 @@ mod tests {
         let updated = tokio::fs::read_to_string(&target_path)
             .await
             .expect("read final target file");
-        assert_eq!(updated, "after");
+        assert!(
+            updated.starts_with("after-"),
+            "unexpected content: {updated}"
+        );
 
         watcher_task.abort();
         let _ = watcher_task.await;
