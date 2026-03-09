@@ -15,6 +15,7 @@ export default {
     edit: 'Editar',
     open: 'Abrir',
     hide: 'Ocultar',
+    reveal: 'Mostrar',
     remove: 'Remover',
     rename: 'Renomear',
     confirm: 'Confirmar',
@@ -39,8 +40,11 @@ export default {
     nextPage: 'Pagina seguinte',
     previousPage: 'Pagina anterior',
     currentPage: 'Pagina atual',
+    files: 'Arquivos',
+    notSet: '(nao definido)',
     loadMore: 'Carregar mais',
     copied: 'Copiado',
+    copy: 'Copiar',
     copyFailed: 'Falha ao copiar',
     failedToCopyToClipboard: 'Falha ao copiar para a area de transferencia',
     unknown: 'Desconhecido',
@@ -60,6 +64,20 @@ export default {
           arSA: 'Arabe (Arabia Saudita)',
           ptBR: 'Portugues (Brasil)',
           frFR: 'Frances (Franca)',
+        },
+      },
+    },
+    opencodeConfig: {
+      sections: {
+        formatter: {
+          lsp: {
+            options: {
+              mode: {
+                config: 'config',
+                disabled: 'disabled',
+              },
+            },
+          },
         },
       },
     },

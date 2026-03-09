@@ -72,10 +72,20 @@ jobs:
         run: bun test --cwd web
 
   rust:
-    name: Rust
+    name: Rust (${{ matrix.platform }})
     needs: version
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+          - os: macos-latest
+            platform: macos
+          - os: windows-latest
+            platform: windows
     steps:
       - uses: actions/checkout@v6
 
@@ -92,15 +102,18 @@ jobs:
           cache-workspace-crates: true
 
       - name: Rust format check
+        if: matrix.platform == 'linux'
         run: cargo fmt --all -- --check
 
       - name: Rust clippy
+        if: matrix.platform == 'linux'
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
       - name: Rust tests
         run: cargo test -q --locked --manifest-path server/Cargo.toml
 
       - name: Validate desktop config JSON
+        if: matrix.platform == 'linux'
         run: |
           python3 -m json.tool desktop/src-tauri/tauri.conf.json >/dev/null
           python3 -m json.tool desktop/src-tauri/tauri.conf.full.json >/dev/null

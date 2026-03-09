@@ -229,6 +229,16 @@ export interface GitCompareResponse {
 
 export interface GitCommitFilesResponse {
   files: GitCommitFile[]
+  total: number
+  page: number
+  pageSize: number
+  totalPages: number
+  hasPrev: boolean
+  hasNext: boolean
+  hasMore?: boolean
+  nextOffset?: number
+  offset?: number
+  limit?: number
 }
 
 export interface GitBlameLine {

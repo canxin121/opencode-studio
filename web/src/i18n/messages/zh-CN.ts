@@ -18,6 +18,7 @@ export default {
     edit: '编辑',
     open: '打开',
     hide: '隐藏',
+    reveal: '显示',
     from: '从',
     to: '到',
     remove: '移除',
@@ -56,6 +57,7 @@ export default {
     noActionsFound: '未找到操作。',
     noOptionsFound: '未找到选项。',
     options: '选项',
+    copy: '复制',
     copied: '已复制',
     copyPath: '复制路径',
     view: '查看',
@@ -73,10 +75,12 @@ export default {
     currentPage: '当前页',
     previous: '上一项',
     next: '下一项',
+    files: '文件',
     unknown: '未知',
     moveUp: '上移',
     moveDown: '下移',
     empty: '空',
+    notSet: '（未设置）',
     on: '开启',
     key: '键',
     value: '值',
@@ -1397,6 +1401,12 @@ export default {
             },
             search: {
               searchModes: '搜索模式',
+            },
+            options: {
+              mode: {
+                config: 'config',
+                disabled: 'disabled',
+              },
             },
             command: {
               panelTitle: 'LSP 命令',

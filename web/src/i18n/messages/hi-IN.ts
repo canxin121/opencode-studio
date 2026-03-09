@@ -14,6 +14,7 @@ export default {
     saveFailed: 'सहेजना विफल रहा',
     edit: 'संपादित करें',
     open: 'खोलें',
+    reveal: 'दिखाएं',
     search: 'खोजें',
     searching: 'खोजा जा रहा है...',
     loading: 'लोड हो रहा है...',
@@ -25,6 +26,9 @@ export default {
     remove: 'हटाएं',
     next: 'अगला',
     previous: 'पिछला',
+    copy: 'कॉपी करें',
+    files: 'फाइलें',
+    notSet: '(सेट नहीं)',
     yes: 'हाँ',
     no: 'नहीं',
   },
@@ -41,6 +45,20 @@ export default {
           arSA: 'अरबी',
           ptBR: 'ब्राज़ीलियाई पुर्तगाली',
           frFR: 'फ़्रेंच',
+        },
+      },
+    },
+    opencodeConfig: {
+      sections: {
+        formatter: {
+          lsp: {
+            options: {
+              mode: {
+                config: 'config',
+                disabled: 'disabled',
+              },
+            },
+          },
         },
       },
     },

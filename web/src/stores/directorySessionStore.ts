@@ -414,7 +414,8 @@ function normalizeSidebarSessionRow(raw: JsonValue): SidebarSessionRow | null {
   const depthRaw = Number(record.depth)
   const depth = Number.isFinite(depthRaw) ? Math.max(0, Math.floor(depthRaw)) : 0
   const renderKey = typeof record.renderKey === 'string' && record.renderKey.trim() ? record.renderKey.trim() : id
-  const parentId = typeof record.parentId === 'string' && record.parentId.trim() ? record.parentId.trim() : null
+  const parentRaw = record.parentId ?? record.parentID ?? record.parent_id
+  const parentId = typeof parentRaw === 'string' && parentRaw.trim() ? parentRaw.trim() : null
   const rootId = typeof record.rootId === 'string' && record.rootId.trim() ? record.rootId.trim() : id
 
   return {
