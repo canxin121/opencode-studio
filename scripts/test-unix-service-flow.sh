@@ -542,6 +542,14 @@ MACOS_LABEL="cn.cxits.opencode-studio"
 MACOS_PLIST="$HOME/Library/LaunchAgents/${MACOS_LABEL}.plist"
 MACOS_ACTIVE_DOMAIN=""
 
+dump_macos_launchd_diagnostics() {
+  local header="${1:-macOS launchd diagnostics}"
+  log "$header"
+  launchctl print "gui/$(id -u)/$MACOS_LABEL" 2>/dev/null || true
+  launchctl print "user/$(id -u)/$MACOS_LABEL" 2>/dev/null || true
+  launchctl list 2>/dev/null | grep -F "$MACOS_LABEL" || true
+}
+
 macos_launchctl_domains() {
   local uid
   uid="$(id -u)"
@@ -904,7 +912,19 @@ if [[ "$WITH_FRONTEND" == "1" ]]; then
 fi
 
 bash "$INSTALL_SCRIPT" "${REINSTALL_ARGS[@]}"
-wait_for_health_up "$BASE_URL" "$WAIT_TIMEOUT_SECS" || fail "Service health endpoint did not come up after reinstall"
+if [[ "$OS" == "Darwin" ]]; then
+  # Ensure service is explicitly started after reinstall.
+  macos_restart_service
+fi
+
+if ! wait_for_health_up "$BASE_URL" "$WAIT_TIMEOUT_SECS"; then
+  if [[ "$OS" == "Darwin" ]]; then
+    dump_macos_launchd_diagnostics "Service failed to become healthy after reinstall"
+    log "Recent unified logs (opencode-studio, last 2m)"
+    log show --style syslog --predicate 'process == "opencode-studio"' --last 2m 2>/dev/null || true
+  fi
+  fail "Service health endpoint did not come up after reinstall"
+fi
 validate_health_payload "$BASE_URL"
 bash "$API_SMOKE_SCRIPT" --base-url "$BASE_URL" --cwd "$INSTALL_DIR" --timeout "$WAIT_TIMEOUT_SECS"
 
