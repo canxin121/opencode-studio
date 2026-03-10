@@ -1145,7 +1145,7 @@ async fn invoke_bridge_action(
     // discoverable via PATH; add common locations unless the plugin explicitly
     // sets PATH.
     if cfg!(target_os = "macos")
-        && bridge.env.get("PATH").is_none()
+        && !bridge.env.contains_key("PATH")
         && !Path::new(&bridge.program).is_absolute()
     {
         let base_path = std::env::var("PATH").unwrap_or_default();
