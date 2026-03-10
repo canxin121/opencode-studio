@@ -474,16 +474,28 @@ fn compare_prerelease(a: &str, b: &str) -> Ordering {
 }
 
 fn runtime_target_triple() -> Option<String> {
-    runtime_target_triple_for(std::env::consts::OS, std::env::consts::ARCH).map(ToString::to_string)
+    runtime_target_triple_for(
+        std::env::consts::OS,
+        std::env::consts::ARCH,
+        cfg!(target_env = "musl"),
+    )
+    .map(ToString::to_string)
 }
 
-fn runtime_target_triple_for(os: &str, arch: &str) -> Option<&'static str> {
-    match (os, arch) {
-        ("linux", "x86_64") => Some("x86_64-unknown-linux-gnu"),
-        ("linux", "aarch64") => Some("aarch64-unknown-linux-gnu"),
-        ("macos", "x86_64") => Some("x86_64-apple-darwin"),
-        ("macos", "aarch64") => Some("aarch64-apple-darwin"),
-        ("windows", "x86_64") => Some("x86_64-pc-windows-msvc"),
+fn runtime_target_triple_for(os: &str, arch: &str, musl: bool) -> Option<&'static str> {
+    match (os, arch, musl) {
+        ("linux", "x86_64", true) => Some("x86_64-unknown-linux-musl"),
+        ("linux", "x86_64", false) => Some("x86_64-unknown-linux-gnu"),
+        ("linux", "aarch64", true) => Some("aarch64-unknown-linux-musl"),
+        ("linux", "aarch64", false) => Some("aarch64-unknown-linux-gnu"),
+        ("linux", "arm", true) => Some("armv7-unknown-linux-musleabihf"),
+        ("linux", "arm", false) => Some("armv7-unknown-linux-gnueabihf"),
+        ("linux", "x86", true) => Some("i686-unknown-linux-musl"),
+        ("linux", "x86", false) => Some("i686-unknown-linux-gnu"),
+        ("macos", "x86_64", _) => Some("x86_64-apple-darwin"),
+        ("macos", "aarch64", _) => Some("aarch64-apple-darwin"),
+        ("windows", "x86_64", _) => Some("x86_64-pc-windows-msvc"),
+        ("windows", "aarch64", _) => Some("aarch64-pc-windows-msvc"),
         _ => None,
     }
 }
@@ -969,20 +981,40 @@ mod tests {
     #[test]
     fn runtime_target_triple_for_maps_linux_and_macos_variants() {
         assert_eq!(
-            runtime_target_triple_for("linux", "x86_64"),
+            runtime_target_triple_for("linux", "x86_64", false),
             Some("x86_64-unknown-linux-gnu")
         );
         assert_eq!(
-            runtime_target_triple_for("linux", "aarch64"),
+            runtime_target_triple_for("linux", "aarch64", false),
             Some("aarch64-unknown-linux-gnu")
         );
         assert_eq!(
-            runtime_target_triple_for("macos", "x86_64"),
+            runtime_target_triple_for("macos", "x86_64", false),
             Some("x86_64-apple-darwin")
         );
         assert_eq!(
-            runtime_target_triple_for("macos", "aarch64"),
+            runtime_target_triple_for("macos", "aarch64", false),
             Some("aarch64-apple-darwin")
+        );
+    }
+
+    #[test]
+    fn runtime_target_triple_for_maps_linux_musl_variants() {
+        assert_eq!(
+            runtime_target_triple_for("linux", "x86_64", true),
+            Some("x86_64-unknown-linux-musl")
+        );
+        assert_eq!(
+            runtime_target_triple_for("linux", "aarch64", true),
+            Some("aarch64-unknown-linux-musl")
+        );
+        assert_eq!(
+            runtime_target_triple_for("linux", "x86", true),
+            Some("i686-unknown-linux-musl")
+        );
+        assert_eq!(
+            runtime_target_triple_for("linux", "arm", true),
+            Some("armv7-unknown-linux-musleabihf")
         );
     }
 
@@ -1009,11 +1041,14 @@ mod tests {
     #[test]
     fn runtime_target_triple_for_maps_windows_and_unknown() {
         assert_eq!(
-            runtime_target_triple_for("windows", "x86_64"),
+            runtime_target_triple_for("windows", "x86_64", false),
             Some("x86_64-pc-windows-msvc")
         );
-        assert_eq!(runtime_target_triple_for("windows", "aarch64"), None);
-        assert_eq!(runtime_target_triple_for("freebsd", "x86_64"), None);
+        assert_eq!(
+            runtime_target_triple_for("windows", "aarch64", false),
+            Some("aarch64-pc-windows-msvc")
+        );
+        assert_eq!(runtime_target_triple_for("freebsd", "x86_64", false), None);
     }
 
     #[test]
