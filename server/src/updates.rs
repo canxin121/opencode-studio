@@ -483,68 +483,32 @@ fn compare_prerelease(a: &str, b: &str) -> Ordering {
 }
 
 fn runtime_target_triple() -> Option<String> {
-    // Prefer a compile-time accurate triple for Linux libc variants.
-    // This avoids generating glibc asset URLs for musl builds (and vice versa).
-    let os = std::env::consts::OS;
-    let arch = std::env::consts::ARCH;
-
-    if os == "linux" {
-        let is_musl = cfg!(target_env = "musl");
-        return match arch {
-            "x86_64" => Some(
-                (if is_musl {
-                    "x86_64-unknown-linux-musl"
-                } else {
-                    "x86_64-unknown-linux-gnu"
-                })
-                .to_string(),
-            ),
-            "aarch64" => Some(
-                (if is_musl {
-                    "aarch64-unknown-linux-musl"
-                } else {
-                    "aarch64-unknown-linux-gnu"
-                })
-                .to_string(),
-            ),
-            // Rust reports 32-bit x86 as "x86".
-            "x86" => Some(
-                (if is_musl {
-                    "i686-unknown-linux-musl"
-                } else {
-                    "i686-unknown-linux-gnu"
-                })
-                .to_string(),
-            ),
-            // Release builds only publish armv7 hard-float for 32-bit ARM.
-            "arm" => Some(
-                (if is_musl {
-                    "armv7-unknown-linux-musleabihf"
-                } else {
-                    "armv7-unknown-linux-gnueabihf"
-                })
-                .to_string(),
-            ),
-            _ => None,
-        };
-    }
-
-    runtime_target_triple_for(os, arch).map(ToString::to_string)
+    runtime_target_triple_for(
+        std::env::consts::OS,
+        std::env::consts::ARCH,
+        cfg!(target_env = "musl"),
+    )
+    .map(ToString::to_string)
 }
 
-fn runtime_target_triple_for(os: &str, arch: &str) -> Option<&'static str> {
+fn runtime_target_triple_for(os: &str, arch: &str, musl: bool) -> Option<&'static str> {
     let os = normalize_runtime_os(os);
     let arch = normalize_runtime_arch(arch);
 
-    match (os.as_str(), arch.as_str()) {
-        ("linux", "x86_64") => Some("x86_64-unknown-linux-gnu"),
-        ("linux", "aarch64") => Some("aarch64-unknown-linux-gnu"),
-        ("linux", "i686") => Some("i686-unknown-linux-gnu"),
-        ("linux", "armv7") => Some("armv7-unknown-linux-gnueabihf"),
-        ("macos", "x86_64") => Some("x86_64-apple-darwin"),
-        ("macos", "aarch64") => Some("aarch64-apple-darwin"),
-        ("windows", "x86_64") => Some("x86_64-pc-windows-msvc"),
-        ("windows", "aarch64") => Some("aarch64-pc-windows-msvc"),
+    match (os.as_str(), arch.as_str(), musl) {
+        ("linux", "x86_64", true) => Some("x86_64-unknown-linux-musl"),
+        ("linux", "x86_64", false) => Some("x86_64-unknown-linux-gnu"),
+        ("linux", "aarch64", true) => Some("aarch64-unknown-linux-musl"),
+        ("linux", "aarch64", false) => Some("aarch64-unknown-linux-gnu"),
+        ("linux", "i686", true) => Some("i686-unknown-linux-musl"),
+        ("linux", "i686", false) => Some("i686-unknown-linux-gnu"),
+        // Release builds only publish armv7 hard-float for 32-bit ARM.
+        ("linux", "armv7", true) => Some("armv7-unknown-linux-musleabihf"),
+        ("linux", "armv7", false) => Some("armv7-unknown-linux-gnueabihf"),
+        ("macos", "x86_64", _) => Some("x86_64-apple-darwin"),
+        ("macos", "aarch64", _) => Some("aarch64-apple-darwin"),
+        ("windows", "x86_64", _) => Some("x86_64-pc-windows-msvc"),
+        ("windows", "aarch64", _) => Some("aarch64-pc-windows-msvc"),
         _ => None,
     }
 }
@@ -566,6 +530,7 @@ fn normalize_runtime_arch(raw: &str) -> String {
         // Common variants from uname -m / tooling.
         "i386" => "i686".to_string(),
         "x86" => "i686".to_string(),
+        "arm" => "armv7".to_string(),
         "armv7l" | "armv7" => "armv7".to_string(),
         _ => lower,
     }
@@ -1131,20 +1096,40 @@ mod tests {
     #[test]
     fn runtime_target_triple_for_maps_linux_and_macos_variants() {
         assert_eq!(
-            runtime_target_triple_for("linux", "x86_64"),
+            runtime_target_triple_for("linux", "x86_64", false),
             Some("x86_64-unknown-linux-gnu")
         );
         assert_eq!(
-            runtime_target_triple_for("linux", "aarch64"),
+            runtime_target_triple_for("linux", "aarch64", false),
             Some("aarch64-unknown-linux-gnu")
         );
         assert_eq!(
-            runtime_target_triple_for("macos", "x86_64"),
+            runtime_target_triple_for("macos", "x86_64", false),
             Some("x86_64-apple-darwin")
         );
         assert_eq!(
-            runtime_target_triple_for("macos", "aarch64"),
+            runtime_target_triple_for("macos", "aarch64", false),
             Some("aarch64-apple-darwin")
+        );
+    }
+
+    #[test]
+    fn runtime_target_triple_for_maps_linux_musl_variants() {
+        assert_eq!(
+            runtime_target_triple_for("linux", "x86_64", true),
+            Some("x86_64-unknown-linux-musl")
+        );
+        assert_eq!(
+            runtime_target_triple_for("linux", "aarch64", true),
+            Some("aarch64-unknown-linux-musl")
+        );
+        assert_eq!(
+            runtime_target_triple_for("linux", "x86", true),
+            Some("i686-unknown-linux-musl")
+        );
+        assert_eq!(
+            runtime_target_triple_for("linux", "arm", true),
+            Some("armv7-unknown-linux-musleabihf")
         );
     }
 
@@ -1171,14 +1156,14 @@ mod tests {
     #[test]
     fn runtime_target_triple_for_maps_windows_and_unknown() {
         assert_eq!(
-            runtime_target_triple_for("windows", "x86_64"),
+            runtime_target_triple_for("windows", "x86_64", false),
             Some("x86_64-pc-windows-msvc")
         );
         assert_eq!(
-            runtime_target_triple_for("windows", "aarch64"),
+            runtime_target_triple_for("windows", "aarch64", false),
             Some("aarch64-pc-windows-msvc")
         );
-        assert_eq!(runtime_target_triple_for("freebsd", "x86_64"), None);
+        assert_eq!(runtime_target_triple_for("freebsd", "x86_64", false), None);
     }
 
     #[test]
@@ -1196,15 +1181,15 @@ mod tests {
     #[test]
     fn runtime_target_triple_for_normalizes_common_aliases() {
         assert_eq!(
-            runtime_target_triple_for("linux", "amd64"),
+            runtime_target_triple_for("linux", "amd64", false),
             Some("x86_64-unknown-linux-gnu")
         );
         assert_eq!(
-            runtime_target_triple_for("darwin", "arm64"),
+            runtime_target_triple_for("darwin", "arm64", false),
             Some("aarch64-apple-darwin")
         );
         assert_eq!(
-            runtime_target_triple_for("win32", "arm64"),
+            runtime_target_triple_for("win32", "arm64", false),
             Some("aarch64-pc-windows-msvc")
         );
     }

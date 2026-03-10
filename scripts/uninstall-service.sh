@@ -115,6 +115,33 @@ macos_launchctl_remove_label() {
   launchctl unload "$plist" >/dev/null 2>&1 || true
 }
 
+macos_launchctl_wait_absent() {
+  local label="$1"
+  local timeout_secs="${2:-20}"
+  local elapsed=0
+  local domain=""
+
+  while ((elapsed < timeout_secs)); do
+    local present="0"
+    while IFS= read -r domain; do
+      [[ -n "$domain" ]] || continue
+      if launchctl print "$domain/$label" >/dev/null 2>&1; then
+        present="1"
+        break
+      fi
+    done < <(macos_launchctl_domains)
+
+    if [[ "$present" == "0" ]] && ! launchctl list 2>/dev/null | grep -q "$label"; then
+      return 0
+    fi
+
+    sleep 1
+    elapsed=$((elapsed + 1))
+  done
+
+  return 1
+}
+
 OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
 
 if [[ "$OS" == "linux" ]]; then
@@ -134,6 +161,12 @@ elif [[ "$OS" == "darwin" ]]; then
   PLIST="$HOME/Library/LaunchAgents/cn.cxits.opencode-studio.plist"
   macos_launchctl_remove_label "$LABEL" "$PLIST"
   rm -f "$PLIST" || true
+
+  if ! macos_launchctl_wait_absent "$LABEL" 20; then
+    echo "Warning: launchd label still present after uninstall: $LABEL" >&2
+    launchctl print "gui/$(id -u)/$LABEL" 2>/dev/null || true
+    launchctl print "user/$(id -u)/$LABEL" 2>/dev/null || true
+  fi
 fi
 
 echo "Uninstall finished (service units removed)."

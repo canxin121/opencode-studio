@@ -182,6 +182,7 @@ macos_launchctl_bootout_existing() {
 
   while IFS= read -r domain; do
     [[ -n "$domain" ]] || continue
+    launchctl disable "$domain/$label" >/dev/null 2>&1 || true
     launchctl bootout "$domain/$label" >/dev/null 2>&1 || true
     launchctl bootout "$domain" "$plist" >/dev/null 2>&1 || true
   done < <(macos_launchctl_domains)
@@ -200,15 +201,67 @@ macos_launchctl_enable_known_domains() {
 macos_launchctl_bootstrap() {
   local plist="$1"
   local domain=""
+  local last_err=""
 
   while IFS= read -r domain; do
     [[ -n "$domain" ]] || continue
-    if launchctl bootstrap "$domain" "$plist" >/dev/null 2>&1; then
+    if out="$(launchctl bootstrap "$domain" "$plist" 2>&1)"; then
+      printf '%s\n' "$domain"
+      return 0
+    fi
+    last_err="$out"
+  done < <(macos_launchctl_domains)
+
+  if [[ -n "$last_err" ]]; then
+    echo "launchctl bootstrap failed: $last_err" >&2
+  fi
+  return 1
+}
+
+macos_launchctl_wait_absent() {
+  local label="$1"
+  local timeout_secs="${2:-20}"
+  local elapsed=0
+  local domain=""
+
+  while ((elapsed < timeout_secs)); do
+    local present="0"
+    while IFS= read -r domain; do
+      [[ -n "$domain" ]] || continue
+      if launchctl print "$domain/$label" >/dev/null 2>&1; then
+        present="1"
+        break
+      fi
+    done < <(macos_launchctl_domains)
+
+    if [[ "$present" == "0" ]] && ! launchctl list 2>/dev/null | grep -q "$label"; then
+      return 0
+    fi
+
+    sleep 1
+    elapsed=$((elapsed + 1))
+  done
+
+  return 1
+}
+
+macos_launchctl_kickstart_label() {
+  local label="$1"
+  local domain=""
+
+  while IFS= read -r domain; do
+    [[ -n "$domain" ]] || continue
+    launchctl enable "$domain/$label" >/dev/null 2>&1 || true
+    if launchctl kickstart -k "$domain/$label" >/dev/null 2>&1; then
       printf '%s\n' "$domain"
       return 0
     fi
   done < <(macos_launchctl_domains)
 
+  if launchctl start "$label" >/dev/null 2>&1; then
+    printf '%s\n' "legacy"
+    return 0
+  fi
   return 1
 }
 
@@ -619,19 +672,27 @@ elif [[ "$OS" == "darwin" ]]; then
 EOF
 
   macos_launchctl_bootout_existing "$LABEL" "$PLIST"
+  macos_launchctl_wait_absent "$LABEL" 20 || true
+
+  macos_launchctl_enable_known_domains "$LABEL"
   LAUNCH_DOMAIN="$(macos_launchctl_bootstrap "$PLIST" || true)"
   if [[ -z "$LAUNCH_DOMAIN" ]]; then
     echo "launchctl bootstrap failed; trying legacy load fallback"
-    launchctl load "$PLIST"
+    launchctl load -w "$PLIST" >/dev/null 2>&1 || launchctl load "$PLIST"
     macos_launchctl_enable_known_domains "$LABEL"
     LAUNCH_DOMAIN="$(macos_launchctl_detect_loaded_domain "$LABEL" || true)"
   fi
 
+  STARTED_DOMAIN="$(macos_launchctl_kickstart_label "$LABEL" || true)"
+  if [[ -n "$STARTED_DOMAIN" ]]; then
+    echo "Service kickstarted in domain: $STARTED_DOMAIN"
+  else
+    echo "Warning: launchctl kickstart/start failed for $LABEL" >&2
+    launchctl print "gui/$(id -u)/$LABEL" 2>/dev/null || true
+    launchctl print "user/$(id -u)/$LABEL" 2>/dev/null || true
+  fi
+
   if [[ -n "$LAUNCH_DOMAIN" ]]; then
-    launchctl enable "$LAUNCH_DOMAIN/$LABEL" >/dev/null 2>&1 || true
-    launchctl kickstart -k "$LAUNCH_DOMAIN/$LABEL" >/dev/null 2>&1 || \
-      launchctl kickstart "$LAUNCH_DOMAIN/$LABEL" >/dev/null 2>&1 || \
-      launchctl start "$LABEL" >/dev/null 2>&1 || true
     echo "Service loaded in domain: $LAUNCH_DOMAIN"
   else
     echo "Service loaded via legacy launchctl flow"
