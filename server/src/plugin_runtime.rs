@@ -1352,7 +1352,12 @@ fn augment_macos_path(base: &str) -> String {
 
     if let Some(home) = crate::path_utils::home_dir_path() {
         extras.push(home.join(".bun").join("bin").to_string_lossy().into_owned());
-        extras.push(home.join(".cargo").join("bin").to_string_lossy().into_owned());
+        extras.push(
+            home.join(".cargo")
+                .join("bin")
+                .to_string_lossy()
+                .into_owned(),
+        );
     }
 
     for extra in extras {
