@@ -355,14 +355,60 @@ fn desktop_update_progress_get(app: AppHandle) -> updater::UpdateProgressSnapsho
 }
 
 fn runtime_target_triple() -> Option<String> {
-    let os = std::env::consts::OS;
-    let arch = std::env::consts::ARCH;
+    runtime_target_triple_for(std::env::consts::OS, std::env::consts::ARCH)
+        .map(ToString::to_string)
+}
+
+fn runtime_target_triple_for(os: &str, arch: &str) -> Option<&'static str> {
     match (os, arch) {
-        ("linux", "x86_64") => Some("x86_64-unknown-linux-gnu".to_string()),
-        ("macos", "x86_64") => Some("x86_64-apple-darwin".to_string()),
-        ("macos", "aarch64") => Some("aarch64-apple-darwin".to_string()),
-        ("windows", "x86_64") => Some("x86_64-pc-windows-msvc".to_string()),
+        ("linux", "x86_64") => Some("x86_64-unknown-linux-gnu"),
+        ("linux", "aarch64") => Some("aarch64-unknown-linux-gnu"),
+        ("macos", "x86_64") => Some("x86_64-apple-darwin"),
+        ("macos", "aarch64") => Some("aarch64-apple-darwin"),
+        ("windows", "x86_64") => Some("x86_64-pc-windows-msvc"),
+        ("windows", "aarch64") => Some("aarch64-pc-windows-msvc"),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn runtime_target_triple_for_maps_supported_targets() {
+        assert_eq!(
+            runtime_target_triple_for("linux", "x86_64"),
+            Some("x86_64-unknown-linux-gnu")
+        );
+        assert_eq!(
+            runtime_target_triple_for("linux", "aarch64"),
+            Some("aarch64-unknown-linux-gnu")
+        );
+        assert_eq!(
+            runtime_target_triple_for("macos", "x86_64"),
+            Some("x86_64-apple-darwin")
+        );
+        assert_eq!(
+            runtime_target_triple_for("macos", "aarch64"),
+            Some("aarch64-apple-darwin")
+        );
+        assert_eq!(
+            runtime_target_triple_for("windows", "x86_64"),
+            Some("x86_64-pc-windows-msvc")
+        );
+        assert_eq!(
+            runtime_target_triple_for("windows", "aarch64"),
+            Some("aarch64-pc-windows-msvc")
+        );
+    }
+
+    #[test]
+    fn runtime_target_triple_for_rejects_unknown_combinations() {
+        assert_eq!(runtime_target_triple_for("linux", "arm64"), None);
+        assert_eq!(runtime_target_triple_for("macos", "arm64"), None);
+        assert_eq!(runtime_target_triple_for("windows", "arm64"), None);
+        assert_eq!(runtime_target_triple_for("freebsd", "x86_64"), None);
     }
 }
 

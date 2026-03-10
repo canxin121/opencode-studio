@@ -484,6 +484,7 @@ fn runtime_target_triple_for(os: &str, arch: &str) -> Option<&'static str> {
         ("macos", "x86_64") => Some("x86_64-apple-darwin"),
         ("macos", "aarch64") => Some("aarch64-apple-darwin"),
         ("windows", "x86_64") => Some("x86_64-pc-windows-msvc"),
+        ("windows", "aarch64") => Some("aarch64-pc-windows-msvc"),
         _ => None,
     }
 }
@@ -1012,7 +1013,10 @@ mod tests {
             runtime_target_triple_for("windows", "x86_64"),
             Some("x86_64-pc-windows-msvc")
         );
-        assert_eq!(runtime_target_triple_for("windows", "aarch64"), None);
+        assert_eq!(
+            runtime_target_triple_for("windows", "aarch64"),
+            Some("aarch64-pc-windows-msvc")
+        );
         assert_eq!(runtime_target_triple_for("freebsd", "x86_64"), None);
     }
 
