@@ -80,7 +80,7 @@ function Wait-HealthUp([string]$Url, [int]$TimeoutSeconds = 60) {
   $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
   while ((Get-Date) -lt $deadline) {
     try {
-      $resp = Invoke-WebRequest -Uri "$Url/health" -UseBasicParsing -TimeoutSec 4
+      $resp = Invoke-WebRequestCompat -Uri "$Url/health" -TimeoutSec 4
       if ($resp.StatusCode -ge 200 -and $resp.StatusCode -lt 500) {
         return
       }
@@ -96,7 +96,7 @@ function Wait-HealthDown([string]$Url, [int]$TimeoutSeconds = 60) {
   $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
   while ((Get-Date) -lt $deadline) {
     try {
-      Invoke-WebRequest -Uri "$Url/health" -UseBasicParsing -TimeoutSec 4 | Out-Null
+      Invoke-WebRequestCompat -Uri "$Url/health" -TimeoutSec 4 | Out-Null
     } catch {
       return
     }
@@ -108,6 +108,27 @@ function Wait-HealthDown([string]$Url, [int]$TimeoutSeconds = 60) {
 
 function Get-HealthPayload([string]$Url) {
   return Invoke-RestMethod -Uri "$Url/health" -TimeoutSec 5
+}
+
+function Invoke-WebRequestCompat {
+  Param(
+    [Parameter(Mandatory = $true)][string]$Uri,
+    [string]$OutFile = "",
+    [int]$TimeoutSec = 0
+  )
+
+  $params = @{ Uri = $Uri }
+  if ($OutFile) {
+    $params["OutFile"] = $OutFile
+  }
+  if ($TimeoutSec -gt 0) {
+    $params["TimeoutSec"] = $TimeoutSec
+  }
+  $cmd = Get-Command Invoke-WebRequest
+  if ($cmd -and $cmd.Parameters.ContainsKey("UseBasicParsing")) {
+    $params["UseBasicParsing"] = $true
+  }
+  return Invoke-WebRequest @params
 }
 
 function Assert-HealthPayload([object]$Payload) {
@@ -240,7 +261,9 @@ function Invoke-ServiceUpgradeViaBackendApi([string]$Url, [string]$Repo, [string
     $targetTriple = Get-BackendTargetTriple
   }
   $assetName = "opencode-studio-backend-$targetTriple-$releaseTag.zip"
-  $assetUrl = "https://github.com/$Repo/releases/download/$releaseTag/$assetName"
+  $encodedTag = [Uri]::EscapeDataString($releaseTag)
+  $encodedAsset = [Uri]::EscapeDataString($assetName)
+  $assetUrl = "https://github.com/$Repo/releases/download/$encodedTag/$encodedAsset"
 
   $binPath = Join-Path $InstallDir "bin/opencode-studio.exe"
   $stagedPath = Join-Path $InstallDir "bin/opencode-studio.next.exe"
@@ -250,7 +273,7 @@ function Invoke-ServiceUpgradeViaBackendApi([string]$Url, [string]$Repo, [string
   New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
   try {
     $archivePath = Join-Path $tmpDir "upgrade.zip"
-    Invoke-WebRequest -Uri $assetUrl -OutFile $archivePath -UseBasicParsing -TimeoutSec 180
+    Invoke-WebRequestCompat -Uri $assetUrl -OutFile $archivePath -TimeoutSec 180
     Expand-Archive -LiteralPath $archivePath -DestinationPath $tmpDir -Force
 
     $candidate = Join-Path $tmpDir "opencode-studio.exe"

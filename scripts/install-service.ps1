@@ -121,7 +121,7 @@ function Wait-HealthEndpoint([string]$Url, [int]$TimeoutSeconds = 45) {
   $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
   while ((Get-Date) -lt $deadline) {
     try {
-      $resp = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 4
+      $resp = Invoke-WebRequestCompat -Uri $Url -TimeoutSec 4
       if ($resp.StatusCode -ge 200 -and $resp.StatusCode -lt 500) {
         return
       }
@@ -131,6 +131,67 @@ function Wait-HealthEndpoint([string]$Url, [int]$TimeoutSeconds = 45) {
   }
 
   throw "Service health check timed out at $Url"
+}
+
+function Invoke-WebRequestCompat {
+  Param(
+    [Parameter(Mandatory = $true)][string]$Uri,
+    [string]$OutFile = "",
+    [int]$TimeoutSec = 0
+  )
+
+  $params = @{ Uri = $Uri }
+  if ($OutFile) {
+    $params["OutFile"] = $OutFile
+  }
+  if ($TimeoutSec -gt 0) {
+    $params["TimeoutSec"] = $TimeoutSec
+  }
+  $cmd = Get-Command Invoke-WebRequest
+  if ($cmd -and $cmd.Parameters.ContainsKey("UseBasicParsing")) {
+    $params["UseBasicParsing"] = $true
+  }
+  return Invoke-WebRequest @params
+}
+
+function Get-HttpErrorDetails([object]$ErrorRecord) {
+  $status = 0
+  $body = ""
+
+  $ex = $ErrorRecord.Exception
+  if ($null -ne $ex -and $ex.PSObject.Properties.Name -contains "Response") {
+    $resp = $ex.Response
+    if ($null -ne $resp) {
+      try {
+        if ($resp -is [System.Net.Http.HttpResponseMessage]) {
+          $status = [int]$resp.StatusCode
+          $body = $resp.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+        } elseif ($resp -is [System.Net.HttpWebResponse]) {
+          $status = [int]$resp.StatusCode
+          $stream = $resp.GetResponseStream()
+          if ($null -ne $stream) {
+            $reader = New-Object System.IO.StreamReader($stream)
+            $body = $reader.ReadToEnd()
+            $reader.Close()
+          }
+        }
+      } catch {
+      }
+    }
+  }
+
+  $message = ""
+  if ($body) {
+    try {
+      $parsed = $body | ConvertFrom-Json
+      if ($parsed -and $parsed.message) {
+        $message = [string]$parsed.message
+      }
+    } catch {
+    }
+  }
+
+  return @{ Status = $status; Body = $body; Message = $message }
 }
 
 Assert-Administrator
@@ -151,16 +212,48 @@ function Get-TargetCandidates {
 
 function Get-ReleaseJson {
   if ($Version) {
-    $url = "https://api.github.com/repos/$Repo/releases/tags/$Version"
+    $encoded = [Uri]::EscapeDataString($Version)
+    $url = "https://api.github.com/repos/$Repo/releases/tags/$encoded"
   } else {
     $url = "https://api.github.com/repos/$Repo/releases/latest"
   }
-  return Invoke-RestMethod -Uri $url -Headers (Get-GitHubHeaders)
+
+  try {
+    return Invoke-RestMethod -Uri $url -Headers (Get-GitHubHeaders) -TimeoutSec 15
+  } catch {
+    $details = Get-HttpErrorDetails $_
+    $status = [int]$details.Status
+    $msg = [string]$details.Message
+
+    $extra = ""
+    if ($status -eq 403 -or $status -eq 429) {
+      $extra = "Tip: set GITHUB_TOKEN (or GH_TOKEN) to avoid GitHub API rate limits."
+    } elseif ($status -eq 404 -and $Version) {
+      $extra = "Tip: verify the release tag exists and is published: $Version"
+    }
+
+    $parts = @("GitHub API request failed ($status): $url")
+    if ($msg) {
+      $parts += "GitHub API message: $msg"
+    }
+    if ($extra) {
+      $parts += $extra
+    }
+    throw ($parts -join "`n")
+  }
 }
 
 function Find-AssetUrl([object]$Release, [string]$Name) {
   foreach ($a in $Release.assets) {
     if ($a.name -eq $Name) { return $a.browser_download_url }
+  }
+  $available = @()
+  try {
+    $available = @($Release.assets | ForEach-Object { $_.name } | Where-Object { $_ } | Sort-Object)
+  } catch {
+  }
+  if ($available.Count -gt 0) {
+    throw "Asset not found in release: $Name`nAvailable assets:`n- $($available -join "`n- ")"
   }
   throw "Asset not found in release: $Name"
 }
@@ -171,12 +264,21 @@ function Find-FirstAsset([object]$Release, [string[]]$Names) {
       if ($a.name -eq $name) { return $a }
     }
   }
-  throw "Asset not found in release. Tried: $($Names -join ', ')"
+  $available = @()
+  try {
+    $available = @($Release.assets | ForEach-Object { $_.name } | Where-Object { $_ } | Sort-Object)
+  } catch {
+  }
+  $message = "Asset not found in release. Tried: $($Names -join ', ')"
+  if ($available.Count -gt 0) {
+    $message += "`nAvailable assets:`n- $($available -join "`n- ")"
+  }
+  throw $message
 }
 
 function Download([string]$Url, [string]$OutFile) {
   Write-Host "Downloading $Url"
-  Invoke-WebRequest -Uri $Url -OutFile $OutFile
+  Invoke-WebRequestCompat -Uri $Url -OutFile $OutFile -TimeoutSec 180
 }
 
 function Convert-ToTomlBasicString([string]$Value) {
@@ -320,6 +422,12 @@ try {
   $BackendCandidates = @()
   foreach ($target in $Targets) {
     $BackendCandidates += "opencode-studio-backend-$target-$TagName.zip"
+  }
+  foreach ($target in $Targets) {
+    $BackendCandidates += "opencode-studio-backend-$target.zip"
+  }
+  foreach ($target in $Targets) {
+    $BackendCandidates += "opencode-studio-$target-$TagName.zip"
   }
   foreach ($target in $Targets) {
     $BackendCandidates += "opencode-studio-$target.zip"

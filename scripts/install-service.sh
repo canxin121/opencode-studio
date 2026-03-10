@@ -213,7 +213,15 @@ macos_launchctl_bootstrap() {
 }
 
 OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
-ARCH="$(uname -m)"
+normalize_arch() {
+  local arch="$1"
+  case "$arch" in
+    amd64) printf 'x86_64' ;;
+    armv8*|arm64v8) printf 'aarch64' ;;
+    *) printf '%s' "$arch" ;;
+  esac
+}
+ARCH="$(normalize_arch "$(uname -m)")"
 
 linux_libc_family() {
   if ! command -v ldd >/dev/null 2>&1; then
@@ -268,6 +276,9 @@ backend_target_candidates() {
       ;;
     *)
       echo "Unsupported platform: ${OS}/${ARCH}" >&2
+      echo "Supported platforms/arches:" >&2
+      echo "  - linux: x86_64, aarch64/arm64, armv7l/armv7, i686/i386" >&2
+      echo "  - macos: x86_64, arm64" >&2
       echo "Set up a manual install from GitHub Releases for your target." >&2
       exit 1
       ;;
@@ -296,7 +307,11 @@ mkdir -p "$INSTALL_DIR" "$BIN_DIR"
 
 fetch_release_json() {
   local url
-  local curl_args=(-fsSL -H "User-Agent: opencode-studio-installer")
+  local curl_args=(
+    -sS
+    -H "User-Agent: opencode-studio-installer"
+    -H "Accept: application/vnd.github+json"
+  )
 
   if [[ -n "${GITHUB_TOKEN:-}" ]]; then
     curl_args+=( -H "Authorization: Bearer ${GITHUB_TOKEN}" )
@@ -305,11 +320,70 @@ fetch_release_json() {
   fi
 
   if [[ -n "$VERSION" ]]; then
-    url="https://api.github.com/repos/${REPO}/releases/tags/${VERSION}"
+    local tag="$VERSION"
+    if ! [[ "$tag" =~ ^[A-Za-z0-9._-]+$ ]]; then
+      need python3
+      tag="$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$tag")"
+    fi
+    url="https://api.github.com/repos/${REPO}/releases/tags/${tag}"
   else
     url="https://api.github.com/repos/${REPO}/releases/latest"
   fi
-  curl "${curl_args[@]}" "$url"
+
+  local body
+  body="$(mktemp)"
+  local code=""
+  code="$(curl "${curl_args[@]}" -o "$body" -w '%{http_code}' "$url" || true)"
+  if [[ "$code" != "200" ]]; then
+    local msg=""
+    if command -v jq >/dev/null 2>&1; then
+      msg="$(jq -r '.message? // empty' <"$body" 2>/dev/null || true)"
+    elif command -v python3 >/dev/null 2>&1; then
+      msg="$(python3 - <<'PY' <"$body" 2>/dev/null || true
+import json,sys
+try:
+  j=json.load(sys.stdin)
+except Exception:
+  j={}
+print(j.get('message',''))
+PY
+      )"
+    fi
+
+    echo "GitHub API request failed ($code): $url" >&2
+    if [[ -n "$msg" ]]; then
+      echo "GitHub API message: $msg" >&2
+    fi
+    if [[ "$code" == "403" || "$code" == "429" ]]; then
+      echo "Tip: set GITHUB_TOKEN (or GH_TOKEN) to avoid rate limits." >&2
+    fi
+    if [[ "$code" == "404" && -n "$VERSION" ]]; then
+      echo "Tip: verify the release tag exists and is published: ${VERSION}" >&2
+    fi
+    rm -f "$body"
+    exit 1
+  fi
+
+  cat "$body"
+  rm -f "$body"
+}
+
+list_release_assets() {
+  local json="$1"
+  if command -v jq >/dev/null 2>&1; then
+    jq -r '.assets[]?.name' <<<"$json" 2>/dev/null || true
+    return 0
+  fi
+
+  need python3
+  python3 - <<'PY' <<<"$json" 2>/dev/null || true
+import json,sys
+j=json.loads(sys.stdin.read())
+for a in j.get('assets', []) or []:
+  n=a.get('name')
+  if n:
+    print(n)
+PY
 }
 
 asset_url_by_name() {
@@ -341,6 +415,11 @@ download_asset_by_name() {
   url="$(asset_url_by_name "$json" "$name")"
   if [[ -z "$url" || "$url" == "null" ]]; then
     echo "Asset not found in release: $name" >&2
+    echo "Available assets:" >&2
+    while IFS= read -r a; do
+      [[ -n "$a" ]] || continue
+      echo "  - $a" >&2
+    done < <(list_release_assets "$json")
     exit 1
   fi
 
@@ -368,6 +447,11 @@ download_first_asset_by_name() {
   for name in "$@"; do
     echo "  - $name" >&2
   done
+  echo "Available assets:" >&2
+  while IFS= read -r a; do
+    [[ -n "$a" ]] || continue
+    echo "  - $a" >&2
+  done < <(list_release_assets "$json")
   exit 1
 }
 
@@ -395,6 +479,12 @@ BACKEND_TAR="$TMP_DIR/opencode-studio-backend.tar.gz"
 BACKEND_ASSET_CANDIDATES=()
 for target in "${BACKEND_TARGETS[@]}"; do
   BACKEND_ASSET_CANDIDATES+=("opencode-studio-backend-${target}-${TAG_NAME}.tar.gz")
+done
+for target in "${BACKEND_TARGETS[@]}"; do
+  BACKEND_ASSET_CANDIDATES+=("opencode-studio-backend-${target}.tar.gz")
+done
+for target in "${BACKEND_TARGETS[@]}"; do
+  BACKEND_ASSET_CANDIDATES+=("opencode-studio-${target}-${TAG_NAME}.tar.gz")
 done
 for target in "${BACKEND_TARGETS[@]}"; do
   BACKEND_ASSET_CANDIDATES+=("opencode-studio-${target}.tar.gz")
