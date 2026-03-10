@@ -232,7 +232,7 @@ linux_libc_family() {
 
 backend_target_candidates() {
   case "${OS}/${ARCH}" in
-    linux/x86_64)
+    linux/x86_64|linux/amd64)
       if [[ "$(linux_libc_family)" == "musl" ]]; then
         printf '%s\n' "x86_64-unknown-linux-musl" "x86_64-unknown-linux-gnu"
       else
@@ -260,7 +260,7 @@ backend_target_candidates() {
         printf '%s\n' "i686-unknown-linux-gnu" "i686-unknown-linux-musl"
       fi
       ;;
-    darwin/x86_64)
+    darwin/x86_64|darwin/amd64)
       printf '%s\n' "x86_64-apple-darwin"
       ;;
     darwin/arm64|darwin/aarch64)

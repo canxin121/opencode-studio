@@ -359,9 +359,11 @@ fn runtime_target_triple() -> Option<String> {
     let arch = std::env::consts::ARCH;
     match (os, arch) {
         ("linux", "x86_64") => Some("x86_64-unknown-linux-gnu".to_string()),
+        ("linux", "aarch64") => Some("aarch64-unknown-linux-gnu".to_string()),
         ("macos", "x86_64") => Some("x86_64-apple-darwin".to_string()),
         ("macos", "aarch64") => Some("aarch64-apple-darwin".to_string()),
         ("windows", "x86_64") => Some("x86_64-pc-windows-msvc".to_string()),
+        ("windows", "aarch64") => Some("aarch64-pc-windows-msvc".to_string()),
         _ => None,
     }
 }
