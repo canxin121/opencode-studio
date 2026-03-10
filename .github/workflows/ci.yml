@@ -176,19 +176,19 @@ jobs:
             core.setOutput("previous", stable[1].tag_name);
             core.info(`Resolved latest=${stable[0].tag_name}, previous=${stable[1].tag_name}`);
 
-      - name: Run Linux service flow test
+      - name: Run Linux service E2E flow (API tests)
         if: runner.os == 'Linux'
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: bash scripts/test-unix-service-flow.sh --mode system --version "${{ steps.service-versions.outputs.previous }}" --upgrade-to-version "${{ steps.service-versions.outputs.latest }}" --upgrade-via-backend-api
 
-      - name: Run macOS service flow test
+      - name: Run macOS service E2E flow (API tests)
         if: runner.os == 'macOS'
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: bash scripts/test-unix-service-flow.sh --version "${{ steps.service-versions.outputs.previous }}" --upgrade-to-version "${{ steps.service-versions.outputs.latest }}" --upgrade-via-backend-api
 
-      - name: Run Windows service flow test
+      - name: Run Windows service E2E flow (API tests)
         if: runner.os == 'Windows'
         env:
           GITHUB_TOKEN: ${{ github.token }}
