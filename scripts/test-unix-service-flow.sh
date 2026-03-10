@@ -177,6 +177,17 @@ normalize_release_tag() {
   fi
 }
 
+urlencode_path_segment() {
+  local value="$1"
+  if [[ "$value" =~ ^[A-Za-z0-9._-]+$ ]]; then
+    printf '%s' "$value"
+    return 0
+  fi
+
+  need python3
+  python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$value"
+}
+
 detect_backend_target_triple() {
   local machine=""
 
@@ -278,7 +289,7 @@ resolve_service_upgrade_asset_url() {
   [[ -n "$resolved_target" ]] || fail "Unable to resolve backend target triple for service upgrade"
 
   canonical_asset_name="opencode-studio-backend-${resolved_target}-${release_tag}.tar.gz"
-  asset_url="https://github.com/${REPO}/releases/download/${release_tag}/${canonical_asset_name}"
+  asset_url="https://github.com/${REPO}/releases/download/$(urlencode_path_segment "$release_tag")/$(urlencode_path_segment "$canonical_asset_name")"
   printf '%s\n' "$asset_url"
 }
 

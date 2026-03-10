@@ -1145,7 +1145,7 @@ async fn invoke_bridge_action(
     // discoverable via PATH; add common locations unless the plugin explicitly
     // sets PATH.
     if cfg!(target_os = "macos")
-        && bridge.env.get("PATH").is_none()
+        && !bridge.env.contains_key("PATH")
         && !Path::new(&bridge.program).is_absolute()
     {
         let base_path = std::env::var("PATH").unwrap_or_default();
@@ -1352,7 +1352,12 @@ fn augment_macos_path(base: &str) -> String {
 
     if let Some(home) = crate::path_utils::home_dir_path() {
         extras.push(home.join(".bun").join("bin").to_string_lossy().into_owned());
-        extras.push(home.join(".cargo").join("bin").to_string_lossy().into_owned());
+        extras.push(
+            home.join(".cargo")
+                .join("bin")
+                .to_string_lossy()
+                .into_owned(),
+        );
     }
 
     for extra in extras {

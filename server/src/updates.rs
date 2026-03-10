@@ -226,17 +226,19 @@ pub async fn update_check(Query(query): Query<UpdateCheckQuery>) -> Json<UpdateC
         .unwrap_or(false);
 
     if let Some(target) = service_target.as_deref() {
-        let asset_name = service_asset_name(target);
-        let asset_url = find_asset_url(&release.assets, &asset_name).or_else(|| {
-            Some(release_asset_url(
-                &repo,
-                release.tag_name.trim(),
-                &asset_name,
-            ))
-        });
-        response.service.asset_name = Some(asset_name);
+        let release_tag = release.tag_name.trim();
+        let (asset_name, asset_url) = resolve_release_asset_url(
+            &release.assets,
+            &repo,
+            release_tag,
+            service_asset_candidates(target, release_tag).as_slice(),
+        );
+        response.service.asset_name = asset_name;
         response.service.asset_url = asset_url.clone();
-        response.service.update_command = build_service_update_command(asset_url.as_deref());
+        response.service.update_command = build_service_update_command(
+            asset_url.as_deref(),
+            response.service.asset_name.as_deref(),
+        );
     }
 
     if let (Some(installer), Some(runtime)) =
@@ -249,25 +251,32 @@ pub async fn update_check(Query(query): Query<UpdateCheckQuery>) -> Json<UpdateC
             .unwrap_or(false);
         installer.available = false;
 
-        if let Some(target) = runtime.target.as_deref() {
-            let mut assets = installer_assets_for_target(
-                &release.assets,
-                &repo,
-                target,
-                &runtime.channel,
-                release.tag_name.trim(),
-            );
-            assets.sort_by(|a, b| a.name.cmp(&b.name));
-            installer.assets = assets;
-            let selected = select_primary_installer_asset(runtime, installer.assets.as_slice());
-            installer.selection_error = selected.selection_error;
-            if let Some(primary) = selected.primary_asset {
-                installer.primary_asset_name = Some(primary.name.clone());
-                installer.primary_asset_url = Some(primary.url.clone());
-                installer.available = version_available;
-            }
-        } else {
+        let Some(target_raw) = runtime.target.as_deref() else {
             installer.selection_error = Some(missing_target_error());
+            return Json(response);
+        };
+
+        let Some(target) = normalize_installer_target(target_raw) else {
+            installer.selection_error = Some(unsupported_target_error(target_raw));
+            return Json(response);
+        };
+
+        installer.target = Some(target.to_string());
+        let mut assets = installer_assets_for_target(
+            &release.assets,
+            &repo,
+            target,
+            &runtime.channel,
+            release.tag_name.trim(),
+        );
+        assets.sort_by(|a, b| a.name.cmp(&b.name));
+        installer.assets = assets;
+        let selected = select_primary_installer_asset(runtime, installer.assets.as_slice());
+        installer.selection_error = selected.selection_error;
+        if let Some(primary) = selected.primary_asset {
+            installer.primary_asset_name = Some(primary.name.clone());
+            installer.primary_asset_url = Some(primary.url.clone());
+            installer.available = version_available;
         }
     }
 
@@ -483,15 +492,19 @@ fn runtime_target_triple() -> Option<String> {
 }
 
 fn runtime_target_triple_for(os: &str, arch: &str, musl: bool) -> Option<&'static str> {
-    match (os, arch, musl) {
+    let os = normalize_runtime_os(os);
+    let arch = normalize_runtime_arch(arch);
+
+    match (os.as_str(), arch.as_str(), musl) {
         ("linux", "x86_64", true) => Some("x86_64-unknown-linux-musl"),
         ("linux", "x86_64", false) => Some("x86_64-unknown-linux-gnu"),
         ("linux", "aarch64", true) => Some("aarch64-unknown-linux-musl"),
         ("linux", "aarch64", false) => Some("aarch64-unknown-linux-gnu"),
-        ("linux", "arm", true) => Some("armv7-unknown-linux-musleabihf"),
-        ("linux", "arm", false) => Some("armv7-unknown-linux-gnueabihf"),
-        ("linux", "x86", true) => Some("i686-unknown-linux-musl"),
-        ("linux", "x86", false) => Some("i686-unknown-linux-gnu"),
+        ("linux", "i686", true) => Some("i686-unknown-linux-musl"),
+        ("linux", "i686", false) => Some("i686-unknown-linux-gnu"),
+        // Release builds only publish armv7 hard-float for 32-bit ARM.
+        ("linux", "armv7", true) => Some("armv7-unknown-linux-musleabihf"),
+        ("linux", "armv7", false) => Some("armv7-unknown-linux-gnueabihf"),
         ("macos", "x86_64", _) => Some("x86_64-apple-darwin"),
         ("macos", "aarch64", _) => Some("aarch64-apple-darwin"),
         ("windows", "x86_64", _) => Some("x86_64-pc-windows-msvc"),
@@ -500,12 +513,69 @@ fn runtime_target_triple_for(os: &str, arch: &str, musl: bool) -> Option<&'stati
     }
 }
 
-fn service_asset_name(target: &str) -> String {
-    if is_windows_target(target) {
-        format!("opencode-studio-{target}.zip")
-    } else {
-        format!("opencode-studio-{target}.tar.gz")
+fn normalize_runtime_os(raw: &str) -> String {
+    let lower = raw.trim().to_ascii_lowercase();
+    match lower.as_str() {
+        "darwin" | "osx" => "macos".to_string(),
+        "win32" => "windows".to_string(),
+        _ => lower,
     }
+}
+
+fn normalize_runtime_arch(raw: &str) -> String {
+    let lower = raw.trim().to_ascii_lowercase();
+    match lower.as_str() {
+        "amd64" => "x86_64".to_string(),
+        "arm64" => "aarch64".to_string(),
+        // Common variants from uname -m / tooling.
+        "i386" => "i686".to_string(),
+        "x86" => "i686".to_string(),
+        "arm" => "armv7".to_string(),
+        "armv7l" | "armv7" => "armv7".to_string(),
+        _ => lower,
+    }
+}
+
+fn service_asset_candidates(target: &str, release_tag: &str) -> Vec<String> {
+    let tag = release_tag.trim();
+    let (primary_ext, secondary_ext) = if is_windows_target(target) {
+        ("zip", "tar.gz")
+    } else {
+        ("tar.gz", "zip")
+    };
+
+    let mut candidates = Vec::new();
+    for ext in [primary_ext, secondary_ext] {
+        candidates.push(format!("opencode-studio-backend-{target}-{tag}.{ext}"));
+        candidates.push(format!("opencode-studio-backend-{target}.{ext}"));
+        candidates.push(format!("opencode-studio-{target}-{tag}.{ext}"));
+        candidates.push(format!("opencode-studio-{target}.{ext}"));
+    }
+    candidates
+}
+
+fn resolve_release_asset_url(
+    assets: &[GithubReleaseAsset],
+    repo: &str,
+    release_tag: &str,
+    candidates: &[String],
+) -> (Option<String>, Option<String>) {
+    for name in candidates {
+        if let Some(url) = find_asset_url(assets, name) {
+            return (Some(name.clone()), Some(url));
+        }
+    }
+
+    // If GitHub returned an explicit asset list, fail fast instead of guessing.
+    if !assets.is_empty() {
+        return (None, None);
+    }
+
+    let primary = candidates.first().cloned();
+    let url = primary
+        .as_deref()
+        .map(|name| release_asset_url(repo, release_tag, name));
+    (primary, url)
 }
 
 fn find_asset_url(assets: &[GithubReleaseAsset], name: &str) -> Option<String> {
@@ -515,17 +585,27 @@ fn find_asset_url(assets: &[GithubReleaseAsset], name: &str) -> Option<String> {
         .and_then(|asset| nonempty(Some(asset.browser_download_url.as_str())))
 }
 
-fn build_service_update_command(asset_url: Option<&str>) -> Option<String> {
+fn build_service_update_command(
+    asset_url: Option<&str>,
+    asset_name: Option<&str>,
+) -> Option<String> {
     let url = nonempty(asset_url)?;
-    Some(build_service_update_command_for(std::env::consts::OS, &url))
+    Some(build_service_update_command_for(
+        std::env::consts::OS,
+        asset_name,
+        &url,
+    ))
 }
 
-fn build_service_update_command_for(os: &str, url: &str) -> String {
-    if os == "windows" {
-        format!("curl -fL \"{url}\" -o opencode-studio.zip")
+fn build_service_update_command_for(os: &str, asset_name: Option<&str>, url: &str) -> String {
+    let guessed_name = asset_name.unwrap_or("");
+    let lower = guessed_name.to_ascii_lowercase();
+    let out = if lower.ends_with(".zip") || os == "windows" {
+        "opencode-studio.zip"
     } else {
-        format!("curl -fL \"{url}\" -o opencode-studio.tar.gz")
-    }
+        "opencode-studio.tar.gz"
+    };
+    format!("curl -fL \"{url}\" -o {out}")
 }
 
 fn normalize_installer_channel(raw: Option<&str>) -> String {
@@ -583,7 +663,8 @@ fn installer_assets_for_target(
         })
         .collect::<Vec<_>>();
 
-    if links.is_empty() {
+    // Only guess URLs when we do not have an asset listing (web fallback mode).
+    if links.is_empty() && assets.is_empty() {
         links = installer_expected_asset_names(target, channel, release_tag)
             .into_iter()
             .filter_map(|name| {
@@ -599,6 +680,40 @@ fn installer_assets_for_target(
     }
 
     links
+}
+
+const SUPPORTED_INSTALLER_TARGETS: &[&str] = &[
+    "x86_64-unknown-linux-gnu",
+    "aarch64-unknown-linux-gnu",
+    "x86_64-apple-darwin",
+    "aarch64-apple-darwin",
+    "x86_64-pc-windows-msvc",
+    "aarch64-pc-windows-msvc",
+];
+
+fn normalize_installer_target(raw: &str) -> Option<&'static str> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    SUPPORTED_INSTALLER_TARGETS
+        .iter()
+        .copied()
+        .find(|candidate| trimmed.eq_ignore_ascii_case(candidate))
+}
+
+fn unsupported_target_error(raw: &str) -> InstallerSelectionError {
+    InstallerSelectionError {
+        code: "unsupportedTarget".to_string(),
+        message: format!(
+            "unsupported installer target: {raw}; expected one of: {}",
+            SUPPORTED_INSTALLER_TARGETS.join(", ")
+        ),
+        expected_target: nonempty(Some(raw)),
+        expected_installer_type: None,
+        expected_manager: None,
+        available_identities: Vec::new(),
+    }
 }
 
 fn installer_asset_prefix(target: &str, channel: &str, release_tag: &str) -> String {
@@ -1052,14 +1167,47 @@ mod tests {
     }
 
     #[test]
-    fn service_asset_name_handles_case_insensitive_windows_targets() {
+    fn service_asset_candidates_prefer_backend_names_and_platform_extensions() {
         assert_eq!(
-            service_asset_name("x86_64-pc-Windows-msvc"),
-            "opencode-studio-x86_64-pc-Windows-msvc.zip"
+            service_asset_candidates("x86_64-pc-Windows-msvc", "v1.2.0")[0],
+            "opencode-studio-backend-x86_64-pc-Windows-msvc-v1.2.0.zip"
         );
         assert_eq!(
-            service_asset_name("x86_64-unknown-linux-gnu"),
-            "opencode-studio-x86_64-unknown-linux-gnu.tar.gz"
+            service_asset_candidates("x86_64-unknown-linux-gnu", "v1.2.0")[0],
+            "opencode-studio-backend-x86_64-unknown-linux-gnu-v1.2.0.tar.gz"
+        );
+    }
+
+    #[test]
+    fn runtime_target_triple_for_normalizes_common_aliases() {
+        assert_eq!(
+            runtime_target_triple_for("linux", "amd64", false),
+            Some("x86_64-unknown-linux-gnu")
+        );
+        assert_eq!(
+            runtime_target_triple_for("darwin", "arm64", false),
+            Some("aarch64-apple-darwin")
+        );
+        assert_eq!(
+            runtime_target_triple_for("win32", "arm64", false),
+            Some("aarch64-pc-windows-msvc")
+        );
+    }
+
+    #[test]
+    fn normalize_installer_target_accepts_supported_targets_case_insensitive() {
+        assert_eq!(
+            normalize_installer_target("X86_64-pc-Windows-msvc"),
+            Some("x86_64-pc-windows-msvc")
+        );
+        assert_eq!(
+            normalize_installer_target("aarch64-apple-darwin"),
+            Some("aarch64-apple-darwin")
+        );
+        assert_eq!(normalize_installer_target(""), None);
+        assert_eq!(
+            normalize_installer_target("x86_64-unknown-linux-musl"),
+            None
         );
     }
 
@@ -1112,11 +1260,11 @@ mod tests {
     #[test]
     fn build_service_update_command_for_varies_by_os() {
         assert_eq!(
-            build_service_update_command_for("windows", "https://example.invalid/a.zip"),
+            build_service_update_command_for("windows", None, "https://example.invalid/a.zip"),
             "curl -fL \"https://example.invalid/a.zip\" -o opencode-studio.zip"
         );
         assert_eq!(
-            build_service_update_command_for("linux", "https://example.invalid/a.tar.gz"),
+            build_service_update_command_for("linux", None, "https://example.invalid/a.tar.gz"),
             "curl -fL \"https://example.invalid/a.tar.gz\" -o opencode-studio.tar.gz"
         );
     }
