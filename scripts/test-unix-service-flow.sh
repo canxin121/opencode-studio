@@ -14,6 +14,7 @@ UPGRADE_VIA_BACKEND_API="0"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 INSTALL_SCRIPT="$SCRIPT_DIR/install-service.sh"
 UNINSTALL_SCRIPT="$SCRIPT_DIR/uninstall-service.sh"
+API_SMOKE_SCRIPT="$SCRIPT_DIR/service-api-smoke.sh"
 
 OS="$(uname -s)"
 PORT=""
@@ -41,11 +42,12 @@ Options:
 What it validates:
   1) Install service with a random localhost port.
   2) Verify installed files and generated config values.
-  3) Verify /health endpoint and response shape.
-  4) Exercise service management operations (status/restart/stop/start).
-  5) (Optional) Upgrade in-place to a target version and verify service health.
-  6) Uninstall while keeping files, then verify files remain.
-  7) Uninstall with --remove-install-dir, then verify files are removed.
+  3) Verify /health and run additional API smoke tests.
+  4) Exercise service management operations (status/restart/stop/start) and re-run API tests.
+  5) (Optional) Upgrade in-place to a target version, verify health + API tests.
+  6) Uninstall while keeping files, verify API is unavailable.
+  7) Reinstall, verify health + API tests.
+  8) Uninstall with --remove-install-dir, verify files removed + API unavailable.
 
 Notes:
   - Linux/macOS only.
@@ -540,6 +542,14 @@ MACOS_LABEL="cn.cxits.opencode-studio"
 MACOS_PLIST="$HOME/Library/LaunchAgents/${MACOS_LABEL}.plist"
 MACOS_ACTIVE_DOMAIN=""
 
+dump_macos_launchd_diagnostics() {
+  local header="${1:-macOS launchd diagnostics}"
+  log "$header"
+  launchctl print "gui/$(id -u)/$MACOS_LABEL" 2>/dev/null || true
+  launchctl print "user/$(id -u)/$MACOS_LABEL" 2>/dev/null || true
+  launchctl list 2>/dev/null | grep -F "$MACOS_LABEL" || true
+}
+
 macos_launchctl_domains() {
   local uid
   uid="$(id -u)"
@@ -732,6 +742,7 @@ need opencode
 need curl
 need python3
 need bash
+test -f "$API_SMOKE_SCRIPT" || fail "API smoke script not found: $API_SMOKE_SCRIPT"
 
 test -f "$INSTALL_SCRIPT" || fail "Installer script not found: $INSTALL_SCRIPT"
 test -f "$UNINSTALL_SCRIPT" || fail "Uninstaller script not found: $UNINSTALL_SCRIPT"
@@ -789,7 +800,7 @@ if [[ -n "$UPGRADE_TO_VERSION" ]]; then
 fi
 log "Upgrade strategy: $( [[ "$UPGRADE_VIA_BACKEND_API" == "1" ]] && printf 'backend API' || printf 'reinstall script' )"
 
-log "Step 1/6: install service"
+log "Step 1/8: install service"
 bash "$INSTALL_SCRIPT" "${INSTALL_ARGS[@]}"
 INSTALL_COMPLETED="1"
 
@@ -797,7 +808,7 @@ BIN_PATH="$INSTALL_DIR/bin/opencode-studio"
 CONFIG_PATH="$INSTALL_DIR/opencode-studio.toml"
 DIST_INDEX="$INSTALL_DIR/dist/index.html"
 
-log "Step 2/6: validate installed files and config"
+log "Step 2/8: validate installed files and config"
 assert_path_exists "$BIN_PATH"
 [[ -x "$BIN_PATH" ]] || fail "Binary is not executable: $BIN_PATH"
 assert_path_exists "$CONFIG_PATH"
@@ -823,20 +834,22 @@ else
   verify_macos_service_present
 fi
 
-log "Step 3/6: wait for service health"
+log "Step 3/8: wait for service health"
 wait_for_health_up "$BASE_URL" "$WAIT_TIMEOUT_SECS" || fail "Service health endpoint did not come up: $BASE_URL/health"
 validate_health_payload "$BASE_URL"
+bash "$API_SMOKE_SCRIPT" --base-url "$BASE_URL" --cwd "$INSTALL_DIR" --timeout "$WAIT_TIMEOUT_SECS"
 
-log "Step 4/6: exercise service management commands"
+log "Step 4/8: exercise service management commands"
 if [[ "$OS" == "Linux" ]]; then
   manage_service_linux
 else
   manage_service_macos
 fi
 validate_health_payload "$BASE_URL"
+bash "$API_SMOKE_SCRIPT" --base-url "$BASE_URL" --cwd "$INSTALL_DIR" --timeout "$WAIT_TIMEOUT_SECS"
 
 if [[ -n "$UPGRADE_TO_VERSION" ]]; then
-  log "Step 5/7: upgrade service in-place to $UPGRADE_TO_VERSION"
+  log "Step 5/8: upgrade service in-place to $UPGRADE_TO_VERSION"
   if [[ "$UPGRADE_VIA_BACKEND_API" == "1" ]]; then
     UPGRADE_ASSET_URL="$(resolve_service_upgrade_asset_url "$BASE_URL" "$UPGRADE_TO_VERSION")"
     log "Resolved service upgrade package from backend update-check"
@@ -848,6 +861,7 @@ if [[ -n "$UPGRADE_TO_VERSION" ]]; then
 
   wait_for_health_up "$BASE_URL" "$WAIT_TIMEOUT_SECS" || fail "Service health endpoint did not recover after upgrade"
   validate_health_payload "$BASE_URL"
+  bash "$API_SMOKE_SCRIPT" --base-url "$BASE_URL" --cwd "$INSTALL_DIR" --timeout "$WAIT_TIMEOUT_SECS"
   assert_running_service_version "$BASE_URL" "$UPGRADE_TO_VERSION" "$WAIT_TIMEOUT_SECS"
   assert_binary_version "$BIN_PATH" "$UPGRADE_TO_VERSION"
 
@@ -857,10 +871,13 @@ if [[ -n "$UPGRADE_TO_VERSION" ]]; then
     manage_service_macos
   fi
   validate_health_payload "$BASE_URL"
+  bash "$API_SMOKE_SCRIPT" --base-url "$BASE_URL" --cwd "$INSTALL_DIR" --timeout "$WAIT_TIMEOUT_SECS"
 fi
 
-log "Step 6/7: uninstall service but keep install files"
+log "Step 6/8: uninstall service but keep install files"
 bash "$UNINSTALL_SCRIPT" --install-dir "$INSTALL_DIR"
+
+wait_for_health_down "$BASE_URL" "$WAIT_TIMEOUT_SECS" || fail "Service still reachable after uninstall"
 
 if [[ "$OS" == "Linux" ]]; then
   verify_linux_service_removed
@@ -872,8 +889,52 @@ assert_path_exists "$INSTALL_DIR"
 assert_path_exists "$BIN_PATH"
 assert_path_exists "$CONFIG_PATH"
 
-log "Step 7/7: uninstall service and remove install files"
+log "Step 7/8: reinstall service and re-run API tests"
+REINSTALL_VERSION="$VERSION"
+if [[ -n "$UPGRADE_TO_VERSION" ]]; then
+  REINSTALL_VERSION="$UPGRADE_TO_VERSION"
+fi
+
+REINSTALL_ARGS=(
+  --repo "$REPO"
+  --install-dir "$INSTALL_DIR"
+  --host 127.0.0.1
+  --port "$PORT"
+)
+if [[ "$OS" == "Linux" ]]; then
+  REINSTALL_ARGS+=(--mode "$MODE")
+fi
+if [[ -n "$REINSTALL_VERSION" ]]; then
+  REINSTALL_ARGS+=(--version "$REINSTALL_VERSION")
+fi
+if [[ "$WITH_FRONTEND" == "1" ]]; then
+  REINSTALL_ARGS+=(--with-frontend)
+fi
+
+bash "$INSTALL_SCRIPT" "${REINSTALL_ARGS[@]}"
+if [[ "$OS" == "Darwin" ]]; then
+  # Ensure service is explicitly started after reinstall.
+  macos_restart_service
+fi
+
+if ! wait_for_health_up "$BASE_URL" "$WAIT_TIMEOUT_SECS"; then
+  if [[ "$OS" == "Darwin" ]]; then
+    dump_macos_launchd_diagnostics "Service failed to become healthy after reinstall"
+    log "Recent unified logs (opencode-studio, last 2m)"
+    log show --style syslog --predicate 'process == "opencode-studio"' --last 2m 2>/dev/null || true
+  fi
+  fail "Service health endpoint did not come up after reinstall"
+fi
+validate_health_payload "$BASE_URL"
+bash "$API_SMOKE_SCRIPT" --base-url "$BASE_URL" --cwd "$INSTALL_DIR" --timeout "$WAIT_TIMEOUT_SECS"
+
+if [[ -n "$REINSTALL_VERSION" ]]; then
+  assert_binary_version "$BIN_PATH" "$REINSTALL_VERSION"
+fi
+
+log "Step 8/8: uninstall service and remove install files"
 bash "$UNINSTALL_SCRIPT" --install-dir "$INSTALL_DIR" --remove-install-dir
+wait_for_health_down "$BASE_URL" "$WAIT_TIMEOUT_SECS" || fail "Service still reachable after uninstall --remove-install-dir"
 assert_path_not_exists "$INSTALL_DIR"
 
 duration_secs="$(( $(date +%s) - START_EPOCH ))"

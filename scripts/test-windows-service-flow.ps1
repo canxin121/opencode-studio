@@ -13,6 +13,7 @@ $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $InstallScript = Join-Path $ScriptDir "install-service.ps1"
 $UninstallScript = Join-Path $ScriptDir "uninstall-service.ps1"
+$ApiSmokeScript = Join-Path $ScriptDir "service-api-smoke.ps1"
 
 $ServiceName = "OpenCodeStudio"
 $OpenCodeServiceName = "$ServiceName-OpenCode"
@@ -90,6 +91,13 @@ function Wait-HealthUp([string]$Url, [int]$TimeoutSeconds = 60) {
   }
 
   throw "Health endpoint did not become reachable: $Url/health"
+}
+
+function Invoke-ApiSmoke([string]$Url, [string]$WorkingDir, [int]$TimeoutSeconds = 30) {
+  if (-not (Test-Path -LiteralPath $ApiSmokeScript)) {
+    throw "API smoke script not found: $ApiSmokeScript"
+  }
+  & $ApiSmokeScript -BaseUrl $Url -Cwd $WorkingDir -TimeoutSeconds $TimeoutSeconds
 }
 
 function Wait-HealthDown([string]$Url, [int]$TimeoutSeconds = 60) {
@@ -298,6 +306,9 @@ try {
   if (-not (Test-Path -LiteralPath $UninstallScript)) {
     throw "Uninstaller script not found: $UninstallScript"
   }
+  if (-not (Test-Path -LiteralPath $ApiSmokeScript)) {
+    throw "API smoke script not found: $ApiSmokeScript"
+  }
 
   if (-not $InstallDir) {
     $InstallDir = Join-Path $env:TEMP ("opencode-studio-e2e-" + [Guid]::NewGuid().ToString("N"))
@@ -332,7 +343,7 @@ try {
     $installParams["WithFrontend"] = $true
   }
 
-  Write-Log "Step 1/6: install service"
+  Write-Log "Step 1/8: install service"
   & $InstallScript @installParams
   $installCompleted = $true
 
@@ -340,7 +351,7 @@ try {
   $configPath = Join-Path $InstallDir "opencode-studio.toml"
   $distIndexPath = Join-Path $InstallDir "dist/index.html"
 
-  Write-Log "Step 2/6: validate installed files and config"
+  Write-Log "Step 2/8: validate installed files and config"
   if (-not (Test-Path -LiteralPath $binPath)) {
     throw "Installed binary missing: $binPath"
   }
@@ -380,12 +391,13 @@ try {
     throw "Service missing after install: $OpenCodeServiceName"
   }
 
-  Write-Log "Step 3/6: wait for service health"
+  Write-Log "Step 3/8: wait for service health"
   Wait-HealthUp -Url $baseUrl -TimeoutSeconds $WaitTimeoutSeconds
   $payload = Get-HealthPayload -Url $baseUrl
   Assert-HealthPayload -Payload $payload
+  Invoke-ApiSmoke -Url $baseUrl -WorkingDir $InstallDir -TimeoutSeconds $WaitTimeoutSeconds
 
-  Write-Log "Step 4/6: exercise service management commands"
+  Write-Log "Step 4/8: exercise service management commands"
   Invoke-Sc -Arguments @("query", $ServiceName) -ErrorMessage "Failed to query $ServiceName" | Out-Null
   Invoke-Sc -Arguments @("query", $OpenCodeServiceName) -ErrorMessage "Failed to query $OpenCodeServiceName" | Out-Null
 
@@ -410,15 +422,17 @@ try {
   Invoke-Sc -Arguments @("start", $ServiceName) -ErrorMessage "Failed to restart $ServiceName after $OpenCodeServiceName start" | Out-Null
   Wait-ServiceStatus -Name $ServiceName -Status "Running" -TimeoutSeconds $WaitTimeoutSeconds
   Wait-HealthUp -Url $baseUrl -TimeoutSeconds $WaitTimeoutSeconds
+  Invoke-ApiSmoke -Url $baseUrl -WorkingDir $InstallDir -TimeoutSeconds $WaitTimeoutSeconds
 
   if ($UpgradeToVersion) {
-    Write-Log "Step 5/7: trigger in-place upgrade via backend API to $UpgradeToVersion"
+    Write-Log "Step 5/8: trigger in-place upgrade via backend API to $UpgradeToVersion"
     Invoke-ServiceUpgradeViaBackendApi -Url $baseUrl -Repo $Repo -TargetVersion $UpgradeToVersion -InstallDir $InstallDir -TimeoutSeconds $WaitTimeoutSeconds
 
     Wait-ServiceStatus -Name $ServiceName -Status "Running" -TimeoutSeconds $WaitTimeoutSeconds
     Wait-HealthUp -Url $baseUrl -TimeoutSeconds $WaitTimeoutSeconds
     $upgradedPayload = Get-HealthPayload -Url $baseUrl
     Assert-HealthPayload -Payload $upgradedPayload
+    Invoke-ApiSmoke -Url $baseUrl -WorkingDir $InstallDir -TimeoutSeconds $WaitTimeoutSeconds
     Assert-ServiceVersion -Url $baseUrl -ExpectedTag $UpgradeToVersion
     Assert-BinaryVersion -BinaryPath $binPath -ExpectedTag $UpgradeToVersion
 
@@ -429,10 +443,12 @@ try {
     Invoke-Sc -Arguments @("start", $ServiceName) -ErrorMessage "Failed to start $ServiceName after upgrade" | Out-Null
     Wait-ServiceStatus -Name $ServiceName -Status "Running" -TimeoutSeconds $WaitTimeoutSeconds
     Wait-HealthUp -Url $baseUrl -TimeoutSeconds $WaitTimeoutSeconds
+    Invoke-ApiSmoke -Url $baseUrl -WorkingDir $InstallDir -TimeoutSeconds $WaitTimeoutSeconds
   }
 
-  Write-Log "Step 6/7: uninstall services but keep install files"
+  Write-Log "Step 6/8: uninstall services but keep install files"
   & $UninstallScript -InstallDir $InstallDir
+  Wait-HealthDown -Url $baseUrl -TimeoutSeconds $WaitTimeoutSeconds
   if (Test-ServiceExists $ServiceName) {
     throw "Service still exists after uninstall: $ServiceName"
   }
@@ -446,8 +462,46 @@ try {
     throw "Installed binary should still exist after keep-files uninstall: $binPath"
   }
 
-  Write-Log "Step 7/7: uninstall services and remove install files"
+  Write-Log "Step 7/8: reinstall service and re-run API tests"
+  $reinstallVersion = ""
+  if ($UpgradeToVersion) {
+    $reinstallVersion = $UpgradeToVersion
+  } elseif ($Version) {
+    $reinstallVersion = $Version
+  }
+
+  $reinstallParams = @{
+    Repo = $Repo
+    InstallDir = $InstallDir
+    BindHost = "127.0.0.1"
+    Port = $port
+  }
+  if ($reinstallVersion) {
+    $reinstallParams["Version"] = $reinstallVersion
+  }
+  if ($WithFrontend) {
+    $reinstallParams["WithFrontend"] = $true
+  }
+
+  & $InstallScript @reinstallParams
+  if (-not (Test-ServiceExists $ServiceName)) {
+    throw "Service missing after reinstall: $ServiceName"
+  }
+  if (-not (Test-ServiceExists $OpenCodeServiceName)) {
+    throw "Service missing after reinstall: $OpenCodeServiceName"
+  }
+
+  Wait-HealthUp -Url $baseUrl -TimeoutSeconds $WaitTimeoutSeconds
+  $rePayload = Get-HealthPayload -Url $baseUrl
+  Assert-HealthPayload -Payload $rePayload
+  Invoke-ApiSmoke -Url $baseUrl -WorkingDir $InstallDir -TimeoutSeconds $WaitTimeoutSeconds
+  if ($reinstallVersion) {
+    Assert-BinaryVersion -BinaryPath $binPath -ExpectedTag $reinstallVersion
+  }
+
+  Write-Log "Step 8/8: uninstall services and remove install files"
   & $UninstallScript -InstallDir $InstallDir -RemoveInstallDir
+  Wait-HealthDown -Url $baseUrl -TimeoutSeconds $WaitTimeoutSeconds
   Wait-PathAbsent -Path $InstallDir -TimeoutSeconds $WaitTimeoutSeconds
 
   $elapsed = [int]((Get-Date) - $startTime).TotalSeconds
