@@ -1907,30 +1907,41 @@ fn build_sidebar_footer_view(
     page: usize,
     page_size: usize,
 ) -> SidebarFooterViewWire {
-    let deduped = all_root_ids
-        .iter()
-        .map(|value| value.trim())
-        .filter(|value| !value.is_empty())
-        .fold(Vec::<String>::new(), |mut out, value| {
-            if !out.iter().any(|existing| existing == value) {
-                out.push(value.to_string());
-            }
-            out
-        });
+    fn paged_deduped_ids(
+        all_ids: &[String],
+        page: usize,
+        page_size: usize,
+    ) -> (Vec<String>, usize, usize, usize) {
+        let deduped = all_ids
+            .iter()
+            .map(|value| value.trim())
+            .filter(|value| !value.is_empty())
+            .fold(Vec::<String>::new(), |mut out, value| {
+                if !out.iter().any(|existing| existing == value) {
+                    out.push(value.to_string());
+                }
+                out
+            });
 
-    let total = deduped.len();
-    let page_count = std::cmp::max(
-        1,
-        ((std::cmp::max(total, 1) as f64) / (page_size as f64)).ceil() as usize,
-    );
-    let clamped_page = page.min(page_count.saturating_sub(1));
-    let start = clamped_page.saturating_mul(page_size);
-    let end = std::cmp::min(total, start.saturating_add(page_size));
-    let paged_roots = if start < end {
-        deduped[start..end].to_vec()
-    } else {
-        Vec::new()
-    };
+        let total = deduped.len();
+        let page_count = std::cmp::max(
+            1,
+            ((std::cmp::max(total, 1) as f64) / (page_size as f64)).ceil() as usize,
+        );
+        let clamped_page = page.min(page_count.saturating_sub(1));
+        let start = clamped_page.saturating_mul(page_size);
+        let end = std::cmp::min(total, start.saturating_add(page_size));
+        let paged = if start < end {
+            deduped[start..end].to_vec()
+        } else {
+            Vec::new()
+        };
+
+        (paged, total, page_count, clamped_page)
+    }
+
+    let (paged_roots, total, page_count, clamped_page) =
+        paged_deduped_ids(all_root_ids, page, page_size);
 
     let rows = build_index_rows_from_roots(
         ctx.state,
@@ -1979,7 +1990,40 @@ fn build_running_index_items_from_runtime(
     runtime_by_session_id: &Value,
     directory_id_by_normalized_path: &BTreeMap<String, String>,
 ) -> Vec<RunningIndexItem> {
-    let mut items = Vec::<RunningIndexItem>::new();
+    fn root_session_id_for_session(
+        state: &Arc<crate::AppState>,
+        session_id: &str,
+    ) -> Option<String> {
+        let mut cur = session_id.trim().to_string();
+        if cur.is_empty() {
+            return None;
+        }
+
+        let mut seen = HashSet::<String>::new();
+        loop {
+            if !seen.insert(cur.clone()) {
+                return Some(cur);
+            }
+
+            let Some(summary) = state.directory_session_index.summary(&cur) else {
+                // If we can't resolve ancestry, safest fallback is to treat current as root.
+                return Some(cur);
+            };
+            let Some(parent) = session_parent_id(&summary.raw) else {
+                return Some(cur);
+            };
+
+            let parent_trimmed = parent.trim();
+            if parent_trimmed.is_empty() || parent_trimmed == cur {
+                return Some(cur);
+            }
+            cur = parent_trimmed.to_string();
+        }
+    }
+
+    // Aggregate all active (running/blocked) runtime entries up to their root session.
+    // The Running footer lists root sessions, and expansion reveals children.
+    let mut by_root = BTreeMap::<String, RunningIndexItem>::new();
 
     if let Some(map) = runtime_by_session_id.as_object() {
         for (session_id, runtime) in map {
@@ -1996,7 +2040,14 @@ fn build_running_index_items_from_runtime(
                 continue;
             }
 
-            let directory_path = state.directory_session_index.directory_for_session(sid);
+            let Some(root_id) = root_session_id_for_session(state, sid) else {
+                continue;
+            };
+
+            let directory_path = state
+                .directory_session_index
+                .directory_for_session(&root_id)
+                .or_else(|| state.directory_session_index.directory_for_session(sid));
             let directory_id = directory_path
                 .as_deref()
                 .and_then(normalize_path_for_match)
@@ -2006,16 +2057,33 @@ fn build_running_index_items_from_runtime(
                 .and_then(|value| value.as_i64())
                 .unwrap_or(0);
 
-            items.push(RunningIndexItem {
-                session_id: sid.to_string(),
+            let next = RunningIndexItem {
+                session_id: root_id.clone(),
                 directory_id,
                 directory_path,
                 runtime: runtime.clone(),
                 updated_at,
-            });
+            };
+
+            by_root
+                .entry(root_id)
+                .and_modify(|existing| {
+                    if next.updated_at > existing.updated_at {
+                        existing.updated_at = next.updated_at;
+                        existing.runtime = next.runtime.clone();
+                    }
+                    if existing.directory_id.is_none() {
+                        existing.directory_id = next.directory_id.clone();
+                    }
+                    if existing.directory_path.is_none() {
+                        existing.directory_path = next.directory_path.clone();
+                    }
+                })
+                .or_insert(next);
         }
     }
 
+    let mut items = by_root.into_values().collect::<Vec<_>>();
     items.sort_by(|a, b| {
         b.updated_at
             .cmp(&a.updated_at)
