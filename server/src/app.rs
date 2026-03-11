@@ -233,7 +233,9 @@ fn tracked_status_directories(settings: &crate::settings::Settings) -> Vec<Strin
         if raw.is_empty() {
             continue;
         }
-        let normalized = crate::path_utils::normalize_directory_path(raw);
+        let Some(normalized) = crate::path_utils::normalize_directory_for_match(raw) else {
+            continue;
+        };
         let key = normalized.trim();
         if key.is_empty() {
             continue;
@@ -260,7 +262,8 @@ async fn fetch_session_status_map(
 ) -> Option<serde_json::Value> {
     let mut target = format!("{}/session/status", bridge.base_url.trim_end_matches('/'));
     if let Some(directory) = directory {
-        let trimmed = directory.trim();
+        let normalized = crate::path_utils::normalize_directory_for_match(directory);
+        let trimmed = normalized.as_deref().unwrap_or(directory).trim();
         if !trimmed.is_empty() {
             target.push_str("?directory=");
             target.push_str(&urlencoding::encode(trimmed));
@@ -338,7 +341,8 @@ async fn fetch_attention_session_ids(
 ) -> Option<HashSet<String>> {
     let mut target = format!("{}{}", bridge.base_url.trim_end_matches('/'), endpoint);
     if let Some(directory) = directory {
-        let trimmed = directory.trim();
+        let normalized = crate::path_utils::normalize_directory_for_match(directory);
+        let trimmed = normalized.as_deref().unwrap_or(directory).trim();
         if !trimmed.is_empty() {
             let separator = if target.contains('?') { '&' } else { '?' };
             target.push(separator);
@@ -1469,5 +1473,29 @@ mod tests {
                 .and_then(|v| v.get("attention"))
                 .is_some_and(|v| v.is_null())
         );
+    }
+
+    #[test]
+    fn tracked_status_directories_normalizes_windows_paths_for_opencode_queries() {
+        let settings = crate::settings::Settings {
+            projects: vec![
+                crate::settings::Project {
+                    id: "p1".to_string(),
+                    path: "C:\\Users\\Alice\\Repo\\".to_string(),
+                    added_at: 0,
+                    last_opened_at: 0,
+                },
+                crate::settings::Project {
+                    id: "p2".to_string(),
+                    path: "c:/users/alice/repo".to_string(),
+                    added_at: 0,
+                    last_opened_at: 0,
+                },
+            ],
+            ..Default::default()
+        };
+
+        let dirs = tracked_status_directories(&settings);
+        assert_eq!(dirs, vec!["c:/users/alice/repo".to_string()]);
     }
 }
