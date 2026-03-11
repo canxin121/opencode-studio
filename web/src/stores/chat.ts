@@ -188,6 +188,11 @@ export const useChatStore = defineStore('chat', () => {
     return cwd
   }
 
+  function readLocatePayloadSession(value: JsonValue): UnknownRecord | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+    return value as UnknownRecord
+  }
+
   function readEventProperties(evt: SseEvent): UnknownRecord {
     return asRecord(evt.properties) || {}
   }
@@ -778,12 +783,14 @@ export const useChatStore = defineStore('chat', () => {
     if (!dir) {
       try {
         const loc = asRecord(await chatApi.locateSession(sid))
-        const locatedDir = typeof loc?.directory === 'string' ? String(loc.directory).trim() : ''
+        const sess = readLocatePayloadSession(loc?.session as JsonValue)
+        const locatedSessionId = readSessionId((sess as JsonValue) || null)
+        const canUseLocateResult = !sess || !locatedSessionId || locatedSessionId === sid
+        const locatedDir = canUseLocateResult && typeof loc?.directory === 'string' ? String(loc.directory).trim() : ''
         if (locatedDir) {
           dir = locatedDir
         }
-        const sess = loc?.session
-        if (sess && typeof sess === 'object' && readSessionId(sess) === sid) {
+        if (sess && locatedSessionId === sid) {
           const sd = readSessionDirectory(sess)
           const d = sd || dir || locatedDir
           if (d) {

@@ -584,6 +584,10 @@ function sessionSnapshotDirectory(session: SidebarSessionSummary | null | undefi
   return cwd
 }
 
+function readLocatedSessionId(record: UnknownRecord | null | undefined): string {
+  return typeof record?.id === 'string' ? record.id.trim() : ''
+}
+
 function mergeSidebarSessionSummary(
   current: SidebarSessionSummary | null | undefined,
   incoming: Partial<Session> | SidebarSessionSummary | null | undefined,
@@ -611,10 +615,17 @@ function mergeSidebarSessionSummary(
   const directory = sessionSnapshotDirectory(incomingRecord) || sessionSnapshotDirectory(currentRecord)
 
   if (title) merged.title = title
+  else delete merged.title
   if (slug) merged.slug = slug
+  else delete merged.slug
   if (directory) {
     merged.directory = directory
+  } else {
+    delete merged.directory
   }
+  const cwd = typeof merged.cwd === 'string' ? merged.cwd.trim() : ''
+  if (cwd) merged.cwd = cwd
+  else delete merged.cwd
   return merged
 }
 
@@ -926,8 +937,8 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     if (!sid) return null
     const located = asRecord(await chatApi.locateSession(sid).catch(() => null))
     const rawSession = asRecord((located?.session ?? null) as JsonValue)
-    const locatedSessionId = typeof rawSession?.id === 'string' ? rawSession.id.trim() : ''
-    if (!rawSession || !locatedSessionId) return null
+    const locatedSessionId = readLocatedSessionId(rawSession)
+    if (!rawSession || !locatedSessionId || locatedSessionId !== sid) return null
     const directory =
       resolveDirectoryEntryForSessionSnapshot(rawSession, {
         directoryId: typeof located?.projectId === 'string' ? located.projectId : hint?.directoryId,
@@ -1015,7 +1026,7 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
       })
       for (const session of page.sessions || []) {
         const sid = typeof session?.id === 'string' ? session.id.trim() : ''
-        if (!sid) continue
+        if (!sid || !candidateIds.has(sid)) continue
         unresolved.delete(sid)
         hydrated.set(sid, {
           session,
@@ -1052,6 +1063,12 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     await Promise.allSettled(locateTasks)
 
     if (hydrated.size === 0) {
+      for (const sid of unresolved) {
+        sidebarSessionHydrationAttemptAt.set(
+          sid,
+          Date.now() - SIDEBAR_SESSION_HYDRATION_RETRY_MS + SIDEBAR_RECOVERY_THROTTLE_MS,
+        )
+      }
       scheduleSidebarRecoverySync('sidebar-session-hydration-missed', 220)
       return
     }
@@ -1062,6 +1079,12 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     )
     applyHydratedSidebarSessions(hydrated)
     if (unresolved.size > 0) {
+      for (const sid of unresolved) {
+        sidebarSessionHydrationAttemptAt.set(
+          sid,
+          Date.now() - SIDEBAR_SESSION_HYDRATION_RETRY_MS + SIDEBAR_RECOVERY_THROTTLE_MS,
+        )
+      }
       scheduleSidebarRecoverySync('sidebar-session-hydration-partial', 220)
     }
   }
@@ -2016,12 +2039,15 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
 
     const locateResult = hint?.locateResult ?? (await chatApi.locateSession(sid).catch(() => null))
     const loc = asRecord(locateResult)
+    const locatedSession = asRecord((loc?.session ?? null) as JsonValue)
+    const locatedSessionId = readLocatedSessionId(locatedSession)
+    const canUseRemoteLocate = !locatedSession || !locatedSessionId || locatedSessionId === sid
     const rawPid = loc?.projectId ?? loc?.project_id
     const rawPath = loc?.projectPath ?? loc?.project_path
 
-    const pid = typeof rawPid === 'string' ? rawPid.trim() : ''
-    const ppath = typeof rawPath === 'string' ? rawPath.trim() : ''
-    const locatedDir = typeof loc?.directory === 'string' ? loc.directory.trim() : ''
+    const pid = canUseRemoteLocate && typeof rawPid === 'string' ? rawPid.trim() : ''
+    const ppath = canUseRemoteLocate && typeof rawPath === 'string' ? rawPath.trim() : ''
+    const locatedDir = canUseRemoteLocate && typeof loc?.directory === 'string' ? loc.directory.trim() : ''
 
     const locatePath = locatedDir || ppath
     const matchedByPath = locatePath ? directoryEntryByPath(locatePath, directoriesById.value) : null
