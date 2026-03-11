@@ -5,7 +5,7 @@ import test from 'node:test'
 
 test('files page syncs visibility preferences from settings payload', () => {
   const file = resolve(import.meta.dir, '../src/pages/FilesPage.vue')
-  const source = readFileSync(file, 'utf8')
+  const source = readFileSync(file, 'utf8').replace(/\r\n/g, '\n')
 
   assert.ok(source.includes("import { useSettingsStore } from '@/stores/settings'"))
   assert.ok(source.includes('function syncFilesVisibilityPreferencesFromSettings(next: Settings | null)'))
@@ -17,7 +17,7 @@ test('files page syncs visibility preferences from settings payload', () => {
 
 test('files page persists visibility preferences through settings store', () => {
   const file = resolve(import.meta.dir, '../src/pages/FilesPage.vue')
-  const source = readFileSync(file, 'utf8')
+  const source = readFileSync(file, 'utf8').replace(/\r\n/g, '\n')
 
   assert.ok(source.includes('function persistFilesVisibilityPreferencesToSettings()'))
   assert.ok(source.includes('if (settings.data.directoryShowHidden !== showHidden.value)'))
