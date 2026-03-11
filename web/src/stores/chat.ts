@@ -1453,6 +1453,15 @@ export const useChatStore = defineStore('chat', () => {
     sessionsByDirectory.value = nextByDir
   }
 
+  function cacheSessions(
+    entries: Array<(Partial<Session> & { id: string }) | null | undefined>,
+    opts?: { insertIfMissing?: boolean },
+  ) {
+    for (const entry of entries) {
+      upsertSessionCache(entry, opts)
+    }
+  }
+
   function clearSessionRevertBoundaryForMessage(sessionId: string, messageId: string) {
     const sid = (sessionId || '').trim()
     if (!sid) return
@@ -2007,6 +2016,7 @@ export const useChatStore = defineStore('chat', () => {
     unshareSession,
     summarizeSession,
     abortSession,
+    cacheSessions,
     sendText,
     sendMessage,
     replyPermission,

@@ -7,8 +7,10 @@ import { apiJson } from '@/lib/api'
 import { normalizeDirectories } from '@/features/sessions/model/projects'
 import type { DirectoryEntry } from '@/features/sessions/model/types'
 import { normalizeDirForCompare } from '@/features/sessions/model/labels'
+import type { Session } from '@/types/chat'
 import type { SseEvent } from '@/lib/sse'
 import { defaultChatSidebarUiPrefs, patchChatSidebarUiPrefs, type ChatSidebarUiPrefs } from '@/data/chatSidebarUiPrefs'
+import { useChatStore } from './chat'
 
 import {
   normalizeRuntime,
@@ -47,6 +49,7 @@ const SIDEBAR_FOOTER_PAGE_SIZE = 10
 const SIDEBAR_DIRECTORY_SESSIONS_PAGE_SIZE = 10
 const SIDEBAR_RECOVERY_THROTTLE_MS = 1500
 const SIDEBAR_STATE_REQUEST_STALE_MS = 12000
+const SIDEBAR_SESSION_HYDRATION_RETRY_MS = 10000
 const SIDEBAR_RECOVERY_EVENT_TYPES = new Set([
   'session.created',
   'session.updated',
@@ -568,6 +571,74 @@ function normalizeSidebarView(raw: JsonValue | null | undefined): NormalizedSide
   }
 }
 
+function sessionSnapshotHasIdentity(session: SidebarSessionSummary | null | undefined): boolean {
+  const title = typeof session?.title === 'string' ? session.title.trim() : ''
+  const slug = typeof session?.slug === 'string' ? session.slug.trim() : ''
+  return Boolean(title || slug)
+}
+
+function sessionSnapshotDirectory(session: SidebarSessionSummary | null | undefined): string {
+  const directory = typeof session?.directory === 'string' ? session.directory.trim() : ''
+  if (directory) return directory
+  const cwd = typeof session?.cwd === 'string' ? session.cwd.trim() : ''
+  return cwd
+}
+
+function mergeSidebarSessionSummary(
+  current: SidebarSessionSummary | null | undefined,
+  incoming: Partial<Session> | SidebarSessionSummary | null | undefined,
+  fallbackId: string,
+): SidebarSessionSummary | null {
+  const sid = String(fallbackId || '').trim()
+  if (!sid) return null
+  const currentRecord = current ? { ...current } : null
+  const incomingRecord = incoming && typeof incoming === 'object' ? ({ ...incoming } as SidebarSessionSummary) : null
+
+  if (!currentRecord && !incomingRecord) return null
+
+  const merged = {
+    ...(currentRecord || {}),
+    ...(incomingRecord || {}),
+    id: sid,
+  } as SidebarSessionSummary
+
+  const title =
+    (typeof incomingRecord?.title === 'string' ? incomingRecord.title.trim() : '') ||
+    (typeof currentRecord?.title === 'string' ? currentRecord.title.trim() : '')
+  const slug =
+    (typeof incomingRecord?.slug === 'string' ? incomingRecord.slug.trim() : '') ||
+    (typeof currentRecord?.slug === 'string' ? currentRecord.slug.trim() : '')
+  const directory = sessionSnapshotDirectory(incomingRecord) || sessionSnapshotDirectory(currentRecord)
+
+  if (title) merged.title = title
+  if (slug) merged.slug = slug
+  if (directory) {
+    merged.directory = directory
+  }
+  return merged
+}
+
+function mergeSidebarRowSnapshot(
+  row: SidebarSessionRow,
+  opts?: { session?: Partial<Session> | SidebarSessionSummary | null; directory?: DirectoryEntry | null },
+): SidebarSessionRow {
+  const session = mergeSidebarSessionSummary(row.session, opts?.session, row.id)
+  const directory = opts?.directory || row.directory
+
+  return {
+    ...row,
+    session,
+    directory: directory || row.directory || null,
+  }
+}
+
+function sidebarSessionNeedsHydration(row: SidebarSessionRow): boolean {
+  if (!row.session) return true
+  if (!sessionSnapshotHasIdentity(row.session)) return true
+  if (!row.directory && !sessionSnapshotDirectory(row.session)) return true
+  return false
+}
+
 function applyPersistentStateQueryOverrides(
   base: PersistedSidebarStateQuery,
   opts: SidebarStateQuery | undefined,
@@ -661,6 +732,7 @@ function buildSidebarStateUrl(persistedQuery: PersistedSidebarStateQuery, focusS
 }
 
 export const useDirectorySessionStore = defineStore('directorySession', () => {
+  const chat = useChatStore()
   const directoriesById = ref<Record<string, DirectoryEntry>>({})
   const directoryOrder = ref<string[]>([])
   const runtimeBySessionId = ref<Record<string, SessionRuntimeState>>({})
@@ -687,6 +759,13 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
   let lastSidebarRecoverySyncAt = 0
   let sidebarStateRequestInFlight: SidebarInFlightVoidRequest | null = null
   let lastAppliedDeltaSeq = 0
+  const sidebarSessionHydrationInFlight = new Map<
+    string,
+    Promise<{ session: Session; directory: DirectoryEntry | null } | null>
+  >()
+  const sidebarSessionHydrationAttemptAt = new Map<string, number>()
+  let sidebarSessionHydrationRunning: Promise<void> | null = null
+  let sidebarSessionHydrationQueued = false
 
   const visibleDirectories = computed<DirectoryEntry[]>(() => {
     return directoryOrder.value
@@ -714,6 +793,296 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     if (!stringArraysEquivalent(directoryOrder.value, order)) {
       directoryOrder.value = order
     }
+  }
+
+  function collectLoadedSidebarRows(): SidebarSessionRow[] {
+    const rows: SidebarSessionRow[] = []
+    for (const section of Object.values(directorySidebarById.value)) {
+      rows.push(...section.pinnedRows, ...section.recentRows)
+    }
+    rows.push(...pinnedFooterView.value.rows, ...recentFooterView.value.rows, ...runningFooterView.value.rows)
+    return rows
+  }
+
+  function knownSidebarRowBySessionId(): Record<string, SidebarSessionRow> {
+    const known: Record<string, SidebarSessionRow> = {}
+    for (const row of collectLoadedSidebarRows()) {
+      const sid = String(row.id || '').trim()
+      if (!sid) continue
+      const previous = known[sid]
+      if (!previous) {
+        known[sid] = row
+        continue
+      }
+      const merged = mergeSidebarRowSnapshot(previous, {
+        session: row.session,
+        directory: row.directory || previous.directory,
+      })
+      known[sid] = merged
+    }
+    return known
+  }
+
+  function knownDirectoryForSession(row: SidebarSessionRow): DirectoryEntry | null {
+    if (row.directory?.id && row.directory.path) return row.directory
+    const sessionPath = sessionSnapshotDirectory(row.session)
+    if (!sessionPath) return null
+    return directoryEntryByPath(sessionPath, directoriesById.value)
+  }
+
+  function enrichSidebarRowWithKnownData(
+    row: SidebarSessionRow,
+    knownRows: Record<string, SidebarSessionRow>,
+  ): SidebarSessionRow {
+    const sid = String(row.id || '').trim()
+    if (!sid) return row
+    const cachedSession = chat.getSessionById(sid)
+    const knownRow = knownRows[sid]
+    const directory =
+      row.directory ||
+      knownRow?.directory ||
+      knownDirectoryForSession(row) ||
+      (knownRow ? knownDirectoryForSession(knownRow) : null)
+    return mergeSidebarRowSnapshot(row, {
+      session: mergeSidebarSessionSummary(knownRow?.session || null, cachedSession || null, sid),
+      directory,
+    })
+  }
+
+  function enrichDirectorySidebarView(
+    section: DirectorySidebarView,
+    knownRows: Record<string, SidebarSessionRow>,
+  ): DirectorySidebarView {
+    return {
+      ...section,
+      pinnedRows: section.pinnedRows.map((row) => enrichSidebarRowWithKnownData(row, knownRows)),
+      recentRows: section.recentRows.map((row) => enrichSidebarRowWithKnownData(row, knownRows)),
+    }
+  }
+
+  function enrichFooterView(view: SidebarFooterView, knownRows: Record<string, SidebarSessionRow>): SidebarFooterView {
+    return {
+      ...view,
+      rows: view.rows.map((row) => enrichSidebarRowWithKnownData(row, knownRows)),
+    }
+  }
+
+  function applyHydratedSidebarSessions(
+    entries: Map<string, { session: Session; directory: DirectoryEntry | null }>,
+  ): boolean {
+    if (entries.size === 0) return false
+    let changed = false
+
+    const nextDirectorySidebarById: Record<string, DirectorySidebarView> = {}
+    for (const [directoryId, section] of Object.entries(directorySidebarById.value)) {
+      const nextSection: DirectorySidebarView = {
+        ...section,
+        pinnedRows: section.pinnedRows.map((row) => {
+          const hydrated = entries.get(row.id)
+          if (!hydrated) return row
+          const nextRow = mergeSidebarRowSnapshot(row, hydrated)
+          if (!sessionRowEquivalent(row, nextRow)) changed = true
+          return nextRow
+        }),
+        recentRows: section.recentRows.map((row) => {
+          const hydrated = entries.get(row.id)
+          if (!hydrated) return row
+          const nextRow = mergeSidebarRowSnapshot(row, hydrated)
+          if (!sessionRowEquivalent(row, nextRow)) changed = true
+          return nextRow
+        }),
+      }
+      nextDirectorySidebarById[directoryId] = nextSection
+    }
+
+    const mergeFooterRows = (rows: SidebarSessionRow[]): SidebarSessionRow[] =>
+      rows.map((row) => {
+        const hydrated = entries.get(row.id)
+        if (!hydrated) return row
+        const nextRow = mergeSidebarRowSnapshot(row, hydrated)
+        if (!sessionRowEquivalent(row, nextRow)) changed = true
+        return nextRow
+      })
+
+    const nextPinnedFooterView = { ...pinnedFooterView.value, rows: mergeFooterRows(pinnedFooterView.value.rows) }
+    const nextRecentFooterView = { ...recentFooterView.value, rows: mergeFooterRows(recentFooterView.value.rows) }
+    const nextRunningFooterView = { ...runningFooterView.value, rows: mergeFooterRows(runningFooterView.value.rows) }
+
+    if (changed) {
+      directorySidebarById.value = nextDirectorySidebarById
+      pinnedFooterView.value = nextPinnedFooterView
+      recentFooterView.value = nextRecentFooterView
+      runningFooterView.value = nextRunningFooterView
+    }
+
+    return changed
+  }
+
+  async function hydrateSessionViaLocate(
+    sessionId: string,
+    hint?: { directoryId?: string; directoryPath?: string },
+  ): Promise<{ session: Session; directory: DirectoryEntry | null } | null> {
+    const sid = String(sessionId || '').trim()
+    if (!sid) return null
+    const located = asRecord(await chatApi.locateSession(sid).catch(() => null))
+    const rawSession = asRecord((located?.session ?? null) as JsonValue)
+    const locatedSessionId = typeof rawSession?.id === 'string' ? rawSession.id.trim() : ''
+    if (!rawSession || !locatedSessionId) return null
+    const directory =
+      resolveDirectoryEntryForSessionSnapshot(rawSession, {
+        directoryId: typeof located?.projectId === 'string' ? located.projectId : hint?.directoryId,
+        directoryPath:
+          typeof located?.directory === 'string'
+            ? located.directory
+            : typeof located?.projectPath === 'string'
+              ? located.projectPath
+              : hint?.directoryPath,
+      }) || null
+    return {
+      session: rawSession as Session,
+      directory,
+    }
+  }
+
+  function resolveDirectoryEntryForSessionSnapshot(
+    session: Partial<Session> | SidebarSessionSummary | null | undefined,
+    hint?: { directoryId?: string; directoryPath?: string },
+  ): DirectoryEntry | null {
+    const sessionDirectory = sessionSnapshotDirectory(session as SidebarSessionSummary | null)
+    const hintId = String(hint?.directoryId || '').trim()
+    const hintPath = String(hint?.directoryPath || '').trim()
+    if (hintId) {
+      const byId = directoriesById.value[hintId]
+      if (byId?.path) return byId
+    }
+    if (sessionDirectory) {
+      const byPath = directoryEntryByPath(sessionDirectory, directoriesById.value)
+      if (byPath?.id && byPath.path) return byPath
+    }
+    if (hintPath) {
+      const byPath = directoryEntryByPath(hintPath, directoriesById.value)
+      if (byPath?.id && byPath.path) return byPath
+      if (hintId) return { id: hintId, path: hintPath }
+    }
+    return null
+  }
+
+  async function hydrateIncompleteSidebarSessions(): Promise<void> {
+    const knownRows = knownSidebarRowBySessionId()
+    const candidateIds = new Set<string>()
+    const groupedByDirectory = new Map<string, Set<string>>()
+    const hintsBySessionId = new Map<string, { directoryId?: string; directoryPath?: string }>()
+    const now = Date.now()
+
+    for (const row of Object.values(knownRows)) {
+      if (!sidebarSessionNeedsHydration(row)) continue
+      const sid = String(row.id || '').trim()
+      if (!sid) continue
+      if (sidebarSessionHydrationInFlight.has(sid)) continue
+      const lastAttempt = sidebarSessionHydrationAttemptAt.get(sid) || 0
+      if (now - lastAttempt < SIDEBAR_SESSION_HYDRATION_RETRY_MS) continue
+      candidateIds.add(sid)
+
+      const directory = knownDirectoryForSession(row)
+      const directoryPath = directory?.path || sessionSnapshotDirectory(row.session)
+      if (directory?.id || directoryPath) {
+        hintsBySessionId.set(sid, {
+          directoryId: directory?.id || undefined,
+          directoryPath: directoryPath || undefined,
+        })
+      }
+      if (directoryPath) {
+        const key = directoryPath.trim()
+        const bucket = groupedByDirectory.get(key) || new Set<string>()
+        bucket.add(sid)
+        groupedByDirectory.set(key, bucket)
+      }
+      sidebarSessionHydrationAttemptAt.set(sid, now)
+    }
+
+    if (candidateIds.size === 0) return
+
+    const hydrated = new Map<string, { session: Session; directory: DirectoryEntry | null }>()
+    const unresolved = new Set<string>(candidateIds)
+
+    const directoryTasks = [...groupedByDirectory.entries()].map(async ([directoryPath, sessionIds]) => {
+      const ids = [...sessionIds]
+      if (ids.length === 0) return
+      const page = await chatApi.listSessions(directoryPath, {
+        ids,
+        scope: 'directory',
+        includeTotal: false,
+      })
+      for (const session of page.sessions || []) {
+        const sid = typeof session?.id === 'string' ? session.id.trim() : ''
+        if (!sid) continue
+        unresolved.delete(sid)
+        hydrated.set(sid, {
+          session,
+          directory: resolveDirectoryEntryForSessionSnapshot(session, {
+            directoryPath,
+            directoryId: hintsBySessionId.get(sid)?.directoryId,
+          }),
+        })
+      }
+    })
+
+    await Promise.allSettled(directoryTasks)
+
+    const locateTargets = [...unresolved]
+    const locateTasks = locateTargets.map((sid) => {
+      let task = sidebarSessionHydrationInFlight.get(sid)
+      if (!task) {
+        task = hydrateSessionViaLocate(sid, hintsBySessionId.get(sid)).finally(() => {
+          sidebarSessionHydrationInFlight.delete(sid)
+        })
+        sidebarSessionHydrationInFlight.set(sid, task)
+      }
+      return task.then((result) => {
+        if (!result?.session) return
+        unresolved.delete(sid)
+        hydrated.set(sid, {
+          session: result.session,
+          directory:
+            result.directory || resolveDirectoryEntryForSessionSnapshot(result.session, hintsBySessionId.get(sid)),
+        })
+      })
+    })
+
+    await Promise.allSettled(locateTasks)
+
+    if (hydrated.size === 0) {
+      scheduleSidebarRecoverySync('sidebar-session-hydration-missed', 220)
+      return
+    }
+
+    chat.cacheSessions(
+      [...hydrated.values()].map((entry) => entry.session),
+      { insertIfMissing: false },
+    )
+    applyHydratedSidebarSessions(hydrated)
+    if (unresolved.size > 0) {
+      scheduleSidebarRecoverySync('sidebar-session-hydration-partial', 220)
+    }
+  }
+
+  function scheduleSidebarSessionHydration() {
+    if (sidebarSessionHydrationRunning) {
+      sidebarSessionHydrationQueued = true
+      return
+    }
+
+    sidebarSessionHydrationRunning = (async () => {
+      try {
+        await hydrateIncompleteSidebarSessions()
+      } finally {
+        sidebarSessionHydrationRunning = null
+        if (sidebarSessionHydrationQueued) {
+          sidebarSessionHydrationQueued = false
+          scheduleSidebarSessionHydration()
+        }
+      }
+    })()
   }
 
   function applyAuthoritativeUiPrefs(incomingRaw: Partial<ChatSidebarUiPrefs> | null | undefined): boolean {
@@ -974,7 +1343,19 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
 
     applyDirectoriesPagePayload((stateRecord.directoriesPage ?? stateRecord.directories_page) as JsonValue)
 
-    const normalizedView = normalizeSidebarView(stateRecord.view as JsonValue)
+    const knownRows = knownSidebarRowBySessionId()
+    const normalizedViewRaw = normalizeSidebarView(stateRecord.view as JsonValue)
+    const normalizedView: NormalizedSidebarView = {
+      directorySidebarById: Object.fromEntries(
+        Object.entries(normalizedViewRaw.directorySidebarById).map(([directoryId, section]) => [
+          directoryId,
+          enrichDirectorySidebarView(section, knownRows),
+        ]),
+      ),
+      pinnedFooterView: enrichFooterView(normalizedViewRaw.pinnedFooterView, knownRows),
+      recentFooterView: enrichFooterView(normalizedViewRaw.recentFooterView, knownRows),
+      runningFooterView: enrichFooterView(normalizedViewRaw.runningFooterView, knownRows),
+    }
 
     const nextRuntimeBySessionId = parseRuntimeMap(
       (stateRecord.runtimeBySessionId ?? stateRecord.runtime_by_session_id) as JsonValue,
@@ -1025,6 +1406,8 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     if (!sidebarFocusEquivalent(sidebarStateFocus.value, nextFocus)) {
       sidebarStateFocus.value = nextFocus
     }
+
+    scheduleSidebarSessionHydration()
   }
 
   async function revalidateFromStateApi(opts?: SidebarStateQuery): Promise<void> {
@@ -1151,6 +1534,7 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     const directoryIdsWithInlineView = new Set<string>()
     const appliedFooterViews = new Map<SidebarFooterKind, SidebarFooterView>()
     const footerKindsWithInlineView = new Set<SidebarFooterKind>()
+    const knownRows = knownSidebarRowBySessionId()
 
     for (const opRaw of opsList) {
       const op = asRecord(opRaw)
@@ -1200,7 +1584,8 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
         const did = didRaw.trim()
         if (!did) continue
         const viewRaw = (op.view ?? op.sidebarView ?? op.sidebar_view) as JsonValue
-        const section = normalizeDirectorySidebarSection(viewRaw, did)
+        const sectionBase = normalizeDirectorySidebarSection(viewRaw, did)
+        const section = sectionBase ? enrichDirectorySidebarView(sectionBase, knownRows) : null
         if (!section) continue
         appliedDirectoryViews.set(did, section)
         directoryIdsWithInlineView.add(did)
@@ -1209,7 +1594,7 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
       if (type === 'applyFooterView') {
         const kind = normalizeFooterKind(op.kind as JsonValue)
         if (!kind) continue
-        const view = normalizeSidebarFooterView((op.view ?? null) as JsonValue)
+        const view = enrichFooterView(normalizeSidebarFooterView((op.view ?? null) as JsonValue), knownRows)
         appliedFooterViews.set(kind, view)
         footerKindsWithInlineView.add(kind)
         continue
@@ -1344,6 +1729,8 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     if (typeof deltaSeq === 'number' && Number.isFinite(deltaSeq) && deltaSeq > lastAppliedDeltaSeq) {
       lastAppliedDeltaSeq = Math.floor(deltaSeq)
     }
+
+    scheduleSidebarSessionHydration()
 
     return true
   }
@@ -1496,7 +1883,8 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
       )
       const payloadRecord = asRecord(payload) || {}
       const sectionRaw = (payloadRecord.sidebarView ?? payloadRecord.sidebar_view) as JsonValue
-      const section = normalizeDirectorySidebarSection(sectionRaw, did)
+      const sectionBase = normalizeDirectorySidebarSection(sectionRaw, did)
+      const section = sectionBase ? enrichDirectorySidebarView(sectionBase, knownSidebarRowBySessionId()) : null
       if (!section) return false
 
       const previousSection = directorySidebarById.value[did]
@@ -1528,6 +1916,7 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
       if (!opts?.silent) {
         loading.value = false
       }
+      scheduleSidebarSessionHydration()
     }
   }
 
@@ -1560,7 +1949,10 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
       params.set('pageSize', String(pageSize))
       const payload = await apiJson<JsonValue>(`${SIDEBAR_FOOTER_ENDPOINT}?${params.toString()}`)
       const payloadRecord = asRecord(payload) || {}
-      const view = normalizeSidebarFooterView((payloadRecord.view ?? null) as JsonValue)
+      const view = enrichFooterView(
+        normalizeSidebarFooterView((payloadRecord.view ?? null) as JsonValue),
+        knownSidebarRowBySessionId(),
+      )
 
       if (targetKind === 'pinned') {
         if (!footerViewEquivalent(pinnedFooterView.value, view)) {
@@ -1594,6 +1986,7 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
       if (!opts?.silent) {
         loading.value = false
       }
+      scheduleSidebarSessionHydration()
     }
   }
 
@@ -1751,6 +2144,10 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     }
     sidebarStateRequestInFlight = null
     lastAppliedDeltaSeq = 0
+    sidebarSessionHydrationInFlight.clear()
+    sidebarSessionHydrationAttemptAt.clear()
+    sidebarSessionHydrationRunning = null
+    sidebarSessionHydrationQueued = false
 
     persistedStateQuery = {}
 
