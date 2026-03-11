@@ -1,0 +1,101 @@
+name: Setup Bun
+description: Install Bun without relying on a Node-based action
+
+inputs:
+  bun-version:
+    description: Bun version to install
+    required: false
+    default: latest
+
+runs:
+  using: composite
+  steps:
+    - name: Install Bun (Unix)
+      if: runner.os != 'Windows'
+      shell: bash
+      env:
+        BUN_VERSION: ${{ inputs.bun-version }}
+        RUNNER_ARCH: ${{ runner.arch }}
+        RUNNER_OS: ${{ runner.os }}
+      run: |
+        set -euo pipefail
+
+        case "$RUNNER_OS" in
+          Linux) platform="linux" ;;
+          macOS) platform="darwin" ;;
+          *)
+            echo "Unsupported runner OS: $RUNNER_OS" >&2
+            exit 1
+            ;;
+        esac
+
+        case "$RUNNER_ARCH" in
+          X64) arch="x64" ;;
+          ARM64) arch="aarch64" ;;
+          *)
+            echo "Unsupported runner arch: $RUNNER_ARCH" >&2
+            exit 1
+            ;;
+        esac
+
+        asset="bun-${platform}-${arch}.zip"
+        if [[ "$BUN_VERSION" == "latest" ]]; then
+          url="https://github.com/oven-sh/bun/releases/latest/download/${asset}"
+        else
+          version="$BUN_VERSION"
+          if [[ "$version" != bun-v* ]]; then
+            version="bun-v${version#v}"
+          fi
+          url="https://github.com/oven-sh/bun/releases/download/${version}/${asset}"
+        fi
+
+        archive="$RUNNER_TEMP/$asset"
+        extract_dir="$RUNNER_TEMP/bun-${platform}-${arch}"
+        install_dir="$HOME/.bun/bin"
+        curl -fsSL "$url" -o "$archive"
+        rm -rf "$extract_dir"
+        unzip -qo "$archive" -d "$RUNNER_TEMP"
+        mkdir -p "$install_dir"
+        install "$extract_dir/bun" "$install_dir/bun"
+        echo "$install_dir" >> "$GITHUB_PATH"
+        "$install_dir/bun" --version
+
+    - name: Install Bun (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      env:
+        BUN_VERSION: ${{ inputs.bun-version }}
+        RUNNER_ARCH: ${{ runner.arch }}
+      run: |
+        $ErrorActionPreference = 'Stop'
+
+        switch ($env:RUNNER_ARCH) {
+          'X64' { $arch = 'x64' }
+          'ARM64' { $arch = 'aarch64' }
+          default { throw "Unsupported runner arch: $env:RUNNER_ARCH" }
+        }
+
+        $asset = "bun-windows-$arch.zip"
+        if ($env:BUN_VERSION -eq 'latest') {
+          $url = "https://github.com/oven-sh/bun/releases/latest/download/$asset"
+        } else {
+          $version = $env:BUN_VERSION
+          if (-not $version.StartsWith('bun-v')) {
+            $version = "bun-v$($version.TrimStart('v'))"
+          }
+          $url = "https://github.com/oven-sh/bun/releases/download/$version/$asset"
+        }
+
+        $archive = Join-Path $env:RUNNER_TEMP $asset
+        $extractDir = Join-Path $env:RUNNER_TEMP "bun-windows-$arch"
+        $installDir = Join-Path $env:USERPROFILE '.bun\bin'
+
+        Invoke-WebRequest -Uri $url -OutFile $archive
+        if (Test-Path $extractDir) {
+          Remove-Item -Recurse -Force $extractDir
+        }
+        Expand-Archive -Path $archive -DestinationPath $env:RUNNER_TEMP -Force
+        New-Item -ItemType Directory -Force -Path $installDir | Out-Null
+        Copy-Item -Force (Join-Path $extractDir 'bun.exe') (Join-Path $installDir 'bun.exe')
+        Add-Content -Path $env:GITHUB_PATH -Value $installDir
+        & (Join-Path $installDir 'bun.exe') --version

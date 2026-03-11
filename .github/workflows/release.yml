@@ -54,11 +54,19 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          name: ${{ env.RELEASE_TAG }}
-          generate_release_notes: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "${{ env.RELEASE_TAG }}" >/dev/null 2>&1; then
+            echo "Release ${{ env.RELEASE_TAG }} already exists"
+            exit 0
+          fi
+
+          gh release create "${{ env.RELEASE_TAG }}" \
+            --title "${{ env.RELEASE_TAG }}" \
+            --generate-notes
 
   web:
     name: Web dist
@@ -71,19 +79,9 @@ jobs:
           ref: ${{ env.RELEASE_REF }}
 
       - name: Setup Bun
-        id: setup-bun-web
-        continue-on-error: true
-        uses: oven-sh/setup-bun@v2
+        uses: ./.github/actions/setup-bun
         with:
           bun-version: latest
-          no-cache: true
-
-      - name: Setup Bun (retry)
-        if: steps.setup-bun-web.outcome == 'failure'
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-          no-cache: true
 
       - name: Cache Bun downloads
         uses: actions/cache@v5
@@ -122,12 +120,18 @@ jobs:
           cp release-assets/opencode-studio-web-dist.zip "release-assets/opencode-studio-web-dist-${{ env.RELEASE_TAG }}.zip"
 
       - name: Upload web assets to GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          files: |
-            release-assets/opencode-studio-web-dist-${{ env.RELEASE_TAG }}.tar.gz
-            release-assets/opencode-studio-web-dist-${{ env.RELEASE_TAG }}.zip
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(release-assets/opencode-studio-web-dist-${{ env.RELEASE_TAG }}.*)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::error::No web release assets found"
+            exit 1
+          fi
+          gh release upload "${{ env.RELEASE_TAG }}" --clobber "${files[@]}"
 
       - name: Upload web dist artifact
         uses: actions/upload-artifact@v7
@@ -301,7 +305,7 @@ jobs:
         run: cargo install cross --locked --version 0.2.5
 
       - name: Cache Rust builds
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@8a02ed5e290d8afc7e587930243f3016b3223f50
         with:
           workspaces: |
             server -> server/target
@@ -391,12 +395,18 @@ jobs:
 
       - name: Upload backend assets to GitHub Release
         if: ${{ matrix.build_tool != 'cross' || !((github.event_name == 'workflow_dispatch' && github.event.inputs.tag == 'v0.1.0') || (github.event_name != 'workflow_dispatch' && github.ref_name == 'v0.1.0')) }}
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          files: |
-            release-assets/opencode-studio-backend-${{ matrix.target }}-${{ env.RELEASE_TAG }}.tar.gz
-            release-assets/opencode-studio-backend-${{ matrix.target }}-${{ env.RELEASE_TAG }}.zip
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(release-assets/opencode-studio-backend-${{ matrix.target }}-${{ env.RELEASE_TAG }}.*)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::error::No backend release assets found for ${{ matrix.target }}"
+            exit 1
+          fi
+          gh release upload "${{ env.RELEASE_TAG }}" --clobber "${files[@]}"
 
       - name: Upload backend artifact
         if: ${{ matrix.build_tool != 'cross' || !((github.event_name == 'workflow_dispatch' && github.event.inputs.tag == 'v0.1.0') || (github.event_name != 'workflow_dispatch' && github.ref_name == 'v0.1.0')) }}
@@ -551,7 +561,7 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Cache Rust builds
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@8a02ed5e290d8afc7e587930243f3016b3223f50
         with:
           workspaces: |
             desktop/src-tauri -> target
@@ -726,11 +736,18 @@ jobs:
           }
 
       - name: Upload desktop assets to GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          files: |
-            release-assets/opencode-studio-desktop-${{ matrix.target }}${{ matrix.suffix }}-${{ env.RELEASE_TAG }}.*
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(release-assets/opencode-studio-desktop-${{ matrix.target }}${{ matrix.suffix }}-${{ env.RELEASE_TAG }}.*)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::error::No desktop release assets found for ${{ matrix.target }}${{ matrix.suffix }}"
+            exit 1
+          fi
+          gh release upload "${{ env.RELEASE_TAG }}" --clobber "${files[@]}"
 
   desktop-cef:
     name: Desktop (cef, ${{ matrix.flavor }}, ${{ matrix.target }})
@@ -902,7 +919,7 @@ jobs:
         run: rustup target add aarch64-apple-darwin
 
       - name: Cache Rust builds
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@8a02ed5e290d8afc7e587930243f3016b3223f50
         with:
           workspaces: |
             desktop/src-tauri-cef -> ${{ env.CARGO_TARGET_DIR }}
@@ -1073,8 +1090,15 @@ jobs:
           }
 
       - name: Upload desktop assets to GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          files: |
-            release-assets/opencode-studio-desktop-${{ matrix.target }}${{ matrix.suffix }}-${{ env.RELEASE_TAG }}.*
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(release-assets/opencode-studio-desktop-${{ matrix.target }}${{ matrix.suffix }}-${{ env.RELEASE_TAG }}.*)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::error::No desktop release assets found for ${{ matrix.target }}${{ matrix.suffix }}"
+            exit 1
+          fi
+          gh release upload "${{ env.RELEASE_TAG }}" --clobber "${files[@]}"
