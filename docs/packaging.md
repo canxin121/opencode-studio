@@ -29,10 +29,11 @@ Repository layout:
 - What: one desktop installer/bundle that includes:
   - the frontend UI
   - the Rust server (`opencode-studio`) bundled as the desktop backend service
-  - tray icon + close-to-tray behavior
+  - tray icon support with platform-specific close behavior
 - Behavior:
   - App startup automatically starts the bundled backend service.
-  - Closing the window hides it; the backend continues in the tray.
+  - On Windows/Linux, closing the window hides it and the backend continues in the tray.
+  - On macOS, closing the main window quits the desktop app so the bundled backend is also stopped.
   - Tray menu can start/stop/restart backend, open logs/config, quit.
 - Built from: `desktop/src-tauri/tauri.conf.full.json`.
 

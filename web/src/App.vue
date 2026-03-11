@@ -19,8 +19,9 @@ const health = useHealthStore()
 const settings = useSettingsStore()
 const desktopRuntime = isDesktopRuntime()
 
+const desktopBackendReachable = computed(() => health.data !== null)
 const backendReady = computed(() => health.data !== null && health.data.isOpenCodeReady)
-const showDesktopLoading = computed(() => desktopRuntime && !backendReady.value)
+const showDesktopLoading = computed(() => desktopRuntime && !desktopBackendReachable.value)
 const showLogin = computed(() => !showDesktopLoading.value && (auth.needsLogin || !backendReady.value))
 
 let desktopProbeTimer: ReturnType<typeof setInterval> | null = null

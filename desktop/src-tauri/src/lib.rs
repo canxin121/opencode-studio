@@ -74,8 +74,13 @@ pub fn run() {
                 None::<&str>,
             )?;
             let logs_i = MenuItem::with_id(app, "open_logs", "Open logs", true, None::<&str>)?;
-            let cfg_i =
-                MenuItem::with_id(app, "open_config", "Open runtime config", true, None::<&str>)?;
+            let cfg_i = MenuItem::with_id(
+                app,
+                "open_config",
+                "Open runtime config",
+                true,
+                None::<&str>,
+            )?;
             let autostart_i = MenuItem::with_id(
                 app,
                 "toggle_autostart_on_boot",
@@ -125,13 +130,28 @@ pub fn run() {
             // Keep tray handle alive.
             app.manage(tray);
 
-            // Close-to-tray behavior.
+            // Platform-specific close behavior.
             if let Some(win) = app.get_webview_window("main") {
+                #[cfg(not(target_os = "macos"))]
                 let win2 = win.clone();
+                #[cfg(target_os = "macos")]
+                let app_handle = app.handle().clone();
                 win.on_window_event(move |event| {
                     if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                         api.prevent_close();
-                        let _ = win2.hide();
+                        #[cfg(target_os = "macos")]
+                        {
+                            let app = app_handle.clone();
+                            tauri::async_runtime::spawn(async move {
+                                let manager = app.state::<BackendManager>().inner().clone();
+                                let _ = manager.stop(&app).await;
+                                app.exit(0);
+                            });
+                        }
+                        #[cfg(not(target_os = "macos"))]
+                        {
+                            let _ = win2.hide();
+                        }
                     }
                 });
             }
@@ -355,8 +375,7 @@ fn desktop_update_progress_get(app: AppHandle) -> updater::UpdateProgressSnapsho
 }
 
 fn runtime_target_triple() -> Option<String> {
-    runtime_target_triple_for(std::env::consts::OS, std::env::consts::ARCH)
-        .map(ToString::to_string)
+    runtime_target_triple_for(std::env::consts::OS, std::env::consts::ARCH).map(ToString::to_string)
 }
 
 fn runtime_target_triple_for(os: &str, arch: &str) -> Option<&'static str> {
