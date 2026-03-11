@@ -723,9 +723,9 @@ function insertGitmoji() {
 
 let loadSeq = 0
 
-// Live status watch (SSE). This keeps the SCM panel "fresh" while files change.
-async function refreshListsFromWatch(directory: string) {
-  await Promise.all([loadConflicts(directory).catch(() => (conflictPaths.value = [])), reloadFirstPages(directory)])
+// Keep the open diff fresh without auto-refreshing the sidebar lists.
+async function refreshOpenDiffFromWatch(directory: string) {
+  await loadConflicts(directory).catch(() => (conflictPaths.value = []))
   refreshDiff()
 }
 
@@ -767,7 +767,7 @@ const {
       selectedFile.value = null
     }
 
-    // Debounce list refreshes; avoid thrashing on rapid edits.
+    // Debounce open diff refreshes; list refresh stays manual.
     const prevSignature = typeof prev?.worktreeSignature === 'string' ? prev.worktreeSignature : ''
     const nextSignature = typeof payload.worktreeSignature === 'string' ? payload.worktreeSignature : ''
     const changedCounts =
@@ -786,8 +786,8 @@ const {
       if (watchRefreshTimer.value) window.clearTimeout(watchRefreshTimer.value)
       watchRefreshTimer.value = window.setTimeout(() => {
         const dir = root.value
-        if (!dir || !gitReady.value) return
-        void refreshListsFromWatch(dir)
+        if (!dir || !gitReady.value || !selectedFile.value) return
+        void refreshOpenDiffFromWatch(dir)
       }, 250)
     }
   },
@@ -1073,15 +1073,15 @@ watch(
 )
 
 watch(
-  () => [root.value, gitReady.value] as const,
+  () => [root.value, gitReady.value, selectedFile.value] as const,
   (next, old) => {
-    const [dir, ready] = next
-    const [prevDir, prevReady] = old ?? [null, false]
+    const [dir, ready, selected] = next
+    const [prevDir, prevReady, prevSelected] = old ?? [null, false, null]
     const nextDir = (dir || '').trim()
     const prevDirTrimmed = (prevDir || '').trim()
-    if (nextDir === prevDirTrimmed && ready === prevReady) return
+    if (nextDir === prevDirTrimmed && ready === prevReady && selected === prevSelected) return
 
-    if (!ready || !nextDir) {
+    if (!ready || !nextDir || !selected) {
       stopWatch()
       return
     }
@@ -1205,6 +1205,7 @@ const viewCtx = composeGitPageViewContext([
       selectFile,
       openFirstConflict,
       load,
+      refreshRepository: load,
       copyCommitHash,
       copyRemoteUrl,
       copyWorktreePath,
