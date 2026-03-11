@@ -231,6 +231,7 @@ const {
   selectFile,
   openFirstConflict,
   load,
+  refreshRepository,
   copyCommitHash,
   copyRemoteUrl,
   copyWorktreePath,
@@ -2210,6 +2211,7 @@ void diffPaneRef
       :stageAllUntracked="stageAllUntracked"
       :stageAllMerge="stageAllMerge"
       :fetchRemote="fetchRemote"
+      :refreshRepository="refreshRepository"
       :fetchPrune="fetchPrune"
       :fetchAll="fetchAll"
       :openFetchFrom="openFetchFrom"
