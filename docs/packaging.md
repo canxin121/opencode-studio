@@ -181,5 +181,17 @@ Service install scripts are not published as release assets. Use GitHub raw URLs
 This project does not require Apple/Windows signing keys to build. Release assets are produced
 unsigned by default:
 
-- macOS: users may see Gatekeeper warnings for unsigned apps.
+- macOS: users may see Gatekeeper warnings for non-notarized apps. We use ad-hoc signing
+  (`bundle.macOS.signingIdentity: "-"`) to reduce "app is damaged" errors on Apple Silicon,
+  but users still need to approve the first launch.
 - Windows: SmartScreen may warn for unsigned installers/binaries.
+
+If a user sees the "is damaged and can't be opened" dialog, it is usually caused by
+Gatekeeper quarantine. Workarounds:
+
+```bash
+# after installing (dragging the .app to /Applications)
+xattr -dr com.apple.quarantine "/Applications/OpenCode Studio.app"
+```
+
+Or use Finder: right-click the app -> Open, then confirm.

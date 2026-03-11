@@ -177,5 +177,17 @@ target/runner 守护：
 
 本项目构建不要求 Apple/Windows 签名密钥。Release 资产默认是未签名状态：
 
-- macOS：用户可能看到 Gatekeeper 的未签名告警。
+- macOS：用户可能看到 Gatekeeper 的未公证（notarize）告警。我们使用 ad-hoc 签名
+  （`bundle.macOS.signingIdentity: "-"`）来降低 Apple Silicon 上常见的
+  “app is damaged” 类错误，但首次启动仍需要用户手动放行。
 - Windows：SmartScreen 可能对未签名安装包/二进制给出提示。
+
+如果用户遇到 “is damaged and can't be opened”，通常与 Gatekeeper 的 quarantine 标记有关。
+可用的绕过方式：
+
+```bash
+# 安装后（将 .app 拖到 /Applications）执行
+xattr -dr com.apple.quarantine "/Applications/OpenCode Studio.app"
+```
+
+或在 Finder 里对应用右键 -> 打开，然后确认。

@@ -58,6 +58,7 @@ See [`docs/i18n/README.md`](docs/i18n/README.md) for the language matrix and cro
 - [Quick Start (2 minutes)](#quick-start)
 - [Installation Details](#installation-details)
 - [After Install](#after-install)
+- [Troubleshooting](#troubleshooting)
 - [Service Management](#service-management)
 - [Technical Details and Parameters](#technical-details-and-parameters)
 - [License](#license)
@@ -220,6 +221,26 @@ Apply changes by restarting the service:
 - Windows service: `sc stop OpenCodeStudio` then `sc start OpenCodeStudio`
 
 For package install, runtime config is stored in the app data directory. Use the tray menu action to open the config file directly.
+
+<a id="troubleshooting"></a>
+<details>
+<summary><strong>Troubleshooting</strong></summary>
+
+### macOS: app is damaged and can't be opened
+
+This usually means macOS Gatekeeper is blocking a downloaded (non-notarized) build.
+
+1. Open the `.dmg` and drag `OpenCode Studio.app` into `/Applications`.
+2. In Finder, open `/Applications`, right-click the app -> Open -> confirm.
+3. If it still shows the "damaged" dialog, remove the quarantine flag:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/OpenCode Studio.app"
+```
+
+Then launch the app again.
+
+</details>
 
 <a id="service-management"></a>
 ## Service Management

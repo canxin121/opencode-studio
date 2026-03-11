@@ -28,6 +28,9 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "macOS": {
+      "signingIdentity": "-"
+    },
     "icon": [
       "icons/icon.png",
       "icons/icon.ico",
