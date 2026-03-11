@@ -86,6 +86,8 @@ pub async fn git_file_diff(Query(q): Query<GitFileDiffQuery>) -> Response {
             .into_response();
     }
 
+    crate::fs_watch::hint_watch_path(&dir.join(file_path));
+
     // Git panel needs different bases depending on whether we're previewing staged or unstaged.
     // - staged=true:  original=HEAD,  modified=index
     // - staged=false: original=index, modified=workdir

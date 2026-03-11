@@ -109,6 +109,21 @@ fn watch_failure_backoff(failures: u32) -> Duration {
     backoff.min(WATCH_FAILURE_BACKOFF_MAX)
 }
 
+fn watch_root_hint_candidate(path: &Path) -> Option<PathBuf> {
+    if should_ignore_watch_path(path) {
+        return None;
+    }
+
+    match std::fs::metadata(path) {
+        Ok(metadata) if metadata.is_dir() => Some(path.to_path_buf()),
+        Ok(_) => path.parent().map(Path::to_path_buf),
+        Err(_) => path
+            .parent()
+            .map(Path::to_path_buf)
+            .or_else(|| Some(path.to_path_buf())),
+    }
+}
+
 pub(crate) fn hint_watch_root(path: &Path) {
     if should_ignore_watch_path(path) {
         return;
@@ -125,6 +140,13 @@ pub(crate) fn hint_watch_root(path: &Path) {
         prune_watch_root_hints(&mut hints, now);
     }
     WATCH_ROOT_HINT_NOTIFY.notify_one();
+}
+
+pub(crate) fn hint_watch_path(path: &Path) {
+    let Some(candidate) = watch_root_hint_candidate(path) else {
+        return;
+    };
+    hint_watch_root(&candidate);
 }
 
 pub(crate) fn start_fs_watch_hub_if_needed(state: Arc<crate::AppState>) {
@@ -224,26 +246,15 @@ async fn maybe_push_watch_root(
     });
 }
 
-async fn collect_watch_roots(state: &Arc<crate::AppState>) -> Vec<WatchRoot> {
+async fn collect_watch_roots(_state: &Arc<crate::AppState>) -> Vec<WatchRoot> {
     if crate::global_sse_hub::downstream_client_count() == 0 {
         return Vec::new();
     }
 
-    let settings = state.settings.read().await.clone();
     let cwd = std::env::current_dir().ok();
 
     let mut roots = Vec::<WatchRoot>::new();
     let mut seen = HashSet::<String>::new();
-
-    for project in settings.projects {
-        let raw = project.path.trim();
-        if raw.is_empty() {
-            continue;
-        }
-
-        let candidate = PathBuf::from(crate::path_utils::normalize_directory_path(raw));
-        maybe_push_watch_root(candidate, cwd.as_ref(), &mut roots, &mut seen).await;
-    }
 
     let hinted_roots = {
         let now = now_epoch_millis();
@@ -688,6 +699,63 @@ mod tests {
         assert_eq!(watch_failure_backoff(6), Duration::from_secs(192));
         assert_eq!(watch_failure_backoff(7), Duration::from_secs(300));
         assert_eq!(watch_failure_backoff(20), Duration::from_secs(300));
+    }
+
+    #[test]
+    fn watch_root_hint_candidate_uses_parent_for_files() {
+        let temp_root = unique_tmp_dir("hint-candidate");
+        let dir_path = temp_root.join("src");
+        std::fs::create_dir_all(&dir_path).expect("create dir");
+        let file_path = dir_path.join("main.rs");
+        std::fs::write(&file_path, "fn main() {}\n").expect("create file");
+
+        assert_eq!(
+            watch_root_hint_candidate(&file_path).as_deref(),
+            Some(dir_path.as_path())
+        );
+        assert_eq!(
+            watch_root_hint_candidate(&dir_path).as_deref(),
+            Some(dir_path.as_path())
+        );
+        assert_eq!(
+            watch_root_hint_candidate(Path::new("/repo/.git/index")),
+            None
+        );
+
+        let _ = std::fs::remove_dir_all(&temp_root);
+    }
+
+    #[tokio::test]
+    async fn collect_watch_roots_uses_hints_not_saved_projects() {
+        lock_watch_root_hints().clear();
+
+        let temp_root = unique_tmp_dir("hint-scope");
+        let nested_dir = temp_root.join("src");
+        tokio::fs::create_dir_all(&nested_dir)
+            .await
+            .expect("create nested dir");
+        let canonical_root = tokio::fs::canonicalize(&temp_root)
+            .await
+            .unwrap_or(temp_root.clone());
+        let canonical_nested = tokio::fs::canonicalize(&nested_dir)
+            .await
+            .unwrap_or(nested_dir.clone());
+        let state = test_state_with_project(&canonical_root);
+        let _downstream = crate::global_sse_hub::subscribe_test_downstream();
+
+        let roots_without_hint = collect_watch_roots(&state).await;
+        assert!(
+            roots_without_hint.is_empty(),
+            "saved projects should not become watch roots without an active hint"
+        );
+
+        hint_watch_path(&canonical_nested.join("main.rs"));
+        let hinted_roots = collect_watch_roots(&state).await;
+        assert_eq!(hinted_roots.len(), 1);
+        assert_eq!(hinted_roots[0].path, canonical_nested);
+
+        lock_watch_root_hints().clear();
+        let _ = tokio::fs::remove_dir_all(&canonical_root).await;
     }
 
     #[tokio::test]

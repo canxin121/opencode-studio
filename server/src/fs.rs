@@ -246,7 +246,6 @@ pub async fn resolve_project_directory(
 
     if let Some(req) = requested {
         let resolved = validate_directory(req).await?;
-        crate::fs_watch::hint_watch_root(&resolved);
         return Ok(resolved);
     }
 
@@ -400,6 +399,8 @@ pub async fn fs_read(Query(q): Query<ReadQuery>) -> ApiResult<Response> {
             _ => AppError::internal(err.to_string()),
         })?;
 
+    crate::fs_watch::hint_watch_path(&abs);
+
     Ok(Response::builder()
         .status(StatusCode::OK)
         .header("content-type", "text/plain")
@@ -498,6 +499,7 @@ pub async fn fs_read_chunk(Query(q): Query<ReadChunkQuery>) -> ApiResult<Json<Re
         .min(MAX_READ_CHUNK_LIMIT);
 
     if limit == 0 {
+        crate::fs_watch::hint_watch_path(&abs);
         let has_more = offset < total_bytes;
         return Ok(Json(ReadChunkResponse {
             path: to_api_path(&abs),
@@ -532,6 +534,8 @@ pub async fn fs_read_chunk(Query(q): Query<ReadChunkQuery>) -> ApiResult<Json<Re
     let (content, consumed_bytes) = decode_utf8_chunk(&buffer)?;
     let loaded_bytes = offset.saturating_add(consumed_bytes);
     let has_more = (loaded_bytes as u64) < total_bytes_u64;
+
+    crate::fs_watch::hint_watch_path(&abs);
 
     Ok(Json(ReadChunkResponse {
         path: to_api_path(&abs),
@@ -625,6 +629,8 @@ pub async fn fs_raw(Query(q): Query<ReadQuery>) -> ApiResult<Response> {
             std::io::ErrorKind::PermissionDenied => AppError::forbidden("Access to file denied"),
             _ => AppError::internal(err.to_string()),
         })?;
+
+    crate::fs_watch::hint_watch_path(&abs);
 
     Ok(Response::builder()
         .status(StatusCode::OK)
@@ -1113,8 +1119,6 @@ pub async fn fs_list(Query(q): Query<ListQuery>) -> ApiResult<Json<ListResponse>
         return Err(AppError::bad_request("Specified path is not a directory"));
     }
 
-    crate::fs_watch::hint_watch_root(&abs);
-
     let mut rd = tokio::fs::read_dir(&abs)
         .await
         .map_err(|err| AppError::internal(err.to_string()))?;
@@ -1346,8 +1350,6 @@ pub async fn fs_search(Query(q): Query<SearchQuery>) -> ApiResult<Json<SearchRes
     if !stats.is_dir() {
         return Err(AppError::bad_request("Specified root is not a directory"));
     }
-
-    crate::fs_watch::hint_watch_root(&abs_root);
 
     let query_norm = raw_query.trim().to_ascii_lowercase();
     let match_all = query_norm.is_empty();
