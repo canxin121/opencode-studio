@@ -222,10 +222,7 @@ async fn maybe_push_watch_root(
         candidate = base.join(candidate);
     }
 
-    let canonical = tokio::fs::canonicalize(&candidate)
-        .await
-        .unwrap_or(candidate);
-    let metadata = match tokio::fs::metadata(&canonical).await {
+    let metadata = match tokio::fs::metadata(&candidate).await {
         Ok(meta) => meta,
         Err(_) => return,
     };
@@ -233,7 +230,7 @@ async fn maybe_push_watch_root(
         return;
     }
 
-    let Some(normalized) = normalized_path_for_match(&canonical) else {
+    let Some(normalized) = normalized_path_for_match(&candidate) else {
         return;
     };
     if !seen.insert(normalized.clone()) {
@@ -241,7 +238,7 @@ async fn maybe_push_watch_root(
     }
 
     roots.push(WatchRoot {
-        path: canonical,
+        path: candidate,
         normalized,
     });
 }
@@ -745,7 +742,9 @@ mod tests {
 
         let roots_without_hint = collect_watch_roots(&state).await;
         assert!(
-            roots_without_hint.is_empty(),
+            roots_without_hint
+                .iter()
+                .all(|root| root.path != canonical_root),
             "saved projects should not become watch roots without an active hint"
         );
 
@@ -756,6 +755,28 @@ mod tests {
 
         lock_watch_root_hints().clear();
         let _ = tokio::fs::remove_dir_all(&canonical_root).await;
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn maybe_push_watch_root_preserves_symlink_hint_path() {
+        let temp_root = unique_tmp_dir("hint-symlink");
+        let real_root = temp_root.join("real");
+        let link_root = temp_root.join("link");
+        tokio::fs::create_dir_all(&real_root)
+            .await
+            .expect("create real root");
+        std::os::unix::fs::symlink(&real_root, &link_root).expect("create symlink root");
+
+        let mut roots = Vec::new();
+        let mut seen = HashSet::new();
+        maybe_push_watch_root(link_root.clone(), None, &mut roots, &mut seen).await;
+
+        assert_eq!(roots.len(), 1);
+        assert_eq!(roots[0].path, link_root);
+        assert_eq!(roots[0].normalized, to_api_path(&temp_root.join("link")));
+
+        let _ = tokio::fs::remove_dir_all(&temp_root).await;
     }
 
     #[tokio::test]
