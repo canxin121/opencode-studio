@@ -6,7 +6,7 @@ import { getLocalString, setLocalString } from '@/lib/persist'
 import { localStorageKeys } from '@/lib/persistence/storageKeys'
 
 export type MainTab = MainTabId
-export type WorkspaceDockPanel = 'git' | 'files' | 'terminal'
+export type WorkspaceDockPanel = 'changes' | 'git' | 'files' | 'terminal'
 export type WorkspaceDockPlacement = 'right' | 'bottom'
 export type WorkspaceDockFileAction = 'open' | 'reveal'
 export type WorkspaceDockFileRequest = {
@@ -64,7 +64,7 @@ export const useUiStore = defineStore('ui', () => {
   const workspaceDockPanel = ref<WorkspaceDockPanel>(
     (() => {
       const raw = getLocalString(STORAGE_WORKSPACE_DOCK_PANEL).trim()
-      if (raw === 'terminal' || raw === 'files') return raw
+      if (raw === 'changes' || raw === 'terminal' || raw === 'files') return raw
       return 'git'
     })(),
   )
