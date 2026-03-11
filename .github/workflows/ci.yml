@@ -35,12 +35,9 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+        uses: ./.github/actions/setup-bun
         with:
           bun-version: latest
-          # Disable setup-bun's internal cache to avoid failures
-          # when GitHub's cache service is degraded.
-          no-cache: true
 
       - name: Cache Bun downloads
         uses: actions/cache@v5
@@ -95,7 +92,7 @@ jobs:
           components: rustfmt, clippy
 
       - name: Cache Rust builds
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@8a02ed5e290d8afc7e587930243f3016b3223f50
         with:
           add-job-id-key: false
           cache-on-failure: true
@@ -138,10 +135,9 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+        uses: ./.github/actions/setup-bun
         with:
           bun-version: latest
-          no-cache: true
 
       - name: Install OpenCode CLI
         run: bun add -g opencode-ai@latest
