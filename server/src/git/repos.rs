@@ -36,10 +36,30 @@ pub async fn git_check(Query(q): Query<DirectoryQuery>) -> Response {
         Err(resp) => return *resp,
     };
 
-    let ok = run_git(&dir, &["rev-parse", "--is-inside-work-tree"]).await;
-    let is_repo = ok
-        .map(|(code, out, _)| code == 0 && out.trim() == "true")
-        .unwrap_or(false);
+    // IMPORTANT: do not silently coerce git errors into `false`.
+    // - If the repo is blocked by safe.directory (dubious ownership), surface the structured
+    //   error so the UI can show the trust prompt.
+    // - If git fails for other reasons, return the mapped error instead of hiding it.
+    let (code, out, err) = match run_git(&dir, &["rev-parse", "--is-inside-work-tree"]).await {
+        Ok(v) => v,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": e,
+                    "code": "git_spawn_failed",
+                    "hint": "Ensure Git is installed and available on PATH, then retry.",
+                })),
+            )
+                .into_response();
+        }
+    };
+
+    if let Some(resp) = map_git_failure(code, &out, &err) {
+        return resp;
+    }
+
+    let is_repo = out.trim() == "true";
     Json(GitCheckResponse {
         is_git_repository: is_repo,
     })

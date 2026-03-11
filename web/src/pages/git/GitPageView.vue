@@ -83,6 +83,7 @@ const {
   gitReady,
   repoBusy,
   loading,
+  error,
   status,
   headline,
   gitState,
@@ -1303,6 +1304,10 @@ void diffPaneRef
 
         <div v-if="reposError" class="mt-1.5 text-xs text-destructive/90">
           {{ reposError }}
+        </div>
+
+        <div v-else-if="error" class="mt-1.5 text-xs text-destructive/90 whitespace-pre-line">
+          {{ error }}
         </div>
 
         <div v-if="gitReady" class="mt-1.5">
