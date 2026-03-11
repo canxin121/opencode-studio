@@ -731,38 +731,28 @@ mod tests {
         tokio::fs::create_dir_all(&nested_dir)
             .await
             .expect("create nested dir");
-        let canonical_root = tokio::fs::canonicalize(&temp_root)
-            .await
-            .unwrap_or(temp_root.clone());
-        let canonical_nested = tokio::fs::canonicalize(&nested_dir)
-            .await
-            .unwrap_or(nested_dir.clone());
-        let state = test_state_with_project(&canonical_root);
+        let state = test_state_with_project(&temp_root);
         let _downstream = crate::global_sse_hub::subscribe_test_downstream();
 
         let roots_without_hint = collect_watch_roots(&state).await;
         assert!(
-            roots_without_hint
-                .iter()
-                .all(|root| root.path != canonical_root),
+            roots_without_hint.iter().all(|root| root.path != temp_root),
             "saved projects should not become watch roots without an active hint"
         );
 
-        hint_watch_path(&canonical_nested.join("main.rs"));
+        hint_watch_path(&nested_dir.join("main.rs"));
         let hinted_roots = collect_watch_roots(&state).await;
         assert!(
-            hinted_roots
-                .iter()
-                .any(|root| root.path == canonical_nested),
+            hinted_roots.iter().any(|root| root.path == nested_dir),
             "opened-file hint should add the file parent directory as a watch root"
         );
         assert!(
-            hinted_roots.iter().all(|root| root.path != canonical_root),
+            hinted_roots.iter().all(|root| root.path != temp_root),
             "saved projects should still not become watch roots after unrelated test hints"
         );
 
         lock_watch_root_hints().clear();
-        let _ = tokio::fs::remove_dir_all(&canonical_root).await;
+        let _ = tokio::fs::remove_dir_all(&temp_root).await;
     }
 
     #[cfg(unix)]
