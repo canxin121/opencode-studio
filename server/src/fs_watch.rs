@@ -731,23 +731,32 @@ mod tests {
         tokio::fs::create_dir_all(&nested_dir)
             .await
             .expect("create nested dir");
+        let expected_root = normalized_path_for_match(&temp_root).expect("normalized temp root");
+        let expected_nested =
+            normalized_path_for_match(&nested_dir).expect("normalized nested dir");
         let state = test_state_with_project(&temp_root);
         let _downstream = crate::global_sse_hub::subscribe_test_downstream();
 
         let roots_without_hint = collect_watch_roots(&state).await;
         assert!(
-            roots_without_hint.iter().all(|root| root.path != temp_root),
+            roots_without_hint
+                .iter()
+                .all(|root| root.normalized != expected_root),
             "saved projects should not become watch roots without an active hint"
         );
 
         hint_watch_path(&nested_dir.join("main.rs"));
         let hinted_roots = collect_watch_roots(&state).await;
         assert!(
-            hinted_roots.iter().any(|root| root.path == nested_dir),
+            hinted_roots
+                .iter()
+                .any(|root| root.normalized == expected_nested),
             "opened-file hint should add the file parent directory as a watch root"
         );
         assert!(
-            hinted_roots.iter().all(|root| root.path != temp_root),
+            hinted_roots
+                .iter()
+                .all(|root| root.normalized != expected_root),
             "saved projects should still not become watch roots after unrelated test hints"
         );
 
