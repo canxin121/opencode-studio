@@ -750,8 +750,16 @@ mod tests {
 
         hint_watch_path(&canonical_nested.join("main.rs"));
         let hinted_roots = collect_watch_roots(&state).await;
-        assert_eq!(hinted_roots.len(), 1);
-        assert_eq!(hinted_roots[0].path, canonical_nested);
+        assert!(
+            hinted_roots
+                .iter()
+                .any(|root| root.path == canonical_nested),
+            "opened-file hint should add the file parent directory as a watch root"
+        );
+        assert!(
+            hinted_roots.iter().all(|root| root.path != canonical_root),
+            "saved projects should still not become watch roots after unrelated test hints"
+        );
 
         lock_watch_root_hints().clear();
         let _ = tokio::fs::remove_dir_all(&canonical_root).await;
