@@ -288,6 +288,13 @@ export default {
       unstaged: '已修改',
       untracked: '未跟踪',
     },
+    changes: {
+      tab: '变更',
+      currentSession: '当前会话',
+      noSession: '没有活动会话',
+      noSessionHint: '先选择一个聊天会话，即可在这里查看它的文件变更。',
+      openFile: '在文件面板中打开文件',
+    },
     files: {
       tab: '文件',
     },

@@ -288,6 +288,13 @@ export default {
       unstaged: 'Changed',
       untracked: 'Untracked',
     },
+    changes: {
+      tab: 'Changes',
+      currentSession: 'Current session',
+      noSession: 'No active session',
+      noSessionHint: 'Select a chat session to inspect its file changes here.',
+      openFile: 'Open file in Files panel',
+    },
     files: {
       tab: 'Files',
     },

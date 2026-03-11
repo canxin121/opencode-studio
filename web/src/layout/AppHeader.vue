@@ -270,7 +270,13 @@ function openSettings() {
 }
 
 function toggleWorkspaceDock() {
-  ui.toggleWorkspaceDock('git')
+  const defaultPanel: 'changes' | 'git' = String(route.path || '')
+    .trim()
+    .toLowerCase()
+    .startsWith('/chat')
+    ? 'changes'
+    : 'git'
+  ui.toggleWorkspaceDock(defaultPanel)
 }
 
 function locateCurrentSessionInSidebar() {
