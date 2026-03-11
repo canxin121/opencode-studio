@@ -108,7 +108,7 @@ function maybeLoadMoreSessionDiff() {
 }
 
 watch(
-  () => sessionDiff.value.map((entry) => entry.file).join('|'),
+  sessionDiff,
   () => {
     const list = sessionDiff.value
     if (!list.length) {
@@ -128,10 +128,12 @@ watch(
 
 watch(
   () => chat.selectedSessionId,
-  (sid) => {
+  (sid, previousSid) => {
     selectedDiffFile.value = ''
     mobileDiffView.value = 'list'
+    if (previousSid !== undefined) return
     if (!String(sid || '').trim()) return
+    if (chat.selectedSessionDiffLoaded || chat.selectedSessionDiffLoading) return
     void refresh()
   },
   { immediate: true },
