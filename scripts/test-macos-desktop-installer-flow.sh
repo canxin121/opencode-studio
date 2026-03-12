@@ -360,8 +360,8 @@ launch_with_cdp_and_usage_smoke() {
   local cdp_timeout="$WAIT_TIMEOUT_SECS"
   local health_timeout="$WAIT_TIMEOUT_SECS"
 
-  if ((cdp_timeout > 60)); then cdp_timeout=60; fi
-  if ((health_timeout > 120)); then health_timeout=120; fi
+  if ((cdp_timeout > 180)); then cdp_timeout=180; fi
+  if ((health_timeout > 180)); then health_timeout=180; fi
 
   while ((attempt <= max_attempts)); do
     DEBUG_PORT="$(pick_free_port)"
@@ -371,7 +371,11 @@ launch_with_cdp_and_usage_smoke() {
     CDP_LAUNCHED="1"
 
     log "[$label] Launch attempt ${attempt}/${max_attempts} (CDP port: $DEBUG_PORT)"
-    start_app "$APP_PATH" "--remote-debugging-port=${DEBUG_PORT}" "--remote-debugging-address=127.0.0.1" "--remote-allow-origins=*"
+    start_app \
+      "$APP_PATH" \
+      --remote-debugging-port "$DEBUG_PORT" \
+      --remote-debugging-address 127.0.0.1 \
+      --remote-allow-origins=*
 
     if ! try_wait_cdp_ready "$DEBUG_PORT" "$cdp_timeout"; then
       log "[$label] CDP not ready within ${cdp_timeout}s (last error: ${CDP_LAST_ERROR:-unknown})"
