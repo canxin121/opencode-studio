@@ -243,17 +243,29 @@ install_app_from_dmg() {
   log "Mounting DMG: $dmg"
   mount_dmg "$dmg" "$mount_dir" || fail "Failed to mount DMG"
   local src_app=""
-  src_app="$(ls -1 "$mount_dir"/*.app 2>/dev/null | head -n 1 || true)"
+  if [[ -d "$mount_dir/$APP_BUNDLE_NAME" ]]; then
+    src_app="$mount_dir/$APP_BUNDLE_NAME"
+  else
+    src_app="$(ls -1 "$mount_dir"/*.app 2>/dev/null | head -n 1 || true)"
+  fi
   if [[ -z "$src_app" ]]; then
     unmount_dmg "$mount_dir"
     rmdir "$mount_dir" >/dev/null 2>&1 || true
     fail "No .app found in DMG"
   fi
+  if ! test -d "$src_app"; then
+    unmount_dmg "$mount_dir"
+    rmdir "$mount_dir" >/dev/null 2>&1 || true
+    fail "DMG .app is not a directory: $src_app"
+  fi
+
+  log "Source app: $src_app"
 
   log "Installing app to: $dest_app"
   mkdir -p "$(dirname "$dest_app")"
   rm -rf "$dest_app"
-  cp -R "$src_app" "$dest_app"
+  # Use ditto instead of cp for app bundles (more reliable on macOS, preserves bundle structure).
+  ditto "$src_app" "$dest_app" || fail "Failed to copy .app bundle"
 
   unmount_dmg "$mount_dir"
   rmdir "$mount_dir" >/dev/null 2>&1 || true

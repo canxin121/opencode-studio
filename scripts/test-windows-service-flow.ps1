@@ -217,16 +217,7 @@ function Invoke-UsageSmoke([string]$Url, [string]$WorkingDir, [int]$TimeoutSecon
   if (-not (Test-Path -LiteralPath $UsageSmokeScript)) {
     throw "Usage smoke script not found: $UsageSmokeScript"
   }
-  $args = @(
-    "-BaseUrl", $Url,
-    "-Directory", $WorkingDir,
-    "-TimeoutSeconds", $TimeoutSeconds,
-    "-MaxAssets", "3"
-  )
-  if ($RequireUi) {
-    $args += "-RequireUi"
-  }
-  & $UsageSmokeScript @args
+  & $UsageSmokeScript -BaseUrl $Url -Directory $WorkingDir -TimeoutSeconds $TimeoutSeconds -MaxAssets 3 -RequireUi:$RequireUi
 }
 
 function Invoke-UiClicks([string]$Url, [string]$WorkingDir, [int]$TimeoutSeconds = 180, [string]$Label = "service") {

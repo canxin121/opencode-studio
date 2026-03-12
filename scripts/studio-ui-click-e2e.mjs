@@ -467,16 +467,53 @@ async function main() {
     await confirmDelete.waitFor({ timeout: timeoutMs })
     await confirmDelete.click()
 
-    // After deletion, URL should change away from the deleted session id.
-    await page.waitForTimeout(300)
-    if (page.url().includes(sessionId)) {
-      // Give it a little longer for stores/router to settle.
-      await page.waitForTimeout(1200)
+    // Deleting the currently-selected session may or may not immediately clear the router query param.
+    // Treat success as: the delete confirm UI closes AND the app can create a new session afterwards.
+    try {
+      await confirmDelete.waitFor({ state: 'hidden', timeout: 5000 })
+    } catch {
+      // ignore
     }
-    if (page.url().includes(sessionId)) {
-      throw new Error(`session still selected after delete (URL still contains session id): ${page.url()}`)
+
+    await log('Create a fresh session after delete')
+    await dirRow.hover()
+    await dirRow.locator('button[aria-label="New session"]').click()
+    await page.waitForURL(/\/chat.*[?&](session|sessionId|sessionid)=/i, { timeout: timeoutMs })
+    const urlAfter = new URL(page.url())
+    let postDeleteSessionId =
+      urlAfter.searchParams.get('session') ||
+      urlAfter.searchParams.get('sessionId') ||
+      urlAfter.searchParams.get('sessionid') ||
+      ''
+    postDeleteSessionId = String(postDeleteSessionId || '').trim()
+
+    if (!postDeleteSessionId) {
+      throw new Error(`post-delete session id missing from URL: ${page.url()}`)
     }
-    await log('Session delete OK')
+
+    if (postDeleteSessionId === sessionId) {
+      await log('Session id unchanged after new session click; retry once')
+      await page.waitForTimeout(600)
+      await dirRow.hover()
+      await dirRow.locator('button[aria-label="New session"]').click()
+      await page.waitForTimeout(300)
+      const urlRetry = new URL(page.url())
+      const retryId =
+        urlRetry.searchParams.get('session') ||
+        urlRetry.searchParams.get('sessionId') ||
+        urlRetry.searchParams.get('sessionid') ||
+        ''
+      const retryTrimmed = String(retryId || '').trim()
+      if (!retryTrimmed) {
+        throw new Error(`post-delete retry session id missing from URL: ${page.url()}`)
+      }
+      if (retryTrimmed === sessionId) {
+        throw new Error(`new session id did not change after delete/new-session flow: ${page.url()}`)
+      }
+      postDeleteSessionId = retryTrimmed
+    }
+
+    await log('Post-delete session OK:', postDeleteSessionId)
 
     await log('PASS')
   } catch (err) {

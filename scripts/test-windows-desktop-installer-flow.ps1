@@ -140,9 +140,9 @@ function Dump-DesktopSupport {
   Write-Log $Header
 
   $candidates = @(
-    Join-Path $env:APPDATA "cn.cxits.opencode-studio",
-    Join-Path $env:LOCALAPPDATA "cn.cxits.opencode-studio",
-    Join-Path $env:APPDATA "OpenCode Studio",
+    Join-Path $env:APPDATA "cn.cxits.opencode-studio"
+    Join-Path $env:LOCALAPPDATA "cn.cxits.opencode-studio"
+    Join-Path $env:APPDATA "OpenCode Studio"
     Join-Path $env:LOCALAPPDATA "OpenCode Studio"
   ) | Where-Object { $_ -and (Test-Path -LiteralPath $_) }
 
@@ -237,9 +237,9 @@ function Uninstall-Desktop([hashtable]$Installer) {
   if ($Installer.Type -eq "exe") {
     # Best-effort: many NSIS installers drop an uninstaller in Program Files.
     $candidateDirs = @(
-      Join-Path $env:ProgramFiles "OpenCode Studio",
-      Join-Path ${env:ProgramFiles(x86)} "OpenCode Studio",
-      Join-Path $env:LOCALAPPDATA "Programs\OpenCode Studio",
+      Join-Path $env:ProgramFiles "OpenCode Studio"
+      Join-Path ${env:ProgramFiles(x86)} "OpenCode Studio"
+      Join-Path $env:LOCALAPPDATA "Programs\OpenCode Studio"
       Join-Path $env:LOCALAPPDATA "OpenCode Studio"
     ) | Where-Object { $_ -and (Test-Path $_) }
 
@@ -266,11 +266,11 @@ function Uninstall-Desktop([hashtable]$Installer) {
 function Find-AppExe {
   $candidates = @(
     # Per-machine installs (MSI / some NSIS configs)
-    Join-Path $env:ProgramFiles "OpenCode Studio\OpenCode Studio.exe",
-    Join-Path ${env:ProgramFiles(x86)} "OpenCode Studio\OpenCode Studio.exe",
+    Join-Path $env:ProgramFiles "OpenCode Studio\OpenCode Studio.exe"
+    Join-Path ${env:ProgramFiles(x86)} "OpenCode Studio\OpenCode Studio.exe"
 
     # Per-user installs (common for desktop apps)
-    Join-Path $env:LOCALAPPDATA "Programs\OpenCode Studio\OpenCode Studio.exe",
+    Join-Path $env:LOCALAPPDATA "Programs\OpenCode Studio\OpenCode Studio.exe"
     Join-Path $env:LOCALAPPDATA "OpenCode Studio\OpenCode Studio.exe"
   ) | Where-Object { $_ -and (Test-Path -LiteralPath $_) }
 
