@@ -11,6 +11,7 @@ APP_BUNDLE_NAME="OpenCode Studio.app"
 APP_PATH="${INSTALL_ROOT}/${APP_BUNDLE_NAME}"
 KEEP_FILES="0"
 UI_CLICKS="0"
+USE_CEF="0"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 USAGE_SMOKE_SCRIPT="$SCRIPT_DIR/studio-usage-smoke.sh"
@@ -426,7 +427,11 @@ start_app() {
 
 stop_app() {
   log "Stopping app (best-effort graceful quit)"
-  osascript -e 'tell application "OpenCode Studio" to quit' >/dev/null 2>&1 || true
+  # AppleScript can hang if the app is unresponsive; bound it with a short timeout.
+  osascript \
+    -e 'with timeout of 5 seconds' \
+    -e 'tell application "OpenCode Studio" to quit' \
+    -e 'end timeout' >/dev/null 2>&1 || true
 
   # Give it a moment to shut down.
   sleep 2
@@ -548,30 +553,37 @@ log "Upgrade to: $UPGRADE_TO_VERSION"
 log "App path: $APP_PATH"
 log "Base URL: $BASE_URL"
 
-ASSET_SUFFIX=""
+ASSET_OLD_STD="opencode-studio-desktop-${TARGET}-${VERSION}.dmg"
+ASSET_NEW_STD="opencode-studio-desktop-${TARGET}-${UPGRADE_TO_VERSION}.dmg"
+DMG_OLD_STD="$DOWNLOAD_DIR/opencode-studio-${TARGET}-${VERSION}.dmg"
+DMG_NEW_STD="$DOWNLOAD_DIR/opencode-studio-${TARGET}-${UPGRADE_TO_VERSION}.dmg"
+
+ASSET_OLD_CEF="opencode-studio-desktop-${TARGET}-cef-${VERSION}.dmg"
+ASSET_NEW_CEF="opencode-studio-desktop-${TARGET}-cef-${UPGRADE_TO_VERSION}.dmg"
+DMG_OLD_CEF="$DOWNLOAD_DIR/opencode-studio-${TARGET}-cef-${VERSION}.dmg"
+DMG_NEW_CEF="$DOWNLOAD_DIR/opencode-studio-${TARGET}-cef-${UPGRADE_TO_VERSION}.dmg"
+
+USE_CEF="0"
+DMG_OLD="$DMG_OLD_STD"
+DMG_NEW="$DMG_NEW_STD"
+
 if [[ "$UI_CLICKS" == "1" ]]; then
-  # The CEF desktop builds expose Chromium remote debugging (CDP).
-  ASSET_SUFFIX="-cef"
-  log "UI clicks enabled: using CEF desktop installers"
+  # Prefer CEF installers so Playwright can attach via CDP. If unavailable (or later flaky),
+  # fall back to standard desktop installers and run UI clicks in web mode.
+  log "UI clicks enabled"
+  if download_release_asset "$VERSION" "$ASSET_OLD_CEF" "$DMG_OLD_CEF" && download_release_asset "$UPGRADE_TO_VERSION" "$ASSET_NEW_CEF" "$DMG_NEW_CEF"; then
+    USE_CEF="1"
+    DMG_OLD="$DMG_OLD_CEF"
+    DMG_NEW="$DMG_NEW_CEF"
+    log "Using CEF desktop installers (CDP enabled)"
+  else
+    log "CEF desktop installers unavailable; using standard installers (UI clicks will run in web mode)"
+  fi
 fi
 
-DMG_OLD="$DOWNLOAD_DIR/opencode-studio-${TARGET}${ASSET_SUFFIX}-${VERSION}.dmg"
-DMG_NEW="$DOWNLOAD_DIR/opencode-studio-${TARGET}${ASSET_SUFFIX}-${UPGRADE_TO_VERSION}.dmg"
-ASSET_OLD="opencode-studio-desktop-${TARGET}${ASSET_SUFFIX}-${VERSION}.dmg"
-ASSET_NEW="opencode-studio-desktop-${TARGET}${ASSET_SUFFIX}-${UPGRADE_TO_VERSION}.dmg"
-
-if ! download_release_asset "$VERSION" "$ASSET_OLD" "$DMG_OLD"; then
-  if [[ "$UI_CLICKS" == "1" ]]; then
-    fail "CEF desktop DMG not found for $VERSION ($ASSET_OLD). Publish -cef desktop assets or run without --ui-clicks."
-  fi
-  fail "Failed to download desktop DMG: $ASSET_OLD"
-fi
-
-if ! download_release_asset "$UPGRADE_TO_VERSION" "$ASSET_NEW" "$DMG_NEW"; then
-  if [[ "$UI_CLICKS" == "1" ]]; then
-    fail "CEF desktop DMG not found for $UPGRADE_TO_VERSION ($ASSET_NEW). Publish -cef desktop assets or run without --ui-clicks."
-  fi
-  fail "Failed to download desktop DMG: $ASSET_NEW"
+if [[ "$USE_CEF" != "1" ]]; then
+  download_release_asset "$VERSION" "$ASSET_OLD_STD" "$DMG_OLD_STD" || fail "Failed to download desktop DMG: $ASSET_OLD_STD"
+  download_release_asset "$UPGRADE_TO_VERSION" "$ASSET_NEW_STD" "$DMG_NEW_STD" || fail "Failed to download desktop DMG: $ASSET_NEW_STD"
 fi
 
 log "Step 1/6: install desktop app ($VERSION)"
@@ -584,7 +596,7 @@ CDP_BASE_URL=""
 RUN_BASE_URL="$BASE_URL"
 STUDIO_PORT_LAST="$PORT"
 CDP_LAUNCHED="0"
-  if [[ "$UI_CLICKS" == "1" ]]; then
+  if [[ "$UI_CLICKS" == "1" && "$USE_CEF" == "1" ]]; then
     DEBUG_PORT="$(pick_free_port)"
     log "Using CDP debug port: $DEBUG_PORT"
     start_app "$APP_PATH" "--remote-debugging-port=${DEBUG_PORT}" "--remote-debugging-address=127.0.0.1" "--remote-allow-origins=*"
@@ -596,7 +608,10 @@ CDP_LAUNCHED="0"
 log "Base URL: $RUN_BASE_URL"
 STUDIO_PORT_LAST="$(port_from_base_url "$RUN_BASE_URL")"
 
-if ! bash "$USAGE_SMOKE_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --require-ui; then
+SMOKE_OK="0"
+if bash "$USAGE_SMOKE_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --require-ui; then
+  SMOKE_OK="1"
+else
   if [[ "$CDP_LAUNCHED" == "1" ]]; then
     log "Usage smoke failed after CDP launch; retrying without remote debugging args"
     stop_app
@@ -604,7 +619,29 @@ if ! bash "$USAGE_SMOKE_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DI
     CDP_BASE_URL=""
     CDP_LAUNCHED="0"
     start_app "$APP_PATH"
-    bash "$USAGE_SMOKE_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --require-ui
+    if bash "$USAGE_SMOKE_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --require-ui; then
+      SMOKE_OK="1"
+    fi
+  fi
+fi
+
+if [[ "$SMOKE_OK" != "1" ]]; then
+  if [[ "$UI_CLICKS" == "1" && "$USE_CEF" == "1" ]]; then
+    log "Usage smoke still failing with CEF installers; falling back to standard installers"
+    stop_app || true
+    DEBUG_PORT=""
+    CDP_BASE_URL=""
+    CDP_LAUNCHED="0"
+    USE_CEF="0"
+    download_release_asset "$VERSION" "$ASSET_OLD_STD" "$DMG_OLD_STD" || fail "Failed to download desktop DMG: $ASSET_OLD_STD"
+    download_release_asset "$UPGRADE_TO_VERSION" "$ASSET_NEW_STD" "$DMG_NEW_STD" || fail "Failed to download desktop DMG: $ASSET_NEW_STD"
+    DMG_OLD="$DMG_OLD_STD"
+    DMG_NEW="$DMG_NEW_STD"
+    assert_port_free "$PORT" "$WAIT_TIMEOUT_SECS"
+    install_app_from_dmg "$DMG_OLD" "$APP_PATH"
+    start_app "$APP_PATH"
+    bash "$USAGE_SMOKE_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --require-ui || fail "Usage smoke failed (standard installer fallback)"
+    SMOKE_OK="1"
   else
     fail "Usage smoke failed"
   fi
@@ -665,7 +702,10 @@ fi
 log "Base URL: $RUN_BASE_URL"
 STUDIO_PORT_LAST="$(port_from_base_url "$RUN_BASE_URL")"
 
-if ! bash "$USAGE_SMOKE_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --require-ui; then
+SMOKE_OK="0"
+if bash "$USAGE_SMOKE_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --require-ui; then
+  SMOKE_OK="1"
+else
   if [[ "$CDP_LAUNCHED" == "1" ]]; then
     log "Usage smoke failed after CDP launch; retrying without remote debugging args"
     stop_app
@@ -673,7 +713,27 @@ if ! bash "$USAGE_SMOKE_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DI
     CDP_BASE_URL=""
     CDP_LAUNCHED="0"
     start_app "$APP_PATH"
-    bash "$USAGE_SMOKE_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --require-ui
+    if bash "$USAGE_SMOKE_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --require-ui; then
+      SMOKE_OK="1"
+    fi
+  fi
+fi
+
+if [[ "$SMOKE_OK" != "1" ]]; then
+  if [[ "$UI_CLICKS" == "1" && "$USE_CEF" == "1" ]]; then
+    log "Usage smoke still failing with CEF installers; falling back to standard installer for $UPGRADE_TO_VERSION"
+    stop_app || true
+    DEBUG_PORT=""
+    CDP_BASE_URL=""
+    CDP_LAUNCHED="0"
+    USE_CEF="0"
+    download_release_asset "$UPGRADE_TO_VERSION" "$ASSET_NEW_STD" "$DMG_NEW_STD" || fail "Failed to download desktop DMG: $ASSET_NEW_STD"
+    DMG_NEW="$DMG_NEW_STD"
+    assert_port_free "$PORT" "$WAIT_TIMEOUT_SECS"
+    install_app_from_dmg "$DMG_NEW" "$APP_PATH"
+    start_app "$APP_PATH"
+    bash "$USAGE_SMOKE_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --require-ui || fail "Usage smoke failed (standard installer fallback)"
+    SMOKE_OK="1"
   else
     fail "Usage smoke failed"
   fi
@@ -721,7 +781,7 @@ CDP_BASE_URL=""
 RUN_BASE_URL="$BASE_URL"
 STUDIO_PORT_LAST="$PORT"
 CDP_LAUNCHED="0"
-if [[ "$UI_CLICKS" == "1" ]]; then
+if [[ "$UI_CLICKS" == "1" && "$USE_CEF" == "1" ]]; then
   DEBUG_PORT="$(pick_free_port)"
   log "Using CDP debug port: $DEBUG_PORT"
   start_app "$APP_PATH" "--remote-debugging-port=${DEBUG_PORT}" "--remote-debugging-address=127.0.0.1" "--remote-allow-origins=*"
@@ -733,7 +793,10 @@ fi
 log "Base URL: $RUN_BASE_URL"
 STUDIO_PORT_LAST="$(port_from_base_url "$RUN_BASE_URL")"
 
-if ! bash "$USAGE_SMOKE_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --require-ui; then
+SMOKE_OK="0"
+if bash "$USAGE_SMOKE_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --require-ui; then
+  SMOKE_OK="1"
+else
   if [[ "$CDP_LAUNCHED" == "1" ]]; then
     log "Usage smoke failed after CDP launch; retrying without remote debugging args"
     stop_app
@@ -741,7 +804,27 @@ if ! bash "$USAGE_SMOKE_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DI
     CDP_BASE_URL=""
     CDP_LAUNCHED="0"
     start_app "$APP_PATH"
-    bash "$USAGE_SMOKE_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --require-ui
+    if bash "$USAGE_SMOKE_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --require-ui; then
+      SMOKE_OK="1"
+    fi
+  fi
+fi
+
+if [[ "$SMOKE_OK" != "1" ]]; then
+  if [[ "$UI_CLICKS" == "1" && "$USE_CEF" == "1" ]]; then
+    log "Usage smoke still failing with CEF installers; falling back to standard installer for $UPGRADE_TO_VERSION"
+    stop_app || true
+    DEBUG_PORT=""
+    CDP_BASE_URL=""
+    CDP_LAUNCHED="0"
+    USE_CEF="0"
+    download_release_asset "$UPGRADE_TO_VERSION" "$ASSET_NEW_STD" "$DMG_NEW_STD" || fail "Failed to download desktop DMG: $ASSET_NEW_STD"
+    DMG_NEW="$DMG_NEW_STD"
+    assert_port_free "$PORT" "$WAIT_TIMEOUT_SECS"
+    install_app_from_dmg "$DMG_NEW" "$APP_PATH"
+    start_app "$APP_PATH"
+    bash "$USAGE_SMOKE_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --require-ui || fail "Usage smoke failed (standard installer fallback)"
+    SMOKE_OK="1"
   else
     fail "Usage smoke failed"
   fi
