@@ -353,15 +353,20 @@ wait_for_health_up() {
   return 1
 }
 
+activate_app() {
+  # Best-effort: bring the app to the foreground so the webview is created.
+  osascript \
+    -e 'with timeout of 5 seconds' \
+    -e 'tell application "OpenCode Studio" to activate' \
+    -e 'end timeout' >/dev/null 2>&1 || true
+}
+
 launch_with_cdp_and_usage_smoke() {
   local label="$1"
   local attempt=1
   local max_attempts=3
   local cdp_timeout="$WAIT_TIMEOUT_SECS"
   local health_timeout="$WAIT_TIMEOUT_SECS"
-
-  if ((cdp_timeout > 180)); then cdp_timeout=180; fi
-  if ((health_timeout > 180)); then health_timeout=180; fi
 
   while ((attempt <= max_attempts)); do
     DEBUG_PORT="$(pick_free_port)"
@@ -377,9 +382,23 @@ launch_with_cdp_and_usage_smoke() {
       "--remote-debugging-address=127.0.0.1" \
       --remote-allow-origins=*
 
-    if ! try_wait_cdp_ready "$DEBUG_PORT" "$cdp_timeout"; then
-      log "[$label] CDP not ready within ${cdp_timeout}s (last error: ${CDP_LAST_ERROR:-unknown})"
+    activate_app
+
+    if ! wait_for_health_up "$RUN_BASE_URL" "$health_timeout"; then
+      log "[$label] Backend not reachable: $RUN_BASE_URL/health (waited ${health_timeout}s)"
+      dump_port_diag "$STUDIO_PORT_LAST"
       dump_cdp_diag "$DEBUG_PORT"
+      stop_app || true
+      assert_port_free "$STUDIO_PORT_LAST" "$WAIT_TIMEOUT_SECS" || true
+      assert_port_free "$DEBUG_PORT" "$WAIT_TIMEOUT_SECS" || true
+      attempt=$((attempt + 1))
+      continue
+    fi
+
+    if ! try_wait_cdp_ready "$DEBUG_PORT" "$cdp_timeout"; then
+      log "[$label] Backend is reachable but CDP not ready within ${cdp_timeout}s (last error: ${CDP_LAST_ERROR:-unknown})"
+      dump_cdp_diag "$DEBUG_PORT"
+      dump_desktop_support_dirs "CDP not ready ($label)"
       stop_app || true
       assert_port_free "$DEBUG_PORT" "$WAIT_TIMEOUT_SECS" || true
       attempt=$((attempt + 1))
@@ -395,17 +414,6 @@ launch_with_cdp_and_usage_smoke() {
       log "[$label] CDP base URL detection unavailable; using configured base URL: $RUN_BASE_URL"
     fi
     STUDIO_PORT_LAST="$(port_from_base_url "$RUN_BASE_URL")"
-
-    if ! wait_for_health_up "$RUN_BASE_URL" "$health_timeout"; then
-      log "[$label] Backend not reachable: $RUN_BASE_URL/health (waited ${health_timeout}s)"
-      dump_port_diag "$STUDIO_PORT_LAST"
-      dump_cdp_diag "$DEBUG_PORT"
-      stop_app || true
-      assert_port_free "$STUDIO_PORT_LAST" "$WAIT_TIMEOUT_SECS" || true
-      assert_port_free "$DEBUG_PORT" "$WAIT_TIMEOUT_SECS" || true
-      attempt=$((attempt + 1))
-      continue
-    fi
 
     log "[$label] Running usage smoke"
     if bash "$USAGE_SMOKE_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --require-ui; then
@@ -542,14 +550,32 @@ stop_app() {
     -e 'tell application "OpenCode Studio" to quit' \
     -e 'end timeout' >/dev/null 2>&1 || true
 
-  if [[ -n "${APP_MAIN_PID:-}" ]]; then
-    if kill -0 "$APP_MAIN_PID" >/dev/null 2>&1; then
-      log "Stopping app main pid: $APP_MAIN_PID"
-      kill "$APP_MAIN_PID" >/dev/null 2>&1 || true
+  local pid="${APP_MAIN_PID:-}"
+  APP_MAIN_PID=""
+
+  if [[ -n "${pid:-}" ]] && kill -0 "$pid" >/dev/null 2>&1; then
+    log "Waiting for app to exit (pid: $pid)"
+    local waited=0
+    while kill -0 "$pid" >/dev/null 2>&1 && ((waited < 20)); do
       sleep 1
-      kill -9 "$APP_MAIN_PID" >/dev/null 2>&1 || true
+      waited=$((waited + 1))
+    done
+
+    if kill -0 "$pid" >/dev/null 2>&1; then
+      log "App still running; sending SIGTERM (pid: $pid)"
+      kill "$pid" >/dev/null 2>&1 || true
+
+      waited=0
+      while kill -0 "$pid" >/dev/null 2>&1 && ((waited < 5)); do
+        sleep 1
+        waited=$((waited + 1))
+      done
     fi
-    APP_MAIN_PID=""
+
+    if kill -0 "$pid" >/dev/null 2>&1; then
+      log "App still running; force-killing (pid: $pid)"
+      kill -9 "$pid" >/dev/null 2>&1 || true
+    fi
   fi
 
   # Give it a moment to shut down.
