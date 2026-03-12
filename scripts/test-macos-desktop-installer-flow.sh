@@ -116,16 +116,31 @@ try_wait_cdp_ready() {
   local last_err=""
   local host=""
   local url=""
+  local base=""
 
   CDP_BASE_URL=""
   CDP_LAST_ERROR=""
 
   while ((SECONDS < end)); do
-    for host in 127.0.0.1 localhost; do
+    for host in 127.0.0.1 localhost "[::1]"; do
       url="http://${host}:${port}/json/version"
+      base="http://${host}:${port}"
+
+      local out=""
+      out="$(curl -sS --connect-timeout 1 --max-time 2 "$url" -w $'\n__HTTP_CODE__%{http_code}' 2>/dev/null || true)"
+      [[ -n "$out" ]] || { last_err="no response (${host})"; continue; }
+
+      local code=""
       local body=""
-      body="$(curl -fsS --max-time 2 "$url" 2>/dev/null || true)"
-      if [[ -n "$body" ]]; then
+      if [[ "$out" == *"__HTTP_CODE__"* ]]; then
+        code="${out##*__HTTP_CODE__}"
+        body="${out%$'\n'__HTTP_CODE__*}"
+      else
+        code=""
+        body="$out"
+      fi
+
+      if [[ "$code" == "200" && -n "$body" ]]; then
         if python3 - "$body" <<'PY' >/dev/null 2>&1
 import json,sys
 p=json.loads(sys.argv[1])
@@ -133,13 +148,17 @@ ws=p.get('webSocketDebuggerUrl')
 raise SystemExit(0 if isinstance(ws,str) and ws.strip() else 1)
 PY
         then
-          CDP_BASE_URL="http://${host}:${port}"
+          CDP_BASE_URL="$base"
           log "CDP ready: $url"
           return 0
         fi
-        last_err="missing webSocketDebuggerUrl (${host})"
+        last_err="missing webSocketDebuggerUrl (http ${code}, ${host})"
       else
-        last_err="no response (${host})"
+        if [[ -z "$code" || "$code" == "000" ]]; then
+          last_err="no response (${host})"
+        else
+          last_err="http ${code} (${host})"
+        fi
       fi
     done
     sleep 0.25
@@ -156,6 +175,30 @@ wait_cdp_ready() {
     return 0
   fi
   fail "CDP endpoint not ready within ${timeout_secs}s: http://127.0.0.1:${port}/json/version (or localhost) (last error: ${CDP_LAST_ERROR:-unknown})"
+}
+
+dump_cdp_diag() {
+  local port="$1"
+  [[ -n "$port" ]] || return 0
+
+  log "CDP diagnostics for :$port"
+  dump_port_diag "$port"
+
+  local url="http://127.0.0.1:${port}/json/version"
+  local out=""
+  out="$(curl -sS --connect-timeout 1 --max-time 2 "$url" -w $'\n__HTTP_CODE__%{http_code}' 2>/dev/null || true)"
+  if [[ -z "$out" ]]; then
+    log "CDP /json/version: no response"
+    return 0
+  fi
+
+  local code="${out##*__HTTP_CODE__}"
+  local body="${out%$'\n'__HTTP_CODE__*}"
+  log "CDP /json/version HTTP ${code:-<unknown>}"
+  if [[ -n "$body" ]]; then
+    local one_line="${body//$'\n'/ }"
+    log "CDP /json/version body (first 800 chars): ${one_line:0:800}"
+  fi
 }
 
 detect_base_url_from_cdp() {
@@ -541,14 +584,14 @@ CDP_BASE_URL=""
 RUN_BASE_URL="$BASE_URL"
 STUDIO_PORT_LAST="$PORT"
 CDP_LAUNCHED="0"
-if [[ "$UI_CLICKS" == "1" ]]; then
-  DEBUG_PORT="$(pick_free_port)"
-  log "Using CDP debug port: $DEBUG_PORT"
-  start_app "$APP_PATH" "--remote-debugging-port=${DEBUG_PORT}" "--remote-allow-origins=*"
-  CDP_LAUNCHED="1"
-else
-  start_app "$APP_PATH"
-fi
+  if [[ "$UI_CLICKS" == "1" ]]; then
+    DEBUG_PORT="$(pick_free_port)"
+    log "Using CDP debug port: $DEBUG_PORT"
+    start_app "$APP_PATH" "--remote-debugging-port=${DEBUG_PORT}" "--remote-debugging-address=127.0.0.1" "--remote-allow-origins=*"
+    CDP_LAUNCHED="1"
+  else
+    start_app "$APP_PATH"
+  fi
 
 log "Base URL: $RUN_BASE_URL"
 STUDIO_PORT_LAST="$(port_from_base_url "$RUN_BASE_URL")"
@@ -567,14 +610,23 @@ if ! bash "$USAGE_SMOKE_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DI
   fi
 fi
 
-if [[ "$UI_CLICKS" == "1" ]]; then
-  if [[ "$CDP_LAUNCHED" == "1" ]] && try_wait_cdp_ready "$DEBUG_PORT" 60; then
-    node "$UI_CLICK_SCRIPT" --cdp-url "$CDP_BASE_URL" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "desktop-install"
+  if [[ "$UI_CLICKS" == "1" ]]; then
+  if [[ "$CDP_LAUNCHED" == "1" ]]; then
+    cdp_timeout="$WAIT_TIMEOUT_SECS"
+    if ((cdp_timeout > 180)); then cdp_timeout=180; fi
+    if try_wait_cdp_ready "$DEBUG_PORT" "$cdp_timeout"; then
+      log "UI clicks: CDP mode"
+      node "$UI_CLICK_SCRIPT" --cdp-url "$CDP_BASE_URL" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "desktop-install"
+    else
+      log "CDP unavailable after ${cdp_timeout}s (last error: ${CDP_LAST_ERROR:-unknown}); running UI clicks in web mode"
+      dump_cdp_diag "$DEBUG_PORT"
+      node "$UI_CLICK_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "desktop-install"
+    fi
   else
-    log "CDP unavailable; running UI clicks in web mode"
+    log "UI clicks: web mode (CDP not launched)"
     node "$UI_CLICK_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "desktop-install"
   fi
-fi
+  fi
 OPENCODE_PORT_LAST="$(read_health_field "$RUN_BASE_URL" "openCodePort" || true)"
 if [[ -n "$OPENCODE_PORT_LAST" ]]; then
   log "Captured openCodePort=$OPENCODE_PORT_LAST"
@@ -604,7 +656,7 @@ CDP_LAUNCHED="0"
 if [[ "$UI_CLICKS" == "1" ]]; then
   DEBUG_PORT="$(pick_free_port)"
   log "Using CDP debug port: $DEBUG_PORT"
-  start_app "$APP_PATH" "--remote-debugging-port=${DEBUG_PORT}" "--remote-allow-origins=*"
+  start_app "$APP_PATH" "--remote-debugging-port=${DEBUG_PORT}" "--remote-debugging-address=127.0.0.1" "--remote-allow-origins=*"
   CDP_LAUNCHED="1"
 else
   start_app "$APP_PATH"
@@ -628,10 +680,19 @@ if ! bash "$USAGE_SMOKE_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DI
 fi
 
 if [[ "$UI_CLICKS" == "1" ]]; then
-  if [[ "$CDP_LAUNCHED" == "1" ]] && try_wait_cdp_ready "$DEBUG_PORT" 60; then
-    node "$UI_CLICK_SCRIPT" --cdp-url "$CDP_BASE_URL" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "desktop-upgrade"
+  if [[ "$CDP_LAUNCHED" == "1" ]]; then
+    cdp_timeout="$WAIT_TIMEOUT_SECS"
+    if ((cdp_timeout > 180)); then cdp_timeout=180; fi
+    if try_wait_cdp_ready "$DEBUG_PORT" "$cdp_timeout"; then
+      log "UI clicks: CDP mode"
+      node "$UI_CLICK_SCRIPT" --cdp-url "$CDP_BASE_URL" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "desktop-upgrade"
+    else
+      log "CDP unavailable after ${cdp_timeout}s (last error: ${CDP_LAST_ERROR:-unknown}); running UI clicks in web mode"
+      dump_cdp_diag "$DEBUG_PORT"
+      node "$UI_CLICK_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "desktop-upgrade"
+    fi
   else
-    log "CDP unavailable; running UI clicks in web mode"
+    log "UI clicks: web mode (CDP not launched)"
     node "$UI_CLICK_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "desktop-upgrade"
   fi
 fi
@@ -663,7 +724,7 @@ CDP_LAUNCHED="0"
 if [[ "$UI_CLICKS" == "1" ]]; then
   DEBUG_PORT="$(pick_free_port)"
   log "Using CDP debug port: $DEBUG_PORT"
-  start_app "$APP_PATH" "--remote-debugging-port=${DEBUG_PORT}" "--remote-allow-origins=*"
+  start_app "$APP_PATH" "--remote-debugging-port=${DEBUG_PORT}" "--remote-debugging-address=127.0.0.1" "--remote-allow-origins=*"
   CDP_LAUNCHED="1"
 else
   start_app "$APP_PATH"
@@ -687,10 +748,19 @@ if ! bash "$USAGE_SMOKE_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DI
 fi
 
 if [[ "$UI_CLICKS" == "1" ]]; then
-  if [[ "$CDP_LAUNCHED" == "1" ]] && try_wait_cdp_ready "$DEBUG_PORT" 60; then
-    node "$UI_CLICK_SCRIPT" --cdp-url "$CDP_BASE_URL" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "desktop-reinstall"
+  if [[ "$CDP_LAUNCHED" == "1" ]]; then
+    cdp_timeout="$WAIT_TIMEOUT_SECS"
+    if ((cdp_timeout > 180)); then cdp_timeout=180; fi
+    if try_wait_cdp_ready "$DEBUG_PORT" "$cdp_timeout"; then
+      log "UI clicks: CDP mode"
+      node "$UI_CLICK_SCRIPT" --cdp-url "$CDP_BASE_URL" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "desktop-reinstall"
+    else
+      log "CDP unavailable after ${cdp_timeout}s (last error: ${CDP_LAST_ERROR:-unknown}); running UI clicks in web mode"
+      dump_cdp_diag "$DEBUG_PORT"
+      node "$UI_CLICK_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "desktop-reinstall"
+    fi
   else
-    log "CDP unavailable; running UI clicks in web mode"
+    log "UI clicks: web mode (CDP not launched)"
     node "$UI_CLICK_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "desktop-reinstall"
   fi
 fi
