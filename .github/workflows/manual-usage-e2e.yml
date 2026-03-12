@@ -116,8 +116,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
     env:
-      STUDIO_UI_E2E_OUT_DIR: ${{ runner.temp }}/ui-clicks
-      PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/pw-browsers
+      E2E_ARTIFACT_ROOT: ${{ github.workspace }}/.manual-usage-e2e
+      STUDIO_UI_E2E_OUT_DIR: ${{ github.workspace }}/.manual-usage-e2e/ui-clicks
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.manual-usage-e2e/pw-browsers
     strategy:
       fail-fast: false
       matrix:
@@ -229,7 +230,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          out="${RUNNER_TEMP}/service-diagnostics"
+          out="${E2E_ARTIFACT_ROOT}/service-diagnostics"
           mkdir -p "$out"
 
           if [[ "${RUNNER_OS}" == "Linux" ]]; then
@@ -245,7 +246,7 @@ jobs:
         if: always() && runner.os == 'Windows'
         shell: pwsh
         run: |
-          $out = Join-Path $env:RUNNER_TEMP "service-diagnostics"
+          $out = Join-Path $env:E2E_ARTIFACT_ROOT "service-diagnostics"
           New-Item -ItemType Directory -Force -Path $out | Out-Null
           & sc.exe query OpenCodeStudio *> (Join-Path $out "OpenCodeStudio.sc.txt")
           & sc.exe query OpenCodeStudio-OpenCode *> (Join-Path $out "OpenCodeStudio-OpenCode.sc.txt")
@@ -256,7 +257,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: manual-usage-e2e-service-${{ runner.os }}
-          path: ${{ runner.temp }}/service-diagnostics
+          path: ${{ github.workspace }}/.manual-usage-e2e/service-diagnostics
           if-no-files-found: warn
 
       - name: Upload UI click artifacts (service)
@@ -264,7 +265,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: manual-usage-e2e-ui-clicks-service-${{ runner.os }}
-          path: ${{ runner.temp }}/ui-clicks
+          path: ${{ github.workspace }}/.manual-usage-e2e/ui-clicks
           if-no-files-found: warn
 
   desktop-usage:
@@ -273,8 +274,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
     env:
-      STUDIO_UI_E2E_OUT_DIR: ${{ runner.temp }}/ui-clicks
-      PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/pw-browsers
+      E2E_ARTIFACT_ROOT: ${{ github.workspace }}/.manual-usage-e2e
+      STUDIO_UI_E2E_OUT_DIR: ${{ github.workspace }}/.manual-usage-e2e/ui-clicks
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.manual-usage-e2e/pw-browsers
     strategy:
       fail-fast: false
       matrix:
@@ -342,7 +344,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          out="${RUNNER_TEMP}/desktop-support"
+          out="${E2E_ARTIFACT_ROOT}/desktop-support"
           mkdir -p "$out"
           cp -R "$HOME/Library/Application Support/cn.cxits.opencode-studio" "$out/app-support" 2>/dev/null || true
           cp -R "$HOME/Library/Logs/cn.cxits.opencode-studio" "$out/logs" 2>/dev/null || true
@@ -351,7 +353,7 @@ jobs:
         if: always() && runner.os == 'Windows'
         shell: pwsh
         run: |
-          $out = Join-Path $env:RUNNER_TEMP "desktop-support"
+          $out = Join-Path $env:E2E_ARTIFACT_ROOT "desktop-support"
           New-Item -ItemType Directory -Force -Path $out | Out-Null
           foreach ($d in @(
             Join-Path $env:APPDATA "cn.cxits.opencode-studio",
@@ -370,7 +372,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: manual-usage-e2e-desktop-${{ runner.os }}
-          path: ${{ runner.temp }}/desktop-support
+          path: ${{ github.workspace }}/.manual-usage-e2e/desktop-support
           if-no-files-found: warn
 
       - name: Upload UI click artifacts (desktop)
@@ -378,5 +380,5 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: manual-usage-e2e-ui-clicks-desktop-${{ runner.os }}
-          path: ${{ runner.temp }}/ui-clicks
+          path: ${{ github.workspace }}/.manual-usage-e2e/ui-clicks
           if-no-files-found: warn
