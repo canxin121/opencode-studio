@@ -132,10 +132,10 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Setup Node (for Playwright)
-        uses: actions/setup-node@v6
-        with:
-          node-version: 20
+      - name: Verify Node runtime
+        run: |
+          node --version
+          npm --version
 
       - name: Install Playwright (Chromium + deps)
         if: runner.os == 'Linux'
@@ -293,10 +293,10 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Setup Node (for Playwright)
-        uses: actions/setup-node@v6
-        with:
-          node-version: 20
+      - name: Verify Node runtime
+        run: |
+          node --version
+          npm --version
 
       - name: Install Playwright (Chromium, macOS)
         if: runner.os == 'macOS'

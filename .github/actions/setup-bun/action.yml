@@ -52,7 +52,7 @@ runs:
         archive="$RUNNER_TEMP/$asset"
         extract_dir="$RUNNER_TEMP/bun-${platform}-${arch}"
         install_dir="$HOME/.bun/bin"
-        curl -fsSL "$url" -o "$archive"
+        curl -fsSL --retry 5 --retry-delay 2 "$url" -o "$archive"
         rm -rf "$extract_dir"
         unzip -qo "$archive" -d "$RUNNER_TEMP"
         mkdir -p "$install_dir"
@@ -68,6 +68,55 @@ runs:
         RUNNER_ARCH: ${{ runner.arch }}
       run: |
         $ErrorActionPreference = 'Stop'
+        $ProgressPreference = 'SilentlyContinue'
+
+        function Get-FileSignature {
+          param([string]$Path)
+          if (-not (Test-Path -LiteralPath $Path)) { return $null }
+          $fs = [System.IO.File]::OpenRead($Path)
+          try {
+            $bytes = New-Object byte[] 2
+            $read = $fs.Read($bytes, 0, 2)
+            if ($read -ne 2) { return $null }
+            return [System.Text.Encoding]::ASCII.GetString($bytes)
+          } finally {
+            $fs.Dispose()
+          }
+        }
+
+        function Download-ZipWithRetry {
+          param(
+            [string]$Url,
+            [string]$OutFile,
+            [int]$Attempts = 5
+          )
+
+          for ($i = 1; $i -le $Attempts; $i++) {
+            try {
+              if (Test-Path -LiteralPath $OutFile) {
+                Remove-Item -Force -LiteralPath $OutFile
+              }
+
+              & curl.exe --fail --location --silent --show-error --retry 3 --retry-delay 2 --connect-timeout 20 --max-time 300 --output $OutFile $Url
+
+              if (-not (Test-Path -LiteralPath $OutFile)) {
+                throw "Download produced no file: $OutFile"
+              }
+
+              $sig = Get-FileSignature -Path $OutFile
+              if ($sig -ne 'PK') {
+                $len = (Get-Item -LiteralPath $OutFile).Length
+                throw "Downloaded file is not a zip (sig='$sig', $len bytes): $Url"
+              }
+
+              return
+            } catch {
+              Write-Host "Download attempt $i/$Attempts failed: $($_.Exception.Message)"
+              if ($i -eq $Attempts) { throw }
+              Start-Sleep -Seconds ([Math]::Min(60, [Math]::Pow(2, $i)))
+            }
+          }
+        }
 
         switch ($env:RUNNER_ARCH) {
           'X64' { $arch = 'x64' }
@@ -90,7 +139,7 @@ runs:
         $extractDir = Join-Path $env:RUNNER_TEMP "bun-windows-$arch"
         $installDir = Join-Path $env:USERPROFILE '.bun\bin'
 
-        Invoke-WebRequest -Uri $url -OutFile $archive
+        Download-ZipWithRetry -Url $url -OutFile $archive -Attempts 6
         if (Test-Path $extractDir) {
           Remove-Item -Recurse -Force $extractDir
         }
