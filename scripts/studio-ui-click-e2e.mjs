@@ -582,7 +582,9 @@ async function main() {
       }
 
       const selected = sidebar
-        .locator('button[class*="bg-primary/12"]', { has: sidebar.locator('button[aria-label="Delete session"]') })
+        // Selected session row typically has a bg highlight; actions are hover-only, so don't
+        // require the delete button to already be present in the DOM.
+        .locator('button[class*="bg-primary/12"]')
         .first()
       try {
         await selected.waitFor({ timeout: 1200 })
