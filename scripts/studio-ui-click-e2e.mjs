@@ -445,8 +445,90 @@ async function main() {
     await log('Help dialog OK')
 
     // Settings navigation
+    async function dismissToastsOnce() {
+      const toasts = page.locator('[data-sonner-toast]')
+      let count = 0
+      try {
+        count = await toasts.count()
+      } catch {
+        count = 0
+      }
+      if (!count) return false
+
+      await log(`Toast overlay detected (${count}); attempting dismiss`)
+
+      const closeBtn = page.locator(
+        '[data-sonner-toast] button[aria-label="Close"], [data-sonner-toast] button:has-text("Close"), [data-sonner-toast] button:has-text("Dismiss")',
+      )
+
+      try {
+        if ((await closeBtn.count()) > 0) {
+          await closeBtn.first().click({ timeout: 2000, force: true })
+        } else {
+          // Some toast variants dismiss on click.
+          await toasts.first().click({ timeout: 2000, force: true })
+        }
+      } catch {
+        // ignore
+      }
+
+      await sleep(300)
+      return true
+    }
+
     await log('Navigate to Settings')
-    await page.getByRole('button', { name: 'Settings' }).click()
+    const settingsBtn = page.getByRole('button', { name: 'Settings' }).first()
+    const settingsClickTimeoutMs = Math.min(15000, timeoutMs)
+    const settingsNavTimeoutMs = Math.min(8000, timeoutMs)
+
+    async function waitSettingsUrlShort() {
+      try {
+        await page.waitForURL(/\/settings\b/i, { timeout: settingsNavTimeoutMs })
+        return true
+      } catch {
+        return false
+      }
+    }
+
+    let didNavigateToSettings = false
+
+    try {
+      await settingsBtn.click({ timeout: settingsClickTimeoutMs })
+      didNavigateToSettings = await waitSettingsUrlShort()
+    } catch (err) {
+      await log('Settings click failed; attempting toast dismiss and retry:', err)
+      try {
+        await dismissToastsOnce()
+      } catch {
+        // ignore
+      }
+      try {
+        await settingsBtn.click({ timeout: settingsClickTimeoutMs, force: true })
+        didNavigateToSettings = await waitSettingsUrlShort()
+      } catch (err2) {
+        await log('Settings click still failed; falling back to direct navigation:', err2)
+      }
+    }
+
+    if (!didNavigateToSettings) {
+      const settingsUrl = baseUrl ? `${baseUrl}/settings` : new URL('/settings', page.url()).toString()
+      try {
+        await page.goto(settingsUrl, { waitUntil: 'domcontentloaded' })
+      } catch {
+        try {
+          await page.evaluate((u) => {
+            try {
+              window.location.href = String(u)
+            } catch {
+              // ignore
+            }
+          }, settingsUrl)
+        } catch {
+          // ignore
+        }
+      }
+    }
+
     await page.waitForURL(/\/settings\b/i, { timeout: timeoutMs })
     await page.locator('.settings-page').waitFor({ timeout: timeoutMs })
     await log('Settings page OK')

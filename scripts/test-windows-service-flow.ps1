@@ -6,7 +6,7 @@ Param(
   [switch]$UsageChecks,
   [switch]$UiClicks,
   [string]$InstallDir = "",
-  [ValidateRange(10, 300)]
+  [ValidateRange(10, 900)]
   [int]$WaitTimeoutSeconds = 120
 )
 
