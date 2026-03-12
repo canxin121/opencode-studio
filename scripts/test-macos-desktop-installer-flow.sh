@@ -373,8 +373,8 @@ launch_with_cdp_and_usage_smoke() {
     log "[$label] Launch attempt ${attempt}/${max_attempts} (CDP port: $DEBUG_PORT)"
     start_app \
       "$APP_PATH" \
-      --remote-debugging-port "$DEBUG_PORT" \
-      --remote-debugging-address 127.0.0.1 \
+      "--remote-debugging-port=${DEBUG_PORT}" \
+      "--remote-debugging-address=127.0.0.1" \
       --remote-allow-origins=*
 
     if ! try_wait_cdp_ready "$DEBUG_PORT" "$cdp_timeout"; then
