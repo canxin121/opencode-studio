@@ -112,37 +112,44 @@ PY
 wait_cdp_ready() {
   local port="$1"
   local timeout_secs="$2"
-  local url="http://127.0.0.1:${port}/json/version"
   local end=$((SECONDS + timeout_secs))
   local last_err=""
+  local host=""
+  local url=""
+
+  CDP_BASE_URL=""
 
   while ((SECONDS < end)); do
-    local body=""
-    body="$(curl -fsS --max-time 2 "$url" 2>/dev/null || true)"
-    if [[ -n "$body" ]]; then
-      if python3 - "$body" <<'PY' >/dev/null 2>&1
+    for host in 127.0.0.1 localhost; do
+      url="http://${host}:${port}/json/version"
+      local body=""
+      body="$(curl -fsS --max-time 2 "$url" 2>/dev/null || true)"
+      if [[ -n "$body" ]]; then
+        if python3 - "$body" <<'PY' >/dev/null 2>&1
 import json,sys
 p=json.loads(sys.argv[1])
 ws=p.get('webSocketDebuggerUrl')
 raise SystemExit(0 if isinstance(ws,str) and ws.strip() else 1)
 PY
-      then
-        log "CDP ready: $url"
-        return 0
+        then
+          CDP_BASE_URL="http://${host}:${port}"
+          log "CDP ready: $url"
+          return 0
+        fi
+        last_err="missing webSocketDebuggerUrl (${host})"
+      else
+        last_err="no response (${host})"
       fi
-      last_err="missing webSocketDebuggerUrl"
-    else
-      last_err="no response"
-    fi
+    done
     sleep 0.25
   done
 
-  fail "CDP endpoint not ready within ${timeout_secs}s: $url (last error: $last_err)"
+  fail "CDP endpoint not ready within ${timeout_secs}s: http://127.0.0.1:${port}/json/version (or localhost) (last error: $last_err)"
 }
 
 detect_base_url_from_cdp() {
-  local debug_port="$1"
-  local list_url="http://127.0.0.1:${debug_port}/json/list"
+  local cdp_base_url="$1"
+  local list_url="${cdp_base_url}/json/list"
   local payload=""
   payload="$(curl -fsS --max-time 2 "$list_url" 2>/dev/null || true)"
   [[ -n "$payload" ]] || return 1
@@ -187,13 +194,13 @@ PY
 }
 
 wait_base_url_from_cdp() {
-  local debug_port="$1"
+  local cdp_base_url="$1"
   local timeout_secs="$2"
   local end=$((SECONDS + timeout_secs))
   local detected=""
 
   while ((SECONDS < end)); do
-    detected="$(detect_base_url_from_cdp "$debug_port" 2>/dev/null || true)"
+    detected="$(detect_base_url_from_cdp "$cdp_base_url" 2>/dev/null || true)"
     if [[ -n "${detected:-}" ]]; then
       printf '%s\n' "$detected"
       return 0
@@ -521,16 +528,16 @@ log "Step 2/6: launch + usage smoke ($VERSION)"
 DEBUG_PORT=""
 RUN_BASE_URL="$BASE_URL"
 STUDIO_PORT_LAST="$PORT"
-if [[ "$UI_CLICKS" == "1" ]]; then
-  DEBUG_PORT="$(pick_free_port)"
-  log "Using CDP debug port: $DEBUG_PORT"
-  start_app "$APP_PATH" "--remote-debugging-port=${DEBUG_PORT}" "--remote-allow-origins=*"
-  wait_cdp_ready "$DEBUG_PORT" "$WAIT_TIMEOUT_SECS"
-  detected_base_url="$(wait_base_url_from_cdp "$DEBUG_PORT" 60 2>/dev/null || true)"
-  if [[ -n "${detected_base_url:-}" ]]; then
-    RUN_BASE_URL="$detected_base_url"
-  fi
-else
+  if [[ "$UI_CLICKS" == "1" ]]; then
+    DEBUG_PORT="$(pick_free_port)"
+    log "Using CDP debug port: $DEBUG_PORT"
+    start_app "$APP_PATH" "--remote-debugging-port=${DEBUG_PORT}" "--remote-allow-origins=*"
+    wait_cdp_ready "$DEBUG_PORT" "$WAIT_TIMEOUT_SECS"
+    detected_base_url="$(wait_base_url_from_cdp "$CDP_BASE_URL" 60 2>/dev/null || true)"
+    if [[ -n "${detected_base_url:-}" ]]; then
+      RUN_BASE_URL="$detected_base_url"
+    fi
+  else
   start_app "$APP_PATH"
 fi
 
@@ -542,10 +549,10 @@ fi
 
 STUDIO_PORT_LAST="$(port_from_base_url "$RUN_BASE_URL")"
 
-bash "$USAGE_SMOKE_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --require-ui
-if [[ "$UI_CLICKS" == "1" ]]; then
-  node "$UI_CLICK_SCRIPT" --cdp-url "http://127.0.0.1:${DEBUG_PORT}" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "desktop-install"
-fi
+  bash "$USAGE_SMOKE_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --require-ui
+  if [[ "$UI_CLICKS" == "1" ]]; then
+    node "$UI_CLICK_SCRIPT" --cdp-url "$CDP_BASE_URL" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "desktop-install"
+  fi
 OPENCODE_PORT_LAST="$(read_health_field "$RUN_BASE_URL" "openCodePort" || true)"
 if [[ -n "$OPENCODE_PORT_LAST" ]]; then
   log "Captured openCodePort=$OPENCODE_PORT_LAST"
@@ -570,16 +577,16 @@ assert_port_free "$PORT" "$WAIT_TIMEOUT_SECS"
 DEBUG_PORT=""
 RUN_BASE_URL="$BASE_URL"
 STUDIO_PORT_LAST="$PORT"
-if [[ "$UI_CLICKS" == "1" ]]; then
-  DEBUG_PORT="$(pick_free_port)"
-  log "Using CDP debug port: $DEBUG_PORT"
-  start_app "$APP_PATH" "--remote-debugging-port=${DEBUG_PORT}" "--remote-allow-origins=*"
-  wait_cdp_ready "$DEBUG_PORT" "$WAIT_TIMEOUT_SECS"
-  detected_base_url="$(wait_base_url_from_cdp "$DEBUG_PORT" 60 2>/dev/null || true)"
-  if [[ -n "${detected_base_url:-}" ]]; then
-    RUN_BASE_URL="$detected_base_url"
-  fi
-else
+  if [[ "$UI_CLICKS" == "1" ]]; then
+    DEBUG_PORT="$(pick_free_port)"
+    log "Using CDP debug port: $DEBUG_PORT"
+    start_app "$APP_PATH" "--remote-debugging-port=${DEBUG_PORT}" "--remote-allow-origins=*"
+    wait_cdp_ready "$DEBUG_PORT" "$WAIT_TIMEOUT_SECS"
+    detected_base_url="$(wait_base_url_from_cdp "$CDP_BASE_URL" 60 2>/dev/null || true)"
+    if [[ -n "${detected_base_url:-}" ]]; then
+      RUN_BASE_URL="$detected_base_url"
+    fi
+  else
   start_app "$APP_PATH"
 fi
 
@@ -591,10 +598,10 @@ fi
 
 STUDIO_PORT_LAST="$(port_from_base_url "$RUN_BASE_URL")"
 
-bash "$USAGE_SMOKE_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --require-ui
-if [[ "$UI_CLICKS" == "1" ]]; then
-  node "$UI_CLICK_SCRIPT" --cdp-url "http://127.0.0.1:${DEBUG_PORT}" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "desktop-upgrade"
-fi
+  bash "$USAGE_SMOKE_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --require-ui
+  if [[ "$UI_CLICKS" == "1" ]]; then
+    node "$UI_CLICK_SCRIPT" --cdp-url "$CDP_BASE_URL" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "desktop-upgrade"
+  fi
 OPENCODE_PORT_LAST="$(read_health_field "$RUN_BASE_URL" "openCodePort" || true)"
 stop_app
 assert_port_free "$STUDIO_PORT_LAST" "$WAIT_TIMEOUT_SECS"
@@ -618,16 +625,16 @@ install_app_from_dmg "$DMG_NEW" "$APP_PATH"
 DEBUG_PORT=""
 RUN_BASE_URL="$BASE_URL"
 STUDIO_PORT_LAST="$PORT"
-if [[ "$UI_CLICKS" == "1" ]]; then
-  DEBUG_PORT="$(pick_free_port)"
-  log "Using CDP debug port: $DEBUG_PORT"
-  start_app "$APP_PATH" "--remote-debugging-port=${DEBUG_PORT}" "--remote-allow-origins=*"
-  wait_cdp_ready "$DEBUG_PORT" "$WAIT_TIMEOUT_SECS"
-  detected_base_url="$(wait_base_url_from_cdp "$DEBUG_PORT" 60 2>/dev/null || true)"
-  if [[ -n "${detected_base_url:-}" ]]; then
-    RUN_BASE_URL="$detected_base_url"
-  fi
-else
+  if [[ "$UI_CLICKS" == "1" ]]; then
+    DEBUG_PORT="$(pick_free_port)"
+    log "Using CDP debug port: $DEBUG_PORT"
+    start_app "$APP_PATH" "--remote-debugging-port=${DEBUG_PORT}" "--remote-allow-origins=*"
+    wait_cdp_ready "$DEBUG_PORT" "$WAIT_TIMEOUT_SECS"
+    detected_base_url="$(wait_base_url_from_cdp "$CDP_BASE_URL" 60 2>/dev/null || true)"
+    if [[ -n "${detected_base_url:-}" ]]; then
+      RUN_BASE_URL="$detected_base_url"
+    fi
+  else
   start_app "$APP_PATH"
 fi
 
@@ -639,10 +646,10 @@ fi
 
 STUDIO_PORT_LAST="$(port_from_base_url "$RUN_BASE_URL")"
 
-bash "$USAGE_SMOKE_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --require-ui
-if [[ "$UI_CLICKS" == "1" ]]; then
-  node "$UI_CLICK_SCRIPT" --cdp-url "http://127.0.0.1:${DEBUG_PORT}" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "desktop-reinstall"
-fi
+  bash "$USAGE_SMOKE_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --require-ui
+  if [[ "$UI_CLICKS" == "1" ]]; then
+    node "$UI_CLICK_SCRIPT" --cdp-url "$CDP_BASE_URL" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "desktop-reinstall"
+  fi
 OPENCODE_PORT_LAST="$(read_health_field "$RUN_BASE_URL" "openCodePort" || true)"
 stop_app
 assert_port_free "$STUDIO_PORT_LAST" "$WAIT_TIMEOUT_SECS"
