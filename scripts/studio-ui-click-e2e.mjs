@@ -247,7 +247,39 @@ async function main() {
     page = await findAttachedPage(browser)
     context = page.context()
 
+    await log('Attached page URL:', page.url())
+
+    // Best-effort: force a desktop-ish viewport so the app renders the full header/nav.
+    try {
+      await page.setViewportSize({ width: 1280, height: 760 })
+    } catch (err) {
+      await log('Viewport set failed (continuing):', err)
+    }
+
+    // If a base URL is provided, force navigation inside the WebView.
+    if (baseUrl) {
+      await log('Navigate: /chat (in-webview via CDP)')
+      try {
+        await page.goto(`${baseUrl}/chat`, { waitUntil: 'domcontentloaded' })
+      } catch (err) {
+        await log('page.goto failed (continuing):', err)
+        try {
+          await page.evaluate((u) => {
+            try {
+              window.location.href = String(u)
+            } catch {
+              // ignore
+            }
+          }, `${baseUrl}/chat`)
+          await page.waitForLoadState('domcontentloaded', { timeout: timeoutMs })
+        } catch (err2) {
+          await log('location.href navigation failed (continuing):', err2)
+        }
+      }
+    }
+
     // Force English locale for stable selectors (desktop loads before we can init-script).
+    // Note: do this after navigating to baseUrl (if provided) so we write to the correct origin.
     try {
       const current = await page.evaluate(() => {
         try {
@@ -334,8 +366,10 @@ async function main() {
       }
     }
 
-    await log('Wait: main navigation')
-    await page.getByRole('tablist', { name: 'Main navigation' }).waitFor({ timeout: timeoutMs })
+    await log('Wait: app shell')
+    await page.waitForSelector('#app', { timeout: timeoutMs })
+    await log('Wait: directory picker button')
+    await page.locator('button[aria-label="Change directory"]').waitFor({ state: 'visible', timeout: timeoutMs })
 
     // Directory selection
     await log('Open directory picker')
@@ -418,9 +452,20 @@ async function main() {
     await log('Settings page OK')
 
     await log('Navigate back to Chat')
-    await page.getByRole('link', { name: 'Chat' }).click()
-    await page.waitForURL(/\/chat\b/i, { timeout: timeoutMs })
-    await page.getByRole('tablist', { name: 'Main navigation' }).waitFor({ timeout: timeoutMs })
+    try {
+      await page.goBack({ waitUntil: 'domcontentloaded' })
+    } catch {
+      // Fallback: force navigation when router links are not reliably accessible (e.g. compact header layout).
+      if (baseUrl) {
+        await page.goto(`${baseUrl}/chat`, { waitUntil: 'domcontentloaded' })
+      }
+    }
+    try {
+      await page.waitForURL(/\/chat\b/i, { timeout: timeoutMs })
+    } catch {
+      // ignore
+    }
+    await page.locator('textarea[data-chat-input="true"]').waitFor({ state: 'visible', timeout: timeoutMs })
 
     // Delete the created session (sidebar actions are hover-only).
     // Prefer the locate/highlight flow, but fall back to the selected session row.

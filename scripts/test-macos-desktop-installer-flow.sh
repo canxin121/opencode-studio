@@ -452,7 +452,7 @@ fi
 bash "$USAGE_SMOKE_SCRIPT" --base-url "$BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --require-ui
 if [[ "$UI_CLICKS" == "1" ]]; then
   wait_cdp_ready "$DEBUG_PORT" "$WAIT_TIMEOUT_SECS"
-  node "$UI_CLICK_SCRIPT" --cdp-url "http://127.0.0.1:${DEBUG_PORT}" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "desktop-install"
+  node "$UI_CLICK_SCRIPT" --cdp-url "http://127.0.0.1:${DEBUG_PORT}" --base-url "$BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "desktop-install"
 fi
 OPENCODE_PORT_LAST="$(read_health_field "$BASE_URL" "openCodePort" || true)"
 if [[ -n "$OPENCODE_PORT_LAST" ]]; then
@@ -483,7 +483,7 @@ fi
 bash "$USAGE_SMOKE_SCRIPT" --base-url "$BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --require-ui
 if [[ "$UI_CLICKS" == "1" ]]; then
   wait_cdp_ready "$DEBUG_PORT" "$WAIT_TIMEOUT_SECS"
-  node "$UI_CLICK_SCRIPT" --cdp-url "http://127.0.0.1:${DEBUG_PORT}" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "desktop-upgrade"
+  node "$UI_CLICK_SCRIPT" --cdp-url "http://127.0.0.1:${DEBUG_PORT}" --base-url "$BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "desktop-upgrade"
 fi
 OPENCODE_PORT_LAST="$(read_health_field "$BASE_URL" "openCodePort" || true)"
 stop_app
@@ -513,7 +513,7 @@ fi
 bash "$USAGE_SMOKE_SCRIPT" --base-url "$BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --require-ui
 if [[ "$UI_CLICKS" == "1" ]]; then
   wait_cdp_ready "$DEBUG_PORT" "$WAIT_TIMEOUT_SECS"
-  node "$UI_CLICK_SCRIPT" --cdp-url "http://127.0.0.1:${DEBUG_PORT}" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "desktop-reinstall"
+  node "$UI_CLICK_SCRIPT" --cdp-url "http://127.0.0.1:${DEBUG_PORT}" --base-url "$BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "desktop-reinstall"
 fi
 OPENCODE_PORT_LAST="$(read_health_field "$BASE_URL" "openCodePort" || true)"
 stop_app

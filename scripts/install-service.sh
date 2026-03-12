@@ -53,6 +53,8 @@ if ! command -v opencode >/dev/null 2>&1; then
 fi
 OPENCODE_BIN="$(command -v opencode)"
 OPENCODE_BIN_DIR="$(dirname "$OPENCODE_BIN")"
+SERVICE_USER="$(id -un)"
+SERVICE_GROUP="$(id -gn)"
 
 if ! [[ "$PORT" =~ ^[0-9]+$ ]] || ((PORT < 1 || PORT > 65535)); then
   echo "Invalid --port '$PORT'. Expected 1-65535." >&2
@@ -599,6 +601,10 @@ After=network.target
 
 [Service]
 Type=simple
+User=$SERVICE_USER
+Group=$SERVICE_GROUP
+Environment="PATH=$OPENCODE_BIN_DIR:${PATH:-}"
+Environment="HOME=$HOME"
 ExecStart="$BIN_PATH" --config "$CONFIG_FILE"
 Restart=on-failure
 RestartSec=2

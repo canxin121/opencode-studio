@@ -264,26 +264,121 @@ function Uninstall-Desktop([hashtable]$Installer) {
 }
 
 function Find-AppExe {
-  $candidates = @(
-    # Per-machine installs (MSI / some NSIS configs)
-    Join-Path $env:ProgramFiles "OpenCode Studio\OpenCode Studio.exe"
-    Join-Path ${env:ProgramFiles(x86)} "OpenCode Studio\OpenCode Studio.exe"
+  $exeNames = @(
+    "OpenCode Studio.exe"
+    "opencode-studio-desktop.exe"
+    "opencode-studio.exe"
+  )
 
-    # Per-user installs (common for desktop apps)
-    Join-Path $env:LOCALAPPDATA "Programs\OpenCode Studio\OpenCode Studio.exe"
-    Join-Path $env:LOCALAPPDATA "OpenCode Studio\OpenCode Studio.exe"
-  ) | Where-Object { $_ -and (Test-Path -LiteralPath $_) }
+  # 1) Try Start Menu shortcuts (usually the most reliable).
+  try {
+    $shortcutRoots = @(
+      Join-Path $env:ProgramData "Microsoft\Windows\Start Menu\Programs"
+      Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs"
+    ) | Where-Object { $_ -and (Test-Path -LiteralPath $_) }
 
-  if ($candidates.Count -gt 0) {
-    return $candidates[0]
+    foreach ($root in $shortcutRoots) {
+      $lnk = Get-ChildItem -LiteralPath $root -Recurse -Filter "*.lnk" -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -match "OpenCode" -and $_.Name -match "Studio" } |
+        Select-Object -First 1
+      if (-not $lnk) { continue }
+
+      $ws = New-Object -ComObject WScript.Shell
+      $sc = $ws.CreateShortcut($lnk.FullName)
+      $target = [string]$sc.TargetPath
+      if ($target -and (Test-Path -LiteralPath $target)) {
+        return $target
+      }
+    }
+  } catch {
   }
 
-  throw "Unable to locate installed OpenCode Studio executable (checked Program Files + LocalAppData)"
+  # 2) Try common install locations with multiple possible exe names.
+  $baseDirs = @(
+    Join-Path $env:ProgramFiles "OpenCode Studio"
+    Join-Path ${env:ProgramFiles(x86)} "OpenCode Studio"
+    Join-Path $env:LOCALAPPDATA "Programs\OpenCode Studio"
+    Join-Path $env:LOCALAPPDATA "OpenCode Studio"
+  ) | Where-Object { $_ -and (Test-Path -LiteralPath $_) }
+
+  foreach ($dir in $baseDirs) {
+    foreach ($name in $exeNames) {
+      $p = Join-Path $dir $name
+      if (Test-Path -LiteralPath $p) {
+        return $p
+      }
+    }
+  }
+
+  # 3) Fallback: uninstall registry keys (DisplayIcon often points to the exe).
+  function Parse-ExePath([string]$Raw) {
+    $t = [string]$Raw
+    if (-not $t) { return "" }
+    $t = $t.Trim()
+    if ($t.StartsWith('"') -and $t.Contains('"')) {
+      $t = $t.Trim('"')
+    }
+    $exeIdx = $t.ToLowerInvariant().IndexOf('.exe')
+    if ($exeIdx -ge 0) {
+      return $t.Substring(0, $exeIdx + 4)
+    }
+    return ""
+  }
+
+  foreach ($root in @(
+    "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*"
+    "HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
+    "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*"
+  )) {
+    try {
+      $items = Get-ItemProperty -Path $root -ErrorAction SilentlyContinue
+      foreach ($item in ($items | Where-Object { $_ })) {
+        $name = [string]$item.DisplayName
+        if (-not $name) { continue }
+        if ($name -notmatch "OpenCode" -or $name -notmatch "Studio") { continue }
+
+        $icon = Parse-ExePath ([string]$item.DisplayIcon)
+        if ($icon -and (Test-Path -LiteralPath $icon)) {
+          return $icon
+        }
+
+        $loc = [string]$item.InstallLocation
+        if ($loc -and (Test-Path -LiteralPath $loc)) {
+          foreach ($exe in $exeNames) {
+            $p = Join-Path $loc $exe
+            if (Test-Path -LiteralPath $p) { return $p }
+          }
+        }
+      }
+    } catch {
+    }
+  }
+
+  # 4) Last resort: search likely roots for known exe names.
+  $searchRoots = @(
+    $env:ProgramFiles
+    ${env:ProgramFiles(x86)}
+    (Join-Path $env:LOCALAPPDATA "Programs")
+  ) | Where-Object { $_ -and (Test-Path -LiteralPath $_) }
+
+  foreach ($root in $searchRoots) {
+    foreach ($exe in $exeNames) {
+      try {
+        $hit = Get-ChildItem -LiteralPath $root -Recurse -File -Filter $exe -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($hit -and (Test-Path -LiteralPath $hit.FullName)) {
+          return $hit.FullName
+        }
+      } catch {
+      }
+    }
+  }
+
+  throw "Unable to locate installed OpenCode Studio executable (searched shortcuts, registry, Program Files, and LocalAppData)"
 }
 
 function Stop-DesktopProcesses {
   Write-Log "Stopping desktop processes (best-effort)"
-  foreach ($name in @("OpenCode Studio", "opencode-studio", "opencode")) {
+  foreach ($name in @("OpenCode Studio", "opencode-studio", "opencode-studio-desktop", "opencode")) {
     try {
       Get-Process -Name $name -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
     } catch {
@@ -333,7 +428,7 @@ function Run-Desktop-Smoke([string]$AppExe, [string]$BaseUrl, [string]$WorkDir, 
     & $UsageSmokeScript -BaseUrl $BaseUrl -Directory $WorkDir -TimeoutSeconds $TimeoutSeconds -RequireUi -MaxAssets 3
     if ($UiClicks) {
       Wait-CdpReady -Port $debugPort -TimeoutSeconds $TimeoutSeconds
-      & node $UiClickScript --cdp-url "http://127.0.0.1:$debugPort" --directory $WorkDir --timeout $TimeoutSeconds --label $Label
+      & node $UiClickScript --cdp-url "http://127.0.0.1:$debugPort" --base-url $BaseUrl --directory $WorkDir --timeout $TimeoutSeconds --label $Label
     }
     $ocPort = Get-OpenCodePort -BaseUrl $BaseUrl
     if ($ocPort -gt 0) {
