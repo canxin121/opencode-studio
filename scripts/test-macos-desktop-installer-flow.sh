@@ -12,6 +12,7 @@ APP_PATH="${INSTALL_ROOT}/${APP_BUNDLE_NAME}"
 KEEP_FILES="0"
 UI_CLICKS="0"
 USE_CEF="0"
+APP_MAIN_PID=""
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 USAGE_SMOKE_SCRIPT="$SCRIPT_DIR/studio-usage-smoke.sh"
@@ -499,11 +500,35 @@ start_app() {
   local app_path="$1"
   shift || true
   log "Launching app: $app_path"
+
   if [[ $# -gt 0 ]]; then
+    # Prefer launching the app binary directly so Chromium flags (e.g. --remote-debugging-port)
+    # reliably reach the CEF runtime.
+    local macos_dir="$app_path/Contents/MacOS"
+    local bin=""
+    if [[ -d "$macos_dir" ]]; then
+      local f=""
+      for f in "$macos_dir"/*; do
+        if [[ -f "$f" && -x "$f" ]]; then
+          bin="$f"
+          break
+        fi
+      done
+    fi
+
+    if [[ -n "${bin:-}" ]]; then
+      log "Launching app binary: $bin"
+      "$bin" "$@" >/dev/null 2>&1 &
+      APP_MAIN_PID="$!"
+      return 0
+    fi
+
+    log "Launching via open (fallback): $app_path"
     open -n "$app_path" --args "$@" || fail "Failed to launch app"
-  else
-    open -n "$app_path" || fail "Failed to launch app"
+    return 0
   fi
+
+  open -n "$app_path" || fail "Failed to launch app"
 }
 
 stop_app() {
@@ -513,6 +538,16 @@ stop_app() {
     -e 'with timeout of 5 seconds' \
     -e 'tell application "OpenCode Studio" to quit' \
     -e 'end timeout' >/dev/null 2>&1 || true
+
+  if [[ -n "${APP_MAIN_PID:-}" ]]; then
+    if kill -0 "$APP_MAIN_PID" >/dev/null 2>&1; then
+      log "Stopping app main pid: $APP_MAIN_PID"
+      kill "$APP_MAIN_PID" >/dev/null 2>&1 || true
+      sleep 1
+      kill -9 "$APP_MAIN_PID" >/dev/null 2>&1 || true
+    fi
+    APP_MAIN_PID=""
+  fi
 
   # Give it a moment to shut down.
   sleep 2
