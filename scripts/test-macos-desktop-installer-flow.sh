@@ -504,19 +504,18 @@ start_app() {
   if [[ $# -gt 0 ]]; then
     # Prefer launching the app binary directly so Chromium flags (e.g. --remote-debugging-port)
     # reliably reach the CEF runtime.
-    local macos_dir="$app_path/Contents/MacOS"
+    local plist="$app_path/Contents/Info.plist"
+    local exec_name=""
     local bin=""
-    if [[ -d "$macos_dir" ]]; then
-      local f=""
-      for f in "$macos_dir"/*; do
-        if [[ -f "$f" && -x "$f" ]]; then
-          bin="$f"
-          break
-        fi
-      done
+
+    if [[ -f "$plist" ]] && command -v /usr/libexec/PlistBuddy >/dev/null 2>&1; then
+      exec_name="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$plist" 2>/dev/null | tr -d '\r' | xargs || true)"
+      if [[ -n "${exec_name:-}" ]]; then
+        bin="$app_path/Contents/MacOS/$exec_name"
+      fi
     fi
 
-    if [[ -n "${bin:-}" ]]; then
+    if [[ -n "${bin:-}" && -f "$bin" && -x "$bin" ]]; then
       log "Launching app binary: $bin"
       "$bin" "$@" >/dev/null 2>&1 &
       APP_MAIN_PID="$!"
