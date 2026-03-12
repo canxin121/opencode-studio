@@ -331,7 +331,8 @@ jobs:
             --repo "${{ needs.resolve-versions.outputs.repo }}" \
             --version "${{ needs.resolve-versions.outputs.previous }}" \
             --upgrade-to-version "${{ needs.resolve-versions.outputs.latest }}" \
-            --wait-timeout "${{ needs.resolve-versions.outputs.wait_timeout_seconds }}"
+            --wait-timeout "${{ needs.resolve-versions.outputs.wait_timeout_seconds }}" \
+            --ui-clicks
 
       - name: Run Windows desktop installer flow
         if: runner.os == 'Windows'
