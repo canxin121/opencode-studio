@@ -556,7 +556,8 @@ async function main() {
     const locateClickTimeoutMs = Math.min(15000, timeoutMs)
     try {
       await dismissToastsOnce().catch(() => {})
-      await locateBtn.click({ timeout: locateClickTimeoutMs })
+      // Toast overlays can frequently intercept pointer events in CI; prefer force click.
+      await locateBtn.click({ timeout: locateClickTimeoutMs, force: true })
     } catch (err) {
       await log('Locate click failed; attempting toast dismiss + force click (continuing):', err)
       try {
@@ -596,7 +597,12 @@ async function main() {
     if (!rowForDelete) {
       // Retry once to refresh the transient highlight.
       await log('Locate highlight not found; retry locate')
-      await locateBtn.click()
+      try {
+        await dismissToastsOnce().catch(() => {})
+        await locateBtn.click({ timeout: locateClickTimeoutMs, force: true })
+      } catch (err) {
+        await log('Retry locate click failed (continuing):', err)
+      }
       rowForDelete = await findDeletableSessionRow()
     }
     if (!rowForDelete) {
