@@ -2,7 +2,7 @@ Param(
   [Parameter(Mandatory = $true)]
   [string]$BaseUrl,
   [string]$Cwd = "",
-  [ValidateRange(5, 300)]
+  [ValidateRange(5, 900)]
   [int]$TimeoutSeconds = 30
 )
 
