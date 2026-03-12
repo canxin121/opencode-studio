@@ -10,11 +10,15 @@ INSTALL_DIR=""
 ALLOW_EXISTING_INSTALL_DIR="0"
 WAIT_TIMEOUT_SECS="90"
 UPGRADE_VIA_BACKEND_API="0"
+USAGE_CHECKS="0"
+UI_CLICKS="0"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 INSTALL_SCRIPT="$SCRIPT_DIR/install-service.sh"
 UNINSTALL_SCRIPT="$SCRIPT_DIR/uninstall-service.sh"
 API_SMOKE_SCRIPT="$SCRIPT_DIR/service-api-smoke.sh"
+USAGE_SMOKE_SCRIPT="$SCRIPT_DIR/studio-usage-smoke.sh"
+UI_CLICK_SCRIPT="$SCRIPT_DIR/studio-ui-click-e2e.mjs"
 
 OS="$(uname -s)"
 PORT=""
@@ -29,6 +33,8 @@ Usage:
 
 Options:
   --with-frontend                 Install bundled frontend for validation.
+  --usage-checks                  Run UI/session readiness checks (requires OpenCode backend).
+  --ui-clicks                      Run Playwright UI click flow (requires --with-frontend).
   --mode user|system              Linux service mode to test (default: user).
   --repo owner/repo               Release source repo (default: canxin121/opencode-studio).
   --version vX.Y.Z                Pin release version (default: latest).
@@ -51,7 +57,7 @@ What it validates:
 
 Notes:
   - Linux/macOS only.
-  - Requires: opencode, curl, python3.
+  - Requires: opencode, curl, python3. UI clicks additionally require: node + Playwright.
   - On Linux, sudo calls are forced non-interactive to avoid hanging.
 EOF
 }
@@ -92,6 +98,89 @@ s = socket.socket()
 s.bind(("127.0.0.1", 0))
 print(s.getsockname()[1])
 s.close()
+PY
+}
+
+can_bind_port() {
+  local port="$1"
+  [[ -n "$port" ]] || return 0
+  python3 - "$port" <<'PY'
+import socket
+import sys
+
+port = int(sys.argv[1])
+s = socket.socket()
+try:
+    s.bind(("127.0.0.1", port))
+except OSError:
+    raise SystemExit(1)
+finally:
+    try:
+        s.close()
+    except Exception:
+        pass
+PY
+}
+
+dump_port_diagnostics() {
+  local port="$1"
+  [[ -n "$port" ]] || return 0
+  log "Port diagnostics for :$port"
+  if command -v ss >/dev/null 2>&1; then
+    ss -ltnp 2>/dev/null | grep -E ":${port}\\b" || true
+  elif command -v lsof >/dev/null 2>&1; then
+    lsof -nP -iTCP:"$port" -sTCP:LISTEN 2>/dev/null || true
+  elif command -v netstat >/dev/null 2>&1; then
+    netstat -an 2>/dev/null | grep -E "\\.${port}\\s" || true
+  fi
+}
+
+wait_for_port_free() {
+  local port="$1"
+  local timeout_secs="$2"
+  local elapsed=0
+
+  [[ -n "$port" ]] || return 0
+  while ((elapsed < timeout_secs)); do
+    if can_bind_port "$port" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+    elapsed=$((elapsed + 1))
+  done
+
+  return 1
+}
+
+assert_port_free() {
+  local port="$1"
+  local timeout_secs="$2"
+  [[ -n "$port" ]] || return 0
+
+  if ! wait_for_port_free "$port" "$timeout_secs"; then
+    dump_port_diagnostics "$port"
+    fail "Port $port is still not bindable after ${timeout_secs}s (likely leaked listener)"
+  fi
+  log "Port released: :$port"
+}
+
+read_opencode_port() {
+  local url="$1"
+  local health_json=""
+  health_json="$(curl -fsS --max-time 6 "$url/health" 2>/dev/null || true)"
+  [[ -n "$health_json" ]] || { printf '%s\n' ""; return 0; }
+  python3 - "$health_json" <<'PY'
+import json
+import sys
+
+p = json.loads(sys.argv[1])
+port = p.get('openCodePort')
+if isinstance(port, int):
+    print(port)
+elif isinstance(port, str) and port.strip().isdigit():
+    print(port.strip())
+else:
+    print('')
 PY
 }
 
@@ -539,14 +628,45 @@ manage_service_linux() {
   linux_service_cmd restart opencode-studio
   wait_for_health_up "$BASE_URL" "$WAIT_TIMEOUT_SECS" || fail "Service failed to become healthy after restart"
 
+  if [[ "$USAGE_CHECKS" == "1" ]]; then
+    EXTRA_ARGS=()
+    if [[ "$WITH_FRONTEND" == "1" ]]; then
+      EXTRA_ARGS+=(--require-ui)
+    fi
+    bash "$USAGE_SMOKE_SCRIPT" --base-url "$BASE_URL" --directory "$INSTALL_DIR" --timeout "$WAIT_TIMEOUT_SECS" "${EXTRA_ARGS[@]}"
+    OPENCODE_PORT_LAST="$(read_opencode_port "$BASE_URL" || true)"
+    if [[ -n "${OPENCODE_PORT_LAST:-}" ]]; then
+      log "Captured openCodePort=$OPENCODE_PORT_LAST"
+    fi
+  fi
+
   log "Linux: stopping service"
   linux_service_cmd stop opencode-studio
   wait_for_health_down "$BASE_URL" "$WAIT_TIMEOUT_SECS" || fail "Service still reachable after stop"
+
+  if [[ "$USAGE_CHECKS" == "1" ]]; then
+    assert_port_free "$PORT" "$WAIT_TIMEOUT_SECS"
+    if [[ -n "${OPENCODE_PORT_LAST:-}" ]]; then
+      assert_port_free "$OPENCODE_PORT_LAST" "$WAIT_TIMEOUT_SECS"
+    fi
+  fi
 
   log "Linux: starting service"
   linux_service_cmd reset-failed opencode-studio >/dev/null 2>&1 || true
   linux_service_cmd start opencode-studio
   wait_for_health_up "$BASE_URL" "$WAIT_TIMEOUT_SECS" || fail "Service failed to become healthy after start"
+
+  if [[ "$USAGE_CHECKS" == "1" ]]; then
+    EXTRA_ARGS=()
+    if [[ "$WITH_FRONTEND" == "1" ]]; then
+      EXTRA_ARGS+=(--require-ui)
+    fi
+    bash "$USAGE_SMOKE_SCRIPT" --base-url "$BASE_URL" --directory "$INSTALL_DIR" --timeout "$WAIT_TIMEOUT_SECS" "${EXTRA_ARGS[@]}"
+    OPENCODE_PORT_LAST="$(read_opencode_port "$BASE_URL" || true)"
+    if [[ -n "${OPENCODE_PORT_LAST:-}" ]]; then
+      log "Captured openCodePort=$OPENCODE_PORT_LAST"
+    fi
+  fi
 }
 
 MACOS_LABEL="cn.cxits.opencode-studio"
@@ -681,9 +801,28 @@ manage_service_macos() {
   macos_restart_service
   wait_for_health_up "$BASE_URL" "$WAIT_TIMEOUT_SECS" || fail "Service failed to become healthy after restart"
 
+  if [[ "$USAGE_CHECKS" == "1" ]]; then
+    EXTRA_ARGS=()
+    if [[ "$WITH_FRONTEND" == "1" ]]; then
+      EXTRA_ARGS+=(--require-ui)
+    fi
+    bash "$USAGE_SMOKE_SCRIPT" --base-url "$BASE_URL" --directory "$INSTALL_DIR" --timeout "$WAIT_TIMEOUT_SECS" "${EXTRA_ARGS[@]}"
+    OPENCODE_PORT_LAST="$(read_opencode_port "$BASE_URL" || true)"
+    if [[ -n "${OPENCODE_PORT_LAST:-}" ]]; then
+      log "Captured openCodePort=$OPENCODE_PORT_LAST"
+    fi
+  fi
+
   log "macOS: stopping service"
   macos_bootout_service
   wait_for_health_down "$BASE_URL" "$WAIT_TIMEOUT_SECS" || fail "Service still reachable after unload"
+
+  if [[ "$USAGE_CHECKS" == "1" ]]; then
+    assert_port_free "$PORT" "$WAIT_TIMEOUT_SECS"
+    if [[ -n "${OPENCODE_PORT_LAST:-}" ]]; then
+      assert_port_free "$OPENCODE_PORT_LAST" "$WAIT_TIMEOUT_SECS"
+    fi
+  fi
 
   if macos_detect_service_domain; then
     log "macOS: service still listed after bootout in $MACOS_ACTIVE_DOMAIN (continuing with start checks)"
@@ -696,6 +835,18 @@ manage_service_macos() {
   fi
   macos_restart_service
   wait_for_health_up "$BASE_URL" "$WAIT_TIMEOUT_SECS" || fail "Service failed to become healthy after load"
+
+  if [[ "$USAGE_CHECKS" == "1" ]]; then
+    EXTRA_ARGS=()
+    if [[ "$WITH_FRONTEND" == "1" ]]; then
+      EXTRA_ARGS+=(--require-ui)
+    fi
+    bash "$USAGE_SMOKE_SCRIPT" --base-url "$BASE_URL" --directory "$INSTALL_DIR" --timeout "$WAIT_TIMEOUT_SECS" "${EXTRA_ARGS[@]}"
+    OPENCODE_PORT_LAST="$(read_opencode_port "$BASE_URL" || true)"
+    if [[ -n "${OPENCODE_PORT_LAST:-}" ]]; then
+      log "Captured openCodePort=$OPENCODE_PORT_LAST"
+    fi
+  fi
 }
 
 cleanup_on_failure() {
@@ -712,6 +863,8 @@ trap cleanup_on_failure EXIT
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --with-frontend) WITH_FRONTEND="1"; shift ;;
+    --usage-checks) USAGE_CHECKS="1"; shift ;;
+    --ui-clicks) UI_CLICKS="1"; USAGE_CHECKS="1"; shift ;;
     --mode) MODE="$2"; shift 2 ;;
     --repo) REPO="$2"; shift 2 ;;
     --version) VERSION="$2"; shift 2 ;;
@@ -754,6 +907,15 @@ need curl
 need python3
 need bash
 test -f "$API_SMOKE_SCRIPT" || fail "API smoke script not found: $API_SMOKE_SCRIPT"
+test -f "$USAGE_SMOKE_SCRIPT" || fail "Usage smoke script not found: $USAGE_SMOKE_SCRIPT"
+
+if [[ "$UI_CLICKS" == "1" ]]; then
+  need node
+  test -f "$UI_CLICK_SCRIPT" || fail "UI click script not found: $UI_CLICK_SCRIPT"
+  if [[ "$WITH_FRONTEND" != "1" ]]; then
+    fail "--ui-clicks requires --with-frontend"
+  fi
+fi
 
 test -f "$INSTALL_SCRIPT" || fail "Installer script not found: $INSTALL_SCRIPT"
 test -f "$UNINSTALL_SCRIPT" || fail "Uninstaller script not found: $UNINSTALL_SCRIPT"
@@ -803,6 +965,8 @@ log "Install dir: $INSTALL_DIR"
 log "Random port: $PORT"
 log "Install mode: $MODE"
 log "With frontend: $WITH_FRONTEND"
+log "Usage checks: $USAGE_CHECKS"
+log "UI clicks: $UI_CLICKS"
 if [[ -n "$VERSION" ]]; then
   log "Install version: $VERSION"
 fi
@@ -850,6 +1014,21 @@ wait_for_health_up "$BASE_URL" "$WAIT_TIMEOUT_SECS" || fail "Service health endp
 validate_health_payload "$BASE_URL"
 bash "$API_SMOKE_SCRIPT" --base-url "$BASE_URL" --cwd "$INSTALL_DIR" --timeout "$WAIT_TIMEOUT_SECS"
 
+if [[ "$USAGE_CHECKS" == "1" ]]; then
+  EXTRA_ARGS=()
+  if [[ "$WITH_FRONTEND" == "1" ]]; then
+    EXTRA_ARGS+=(--require-ui)
+  fi
+  bash "$USAGE_SMOKE_SCRIPT" --base-url "$BASE_URL" --directory "$INSTALL_DIR" --timeout "$WAIT_TIMEOUT_SECS" "${EXTRA_ARGS[@]}"
+  if [[ "$UI_CLICKS" == "1" ]]; then
+    node "$UI_CLICK_SCRIPT" --base-url "$BASE_URL" --directory "$INSTALL_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "service-install"
+  fi
+  OPENCODE_PORT_LAST="$(read_opencode_port "$BASE_URL" || true)"
+  if [[ -n "${OPENCODE_PORT_LAST:-}" ]]; then
+    log "Captured openCodePort=$OPENCODE_PORT_LAST"
+  fi
+fi
+
 log "Step 4/8: exercise service management commands"
 if [[ "$OS" == "Linux" ]]; then
   manage_service_linux
@@ -858,6 +1037,21 @@ else
 fi
 validate_health_payload "$BASE_URL"
 bash "$API_SMOKE_SCRIPT" --base-url "$BASE_URL" --cwd "$INSTALL_DIR" --timeout "$WAIT_TIMEOUT_SECS"
+
+if [[ "$USAGE_CHECKS" == "1" ]]; then
+  EXTRA_ARGS=()
+  if [[ "$WITH_FRONTEND" == "1" ]]; then
+    EXTRA_ARGS+=(--require-ui)
+  fi
+  bash "$USAGE_SMOKE_SCRIPT" --base-url "$BASE_URL" --directory "$INSTALL_DIR" --timeout "$WAIT_TIMEOUT_SECS" "${EXTRA_ARGS[@]}"
+  if [[ "$UI_CLICKS" == "1" ]]; then
+    node "$UI_CLICK_SCRIPT" --base-url "$BASE_URL" --directory "$INSTALL_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "service-manage"
+  fi
+  OPENCODE_PORT_LAST="$(read_opencode_port "$BASE_URL" || true)"
+  if [[ -n "${OPENCODE_PORT_LAST:-}" ]]; then
+    log "Captured openCodePort=$OPENCODE_PORT_LAST"
+  fi
+fi
 
 if [[ -n "$UPGRADE_TO_VERSION" ]]; then
   log "Step 5/8: upgrade service in-place to $UPGRADE_TO_VERSION"
@@ -873,6 +1067,21 @@ if [[ -n "$UPGRADE_TO_VERSION" ]]; then
   wait_for_health_up "$BASE_URL" "$WAIT_TIMEOUT_SECS" || fail "Service health endpoint did not recover after upgrade"
   validate_health_payload "$BASE_URL"
   bash "$API_SMOKE_SCRIPT" --base-url "$BASE_URL" --cwd "$INSTALL_DIR" --timeout "$WAIT_TIMEOUT_SECS"
+
+  if [[ "$USAGE_CHECKS" == "1" ]]; then
+    EXTRA_ARGS=()
+    if [[ "$WITH_FRONTEND" == "1" ]]; then
+      EXTRA_ARGS+=(--require-ui)
+    fi
+    bash "$USAGE_SMOKE_SCRIPT" --base-url "$BASE_URL" --directory "$INSTALL_DIR" --timeout "$WAIT_TIMEOUT_SECS" "${EXTRA_ARGS[@]}"
+    if [[ "$UI_CLICKS" == "1" ]]; then
+      node "$UI_CLICK_SCRIPT" --base-url "$BASE_URL" --directory "$INSTALL_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "service-upgrade"
+    fi
+    OPENCODE_PORT_LAST="$(read_opencode_port "$BASE_URL" || true)"
+    if [[ -n "${OPENCODE_PORT_LAST:-}" ]]; then
+      log "Captured openCodePort=$OPENCODE_PORT_LAST"
+    fi
+  fi
   assert_running_service_version "$BASE_URL" "$UPGRADE_TO_VERSION" "$WAIT_TIMEOUT_SECS"
   assert_binary_version "$BIN_PATH" "$UPGRADE_TO_VERSION"
 
@@ -883,12 +1092,34 @@ if [[ -n "$UPGRADE_TO_VERSION" ]]; then
   fi
   validate_health_payload "$BASE_URL"
   bash "$API_SMOKE_SCRIPT" --base-url "$BASE_URL" --cwd "$INSTALL_DIR" --timeout "$WAIT_TIMEOUT_SECS"
+
+  if [[ "$USAGE_CHECKS" == "1" ]]; then
+    EXTRA_ARGS=()
+    if [[ "$WITH_FRONTEND" == "1" ]]; then
+      EXTRA_ARGS+=(--require-ui)
+    fi
+    bash "$USAGE_SMOKE_SCRIPT" --base-url "$BASE_URL" --directory "$INSTALL_DIR" --timeout "$WAIT_TIMEOUT_SECS" "${EXTRA_ARGS[@]}"
+    if [[ "$UI_CLICKS" == "1" ]]; then
+      node "$UI_CLICK_SCRIPT" --base-url "$BASE_URL" --directory "$INSTALL_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "service-upgrade-manage"
+    fi
+    OPENCODE_PORT_LAST="$(read_opencode_port "$BASE_URL" || true)"
+    if [[ -n "${OPENCODE_PORT_LAST:-}" ]]; then
+      log "Captured openCodePort=$OPENCODE_PORT_LAST"
+    fi
+  fi
 fi
 
 log "Step 6/8: uninstall service but keep install files"
 bash "$UNINSTALL_SCRIPT" --install-dir "$INSTALL_DIR"
 
 wait_for_health_down "$BASE_URL" "$WAIT_TIMEOUT_SECS" || fail "Service still reachable after uninstall"
+
+if [[ "$USAGE_CHECKS" == "1" ]]; then
+  assert_port_free "$PORT" "$WAIT_TIMEOUT_SECS"
+  if [[ -n "${OPENCODE_PORT_LAST:-}" ]]; then
+    assert_port_free "$OPENCODE_PORT_LAST" "$WAIT_TIMEOUT_SECS"
+  fi
+fi
 
 if [[ "$OS" == "Linux" ]]; then
   verify_linux_service_removed
@@ -939,6 +1170,21 @@ fi
 validate_health_payload "$BASE_URL"
 bash "$API_SMOKE_SCRIPT" --base-url "$BASE_URL" --cwd "$INSTALL_DIR" --timeout "$WAIT_TIMEOUT_SECS"
 
+if [[ "$USAGE_CHECKS" == "1" ]]; then
+  EXTRA_ARGS=()
+  if [[ "$WITH_FRONTEND" == "1" ]]; then
+    EXTRA_ARGS+=(--require-ui)
+  fi
+  bash "$USAGE_SMOKE_SCRIPT" --base-url "$BASE_URL" --directory "$INSTALL_DIR" --timeout "$WAIT_TIMEOUT_SECS" "${EXTRA_ARGS[@]}"
+  if [[ "$UI_CLICKS" == "1" ]]; then
+    node "$UI_CLICK_SCRIPT" --base-url "$BASE_URL" --directory "$INSTALL_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "service-reinstall"
+  fi
+  OPENCODE_PORT_LAST="$(read_opencode_port "$BASE_URL" || true)"
+  if [[ -n "${OPENCODE_PORT_LAST:-}" ]]; then
+    log "Captured openCodePort=$OPENCODE_PORT_LAST"
+  fi
+fi
+
 if [[ -n "$REINSTALL_VERSION" ]]; then
   assert_binary_version "$BIN_PATH" "$REINSTALL_VERSION"
 fi
@@ -946,6 +1192,13 @@ fi
 log "Step 8/8: uninstall service and remove install files"
 bash "$UNINSTALL_SCRIPT" --install-dir "$INSTALL_DIR" --remove-install-dir
 wait_for_health_down "$BASE_URL" "$WAIT_TIMEOUT_SECS" || fail "Service still reachable after uninstall --remove-install-dir"
+
+if [[ "$USAGE_CHECKS" == "1" ]]; then
+  assert_port_free "$PORT" "$WAIT_TIMEOUT_SECS"
+  if [[ -n "${OPENCODE_PORT_LAST:-}" ]]; then
+    assert_port_free "$OPENCODE_PORT_LAST" "$WAIT_TIMEOUT_SECS"
+  fi
+fi
 assert_path_not_exists "$INSTALL_DIR"
 
 duration_secs="$(( $(date +%s) - START_EPOCH ))"

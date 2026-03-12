@@ -12,6 +12,24 @@ function Write-Log([string]$Message) {
   Write-Host ("[api-smoke {0}] {1}" -f (Get-Date -Format "HH:mm:ss"), $Message)
 }
 
+function Invoke-WebRequestCompat {
+  Param(
+    [Parameter(Mandatory = $true)][string]$Uri,
+    [string]$Method = "GET",
+    [int]$TimeoutSec = 0
+  )
+
+  $params = @{ Uri = $Uri; Method = $Method }
+  if ($TimeoutSec -gt 0) {
+    $params["TimeoutSec"] = $TimeoutSec
+  }
+  $cmd = Get-Command Invoke-WebRequest -ErrorAction SilentlyContinue
+  if ($cmd -and $cmd.Parameters.ContainsKey("UseBasicParsing")) {
+    $params["UseBasicParsing"] = $true
+  }
+  return Invoke-WebRequest @params
+}
+
 function Invoke-RetryJson {
   Param(
     [string]$Uri,
@@ -97,8 +115,8 @@ function Terminal-Smoke([string]$Url, [string]$WorkingDir) {
     throw "terminal/create missing sessionId"
   }
 
-  Invoke-WebRequest -Uri "$Url/api/terminal/$sid" -UseBasicParsing -TimeoutSec 15 | Out-Null
-  Invoke-WebRequest -Uri "$Url/api/terminal/$sid" -Method DELETE -UseBasicParsing -TimeoutSec 15 | Out-Null
+  Invoke-WebRequestCompat -Uri "$Url/api/terminal/$sid" -Method "GET" -TimeoutSec 15 | Out-Null
+  Invoke-WebRequestCompat -Uri "$Url/api/terminal/$sid" -Method "DELETE" -TimeoutSec 15 | Out-Null
   Write-Log "terminal ok (sessionId=$sid)"
 }
 

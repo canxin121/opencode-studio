@@ -3,6 +3,8 @@ Param(
   [string]$Version = "",
   [string]$UpgradeToVersion = "",
   [switch]$WithFrontend,
+  [switch]$UsageChecks,
+  [switch]$UiClicks,
   [string]$InstallDir = "",
   [ValidateRange(10, 300)]
   [int]$WaitTimeoutSeconds = 120
@@ -14,6 +16,8 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $InstallScript = Join-Path $ScriptDir "install-service.ps1"
 $UninstallScript = Join-Path $ScriptDir "uninstall-service.ps1"
 $ApiSmokeScript = Join-Path $ScriptDir "service-api-smoke.ps1"
+$UsageSmokeScript = Join-Path $ScriptDir "studio-usage-smoke.ps1"
+$UiClickScript = Join-Path $ScriptDir "studio-ui-click-e2e.mjs"
 
 $ServiceName = "OpenCodeStudio"
 $OpenCodeServiceName = "$ServiceName-OpenCode"
@@ -171,6 +175,73 @@ function Wait-PathAbsent([string]$Path, [int]$TimeoutSeconds = 60) {
   throw "Path still exists after waiting ${TimeoutSeconds}s: $Path"
 }
 
+function Can-BindPort([int]$Port) {
+  if ($Port -le 0) { return $true }
+  try {
+    $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Parse("127.0.0.1"), $Port)
+    $listener.Start()
+    $listener.Stop()
+    return $true
+  } catch {
+    return $false
+  }
+}
+
+function Wait-PortFree([int]$Port, [int]$TimeoutSeconds = 60) {
+  if ($Port -le 0) { return }
+  $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+  while ((Get-Date) -lt $deadline) {
+    if (Can-BindPort -Port $Port) {
+      Write-Log "Port released: :$Port"
+      return
+    }
+    Start-Sleep -Seconds 1
+  }
+
+  try {
+    $listeners = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+    if ($listeners) {
+      $pids = ($listeners | Select-Object -ExpandProperty OwningProcess -Unique)
+      Write-Log ("Port diagnostics :{0} OwningProcess={1}" -f $Port, ($pids -join ","))
+    }
+  } catch {
+  }
+
+  throw "Port $Port is still not bindable after ${TimeoutSeconds}s (likely leaked listener)."
+}
+
+function Invoke-UsageSmoke([string]$Url, [string]$WorkingDir, [int]$TimeoutSeconds = 120, [bool]$RequireUi = $false) {
+  if (-not $UsageChecks) {
+    return
+  }
+  if (-not (Test-Path -LiteralPath $UsageSmokeScript)) {
+    throw "Usage smoke script not found: $UsageSmokeScript"
+  }
+  $args = @(
+    "-BaseUrl", $Url,
+    "-Directory", $WorkingDir,
+    "-TimeoutSeconds", $TimeoutSeconds,
+    "-MaxAssets", "3"
+  )
+  if ($RequireUi) {
+    $args += "-RequireUi"
+  }
+  & $UsageSmokeScript @args
+}
+
+function Invoke-UiClicks([string]$Url, [string]$WorkingDir, [int]$TimeoutSeconds = 180, [string]$Label = "service") {
+  if (-not $UiClicks) {
+    return
+  }
+  if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+    throw "node is required for UI clicks"
+  }
+  if (-not (Test-Path -LiteralPath $UiClickScript)) {
+    throw "UI click script not found: $UiClickScript"
+  }
+  & node $UiClickScript --base-url $Url --directory $WorkingDir --timeout $TimeoutSeconds --label $Label
+}
+
 function Normalize-SemVerTag([string]$Value) {
   if ($null -eq $Value) {
     return ""
@@ -312,6 +383,9 @@ function Invoke-ServiceUpgradeViaBackendApi([string]$Url, [string]$Repo, [string
 }
 
 try {
+  if ($UiClicks -and -not $WithFrontend) {
+    throw "-UiClicks requires -WithFrontend (UI must be served by the service)"
+  }
   if ($UpgradeToVersion -and -not $Version) {
     throw "-UpgradeToVersion requires -Version so the test can validate upgrade behavior."
   }
@@ -331,6 +405,12 @@ try {
   }
   if (-not (Test-Path -LiteralPath $ApiSmokeScript)) {
     throw "API smoke script not found: $ApiSmokeScript"
+  }
+  if ($UsageChecks -and -not (Test-Path -LiteralPath $UsageSmokeScript)) {
+    throw "Usage smoke script not found: $UsageSmokeScript"
+  }
+  if ($UiClicks -and -not (Test-Path -LiteralPath $UiClickScript)) {
+    throw "UI click script not found: $UiClickScript"
   }
 
   if (-not $InstallDir) {
@@ -419,6 +499,14 @@ try {
   $payload = Get-HealthPayload -Url $baseUrl
   Assert-HealthPayload -Payload $payload
   Invoke-ApiSmoke -Url $baseUrl -WorkingDir $InstallDir -TimeoutSeconds $WaitTimeoutSeconds
+  if ($UsageChecks) {
+    Invoke-UsageSmoke -Url $baseUrl -WorkingDir $InstallDir -TimeoutSeconds $WaitTimeoutSeconds -RequireUi:([bool]$WithFrontend)
+  }
+  if ($UiClicks) {
+    Invoke-UiClicks -Url $baseUrl -WorkingDir $InstallDir -TimeoutSeconds $WaitTimeoutSeconds -Label "service-install"
+  }
+  $openCodePortLast = $null
+  try { $openCodePortLast = [int]$payload.openCodePort } catch { }
 
   Write-Log "Step 4/8: exercise service management commands"
   Invoke-Sc -Arguments @("query", $ServiceName) -ErrorMessage "Failed to query $ServiceName" | Out-Null
@@ -427,17 +515,32 @@ try {
   Invoke-Sc -Arguments @("stop", $ServiceName) -AllowedExitCodes @(0, 1062) -ErrorMessage "Failed to stop $ServiceName" | Out-Null
   Wait-ServiceStatus -Name $ServiceName -Status "Stopped" -TimeoutSeconds $WaitTimeoutSeconds
   Wait-HealthDown -Url $baseUrl -TimeoutSeconds $WaitTimeoutSeconds
+  if ($UsageChecks) {
+    Wait-PortFree -Port $port -TimeoutSeconds $WaitTimeoutSeconds
+  }
 
   Invoke-Sc -Arguments @("start", $ServiceName) -ErrorMessage "Failed to start $ServiceName" | Out-Null
   Wait-ServiceStatus -Name $ServiceName -Status "Running" -TimeoutSeconds $WaitTimeoutSeconds
   Wait-HealthUp -Url $baseUrl -TimeoutSeconds $WaitTimeoutSeconds
+  if ($UsageChecks) {
+    Invoke-UsageSmoke -Url $baseUrl -WorkingDir $InstallDir -TimeoutSeconds $WaitTimeoutSeconds -RequireUi:([bool]$WithFrontend)
+  }
+  if ($UiClicks) {
+    Invoke-UiClicks -Url $baseUrl -WorkingDir $InstallDir -TimeoutSeconds $WaitTimeoutSeconds -Label "service-start"
+  }
 
   Invoke-Sc -Arguments @("stop", $ServiceName) -AllowedExitCodes @(0, 1062) -ErrorMessage "Failed to stop $ServiceName before $OpenCodeServiceName stop" | Out-Null
   Wait-ServiceStatus -Name $ServiceName -Status "Stopped" -TimeoutSeconds $WaitTimeoutSeconds
   Wait-HealthDown -Url $baseUrl -TimeoutSeconds $WaitTimeoutSeconds
+  if ($UsageChecks) {
+    Wait-PortFree -Port $port -TimeoutSeconds $WaitTimeoutSeconds
+  }
 
   Invoke-Sc -Arguments @("stop", $OpenCodeServiceName) -AllowedExitCodes @(0, 1062) -ErrorMessage "Failed to stop $OpenCodeServiceName" | Out-Null
   Wait-ServiceStatus -Name $OpenCodeServiceName -Status "Stopped" -TimeoutSeconds $WaitTimeoutSeconds
+  if ($UsageChecks -and $openCodePortLast -and $openCodePortLast -gt 0) {
+    Wait-PortFree -Port $openCodePortLast -TimeoutSeconds $WaitTimeoutSeconds
+  }
 
   Invoke-Sc -Arguments @("start", $OpenCodeServiceName) -ErrorMessage "Failed to start $OpenCodeServiceName" | Out-Null
   Wait-ServiceStatus -Name $OpenCodeServiceName -Status "Running" -TimeoutSeconds $WaitTimeoutSeconds
@@ -446,6 +549,12 @@ try {
   Wait-ServiceStatus -Name $ServiceName -Status "Running" -TimeoutSeconds $WaitTimeoutSeconds
   Wait-HealthUp -Url $baseUrl -TimeoutSeconds $WaitTimeoutSeconds
   Invoke-ApiSmoke -Url $baseUrl -WorkingDir $InstallDir -TimeoutSeconds $WaitTimeoutSeconds
+  if ($UsageChecks) {
+    Invoke-UsageSmoke -Url $baseUrl -WorkingDir $InstallDir -TimeoutSeconds $WaitTimeoutSeconds -RequireUi:([bool]$WithFrontend)
+  }
+  if ($UiClicks) {
+    Invoke-UiClicks -Url $baseUrl -WorkingDir $InstallDir -TimeoutSeconds $WaitTimeoutSeconds -Label "service-manage"
+  }
 
   if ($UpgradeToVersion) {
     Write-Log "Step 5/8: trigger in-place upgrade via backend API to $UpgradeToVersion"
@@ -456,22 +565,43 @@ try {
     $upgradedPayload = Get-HealthPayload -Url $baseUrl
     Assert-HealthPayload -Payload $upgradedPayload
     Invoke-ApiSmoke -Url $baseUrl -WorkingDir $InstallDir -TimeoutSeconds $WaitTimeoutSeconds
+    if ($UsageChecks) {
+      Invoke-UsageSmoke -Url $baseUrl -WorkingDir $InstallDir -TimeoutSeconds $WaitTimeoutSeconds -RequireUi:([bool]$WithFrontend)
+    }
+    if ($UiClicks) {
+      Invoke-UiClicks -Url $baseUrl -WorkingDir $InstallDir -TimeoutSeconds $WaitTimeoutSeconds -Label "service-upgrade"
+    }
     Assert-ServiceVersion -Url $baseUrl -ExpectedTag $UpgradeToVersion
     Assert-BinaryVersion -BinaryPath $binPath -ExpectedTag $UpgradeToVersion
 
     Invoke-Sc -Arguments @("stop", $ServiceName) -AllowedExitCodes @(0, 1062) -ErrorMessage "Failed to stop $ServiceName after upgrade" | Out-Null
     Wait-ServiceStatus -Name $ServiceName -Status "Stopped" -TimeoutSeconds $WaitTimeoutSeconds
     Wait-HealthDown -Url $baseUrl -TimeoutSeconds $WaitTimeoutSeconds
+    if ($UsageChecks) {
+      Wait-PortFree -Port $port -TimeoutSeconds $WaitTimeoutSeconds
+    }
 
     Invoke-Sc -Arguments @("start", $ServiceName) -ErrorMessage "Failed to start $ServiceName after upgrade" | Out-Null
     Wait-ServiceStatus -Name $ServiceName -Status "Running" -TimeoutSeconds $WaitTimeoutSeconds
     Wait-HealthUp -Url $baseUrl -TimeoutSeconds $WaitTimeoutSeconds
     Invoke-ApiSmoke -Url $baseUrl -WorkingDir $InstallDir -TimeoutSeconds $WaitTimeoutSeconds
+    if ($UsageChecks) {
+      Invoke-UsageSmoke -Url $baseUrl -WorkingDir $InstallDir -TimeoutSeconds $WaitTimeoutSeconds -RequireUi:([bool]$WithFrontend)
+    }
+    if ($UiClicks) {
+      Invoke-UiClicks -Url $baseUrl -WorkingDir $InstallDir -TimeoutSeconds $WaitTimeoutSeconds -Label "service-upgrade-start"
+    }
   }
 
   Write-Log "Step 6/8: uninstall services but keep install files"
   & $UninstallScript -InstallDir $InstallDir
   Wait-HealthDown -Url $baseUrl -TimeoutSeconds $WaitTimeoutSeconds
+  if ($UsageChecks) {
+    Wait-PortFree -Port $port -TimeoutSeconds $WaitTimeoutSeconds
+    if ($openCodePortLast -and $openCodePortLast -gt 0) {
+      Wait-PortFree -Port $openCodePortLast -TimeoutSeconds $WaitTimeoutSeconds
+    }
+  }
   if (Test-ServiceExists $ServiceName) {
     throw "Service still exists after uninstall: $ServiceName"
   }
@@ -518,6 +648,12 @@ try {
   $rePayload = Get-HealthPayload -Url $baseUrl
   Assert-HealthPayload -Payload $rePayload
   Invoke-ApiSmoke -Url $baseUrl -WorkingDir $InstallDir -TimeoutSeconds $WaitTimeoutSeconds
+  if ($UsageChecks) {
+    Invoke-UsageSmoke -Url $baseUrl -WorkingDir $InstallDir -TimeoutSeconds $WaitTimeoutSeconds -RequireUi:([bool]$WithFrontend)
+  }
+  if ($UiClicks) {
+    Invoke-UiClicks -Url $baseUrl -WorkingDir $InstallDir -TimeoutSeconds $WaitTimeoutSeconds -Label "service-reinstall"
+  }
   if ($reinstallVersion) {
     Assert-BinaryVersion -BinaryPath $binPath -ExpectedTag $reinstallVersion
   }
@@ -525,6 +661,12 @@ try {
   Write-Log "Step 8/8: uninstall services and remove install files"
   & $UninstallScript -InstallDir $InstallDir -RemoveInstallDir
   Wait-HealthDown -Url $baseUrl -TimeoutSeconds $WaitTimeoutSeconds
+  if ($UsageChecks) {
+    Wait-PortFree -Port $port -TimeoutSeconds $WaitTimeoutSeconds
+    if ($openCodePortLast -and $openCodePortLast -gt 0) {
+      Wait-PortFree -Port $openCodePortLast -TimeoutSeconds $WaitTimeoutSeconds
+    }
+  }
   Wait-PathAbsent -Path $InstallDir -TimeoutSeconds $WaitTimeoutSeconds
 
   $elapsed = [int]((Get-Date) - $startTime).TotalSeconds

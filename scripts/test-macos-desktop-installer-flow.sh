@@ -1,0 +1,520 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO="canxin121/opencode-studio"
+VERSION=""
+UPGRADE_TO_VERSION=""
+PORT="3210"
+WAIT_TIMEOUT_SECS="180"
+INSTALL_ROOT="${HOME}/Applications"
+APP_BUNDLE_NAME="OpenCode Studio.app"
+APP_PATH="${INSTALL_ROOT}/${APP_BUNDLE_NAME}"
+KEEP_FILES="0"
+UI_CLICKS="0"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+USAGE_SMOKE_SCRIPT="$SCRIPT_DIR/studio-usage-smoke.sh"
+UI_CLICK_SCRIPT="$SCRIPT_DIR/studio-ui-click-e2e.mjs"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  test-macos-desktop-installer-flow.sh --version vX.Y.Z --upgrade-to-version vX.Y.Z [options]
+
+Options:
+  --repo owner/repo                 Release source repo (default: canxin121/opencode-studio).
+  --version vX.Y.Z                  Install this desktop release first (required).
+  --upgrade-to-version vX.Y.Z       Upgrade by replacing the .app with this version (required).
+  --port PORT                       Desktop backend port to expect (default: 3210).
+  --wait-timeout SECONDS            Readiness/teardown timeout (default: 180).
+  --keep-files                      Keep downloaded installers and app support dirs.
+  --ui-clicks                        Run Playwright UI click flow (requires node + Playwright).
+
+What it validates:
+  1) Download + "install" desktop app from DMG (copy .app).
+  2) Launch app and validate backend + UI + session API via studio-usage-smoke.sh.
+  3) Quit app and assert ports released (Studio + OpenCode).
+  4) Upgrade by replacing .app with newer DMG and repeat checks.
+  5) Uninstall by removing .app, then reinstall latest and repeat checks.
+
+Notes:
+  - macOS only.
+  - Requires: curl, hdiutil, python3. UI clicks additionally require: node + Playwright.
+  - OpenCode CLI (`opencode`) must be installed on PATH (desktop backend spawns it).
+EOF
+}
+
+log() {
+  printf '[desktop-e2e %s] %s\n' "$(date '+%H:%M:%S')" "$*"
+}
+
+fail() {
+  log "ERROR: $*"
+  exit 1
+}
+
+need() {
+  command -v "$1" >/dev/null 2>&1 || fail "Missing dependency: $1"
+}
+
+normalize_release_tag() {
+  local value="$1"
+  if [[ "$value" == v* ]]; then
+    printf '%s\n' "$value"
+  else
+    printf 'v%s\n' "$value"
+  fi
+}
+
+detect_target_triple() {
+  local machine
+  machine="$(uname -m)"
+  case "$machine" in
+    arm64|aarch64) printf '%s\n' "aarch64-apple-darwin" ;;
+    x86_64|amd64) printf '%s\n' "x86_64-apple-darwin" ;;
+    *) return 1 ;;
+  esac
+}
+
+can_bind_port() {
+  local port="$1"
+  [[ -n "$port" ]] || return 0
+  python3 - "$port" <<'PY'
+import socket
+import sys
+
+port = int(sys.argv[1])
+s = socket.socket()
+try:
+    s.bind(("127.0.0.1", port))
+except OSError:
+    raise SystemExit(1)
+finally:
+    try:
+        s.close()
+    except Exception:
+        pass
+PY
+}
+
+pick_free_port() {
+  python3 - <<'PY'
+import socket
+
+s = socket.socket()
+s.bind(("127.0.0.1", 0))
+port = s.getsockname()[1]
+s.close()
+print(port)
+PY
+}
+
+wait_cdp_ready() {
+  local port="$1"
+  local timeout_secs="$2"
+  local url="http://127.0.0.1:${port}/json/version"
+  local end=$((SECONDS + timeout_secs))
+  local last_err=""
+
+  while ((SECONDS < end)); do
+    local body=""
+    body="$(curl -fsS --max-time 2 "$url" 2>/dev/null || true)"
+    if [[ -n "$body" ]]; then
+      if python3 - "$body" <<'PY' >/dev/null 2>&1
+import json,sys
+p=json.loads(sys.argv[1])
+ws=p.get('webSocketDebuggerUrl')
+raise SystemExit(0 if isinstance(ws,str) and ws.strip() else 1)
+PY
+      then
+        log "CDP ready: $url"
+        return 0
+      fi
+      last_err="missing webSocketDebuggerUrl"
+    else
+      last_err="no response"
+    fi
+    sleep 0.25
+  done
+
+  fail "CDP endpoint not ready within ${timeout_secs}s: $url (last error: $last_err)"
+}
+
+dump_port_diag() {
+  local port="$1"
+  [[ -n "$port" ]] || return 0
+  log "Port diagnostics for :$port"
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -nP -iTCP:"$port" -sTCP:LISTEN 2>/dev/null || true
+  fi
+}
+
+wait_port_free() {
+  local port="$1"
+  local timeout_secs="$2"
+  local elapsed=0
+  [[ -n "$port" ]] || return 0
+
+  while ((elapsed < timeout_secs)); do
+    if can_bind_port "$port" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+    elapsed=$((elapsed + 1))
+  done
+  return 1
+}
+
+assert_port_free() {
+  local port="$1"
+  local timeout_secs="$2"
+  [[ -n "$port" ]] || return 0
+  if ! wait_port_free "$port" "$timeout_secs"; then
+    dump_port_diag "$port"
+    fail "Port $port is still not bindable after ${timeout_secs}s"
+  fi
+  log "Port released: :$port"
+}
+
+read_health_field() {
+  local base_url="$1"
+  local field="$2"
+  local health_json=""
+  health_json="$(curl -fsS --max-time 6 "$base_url/health" 2>/dev/null || true)"
+  [[ -n "$health_json" ]] || { printf '%s\n' ""; return 0; }
+  python3 - "$health_json" "$field" <<'PY'
+import json
+import sys
+
+p = json.loads(sys.argv[1])
+key = sys.argv[2]
+value = p.get(key)
+if value is None:
+    print('')
+elif isinstance(value, bool):
+    print('1' if value else '0')
+else:
+    print(str(value))
+PY
+}
+
+download_release_asset() {
+  local tag="$1"
+  local asset_name="$2"
+  local out_path="$3"
+  local url="https://github.com/${REPO}/releases/download/${tag}/${asset_name}"
+  log "Downloading $asset_name"
+
+  local tmp
+  tmp="$(mktemp "${TMPDIR:-/tmp}/opencode-studio-download.XXXXXX")"
+  local code=""
+  code="$(curl -sS -L --retry 3 --retry-delay 2 -o "$tmp" -w '%{http_code}' "$url" || true)"
+  if [[ "$code" != "200" ]]; then
+    rm -f "$tmp" >/dev/null 2>&1 || true
+    log "Download failed (HTTP $code): $url"
+    return 1
+  fi
+
+  mkdir -p "$(dirname "$out_path")"
+  mv "$tmp" "$out_path"
+  if ! test -s "$out_path"; then
+    log "Downloaded file is empty: $out_path"
+    return 1
+  fi
+}
+
+mount_dmg() {
+  local dmg="$1"
+  local mount_dir="$2"
+  hdiutil attach -nobrowse -readonly -mountpoint "$mount_dir" "$dmg" >/dev/null
+}
+
+unmount_dmg() {
+  local mount_dir="$1"
+  hdiutil detach "$mount_dir" -quiet >/dev/null 2>&1 || true
+}
+
+install_app_from_dmg() {
+  local dmg="$1"
+  local dest_app="$2"
+  local mount_dir
+  mount_dir="$(mktemp -d "${TMPDIR:-/tmp}/opencode-studio-dmg.XXXXXX")"
+
+  log "Mounting DMG: $dmg"
+  mount_dmg "$dmg" "$mount_dir" || fail "Failed to mount DMG"
+  local src_app=""
+  src_app="$(ls -1 "$mount_dir"/*.app 2>/dev/null | head -n 1 || true)"
+  if [[ -z "$src_app" ]]; then
+    unmount_dmg "$mount_dir"
+    rmdir "$mount_dir" >/dev/null 2>&1 || true
+    fail "No .app found in DMG"
+  fi
+
+  log "Installing app to: $dest_app"
+  mkdir -p "$(dirname "$dest_app")"
+  rm -rf "$dest_app"
+  cp -R "$src_app" "$dest_app"
+
+  unmount_dmg "$mount_dir"
+  rmdir "$mount_dir" >/dev/null 2>&1 || true
+
+  # Avoid Gatekeeper prompts on CI.
+  xattr -dr com.apple.quarantine "$dest_app" >/dev/null 2>&1 || true
+  test -d "$dest_app" || fail "Installed app missing: $dest_app"
+}
+
+start_app() {
+  local app_path="$1"
+  shift || true
+  log "Launching app: $app_path"
+  if [[ $# -gt 0 ]]; then
+    open -n "$app_path" --args "$@" || fail "Failed to launch app"
+  else
+    open -n "$app_path" || fail "Failed to launch app"
+  fi
+}
+
+stop_app() {
+  log "Stopping app (best-effort graceful quit)"
+  osascript -e 'tell application "OpenCode Studio" to quit' >/dev/null 2>&1 || true
+
+  # Give it a moment to shut down.
+  sleep 2
+
+  # Force-kill any lingering processes.
+  if pgrep -f "OpenCode Studio" >/dev/null 2>&1; then
+    log "Force-killing lingering OpenCode Studio processes"
+    pkill -f "OpenCode Studio" >/dev/null 2>&1 || true
+  fi
+  if pgrep -f "opencode-studio" >/dev/null 2>&1; then
+    log "Force-killing lingering opencode-studio sidecar"
+    pkill -f "opencode-studio" >/dev/null 2>&1 || true
+  fi
+  if pgrep -f "opencode serve" >/dev/null 2>&1; then
+    log "Force-killing lingering opencode serve"
+    pkill -f "opencode serve" >/dev/null 2>&1 || true
+  fi
+}
+
+dump_desktop_support_dirs() {
+  local header="$1"
+  log "$header"
+  local cfg_dir="$HOME/Library/Application Support/cn.cxits.opencode-studio"
+  local log_dir="$HOME/Library/Logs/cn.cxits.opencode-studio"
+  if [[ -d "$cfg_dir" ]]; then
+    log "Config dir: $cfg_dir"
+    ls -la "$cfg_dir" || true
+    if [[ -f "$cfg_dir/opencode-studio.toml" ]]; then
+      log "Runtime config (first 200 lines): $cfg_dir/opencode-studio.toml"
+      python3 - "$cfg_dir/opencode-studio.toml" <<'PY' || true
+import sys
+path=sys.argv[1]
+with open(path,'r',encoding='utf-8',errors='ignore') as f:
+    for i,line in enumerate(f):
+        if i>=200:
+            break
+        sys.stdout.write(line)
+PY
+    fi
+  fi
+  if [[ -d "$log_dir" ]]; then
+    log "Log dir: $log_dir"
+    ls -la "$log_dir" || true
+    if [[ -f "$log_dir/backend.log" ]]; then
+      log "backend.log (last 200 lines): $log_dir/backend.log"
+      tail -n 200 "$log_dir/backend.log" || true
+    fi
+  fi
+}
+
+cleanup() {
+  local code="$?"
+  if [[ "$code" -ne 0 ]]; then
+    dump_desktop_support_dirs "Failure diagnostics"
+    stop_app || true
+  fi
+
+  if [[ "$KEEP_FILES" != "1" && -n "${WORK_DIR:-}" ]]; then
+    rm -rf "$WORK_DIR" >/dev/null 2>&1 || true
+  fi
+}
+
+trap cleanup EXIT
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --repo) REPO="$2"; shift 2 ;;
+    --version) VERSION="$2"; shift 2 ;;
+    --upgrade-to-version) UPGRADE_TO_VERSION="$2"; shift 2 ;;
+    --port) PORT="$2"; shift 2 ;;
+    --wait-timeout) WAIT_TIMEOUT_SECS="$2"; shift 2 ;;
+    --keep-files) KEEP_FILES="1"; shift ;;
+    --ui-clicks) UI_CLICKS="1"; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) usage; fail "Unknown arg: $1" ;;
+  esac
+done
+
+[[ -n "$VERSION" ]] || { usage; fail "--version is required"; }
+[[ -n "$UPGRADE_TO_VERSION" ]] || { usage; fail "--upgrade-to-version is required"; }
+if ! [[ "$WAIT_TIMEOUT_SECS" =~ ^[0-9]+$ ]] || ((WAIT_TIMEOUT_SECS < 10)); then
+  fail "Invalid --wait-timeout '$WAIT_TIMEOUT_SECS'. Expected integer >= 10."
+fi
+if ! [[ "$PORT" =~ ^[0-9]+$ ]] || ((PORT < 1 || PORT > 65535)); then
+  fail "Invalid --port '$PORT'. Expected 1-65535."
+fi
+
+need curl
+need hdiutil
+need python3
+need opencode
+test -f "$USAGE_SMOKE_SCRIPT" || fail "Usage smoke script not found: $USAGE_SMOKE_SCRIPT"
+
+if [[ "$UI_CLICKS" == "1" ]]; then
+  need node
+  test -f "$UI_CLICK_SCRIPT" || fail "UI click script not found: $UI_CLICK_SCRIPT"
+fi
+
+OS="$(uname -s)"
+[[ "$OS" == "Darwin" ]] || fail "Unsupported OS: $OS (macOS only)"
+
+TARGET="$(detect_target_triple || true)"
+[[ -n "$TARGET" ]] || fail "Unable to detect macOS target triple"
+
+WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/opencode-studio-desktop-e2e.XXXXXX")"
+DOWNLOAD_DIR="$WORK_DIR/downloads"
+mkdir -p "$DOWNLOAD_DIR"
+
+VERSION="$(normalize_release_tag "$VERSION")"
+UPGRADE_TO_VERSION="$(normalize_release_tag "$UPGRADE_TO_VERSION")"
+
+BASE_URL="http://127.0.0.1:${PORT}"
+
+log "Starting macOS desktop installer flow"
+log "Repo: $REPO"
+log "Target: $TARGET"
+log "Install version: $VERSION"
+log "Upgrade to: $UPGRADE_TO_VERSION"
+log "App path: $APP_PATH"
+log "Base URL: $BASE_URL"
+
+ASSET_SUFFIX=""
+if [[ "$UI_CLICKS" == "1" ]]; then
+  # The CEF desktop builds expose Chromium remote debugging (CDP).
+  ASSET_SUFFIX="-cef"
+  log "UI clicks enabled: using CEF desktop installers"
+fi
+
+DMG_OLD="$DOWNLOAD_DIR/opencode-studio-${TARGET}${ASSET_SUFFIX}-${VERSION}.dmg"
+DMG_NEW="$DOWNLOAD_DIR/opencode-studio-${TARGET}${ASSET_SUFFIX}-${UPGRADE_TO_VERSION}.dmg"
+ASSET_OLD="opencode-studio-desktop-${TARGET}${ASSET_SUFFIX}-${VERSION}.dmg"
+ASSET_NEW="opencode-studio-desktop-${TARGET}${ASSET_SUFFIX}-${UPGRADE_TO_VERSION}.dmg"
+
+if ! download_release_asset "$VERSION" "$ASSET_OLD" "$DMG_OLD"; then
+  if [[ "$UI_CLICKS" == "1" ]]; then
+    fail "CEF desktop DMG not found for $VERSION ($ASSET_OLD). Publish -cef desktop assets or run without --ui-clicks."
+  fi
+  fail "Failed to download desktop DMG: $ASSET_OLD"
+fi
+
+if ! download_release_asset "$UPGRADE_TO_VERSION" "$ASSET_NEW" "$DMG_NEW"; then
+  if [[ "$UI_CLICKS" == "1" ]]; then
+    fail "CEF desktop DMG not found for $UPGRADE_TO_VERSION ($ASSET_NEW). Publish -cef desktop assets or run without --ui-clicks."
+  fi
+  fail "Failed to download desktop DMG: $ASSET_NEW"
+fi
+
+log "Step 1/6: install desktop app ($VERSION)"
+assert_port_free "$PORT" "$WAIT_TIMEOUT_SECS"
+install_app_from_dmg "$DMG_OLD" "$APP_PATH"
+
+log "Step 2/6: launch + usage smoke ($VERSION)"
+DEBUG_PORT=""
+if [[ "$UI_CLICKS" == "1" ]]; then
+  DEBUG_PORT="$(pick_free_port)"
+  log "Using CDP debug port: $DEBUG_PORT"
+  start_app "$APP_PATH" "--remote-debugging-port=${DEBUG_PORT}" "--remote-allow-origins=*"
+else
+  start_app "$APP_PATH"
+fi
+bash "$USAGE_SMOKE_SCRIPT" --base-url "$BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --require-ui
+if [[ "$UI_CLICKS" == "1" ]]; then
+  wait_cdp_ready "$DEBUG_PORT" "$WAIT_TIMEOUT_SECS"
+  node "$UI_CLICK_SCRIPT" --cdp-url "http://127.0.0.1:${DEBUG_PORT}" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "desktop-install"
+fi
+OPENCODE_PORT_LAST="$(read_health_field "$BASE_URL" "openCodePort" || true)"
+if [[ -n "$OPENCODE_PORT_LAST" ]]; then
+  log "Captured openCodePort=$OPENCODE_PORT_LAST"
+fi
+
+log "Step 3/6: quit app + verify port release"
+stop_app
+assert_port_free "$PORT" "$WAIT_TIMEOUT_SECS"
+if [[ -n "$OPENCODE_PORT_LAST" ]]; then
+  assert_port_free "$OPENCODE_PORT_LAST" "$WAIT_TIMEOUT_SECS"
+fi
+if [[ "$UI_CLICKS" == "1" && -n "${DEBUG_PORT:-}" ]]; then
+  assert_port_free "$DEBUG_PORT" "$WAIT_TIMEOUT_SECS"
+fi
+
+log "Step 4/6: upgrade by replacing .app ($UPGRADE_TO_VERSION)"
+install_app_from_dmg "$DMG_NEW" "$APP_PATH"
+assert_port_free "$PORT" "$WAIT_TIMEOUT_SECS"
+DEBUG_PORT=""
+if [[ "$UI_CLICKS" == "1" ]]; then
+  DEBUG_PORT="$(pick_free_port)"
+  log "Using CDP debug port: $DEBUG_PORT"
+  start_app "$APP_PATH" "--remote-debugging-port=${DEBUG_PORT}" "--remote-allow-origins=*"
+else
+  start_app "$APP_PATH"
+fi
+bash "$USAGE_SMOKE_SCRIPT" --base-url "$BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --require-ui
+if [[ "$UI_CLICKS" == "1" ]]; then
+  wait_cdp_ready "$DEBUG_PORT" "$WAIT_TIMEOUT_SECS"
+  node "$UI_CLICK_SCRIPT" --cdp-url "http://127.0.0.1:${DEBUG_PORT}" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "desktop-upgrade"
+fi
+OPENCODE_PORT_LAST="$(read_health_field "$BASE_URL" "openCodePort" || true)"
+stop_app
+assert_port_free "$PORT" "$WAIT_TIMEOUT_SECS"
+if [[ -n "$OPENCODE_PORT_LAST" ]]; then
+  assert_port_free "$OPENCODE_PORT_LAST" "$WAIT_TIMEOUT_SECS"
+fi
+if [[ "$UI_CLICKS" == "1" && -n "${DEBUG_PORT:-}" ]]; then
+  assert_port_free "$DEBUG_PORT" "$WAIT_TIMEOUT_SECS"
+fi
+
+log "Step 5/6: uninstall desktop app (remove .app)"
+rm -rf "$APP_PATH"
+test ! -d "$APP_PATH" || fail "App still exists after uninstall: $APP_PATH"
+assert_port_free "$PORT" "$WAIT_TIMEOUT_SECS"
+
+log "Step 6/6: reinstall latest + usage smoke"
+install_app_from_dmg "$DMG_NEW" "$APP_PATH"
+DEBUG_PORT=""
+if [[ "$UI_CLICKS" == "1" ]]; then
+  DEBUG_PORT="$(pick_free_port)"
+  log "Using CDP debug port: $DEBUG_PORT"
+  start_app "$APP_PATH" "--remote-debugging-port=${DEBUG_PORT}" "--remote-allow-origins=*"
+else
+  start_app "$APP_PATH"
+fi
+bash "$USAGE_SMOKE_SCRIPT" --base-url "$BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --require-ui
+if [[ "$UI_CLICKS" == "1" ]]; then
+  wait_cdp_ready "$DEBUG_PORT" "$WAIT_TIMEOUT_SECS"
+  node "$UI_CLICK_SCRIPT" --cdp-url "http://127.0.0.1:${DEBUG_PORT}" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "desktop-reinstall"
+fi
+OPENCODE_PORT_LAST="$(read_health_field "$BASE_URL" "openCodePort" || true)"
+stop_app
+assert_port_free "$PORT" "$WAIT_TIMEOUT_SECS"
+if [[ -n "$OPENCODE_PORT_LAST" ]]; then
+  assert_port_free "$OPENCODE_PORT_LAST" "$WAIT_TIMEOUT_SECS"
+fi
+if [[ "$UI_CLICKS" == "1" && -n "${DEBUG_PORT:-}" ]]; then
+  assert_port_free "$DEBUG_PORT" "$WAIT_TIMEOUT_SECS"
+fi
+
+if [[ "$KEEP_FILES" != "1" ]]; then
+  rm -rf "$APP_PATH" >/dev/null 2>&1 || true
+fi
+
+log "PASS: macOS desktop installer flow completed"

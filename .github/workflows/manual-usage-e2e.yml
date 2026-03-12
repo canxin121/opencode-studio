@@ -1,0 +1,382 @@
+name: Manual Usage E2E
+
+on:
+  workflow_dispatch:
+    inputs:
+      repo:
+        description: "Release source repo (owner/repo). Default: this repo"
+        required: false
+        default: ""
+      latest:
+        description: "Target release tag to upgrade to (e.g. v0.1.10). Default: latest stable"
+        required: false
+        default: ""
+      previous:
+        description: "Release tag to install first (e.g. v0.1.9). Default: previous stable"
+        required: false
+        default: ""
+      wait_timeout_seconds:
+        description: "Readiness/teardown timeout in seconds (default: 240)"
+        required: false
+        default: "240"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: manual-usage-e2e-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  resolve-versions:
+    name: Resolve release versions
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      repo: ${{ steps.versions.outputs.repo }}
+      latest: ${{ steps.versions.outputs.latest }}
+      previous: ${{ steps.versions.outputs.previous }}
+      wait_timeout_seconds: ${{ steps.versions.outputs.wait_timeout_seconds }}
+    steps:
+      - name: Resolve latest + previous stable tags
+        id: versions
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const stableTag = /^v?\d+\.\d+\.\d+(?:[-+].*)?$/;
+            const inputs = context.payload.inputs || {};
+
+            const waitTimeout = String(inputs.wait_timeout_seconds || "240").trim() || "240";
+            if (!/^\d+$/.test(waitTimeout) || Number(waitTimeout) < 30) {
+              core.setFailed(`Invalid wait_timeout_seconds: ${waitTimeout}`);
+              return;
+            }
+
+            const repoInput = String(inputs.repo || "").trim();
+            const repoName = repoInput || `${context.repo.owner}/${context.repo.repo}`;
+            const [owner, repo] = repoName.split("/");
+            if (!owner || !repo) {
+              core.setFailed(`Invalid repo input '${repoName}'. Expected owner/repo.`);
+              return;
+            }
+
+            const normalizeTag = (raw) => {
+              const t = String(raw || "").trim();
+              if (!t) return "";
+              return t.startsWith("v") ? t : `v${t}`;
+            };
+
+            let latest = normalizeTag(inputs.latest);
+            let previous = normalizeTag(inputs.previous);
+
+            const releases = await github.paginate(github.rest.repos.listReleases, {
+              owner,
+              repo,
+              per_page: 100,
+            });
+
+            const stable = releases.filter((release) =>
+              !release.draft &&
+              !release.prerelease &&
+              typeof release.tag_name === "string" &&
+              stableTag.test(release.tag_name)
+            );
+
+            if (!latest) {
+              if (stable.length < 1) {
+                core.setFailed(`Need at least one stable release to resolve latest for ${repoName}. Found ${stable.length}.`);
+                return;
+              }
+              latest = normalizeTag(stable[0].tag_name);
+            }
+
+            if (!previous) {
+              const pick = stable.find((r) => normalizeTag(r.tag_name) !== latest);
+              if (!pick) {
+                core.setFailed(`Need a previous stable release tag different from latest=${latest} for ${repoName}.`);
+                return;
+              }
+              previous = normalizeTag(pick.tag_name);
+            }
+
+            if (latest === previous) {
+              core.setFailed(`latest and previous must differ (both are '${latest}').`);
+              return;
+            }
+
+            core.setOutput("repo", repoName);
+            core.setOutput("latest", latest);
+            core.setOutput("previous", previous);
+            core.setOutput("wait_timeout_seconds", waitTimeout);
+            core.info(`Resolved repo=${repoName}, latest=${latest}, previous=${previous}, wait_timeout_seconds=${waitTimeout}`);
+
+  service-usage:
+    name: Service usage (installer E2E, ${{ matrix.platform }})
+    needs: resolve-versions
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    env:
+      STUDIO_UI_E2E_OUT_DIR: ${{ runner.temp }}/ui-clicks
+      PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/pw-browsers
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+          - os: macos-latest
+            platform: macos
+          - os: windows-latest
+            platform: windows
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Node (for Playwright)
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+
+      - name: Install Playwright (Chromium + deps)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-save --no-package-lock playwright
+          npx playwright install --with-deps chromium
+
+      - name: Install Playwright (Chromium, macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-save --no-package-lock playwright
+          npx playwright install chromium
+
+      - name: Install Playwright (Chromium, Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          npm install --no-save --no-package-lock playwright
+          npx playwright install chromium
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+        with:
+          bun-version: latest
+
+      - name: Cache Bun downloads
+        uses: actions/cache@v5
+        continue-on-error: true
+        with:
+          path: |
+            ~/.bun/install/cache
+          key: ${{ runner.os }}-manual-usage-e2e-bun-latest-v1
+
+      - name: Install OpenCode CLI
+        run: bun add -g opencode-ai@latest
+
+      - name: Verify OpenCode CLI
+        run: opencode --version
+
+      - name: Run Linux service usage flow
+        if: runner.os == 'Linux'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          bash scripts/test-unix-service-flow.sh \
+            --mode system \
+            --with-frontend \
+            --ui-clicks \
+            --wait-timeout "${{ needs.resolve-versions.outputs.wait_timeout_seconds }}" \
+            --repo "${{ needs.resolve-versions.outputs.repo }}" \
+            --version "${{ needs.resolve-versions.outputs.previous }}" \
+            --upgrade-to-version "${{ needs.resolve-versions.outputs.latest }}" \
+            --upgrade-via-backend-api
+
+      - name: Run macOS service usage flow
+        if: runner.os == 'macOS'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          bash scripts/test-unix-service-flow.sh \
+            --with-frontend \
+            --ui-clicks \
+            --wait-timeout "${{ needs.resolve-versions.outputs.wait_timeout_seconds }}" \
+            --repo "${{ needs.resolve-versions.outputs.repo }}" \
+            --version "${{ needs.resolve-versions.outputs.previous }}" \
+            --upgrade-to-version "${{ needs.resolve-versions.outputs.latest }}" \
+            --upgrade-via-backend-api
+
+      - name: Run Windows service usage flow
+        if: runner.os == 'Windows'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/test-windows-service-flow.ps1 `
+            -Repo "${{ needs.resolve-versions.outputs.repo }}" `
+            -Version "${{ needs.resolve-versions.outputs.previous }}" `
+            -UpgradeToVersion "${{ needs.resolve-versions.outputs.latest }}" `
+            -WithFrontend `
+            -UsageChecks `
+            -UiClicks `
+            -WaitTimeoutSeconds "${{ needs.resolve-versions.outputs.wait_timeout_seconds }}"
+
+      - name: Collect service diagnostics
+        if: always() && runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="${RUNNER_TEMP}/service-diagnostics"
+          mkdir -p "$out"
+
+          if [[ "${RUNNER_OS}" == "Linux" ]]; then
+            sudo systemctl status opencode-studio --no-pager >"$out/systemctl-status.txt" 2>&1 || true
+            sudo journalctl -u opencode-studio --no-pager --since "30 min ago" >"$out/journal.txt" 2>&1 || true
+          elif [[ "${RUNNER_OS}" == "macOS" ]]; then
+            launchctl print "gui/$(id -u)/cn.cxits.opencode-studio" >"$out/launchctl-gui.txt" 2>&1 || true
+            launchctl print "user/$(id -u)/cn.cxits.opencode-studio" >"$out/launchctl-user.txt" 2>&1 || true
+            log show --style syslog --predicate 'process == "opencode-studio"' --last 15m >"$out/unified-log.txt" 2>&1 || true
+          fi
+
+      - name: Collect Windows service diagnostics
+        if: always() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP "service-diagnostics"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          & sc.exe query OpenCodeStudio *> (Join-Path $out "OpenCodeStudio.sc.txt")
+          & sc.exe query OpenCodeStudio-OpenCode *> (Join-Path $out "OpenCodeStudio-OpenCode.sc.txt")
+          try { Get-NetTCPConnection -State Listen | Select-Object -First 200 | Format-Table -AutoSize | Out-String | Set-Content (Join-Path $out "tcp-listen.txt") } catch { }
+
+      - name: Upload service diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: manual-usage-e2e-service-${{ runner.os }}
+          path: ${{ runner.temp }}/service-diagnostics
+          if-no-files-found: warn
+
+      - name: Upload UI click artifacts (service)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: manual-usage-e2e-ui-clicks-service-${{ runner.os }}
+          path: ${{ runner.temp }}/ui-clicks
+          if-no-files-found: warn
+
+  desktop-usage:
+    name: Desktop usage (installer E2E, ${{ matrix.platform }})
+    needs: resolve-versions
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    env:
+      STUDIO_UI_E2E_OUT_DIR: ${{ runner.temp }}/ui-clicks
+      PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/pw-browsers
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: macos
+          - os: windows-latest
+            platform: windows
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Node (for Playwright)
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+
+      - name: Install Playwright (Chromium, macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-save --no-package-lock playwright
+          npx playwright install chromium
+
+      - name: Install Playwright (Chromium, Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          npm install --no-save --no-package-lock playwright
+          npx playwright install chromium
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+        with:
+          bun-version: latest
+
+      - name: Install OpenCode CLI
+        run: bun add -g opencode-ai@latest
+
+      - name: Verify OpenCode CLI
+        run: opencode --version
+
+      - name: Run macOS desktop installer flow
+        if: runner.os == 'macOS'
+        run: |
+          bash scripts/test-macos-desktop-installer-flow.sh \
+            --repo "${{ needs.resolve-versions.outputs.repo }}" \
+            --version "${{ needs.resolve-versions.outputs.previous }}" \
+            --upgrade-to-version "${{ needs.resolve-versions.outputs.latest }}" \
+            --wait-timeout "${{ needs.resolve-versions.outputs.wait_timeout_seconds }}" \
+            --ui-clicks
+
+      - name: Run Windows desktop installer flow
+        if: runner.os == 'Windows'
+        run: |
+          pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/test-windows-desktop-installer-flow.ps1 `
+            -Repo "${{ needs.resolve-versions.outputs.repo }}" `
+            -Version "${{ needs.resolve-versions.outputs.previous }}" `
+            -UpgradeToVersion "${{ needs.resolve-versions.outputs.latest }}" `
+            -WaitTimeoutSeconds "${{ needs.resolve-versions.outputs.wait_timeout_seconds }}" `
+            -UiClicks
+
+      - name: Collect desktop support dirs (macOS)
+        if: always() && runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="${RUNNER_TEMP}/desktop-support"
+          mkdir -p "$out"
+          cp -R "$HOME/Library/Application Support/cn.cxits.opencode-studio" "$out/app-support" 2>/dev/null || true
+          cp -R "$HOME/Library/Logs/cn.cxits.opencode-studio" "$out/logs" 2>/dev/null || true
+
+      - name: Collect desktop support dirs (Windows)
+        if: always() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP "desktop-support"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          foreach ($d in @(
+            Join-Path $env:APPDATA "cn.cxits.opencode-studio",
+            Join-Path $env:LOCALAPPDATA "cn.cxits.opencode-studio",
+            Join-Path $env:APPDATA "OpenCode Studio",
+            Join-Path $env:LOCALAPPDATA "OpenCode Studio"
+          )) {
+            if ($d -and (Test-Path -LiteralPath $d)) {
+              $name = [System.IO.Path]::GetFileName($d)
+              Copy-Item -LiteralPath $d -Destination (Join-Path $out $name) -Recurse -Force -ErrorAction SilentlyContinue
+            }
+          }
+
+      - name: Upload desktop diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: manual-usage-e2e-desktop-${{ runner.os }}
+          path: ${{ runner.temp }}/desktop-support
+          if-no-files-found: warn
+
+      - name: Upload UI click artifacts (desktop)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: manual-usage-e2e-ui-clicks-desktop-${{ runner.os }}
+          path: ${{ runner.temp }}/ui-clicks
+          if-no-files-found: warn
