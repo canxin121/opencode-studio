@@ -29,7 +29,7 @@ Options:
   --port PORT                       Desktop backend port to expect (default: 3210).
   --wait-timeout SECONDS            Readiness/teardown timeout (default: 180).
   --keep-files                      Keep downloaded installers and app support dirs.
-  --ui-clicks                        Run Playwright UI click flow (requires node + Playwright).
+  --ui-clicks                        Run Playwright UI click flow (requires CEF desktop DMGs with CDP; fails if unavailable).
 
 What it validates:
   1) Download + "install" desktop app from DMG (copy .app).
@@ -568,20 +568,19 @@ DMG_OLD="$DMG_OLD_STD"
 DMG_NEW="$DMG_NEW_STD"
 
 if [[ "$UI_CLICKS" == "1" ]]; then
-  # Prefer CEF installers so Playwright can attach via CDP. If unavailable (or later flaky),
-  # fall back to standard desktop installers and run UI clicks in web mode.
-  log "UI clicks enabled"
-  if download_release_asset "$VERSION" "$ASSET_OLD_CEF" "$DMG_OLD_CEF" && download_release_asset "$UPGRADE_TO_VERSION" "$ASSET_NEW_CEF" "$DMG_NEW_CEF"; then
-    USE_CEF="1"
-    DMG_OLD="$DMG_OLD_CEF"
-    DMG_NEW="$DMG_NEW_CEF"
-    log "Using CEF desktop installers (CDP enabled)"
-  else
-    log "CEF desktop installers unavailable; using standard installers (UI clicks will run in web mode)"
-  fi
-fi
+  # UI clicks on desktop require CDP attach, which is only exposed by the CEF desktop builds.
+  log "UI clicks enabled: requiring CEF desktop installers (CDP)"
+  USE_CEF="1"
+  DMG_OLD="$DMG_OLD_CEF"
+  DMG_NEW="$DMG_NEW_CEF"
 
-if [[ "$USE_CEF" != "1" ]]; then
+  if ! download_release_asset "$VERSION" "$ASSET_OLD_CEF" "$DMG_OLD_CEF"; then
+    fail "CEF desktop DMG not found for $VERSION ($ASSET_OLD_CEF). Publish -cef desktop assets or run without --ui-clicks."
+  fi
+  if ! download_release_asset "$UPGRADE_TO_VERSION" "$ASSET_NEW_CEF" "$DMG_NEW_CEF"; then
+    fail "CEF desktop DMG not found for $UPGRADE_TO_VERSION ($ASSET_NEW_CEF). Publish -cef desktop assets or run without --ui-clicks."
+  fi
+else
   download_release_asset "$VERSION" "$ASSET_OLD_STD" "$DMG_OLD_STD" || fail "Failed to download desktop DMG: $ASSET_OLD_STD"
   download_release_asset "$UPGRADE_TO_VERSION" "$ASSET_NEW_STD" "$DMG_NEW_STD" || fail "Failed to download desktop DMG: $ASSET_NEW_STD"
 fi
@@ -611,59 +610,26 @@ STUDIO_PORT_LAST="$(port_from_base_url "$RUN_BASE_URL")"
 SMOKE_OK="0"
 if bash "$USAGE_SMOKE_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --require-ui; then
   SMOKE_OK="1"
-else
-  if [[ "$CDP_LAUNCHED" == "1" ]]; then
-    log "Usage smoke failed after CDP launch; retrying without remote debugging args"
-    stop_app
-    DEBUG_PORT=""
-    CDP_BASE_URL=""
-    CDP_LAUNCHED="0"
-    start_app "$APP_PATH"
-    if bash "$USAGE_SMOKE_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --require-ui; then
-      SMOKE_OK="1"
-    fi
-  fi
 fi
 
 if [[ "$SMOKE_OK" != "1" ]]; then
-  if [[ "$UI_CLICKS" == "1" && "$USE_CEF" == "1" ]]; then
-    log "Usage smoke still failing with CEF installers; falling back to standard installers"
-    stop_app || true
-    DEBUG_PORT=""
-    CDP_BASE_URL=""
-    CDP_LAUNCHED="0"
-    USE_CEF="0"
-    download_release_asset "$VERSION" "$ASSET_OLD_STD" "$DMG_OLD_STD" || fail "Failed to download desktop DMG: $ASSET_OLD_STD"
-    download_release_asset "$UPGRADE_TO_VERSION" "$ASSET_NEW_STD" "$DMG_NEW_STD" || fail "Failed to download desktop DMG: $ASSET_NEW_STD"
-    DMG_OLD="$DMG_OLD_STD"
-    DMG_NEW="$DMG_NEW_STD"
-    assert_port_free "$PORT" "$WAIT_TIMEOUT_SECS"
-    install_app_from_dmg "$DMG_OLD" "$APP_PATH"
-    start_app "$APP_PATH"
-    bash "$USAGE_SMOKE_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --require-ui || fail "Usage smoke failed (standard installer fallback)"
-    SMOKE_OK="1"
-  else
-    fail "Usage smoke failed"
-  fi
+  fail "Usage smoke failed"
 fi
 
-  if [[ "$UI_CLICKS" == "1" ]]; then
-  if [[ "$CDP_LAUNCHED" == "1" ]]; then
-    cdp_timeout="$WAIT_TIMEOUT_SECS"
-    if ((cdp_timeout > 180)); then cdp_timeout=180; fi
-    if try_wait_cdp_ready "$DEBUG_PORT" "$cdp_timeout"; then
-      log "UI clicks: CDP mode"
-      node "$UI_CLICK_SCRIPT" --cdp-url "$CDP_BASE_URL" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "desktop-install"
-    else
-      log "CDP unavailable after ${cdp_timeout}s (last error: ${CDP_LAST_ERROR:-unknown}); running UI clicks in web mode"
-      dump_cdp_diag "$DEBUG_PORT"
-      node "$UI_CLICK_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "desktop-install"
-    fi
-  else
-    log "UI clicks: web mode (CDP not launched)"
-    node "$UI_CLICK_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "desktop-install"
+if [[ "$UI_CLICKS" == "1" ]]; then
+  [[ "$CDP_LAUNCHED" == "1" && -n "${DEBUG_PORT:-}" ]] || fail "UI clicks requested but CDP was not launched"
+
+  cdp_timeout="$WAIT_TIMEOUT_SECS"
+  if ((cdp_timeout > 180)); then cdp_timeout=180; fi
+
+  if ! try_wait_cdp_ready "$DEBUG_PORT" "$cdp_timeout"; then
+    dump_cdp_diag "$DEBUG_PORT"
+    fail "CDP endpoint not ready within ${cdp_timeout}s (last error: ${CDP_LAST_ERROR:-unknown})"
   fi
-  fi
+
+  log "UI clicks: CDP mode"
+  node "$UI_CLICK_SCRIPT" --cdp-url "$CDP_BASE_URL" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "desktop-install"
+fi
 OPENCODE_PORT_LAST="$(read_health_field "$RUN_BASE_URL" "openCodePort" || true)"
 if [[ -n "$OPENCODE_PORT_LAST" ]]; then
   log "Captured openCodePort=$OPENCODE_PORT_LAST"
@@ -705,56 +671,25 @@ STUDIO_PORT_LAST="$(port_from_base_url "$RUN_BASE_URL")"
 SMOKE_OK="0"
 if bash "$USAGE_SMOKE_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --require-ui; then
   SMOKE_OK="1"
-else
-  if [[ "$CDP_LAUNCHED" == "1" ]]; then
-    log "Usage smoke failed after CDP launch; retrying without remote debugging args"
-    stop_app
-    DEBUG_PORT=""
-    CDP_BASE_URL=""
-    CDP_LAUNCHED="0"
-    start_app "$APP_PATH"
-    if bash "$USAGE_SMOKE_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --require-ui; then
-      SMOKE_OK="1"
-    fi
-  fi
 fi
 
 if [[ "$SMOKE_OK" != "1" ]]; then
-  if [[ "$UI_CLICKS" == "1" && "$USE_CEF" == "1" ]]; then
-    log "Usage smoke still failing with CEF installers; falling back to standard installer for $UPGRADE_TO_VERSION"
-    stop_app || true
-    DEBUG_PORT=""
-    CDP_BASE_URL=""
-    CDP_LAUNCHED="0"
-    USE_CEF="0"
-    download_release_asset "$UPGRADE_TO_VERSION" "$ASSET_NEW_STD" "$DMG_NEW_STD" || fail "Failed to download desktop DMG: $ASSET_NEW_STD"
-    DMG_NEW="$DMG_NEW_STD"
-    assert_port_free "$PORT" "$WAIT_TIMEOUT_SECS"
-    install_app_from_dmg "$DMG_NEW" "$APP_PATH"
-    start_app "$APP_PATH"
-    bash "$USAGE_SMOKE_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --require-ui || fail "Usage smoke failed (standard installer fallback)"
-    SMOKE_OK="1"
-  else
-    fail "Usage smoke failed"
-  fi
+  fail "Usage smoke failed"
 fi
 
 if [[ "$UI_CLICKS" == "1" ]]; then
-  if [[ "$CDP_LAUNCHED" == "1" ]]; then
-    cdp_timeout="$WAIT_TIMEOUT_SECS"
-    if ((cdp_timeout > 180)); then cdp_timeout=180; fi
-    if try_wait_cdp_ready "$DEBUG_PORT" "$cdp_timeout"; then
-      log "UI clicks: CDP mode"
-      node "$UI_CLICK_SCRIPT" --cdp-url "$CDP_BASE_URL" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "desktop-upgrade"
-    else
-      log "CDP unavailable after ${cdp_timeout}s (last error: ${CDP_LAST_ERROR:-unknown}); running UI clicks in web mode"
-      dump_cdp_diag "$DEBUG_PORT"
-      node "$UI_CLICK_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "desktop-upgrade"
-    fi
-  else
-    log "UI clicks: web mode (CDP not launched)"
-    node "$UI_CLICK_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "desktop-upgrade"
+  [[ "$CDP_LAUNCHED" == "1" && -n "${DEBUG_PORT:-}" ]] || fail "UI clicks requested but CDP was not launched"
+
+  cdp_timeout="$WAIT_TIMEOUT_SECS"
+  if ((cdp_timeout > 180)); then cdp_timeout=180; fi
+
+  if ! try_wait_cdp_ready "$DEBUG_PORT" "$cdp_timeout"; then
+    dump_cdp_diag "$DEBUG_PORT"
+    fail "CDP endpoint not ready within ${cdp_timeout}s (last error: ${CDP_LAST_ERROR:-unknown})"
   fi
+
+  log "UI clicks: CDP mode"
+  node "$UI_CLICK_SCRIPT" --cdp-url "$CDP_BASE_URL" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "desktop-upgrade"
 fi
 OPENCODE_PORT_LAST="$(read_health_field "$RUN_BASE_URL" "openCodePort" || true)"
 stop_app
@@ -796,56 +731,25 @@ STUDIO_PORT_LAST="$(port_from_base_url "$RUN_BASE_URL")"
 SMOKE_OK="0"
 if bash "$USAGE_SMOKE_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --require-ui; then
   SMOKE_OK="1"
-else
-  if [[ "$CDP_LAUNCHED" == "1" ]]; then
-    log "Usage smoke failed after CDP launch; retrying without remote debugging args"
-    stop_app
-    DEBUG_PORT=""
-    CDP_BASE_URL=""
-    CDP_LAUNCHED="0"
-    start_app "$APP_PATH"
-    if bash "$USAGE_SMOKE_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --require-ui; then
-      SMOKE_OK="1"
-    fi
-  fi
 fi
 
 if [[ "$SMOKE_OK" != "1" ]]; then
-  if [[ "$UI_CLICKS" == "1" && "$USE_CEF" == "1" ]]; then
-    log "Usage smoke still failing with CEF installers; falling back to standard installer for $UPGRADE_TO_VERSION"
-    stop_app || true
-    DEBUG_PORT=""
-    CDP_BASE_URL=""
-    CDP_LAUNCHED="0"
-    USE_CEF="0"
-    download_release_asset "$UPGRADE_TO_VERSION" "$ASSET_NEW_STD" "$DMG_NEW_STD" || fail "Failed to download desktop DMG: $ASSET_NEW_STD"
-    DMG_NEW="$DMG_NEW_STD"
-    assert_port_free "$PORT" "$WAIT_TIMEOUT_SECS"
-    install_app_from_dmg "$DMG_NEW" "$APP_PATH"
-    start_app "$APP_PATH"
-    bash "$USAGE_SMOKE_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --require-ui || fail "Usage smoke failed (standard installer fallback)"
-    SMOKE_OK="1"
-  else
-    fail "Usage smoke failed"
-  fi
+  fail "Usage smoke failed"
 fi
 
 if [[ "$UI_CLICKS" == "1" ]]; then
-  if [[ "$CDP_LAUNCHED" == "1" ]]; then
-    cdp_timeout="$WAIT_TIMEOUT_SECS"
-    if ((cdp_timeout > 180)); then cdp_timeout=180; fi
-    if try_wait_cdp_ready "$DEBUG_PORT" "$cdp_timeout"; then
-      log "UI clicks: CDP mode"
-      node "$UI_CLICK_SCRIPT" --cdp-url "$CDP_BASE_URL" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "desktop-reinstall"
-    else
-      log "CDP unavailable after ${cdp_timeout}s (last error: ${CDP_LAST_ERROR:-unknown}); running UI clicks in web mode"
-      dump_cdp_diag "$DEBUG_PORT"
-      node "$UI_CLICK_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "desktop-reinstall"
-    fi
-  else
-    log "UI clicks: web mode (CDP not launched)"
-    node "$UI_CLICK_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "desktop-reinstall"
+  [[ "$CDP_LAUNCHED" == "1" && -n "${DEBUG_PORT:-}" ]] || fail "UI clicks requested but CDP was not launched"
+
+  cdp_timeout="$WAIT_TIMEOUT_SECS"
+  if ((cdp_timeout > 180)); then cdp_timeout=180; fi
+
+  if ! try_wait_cdp_ready "$DEBUG_PORT" "$cdp_timeout"; then
+    dump_cdp_diag "$DEBUG_PORT"
+    fail "CDP endpoint not ready within ${cdp_timeout}s (last error: ${CDP_LAST_ERROR:-unknown})"
   fi
+
+  log "UI clicks: CDP mode"
+  node "$UI_CLICK_SCRIPT" --cdp-url "$CDP_BASE_URL" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "desktop-reinstall"
 fi
 OPENCODE_PORT_LAST="$(read_health_field "$RUN_BASE_URL" "openCodePort" || true)"
 stop_app
