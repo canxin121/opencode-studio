@@ -13,6 +13,7 @@ KEEP_FILES="0"
 UI_CLICKS="0"
 USE_CEF="0"
 APP_MAIN_PID=""
+APP_LAUNCH_LOG_PATH=""
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 USAGE_SMOKE_SCRIPT="$SCRIPT_DIR/studio-usage-smoke.sh"
@@ -353,6 +354,14 @@ wait_for_health_up() {
   return 1
 }
 
+clear_cef_cache() {
+  local cef_cache_dir="$HOME/Library/Caches/cn.cxits.opencode-studio/cef"
+  if [[ -d "$cef_cache_dir" ]]; then
+    log "Clearing CEF cache: $cef_cache_dir"
+    rm -rf "$cef_cache_dir" >/dev/null 2>&1 || true
+  fi
+}
+
 activate_app() {
   # Best-effort: bring the app to the foreground so the webview is created.
   osascript \
@@ -374,6 +383,9 @@ launch_with_cdp_and_usage_smoke() {
     RUN_BASE_URL="$BASE_URL"
     STUDIO_PORT_LAST="$PORT"
     CDP_LAUNCHED="1"
+
+    APP_LAUNCH_LOG_PATH="$HOME/Library/Logs/cn.cxits.opencode-studio/desktop-e2e-${label}-attempt${attempt}-cdp${DEBUG_PORT}-$(date '+%Y%m%d-%H%M%S').log"
+    clear_cef_cache
 
     log "[$label] Launch attempt ${attempt}/${max_attempts} (CDP port: $DEBUG_PORT)"
     start_app \
@@ -529,7 +541,13 @@ start_app() {
 
     if [[ -n "${bin:-}" && -f "$bin" && -x "$bin" ]]; then
       log "Launching app binary: $bin"
-      "$bin" "$@" >/dev/null 2>&1 &
+      if [[ -n "${APP_LAUNCH_LOG_PATH:-}" ]]; then
+        mkdir -p "$(dirname "$APP_LAUNCH_LOG_PATH")" >/dev/null 2>&1 || true
+        log "App launch log: $APP_LAUNCH_LOG_PATH"
+        "$bin" "$@" >"$APP_LAUNCH_LOG_PATH" 2>&1 &
+      else
+        "$bin" "$@" >/dev/null 2>&1 &
+      fi
       APP_MAIN_PID="$!"
       return 0
     fi
