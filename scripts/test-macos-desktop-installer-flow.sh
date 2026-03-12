@@ -337,6 +337,87 @@ else:
 PY
 }
 
+wait_for_health_up() {
+  local base_url="$1"
+  local timeout_secs="$2"
+  local elapsed=0
+
+  while ((elapsed < timeout_secs)); do
+    if curl -fsS --max-time 2 "$base_url/health" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+    elapsed=$((elapsed + 1))
+  done
+  return 1
+}
+
+launch_with_cdp_and_usage_smoke() {
+  local label="$1"
+  local attempt=1
+  local max_attempts=3
+  local cdp_timeout="$WAIT_TIMEOUT_SECS"
+  local health_timeout="$WAIT_TIMEOUT_SECS"
+
+  if ((cdp_timeout > 60)); then cdp_timeout=60; fi
+  if ((health_timeout > 120)); then health_timeout=120; fi
+
+  while ((attempt <= max_attempts)); do
+    DEBUG_PORT="$(pick_free_port)"
+    CDP_BASE_URL=""
+    RUN_BASE_URL="$BASE_URL"
+    STUDIO_PORT_LAST="$PORT"
+    CDP_LAUNCHED="1"
+
+    log "[$label] Launch attempt ${attempt}/${max_attempts} (CDP port: $DEBUG_PORT)"
+    start_app "$APP_PATH" "--remote-debugging-port=${DEBUG_PORT}" "--remote-debugging-address=127.0.0.1" "--remote-allow-origins=*"
+
+    if ! try_wait_cdp_ready "$DEBUG_PORT" "$cdp_timeout"; then
+      log "[$label] CDP not ready within ${cdp_timeout}s (last error: ${CDP_LAST_ERROR:-unknown})"
+      dump_cdp_diag "$DEBUG_PORT"
+      stop_app || true
+      assert_port_free "$DEBUG_PORT" "$WAIT_TIMEOUT_SECS" || true
+      attempt=$((attempt + 1))
+      continue
+    fi
+
+    local detected=""
+    detected="$(wait_base_url_from_cdp "$CDP_BASE_URL" 10 2>/dev/null || true)"
+    if [[ -n "${detected:-}" ]]; then
+      RUN_BASE_URL="$detected"
+      log "[$label] Detected base URL via CDP: $RUN_BASE_URL"
+    else
+      log "[$label] CDP base URL detection unavailable; using configured base URL: $RUN_BASE_URL"
+    fi
+    STUDIO_PORT_LAST="$(port_from_base_url "$RUN_BASE_URL")"
+
+    if ! wait_for_health_up "$RUN_BASE_URL" "$health_timeout"; then
+      log "[$label] Backend not reachable: $RUN_BASE_URL/health (waited ${health_timeout}s)"
+      dump_port_diag "$STUDIO_PORT_LAST"
+      dump_cdp_diag "$DEBUG_PORT"
+      stop_app || true
+      assert_port_free "$STUDIO_PORT_LAST" "$WAIT_TIMEOUT_SECS" || true
+      assert_port_free "$DEBUG_PORT" "$WAIT_TIMEOUT_SECS" || true
+      attempt=$((attempt + 1))
+      continue
+    fi
+
+    log "[$label] Running usage smoke"
+    if bash "$USAGE_SMOKE_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --require-ui; then
+      return 0
+    fi
+
+    log "[$label] Usage smoke failed; retrying launch"
+    dump_desktop_support_dirs "Usage smoke failed ($label)"
+    stop_app || true
+    assert_port_free "$STUDIO_PORT_LAST" "$WAIT_TIMEOUT_SECS" || true
+    assert_port_free "$DEBUG_PORT" "$WAIT_TIMEOUT_SECS" || true
+    attempt=$((attempt + 1))
+  done
+
+  return 1
+}
+
 download_release_asset() {
   local tag="$1"
   local asset_name="$2"
@@ -595,40 +676,16 @@ CDP_BASE_URL=""
 RUN_BASE_URL="$BASE_URL"
 STUDIO_PORT_LAST="$PORT"
 CDP_LAUNCHED="0"
-  if [[ "$UI_CLICKS" == "1" && "$USE_CEF" == "1" ]]; then
-    DEBUG_PORT="$(pick_free_port)"
-    log "Using CDP debug port: $DEBUG_PORT"
-    start_app "$APP_PATH" "--remote-debugging-port=${DEBUG_PORT}" "--remote-debugging-address=127.0.0.1" "--remote-allow-origins=*"
-    CDP_LAUNCHED="1"
-  else
-    start_app "$APP_PATH"
-  fi
-
-log "Base URL: $RUN_BASE_URL"
-STUDIO_PORT_LAST="$(port_from_base_url "$RUN_BASE_URL")"
-
-SMOKE_OK="0"
-if bash "$USAGE_SMOKE_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --require-ui; then
-  SMOKE_OK="1"
-fi
-
-if [[ "$SMOKE_OK" != "1" ]]; then
-  fail "Usage smoke failed"
-fi
 
 if [[ "$UI_CLICKS" == "1" ]]; then
-  [[ "$CDP_LAUNCHED" == "1" && -n "${DEBUG_PORT:-}" ]] || fail "UI clicks requested but CDP was not launched"
-
-  cdp_timeout="$WAIT_TIMEOUT_SECS"
-  if ((cdp_timeout > 180)); then cdp_timeout=180; fi
-
-  if ! try_wait_cdp_ready "$DEBUG_PORT" "$cdp_timeout"; then
-    dump_cdp_diag "$DEBUG_PORT"
-    fail "CDP endpoint not ready within ${cdp_timeout}s (last error: ${CDP_LAST_ERROR:-unknown})"
-  fi
-
+  launch_with_cdp_and_usage_smoke "desktop-install" || fail "Usage smoke failed"
   log "UI clicks: CDP mode"
   node "$UI_CLICK_SCRIPT" --cdp-url "$CDP_BASE_URL" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "desktop-install"
+else
+  start_app "$APP_PATH"
+  log "Base URL: $RUN_BASE_URL"
+  STUDIO_PORT_LAST="$(port_from_base_url "$RUN_BASE_URL")"
+  bash "$USAGE_SMOKE_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --require-ui || fail "Usage smoke failed"
 fi
 OPENCODE_PORT_LAST="$(read_health_field "$RUN_BASE_URL" "openCodePort" || true)"
 if [[ -n "$OPENCODE_PORT_LAST" ]]; then
@@ -656,40 +713,16 @@ CDP_BASE_URL=""
 RUN_BASE_URL="$BASE_URL"
 STUDIO_PORT_LAST="$PORT"
 CDP_LAUNCHED="0"
-if [[ "$UI_CLICKS" == "1" ]]; then
-  DEBUG_PORT="$(pick_free_port)"
-  log "Using CDP debug port: $DEBUG_PORT"
-  start_app "$APP_PATH" "--remote-debugging-port=${DEBUG_PORT}" "--remote-debugging-address=127.0.0.1" "--remote-allow-origins=*"
-  CDP_LAUNCHED="1"
-else
-  start_app "$APP_PATH"
-fi
-
-log "Base URL: $RUN_BASE_URL"
-STUDIO_PORT_LAST="$(port_from_base_url "$RUN_BASE_URL")"
-
-SMOKE_OK="0"
-if bash "$USAGE_SMOKE_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --require-ui; then
-  SMOKE_OK="1"
-fi
-
-if [[ "$SMOKE_OK" != "1" ]]; then
-  fail "Usage smoke failed"
-fi
 
 if [[ "$UI_CLICKS" == "1" ]]; then
-  [[ "$CDP_LAUNCHED" == "1" && -n "${DEBUG_PORT:-}" ]] || fail "UI clicks requested but CDP was not launched"
-
-  cdp_timeout="$WAIT_TIMEOUT_SECS"
-  if ((cdp_timeout > 180)); then cdp_timeout=180; fi
-
-  if ! try_wait_cdp_ready "$DEBUG_PORT" "$cdp_timeout"; then
-    dump_cdp_diag "$DEBUG_PORT"
-    fail "CDP endpoint not ready within ${cdp_timeout}s (last error: ${CDP_LAST_ERROR:-unknown})"
-  fi
-
+  launch_with_cdp_and_usage_smoke "desktop-upgrade" || fail "Usage smoke failed"
   log "UI clicks: CDP mode"
   node "$UI_CLICK_SCRIPT" --cdp-url "$CDP_BASE_URL" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "desktop-upgrade"
+else
+  start_app "$APP_PATH"
+  log "Base URL: $RUN_BASE_URL"
+  STUDIO_PORT_LAST="$(port_from_base_url "$RUN_BASE_URL")"
+  bash "$USAGE_SMOKE_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --require-ui || fail "Usage smoke failed"
 fi
 OPENCODE_PORT_LAST="$(read_health_field "$RUN_BASE_URL" "openCodePort" || true)"
 stop_app
@@ -716,40 +749,16 @@ CDP_BASE_URL=""
 RUN_BASE_URL="$BASE_URL"
 STUDIO_PORT_LAST="$PORT"
 CDP_LAUNCHED="0"
-if [[ "$UI_CLICKS" == "1" && "$USE_CEF" == "1" ]]; then
-  DEBUG_PORT="$(pick_free_port)"
-  log "Using CDP debug port: $DEBUG_PORT"
-  start_app "$APP_PATH" "--remote-debugging-port=${DEBUG_PORT}" "--remote-debugging-address=127.0.0.1" "--remote-allow-origins=*"
-  CDP_LAUNCHED="1"
-else
-  start_app "$APP_PATH"
-fi
-
-log "Base URL: $RUN_BASE_URL"
-STUDIO_PORT_LAST="$(port_from_base_url "$RUN_BASE_URL")"
-
-SMOKE_OK="0"
-if bash "$USAGE_SMOKE_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --require-ui; then
-  SMOKE_OK="1"
-fi
-
-if [[ "$SMOKE_OK" != "1" ]]; then
-  fail "Usage smoke failed"
-fi
 
 if [[ "$UI_CLICKS" == "1" ]]; then
-  [[ "$CDP_LAUNCHED" == "1" && -n "${DEBUG_PORT:-}" ]] || fail "UI clicks requested but CDP was not launched"
-
-  cdp_timeout="$WAIT_TIMEOUT_SECS"
-  if ((cdp_timeout > 180)); then cdp_timeout=180; fi
-
-  if ! try_wait_cdp_ready "$DEBUG_PORT" "$cdp_timeout"; then
-    dump_cdp_diag "$DEBUG_PORT"
-    fail "CDP endpoint not ready within ${cdp_timeout}s (last error: ${CDP_LAST_ERROR:-unknown})"
-  fi
-
+  launch_with_cdp_and_usage_smoke "desktop-reinstall" || fail "Usage smoke failed"
   log "UI clicks: CDP mode"
   node "$UI_CLICK_SCRIPT" --cdp-url "$CDP_BASE_URL" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --label "desktop-reinstall"
+else
+  start_app "$APP_PATH"
+  log "Base URL: $RUN_BASE_URL"
+  STUDIO_PORT_LAST="$(port_from_base_url "$RUN_BASE_URL")"
+  bash "$USAGE_SMOKE_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --require-ui || fail "Usage smoke failed"
 fi
 OPENCODE_PORT_LAST="$(read_health_field "$RUN_BASE_URL" "openCodePort" || true)"
 stop_app

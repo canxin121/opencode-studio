@@ -576,20 +576,20 @@ async function main() {
       // Make sure we only pick a *session* row (directory rows do not have a "Delete session" action).
       const sessionRow = 'button:has(button[aria-label="Delete session"])'
 
-      const highlighted = sidebar
-        .locator(`${sessionRow}[class*="ring-primary/40"][class*="ring-inset"]`)
-        .first()
-      try {
-        await highlighted.waitFor({ timeout: 5000 })
-        return highlighted
-      } catch {
-        // continue
-      }
-
       const selected = sidebar.locator(`${sessionRow}[class*="bg-primary/12"]`).first()
       try {
         await selected.waitFor({ timeout: 3000 })
         return selected
+      } catch {
+        // continue
+      }
+
+      const highlighted = sidebar
+        .locator(`${sessionRow}[class*="ring-primary/40"][class*="ring-inset"]`)
+        .first()
+      try {
+        await highlighted.waitFor({ timeout: 3000 })
+        return highlighted
       } catch {
         // continue
       }
@@ -623,20 +623,35 @@ async function main() {
 
     await log('Delete located session via sidebar UI')
     const deleteClickTimeoutMs = Math.min(20000, timeoutMs)
-    const deleteBtn = rowForDelete.locator('button[aria-label="Delete session"]').first()
+
+    async function resolveDeleteRow() {
+      const row = await findDeletableSessionRow()
+      if (!row) return null
+      // Make sure it's in view so hover reveals actions.
+      await row.scrollIntoViewIfNeeded().catch(() => {})
+      return row
+    }
+
+    async function clickDeleteIconOnce() {
+      const row = await resolveDeleteRow()
+      if (!row) {
+        throw new Error('unable to resolve deletable session row')
+      }
+      const deleteBtn = row.locator('button[aria-label="Delete session"]').first()
+      await dismissToastsOnce().catch(() => {})
+      await row.hover({ timeout: 5000 }).catch(() => {})
+      await deleteBtn.click({ timeout: deleteClickTimeoutMs, force: true })
+      return row
+    }
 
     let didOpenDeleteConfirm = false
     try {
-      await dismissToastsOnce().catch(() => {})
-      await rowForDelete.hover({ timeout: 5000 }).catch(() => {})
-      await deleteBtn.click({ timeout: deleteClickTimeoutMs, force: true })
+      rowForDelete = await clickDeleteIconOnce()
       didOpenDeleteConfirm = true
     } catch (err) {
-      await log('Delete click failed; retrying hover + force click:', err)
+      await log('Delete click failed; retrying resolve + hover + force click:', err)
       try {
-        await dismissToastsOnce().catch(() => {})
-        await rowForDelete.hover({ timeout: 5000 }).catch(() => {})
-        await deleteBtn.click({ timeout: deleteClickTimeoutMs, force: true })
+        rowForDelete = await clickDeleteIconOnce()
         didOpenDeleteConfirm = true
       } catch (err2) {
         await log('Delete click still failed; attempting Session Actions menu fallback:', err2)
@@ -646,7 +661,10 @@ async function main() {
     if (!didOpenDeleteConfirm) {
       // Fallback: open the row overflow action menu and choose "Delete session".
       try {
+        rowForDelete = (await resolveDeleteRow()) || rowForDelete
         const actionsBtn = rowForDelete.getByRole('button', { name: 'Session Actions' }).first()
+        await dismissToastsOnce().catch(() => {})
+        await rowForDelete.hover({ timeout: 5000 }).catch(() => {})
         await actionsBtn.click({ timeout: 8000, force: true })
         try {
           await page.getByRole('menuitem', { name: 'Delete session' }).first().click({ timeout: 8000 })
