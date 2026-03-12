@@ -286,7 +286,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-15-intel
+          - os: macos-latest
             platform: macos
           - os: windows-latest
             platform: windows
@@ -331,8 +331,7 @@ jobs:
             --repo "${{ needs.resolve-versions.outputs.repo }}" \
             --version "${{ needs.resolve-versions.outputs.previous }}" \
             --upgrade-to-version "${{ needs.resolve-versions.outputs.latest }}" \
-            --wait-timeout "${{ needs.resolve-versions.outputs.wait_timeout_seconds }}" \
-            --ui-clicks
+            --wait-timeout "${{ needs.resolve-versions.outputs.wait_timeout_seconds }}"
 
       - name: Run Windows desktop installer flow
         if: runner.os == 'Windows'

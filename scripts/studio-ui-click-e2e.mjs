@@ -553,7 +553,23 @@ async function main() {
     // Prefer the locate/highlight flow, but fall back to the selected session row.
     const locateBtn = page.getByRole('button', { name: 'Locate current session in sidebar' })
     await log('Locate current session in sidebar')
-    await locateBtn.click()
+    const locateClickTimeoutMs = Math.min(15000, timeoutMs)
+    try {
+      await dismissToastsOnce().catch(() => {})
+      await locateBtn.click({ timeout: locateClickTimeoutMs })
+    } catch (err) {
+      await log('Locate click failed; attempting toast dismiss + force click (continuing):', err)
+      try {
+        await dismissToastsOnce()
+      } catch {
+        // ignore
+      }
+      try {
+        await locateBtn.click({ timeout: locateClickTimeoutMs, force: true })
+      } catch (err2) {
+        await log('Locate force click failed (continuing):', err2)
+      }
+    }
 
     async function findDeletableSessionRow() {
       const highlighted = sidebar.locator('button[class*="ring-primary/40"][class*="ring-inset"]').first()
