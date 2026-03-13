@@ -125,6 +125,10 @@ try_wait_cdp_ready() {
   CDP_LAST_ERROR=""
 
   while ((SECONDS < end)); do
+    if [[ -n "${APP_MAIN_PID:-}" ]] && ! kill -0 "$APP_MAIN_PID" >/dev/null 2>&1; then
+      last_err="app exited (pid ${APP_MAIN_PID})"
+      break
+    fi
     for host in 127.0.0.1 localhost "[::1]"; do
       url="http://${host}:${port}/json/version"
       base="http://${host}:${port}"
@@ -462,9 +466,11 @@ collect_diagnostic_reports() {
 
 activate_app() {
   # Best-effort: bring the app to the foreground so the webview is created.
+  # Guarded: do not re-launch the app via LaunchServices (that would drop the
+  # CDP flags we passed on the command line).
   osascript \
     -e 'with timeout of 5 seconds' \
-    -e 'tell application "OpenCode Studio" to activate' \
+    -e 'if application "OpenCode Studio" is running then tell application "OpenCode Studio" to activate' \
     -e 'end timeout' >/dev/null 2>&1 || true
 }
 
@@ -489,14 +495,29 @@ launch_with_cdp_and_usage_smoke() {
     cleanup_chromium_singletons
 
     log "[$label] Launch attempt ${attempt}/${max_attempts} (CDP port: $DEBUG_PORT)"
-    # Avoid macOS Keychain prompts/hangs during Chromium/CEF init on CI.
     start_app \
       "$APP_PATH" \
       "--remote-debugging-port=${DEBUG_PORT}" \
       "--remote-debugging-address=127.0.0.1" \
       --remote-allow-origins=* \
-      --use-mock-keychain \
+      --password-store=basic \
       "--user-data-dir=${chromium_user_data_dir}"
+
+    # Fail fast if the launched process exits immediately (otherwise we can end up
+    # waiting for CDP while a separate LaunchServices-started instance runs without flags).
+    if [[ -n "${APP_MAIN_PID:-}" ]]; then
+      sleep 1
+      if ! kill -0 "$APP_MAIN_PID" >/dev/null 2>&1; then
+        log "[$label] App process exited early (pid: $APP_MAIN_PID)"
+        if [[ -n "${APP_LAUNCH_LOG_PATH:-}" && -f "$APP_LAUNCH_LOG_PATH" ]]; then
+          log "App launch log (last 120 lines): $APP_LAUNCH_LOG_PATH"
+          tail -n 120 "$APP_LAUNCH_LOG_PATH" || true
+        fi
+        stop_app || true
+        attempt=$((attempt + 1))
+        continue
+      fi
+    fi
 
     activate_app
 
