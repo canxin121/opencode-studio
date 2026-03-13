@@ -53,6 +53,8 @@ if ! command -v opencode >/dev/null 2>&1; then
 fi
 OPENCODE_BIN="$(command -v opencode)"
 OPENCODE_BIN_DIR="$(dirname "$OPENCODE_BIN")"
+SERVICE_USER="$(id -un)"
+SERVICE_GROUP="$(id -gn)"
 
 if ! [[ "$PORT" =~ ^[0-9]+$ ]] || ((PORT < 1 || PORT > 65535)); then
   echo "Invalid --port '$PORT'. Expected 1-65535." >&2
@@ -153,8 +155,128 @@ build_launchd_path() {
   printf '%s' "$out"
 }
 
+macos_launchctl_domains() {
+  local uid
+  uid="$(id -u)"
+  printf 'gui/%s\n' "$uid"
+  printf 'user/%s\n' "$uid"
+}
+
+macos_launchctl_detect_loaded_domain() {
+  local label="$1"
+  local domain=""
+
+  while IFS= read -r domain; do
+    [[ -n "$domain" ]] || continue
+    if launchctl print "$domain/$label" >/dev/null 2>&1; then
+      printf '%s\n' "$domain"
+      return 0
+    fi
+  done < <(macos_launchctl_domains)
+
+  return 1
+}
+
+macos_launchctl_bootout_existing() {
+  local label="$1"
+  local plist="$2"
+  local domain=""
+
+  while IFS= read -r domain; do
+    [[ -n "$domain" ]] || continue
+    launchctl disable "$domain/$label" >/dev/null 2>&1 || true
+    launchctl bootout "$domain/$label" >/dev/null 2>&1 || true
+    launchctl bootout "$domain" "$plist" >/dev/null 2>&1 || true
+  done < <(macos_launchctl_domains)
+}
+
+macos_launchctl_enable_known_domains() {
+  local label="$1"
+  local domain=""
+
+  while IFS= read -r domain; do
+    [[ -n "$domain" ]] || continue
+    launchctl enable "$domain/$label" >/dev/null 2>&1 || true
+  done < <(macos_launchctl_domains)
+}
+
+macos_launchctl_bootstrap() {
+  local plist="$1"
+  local domain=""
+  local last_err=""
+
+  while IFS= read -r domain; do
+    [[ -n "$domain" ]] || continue
+    if out="$(launchctl bootstrap "$domain" "$plist" 2>&1)"; then
+      printf '%s\n' "$domain"
+      return 0
+    fi
+    last_err="$out"
+  done < <(macos_launchctl_domains)
+
+  if [[ -n "$last_err" ]]; then
+    echo "launchctl bootstrap failed: $last_err" >&2
+  fi
+  return 1
+}
+
+macos_launchctl_wait_absent() {
+  local label="$1"
+  local timeout_secs="${2:-20}"
+  local elapsed=0
+  local domain=""
+
+  while ((elapsed < timeout_secs)); do
+    local present="0"
+    while IFS= read -r domain; do
+      [[ -n "$domain" ]] || continue
+      if launchctl print "$domain/$label" >/dev/null 2>&1; then
+        present="1"
+        break
+      fi
+    done < <(macos_launchctl_domains)
+
+    if [[ "$present" == "0" ]] && ! launchctl list 2>/dev/null | grep -q "$label"; then
+      return 0
+    fi
+
+    sleep 1
+    elapsed=$((elapsed + 1))
+  done
+
+  return 1
+}
+
+macos_launchctl_kickstart_label() {
+  local label="$1"
+  local domain=""
+
+  while IFS= read -r domain; do
+    [[ -n "$domain" ]] || continue
+    launchctl enable "$domain/$label" >/dev/null 2>&1 || true
+    if launchctl kickstart -k "$domain/$label" >/dev/null 2>&1; then
+      printf '%s\n' "$domain"
+      return 0
+    fi
+  done < <(macos_launchctl_domains)
+
+  if launchctl start "$label" >/dev/null 2>&1; then
+    printf '%s\n' "legacy"
+    return 0
+  fi
+  return 1
+}
+
 OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
-ARCH="$(uname -m)"
+normalize_arch() {
+  local arch="$1"
+  case "$arch" in
+    amd64) printf 'x86_64' ;;
+    armv8*|arm64v8) printf 'aarch64' ;;
+    *) printf '%s' "$arch" ;;
+  esac
+}
+ARCH="$(normalize_arch "$(uname -m)")"
 
 linux_libc_family() {
   if ! command -v ldd >/dev/null 2>&1; then
@@ -173,7 +295,7 @@ linux_libc_family() {
 
 backend_target_candidates() {
   case "${OS}/${ARCH}" in
-    linux/x86_64)
+    linux/x86_64|linux/amd64)
       if [[ "$(linux_libc_family)" == "musl" ]]; then
         printf '%s\n' "x86_64-unknown-linux-musl" "x86_64-unknown-linux-gnu"
       else
@@ -201,7 +323,7 @@ backend_target_candidates() {
         printf '%s\n' "i686-unknown-linux-gnu" "i686-unknown-linux-musl"
       fi
       ;;
-    darwin/x86_64)
+    darwin/x86_64|darwin/amd64)
       printf '%s\n' "x86_64-apple-darwin"
       ;;
     darwin/arm64|darwin/aarch64)
@@ -209,6 +331,9 @@ backend_target_candidates() {
       ;;
     *)
       echo "Unsupported platform: ${OS}/${ARCH}" >&2
+      echo "Supported platforms/arches:" >&2
+      echo "  - linux: x86_64, aarch64/arm64, armv7l/armv7, i686/i386" >&2
+      echo "  - macos: x86_64, arm64" >&2
       echo "Set up a manual install from GitHub Releases for your target." >&2
       exit 1
       ;;
@@ -237,7 +362,11 @@ mkdir -p "$INSTALL_DIR" "$BIN_DIR"
 
 fetch_release_json() {
   local url
-  local curl_args=(-fsSL -H "User-Agent: opencode-studio-installer")
+  local curl_args=(
+    -sS
+    -H "User-Agent: opencode-studio-installer"
+    -H "Accept: application/vnd.github+json"
+  )
 
   if [[ -n "${GITHUB_TOKEN:-}" ]]; then
     curl_args+=( -H "Authorization: Bearer ${GITHUB_TOKEN}" )
@@ -246,11 +375,70 @@ fetch_release_json() {
   fi
 
   if [[ -n "$VERSION" ]]; then
-    url="https://api.github.com/repos/${REPO}/releases/tags/${VERSION}"
+    local tag="$VERSION"
+    if ! [[ "$tag" =~ ^[A-Za-z0-9._-]+$ ]]; then
+      need python3
+      tag="$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$tag")"
+    fi
+    url="https://api.github.com/repos/${REPO}/releases/tags/${tag}"
   else
     url="https://api.github.com/repos/${REPO}/releases/latest"
   fi
-  curl "${curl_args[@]}" "$url"
+
+  local body
+  body="$(mktemp)"
+  local code=""
+  code="$(curl "${curl_args[@]}" -o "$body" -w '%{http_code}' "$url" || true)"
+  if [[ "$code" != "200" ]]; then
+    local msg=""
+    if command -v jq >/dev/null 2>&1; then
+      msg="$(jq -r '.message? // empty' <"$body" 2>/dev/null || true)"
+    elif command -v python3 >/dev/null 2>&1; then
+      msg="$(python3 - <<'PY' <"$body" 2>/dev/null || true
+import json,sys
+try:
+  j=json.load(sys.stdin)
+except Exception:
+  j={}
+print(j.get('message',''))
+PY
+      )"
+    fi
+
+    echo "GitHub API request failed ($code): $url" >&2
+    if [[ -n "$msg" ]]; then
+      echo "GitHub API message: $msg" >&2
+    fi
+    if [[ "$code" == "403" || "$code" == "429" ]]; then
+      echo "Tip: set GITHUB_TOKEN (or GH_TOKEN) to avoid rate limits." >&2
+    fi
+    if [[ "$code" == "404" && -n "$VERSION" ]]; then
+      echo "Tip: verify the release tag exists and is published: ${VERSION}" >&2
+    fi
+    rm -f "$body"
+    exit 1
+  fi
+
+  cat "$body"
+  rm -f "$body"
+}
+
+list_release_assets() {
+  local json="$1"
+  if command -v jq >/dev/null 2>&1; then
+    jq -r '.assets[]?.name' <<<"$json" 2>/dev/null || true
+    return 0
+  fi
+
+  need python3
+  python3 - <<'PY' <<<"$json" 2>/dev/null || true
+import json,sys
+j=json.loads(sys.stdin.read())
+for a in j.get('assets', []) or []:
+  n=a.get('name')
+  if n:
+    print(n)
+PY
 }
 
 asset_url_by_name() {
@@ -282,6 +470,11 @@ download_asset_by_name() {
   url="$(asset_url_by_name "$json" "$name")"
   if [[ -z "$url" || "$url" == "null" ]]; then
     echo "Asset not found in release: $name" >&2
+    echo "Available assets:" >&2
+    while IFS= read -r a; do
+      [[ -n "$a" ]] || continue
+      echo "  - $a" >&2
+    done < <(list_release_assets "$json")
     exit 1
   fi
 
@@ -309,6 +502,11 @@ download_first_asset_by_name() {
   for name in "$@"; do
     echo "  - $name" >&2
   done
+  echo "Available assets:" >&2
+  while IFS= read -r a; do
+    [[ -n "$a" ]] || continue
+    echo "  - $a" >&2
+  done < <(list_release_assets "$json")
   exit 1
 }
 
@@ -336,6 +534,12 @@ BACKEND_TAR="$TMP_DIR/opencode-studio-backend.tar.gz"
 BACKEND_ASSET_CANDIDATES=()
 for target in "${BACKEND_TARGETS[@]}"; do
   BACKEND_ASSET_CANDIDATES+=("opencode-studio-backend-${target}-${TAG_NAME}.tar.gz")
+done
+for target in "${BACKEND_TARGETS[@]}"; do
+  BACKEND_ASSET_CANDIDATES+=("opencode-studio-backend-${target}.tar.gz")
+done
+for target in "${BACKEND_TARGETS[@]}"; do
+  BACKEND_ASSET_CANDIDATES+=("opencode-studio-${target}-${TAG_NAME}.tar.gz")
 done
 for target in "${BACKEND_TARGETS[@]}"; do
   BACKEND_ASSET_CANDIDATES+=("opencode-studio-${target}.tar.gz")
@@ -397,6 +601,10 @@ After=network.target
 
 [Service]
 Type=simple
+User=$SERVICE_USER
+Group=$SERVICE_GROUP
+Environment="PATH=$OPENCODE_BIN_DIR:${PATH:-}"
+Environment="HOME=$HOME"
 ExecStart="$BIN_PATH" --config "$CONFIG_FILE"
 Restart=on-failure
 RestartSec=2
@@ -433,6 +641,7 @@ EOF
     echo "systemctl not found; installed binary but did not create a service." >&2
   fi
 elif [[ "$OS" == "darwin" ]]; then
+  LABEL="cn.cxits.opencode-studio"
   PLIST="$HOME/Library/LaunchAgents/cn.cxits.opencode-studio.plist"
   mkdir -p "$(dirname "$PLIST")"
   LAUNCHD_PATH="$(build_launchd_path "$OPENCODE_BIN_DIR" "${PATH:-}")"
@@ -468,9 +677,34 @@ elif [[ "$OS" == "darwin" ]]; then
 </plist>
 EOF
 
-  launchctl unload "$PLIST" >/dev/null 2>&1 || true
-  launchctl load "$PLIST"
-  echo "Service loaded. Use: launchctl list | grep opencode"
+  macos_launchctl_bootout_existing "$LABEL" "$PLIST"
+  macos_launchctl_wait_absent "$LABEL" 20 || true
+
+  macos_launchctl_enable_known_domains "$LABEL"
+  LAUNCH_DOMAIN="$(macos_launchctl_bootstrap "$PLIST" || true)"
+  if [[ -z "$LAUNCH_DOMAIN" ]]; then
+    echo "launchctl bootstrap failed; trying legacy load fallback"
+    launchctl load -w "$PLIST" >/dev/null 2>&1 || launchctl load "$PLIST"
+    macos_launchctl_enable_known_domains "$LABEL"
+    LAUNCH_DOMAIN="$(macos_launchctl_detect_loaded_domain "$LABEL" || true)"
+  fi
+
+  STARTED_DOMAIN="$(macos_launchctl_kickstart_label "$LABEL" || true)"
+  if [[ -n "$STARTED_DOMAIN" ]]; then
+    echo "Service kickstarted in domain: $STARTED_DOMAIN"
+  else
+    echo "Warning: launchctl kickstart/start failed for $LABEL" >&2
+    launchctl print "gui/$(id -u)/$LABEL" 2>/dev/null || true
+    launchctl print "user/$(id -u)/$LABEL" 2>/dev/null || true
+  fi
+
+  if [[ -n "$LAUNCH_DOMAIN" ]]; then
+    echo "Service loaded in domain: $LAUNCH_DOMAIN"
+  else
+    echo "Service loaded via legacy launchctl flow"
+  fi
+
+  echo "Use: launchctl print gui/$(id -u)/$LABEL"
   echo "Resolved OpenCode binary: $OPENCODE_BIN"
 fi
 

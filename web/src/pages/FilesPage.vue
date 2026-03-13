@@ -2,9 +2,11 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
+import { RiArrowLeftSLine } from '@remixicon/vue'
 import Button from '@/components/ui/Button.vue'
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import FormDialog from '@/components/ui/FormDialog.vue'
+import IconButton from '@/components/ui/IconButton.vue'
 import Input from '@/components/ui/Input.vue'
 import SearchInput from '@/components/ui/SearchInput.vue'
 import SegmentedButton from '@/components/ui/SegmentedButton.vue'
@@ -95,8 +97,17 @@ import { useChatStore } from '@/stores/chat'
 import { useSettingsStore } from '@/stores/settings'
 import type { Settings } from '@/stores/settings'
 import { useToastsStore } from '@/stores/toasts'
-import { useDirectoryStore, type FsChangeEvent } from '@/stores/directory'
+import { useDirectoryStore } from '@/stores/directory'
 import { useUiStore } from '@/stores/ui'
+
+const props = withDefaults(
+  defineProps<{
+    embedded?: boolean
+  }>(),
+  {
+    embedded: false,
+  },
+)
 
 const STORAGE_FILES_SHOW_HIDDEN = localStorageKeys.files.showHidden
 const STORAGE_FILES_RESPECT_GITIGNORE = localStorageKeys.files.respectGitignore
@@ -113,10 +124,6 @@ const FILE_CHUNK_BYTES = 256 * 1024
 const LARGE_FILE_WARNING_BYTES = 1024 * 1024
 const FILE_AUTO_REFRESH_INTERVAL_MS = 9_000
 const FILE_AUTO_REFRESH_EDIT_IDLE_MS = 4_500
-const FILE_TREE_BACKGROUND_SYNC_INTERVAL_MS = 12_000
-const FILE_TREE_BACKGROUND_SYNC_MIN_GAP_MS = 5_000
-const FILE_TREE_BACKGROUND_SYNC_DEBOUNCE_MS = 260
-const FILE_TREE_EVENT_SYNC_DEBOUNCE_MS = 140
 const HIDDEN_FILE_RELATIVE_PATHS = new Set(['web/src/data/directorySessionSnapshotDb.ts'])
 
 const chat = useChatStore()
@@ -132,6 +139,7 @@ const { t } = useI18n()
 const projectRoot = computed(() => directoryStore.currentDirectory || '')
 const root = computed(() => trimTrailingSlashes(normalizePath((projectRoot.value || '').trim())))
 const isMobile = computed(() => ui.isMobile)
+const embeddedView = ref<'list' | 'viewer'>(props.embedded ? 'list' : 'viewer')
 
 const showHidden = ref(localStorage.getItem(STORAGE_FILES_SHOW_HIDDEN) === 'true')
 const respectGitignore = ref(localStorage.getItem(STORAGE_FILES_RESPECT_GITIGNORE) !== 'false')
@@ -385,7 +393,10 @@ const wrapLines = ref(true)
 const isSaving = ref(false)
 const uploading = ref(false)
 const showMobileViewer = ref(false)
-const showFilesSidebar = computed(() => (isMobile.value ? ui.isSessionSwitcherOpen : ui.isSidebarOpen))
+const showFilesSidebar = computed(() => {
+  if (props.embedded) return embeddedView.value === 'list'
+  return isMobile.value ? ui.isSessionSwitcherOpen : ui.isSidebarOpen
+})
 
 const blameEnabled = ref(localStorage.getItem(STORAGE_FILES_VIEWER_BLAME_VISIBLE) === 'true')
 const timelineVisibilityPreference = ref(localStorage.getItem(STORAGE_FILES_VIEWER_TIMELINE_VISIBLE) === 'true')
@@ -439,19 +450,6 @@ let autoSaveTimer: number | null = null
 let fileAutoRefreshTimer: number | null = null
 let fileRefreshSeq = 0
 let lastDraftEditAt = 0
-let treeBackgroundSyncTimer: number | null = null
-let treeBackgroundSyncInterval: number | null = null
-let treeBackgroundSyncInFlight = false
-let treeBackgroundSyncQueued = false
-let lastTreeBackgroundSyncAt = 0
-let filePageVisibilityHandler: (() => void) | null = null
-let filePageFocusHandler: (() => void) | null = null
-let fsEventSyncTimer: number | null = null
-let fsEventSyncInFlight = false
-let fsEventSyncQueued = false
-let fsEventSyncForceRootRefresh = false
-const fsEventPendingPaths = new Set<string>()
-
 function clearAutoSaveTimer() {
   if (autoSaveTimer !== null) {
     window.clearTimeout(autoSaveTimer)
@@ -463,27 +461,6 @@ function clearFileAutoRefreshTimer() {
   if (fileAutoRefreshTimer !== null) {
     window.clearInterval(fileAutoRefreshTimer)
     fileAutoRefreshTimer = null
-  }
-}
-
-function clearTreeBackgroundSyncTimer() {
-  if (treeBackgroundSyncTimer !== null) {
-    window.clearTimeout(treeBackgroundSyncTimer)
-    treeBackgroundSyncTimer = null
-  }
-}
-
-function clearTreeBackgroundSyncInterval() {
-  if (treeBackgroundSyncInterval !== null) {
-    window.clearInterval(treeBackgroundSyncInterval)
-    treeBackgroundSyncInterval = null
-  }
-}
-
-function clearFsEventSyncTimer() {
-  if (fsEventSyncTimer !== null) {
-    window.clearTimeout(fsEventSyncTimer)
-    fsEventSyncTimer = null
   }
 }
 
@@ -653,10 +630,20 @@ watch(
   },
 )
 
+watch(
+  () => [props.embedded, selectedFile.value?.path] as const,
+  ([embedded, path]) => {
+    if (!embedded) return
+    embeddedView.value = path ? 'viewer' : 'list'
+  },
+  { immediate: true },
+)
+
 let rootRestoreSeq = 0
 let openFileSeq = 0
 let pageMounted = false
 const handledGitNavigationKey = ref('')
+const handledWorkspaceDockFileRequestSeq = ref(0)
 
 function isStaleRootRestore(seq: number, rootPath: string): boolean {
   return seq !== rootRestoreSeq || root.value !== rootPath
@@ -1125,6 +1112,17 @@ function parseGitNavigationAction(value: unknown): GitNavigationAction {
   return routeQueryValue(value) === 'reveal' ? 'reveal' : 'open'
 }
 
+function showEmbeddedFileList() {
+  if (!props.embedded) return
+  embeddedView.value = 'list'
+}
+
+function showEmbeddedFileViewer() {
+  if (!props.embedded) return
+  if (!selectedFile.value) return
+  embeddedView.value = 'viewer'
+}
+
 function resolveGitNavigationPath(rawPath: string, workspaceRoot: string): string {
   const normalized = normalizePath(String(rawPath || '').trim())
   if (!normalized) return ''
@@ -1170,8 +1168,17 @@ async function applyGitNavigationQuery() {
   if (handledGitNavigationKey.value === key) return
   handledGitNavigationKey.value = key
 
+  await applyGitNavigationTarget(gitPathRaw, action)
+  clearGitNavigationQuery()
+}
+
+async function applyGitNavigationTarget(rawPath: string, action: GitNavigationAction) {
+  const workspaceRoot = root.value
+  if (!workspaceRoot) return
+
+  const targetPath = resolveGitNavigationPath(rawPath, workspaceRoot)
+
   if (!targetPath || isPathHiddenInFiles(targetPath)) {
-    clearGitNavigationQuery()
     return
   }
 
@@ -1182,18 +1189,19 @@ async function applyGitNavigationQuery() {
 
   if (action === 'open') {
     await openFile(buildFileNode(targetPath))
-    clearGitNavigationQuery()
     return
   }
 
   selectOnlyPath(targetPath)
   highlightedPath.value = targetPath
   selectedDirectoryPath.value = normalizePath(targetPath.split('/').slice(0, -1).join('/')) || workspaceRoot
+  if (props.embedded) {
+    embeddedView.value = 'list'
+  }
   if (isMobile.value) {
     showMobileViewer.value = false
   }
   persistExplorerSoon()
-  clearGitNavigationQuery()
 }
 
 async function restoreSelectedFile(rootPath: string, seq: number) {
@@ -1653,160 +1661,6 @@ async function refreshRoot() {
     await loadDirectory(dir, { force: true })
     if (root.value !== rootPath) return
   }
-}
-
-function shouldRunTreeBackgroundSync(opts?: { force?: boolean }): boolean {
-  if (!pageMounted) return false
-  if (!root.value) return false
-  if (!opts?.force) {
-    if (document.visibilityState !== 'visible') return false
-    if (!showFilesSidebar.value) return false
-    if (explorerSidebarMode.value !== 'tree') return false
-    if (Date.now() - lastTreeBackgroundSyncAt < FILE_TREE_BACKGROUND_SYNC_MIN_GAP_MS) return false
-  }
-  if (uploading.value) return false
-  if (deletingPaths.value.size > 0) return false
-  if (inFlightDirs.value.size > 0) return false
-  if (dialogSubmitting.value || moveDialogSubmitting.value) return false
-  return true
-}
-
-async function runTreeBackgroundSync(opts?: { force?: boolean }) {
-  if (!shouldRunTreeBackgroundSync(opts)) return
-  if (treeBackgroundSyncInFlight) {
-    treeBackgroundSyncQueued = true
-    return
-  }
-
-  treeBackgroundSyncInFlight = true
-  try {
-    await refreshRoot()
-    lastTreeBackgroundSyncAt = Date.now()
-  } finally {
-    treeBackgroundSyncInFlight = false
-    if (treeBackgroundSyncQueued) {
-      treeBackgroundSyncQueued = false
-      scheduleTreeBackgroundSync(FILE_TREE_BACKGROUND_SYNC_DEBOUNCE_MS)
-    }
-  }
-}
-
-function scheduleTreeBackgroundSync(delayMs = FILE_TREE_BACKGROUND_SYNC_DEBOUNCE_MS, opts?: { force?: boolean }) {
-  if (!root.value) return
-  if (!opts?.force && Date.now() - lastTreeBackgroundSyncAt < FILE_TREE_BACKGROUND_SYNC_MIN_GAP_MS) {
-    return
-  }
-  clearTreeBackgroundSyncTimer()
-  treeBackgroundSyncTimer = window.setTimeout(
-    () => {
-      treeBackgroundSyncTimer = null
-      void runTreeBackgroundSync(opts)
-    },
-    Math.max(0, Math.floor(delayMs)),
-  )
-}
-
-function startTreeBackgroundSyncInterval() {
-  clearTreeBackgroundSyncInterval()
-  treeBackgroundSyncInterval = window.setInterval(() => {
-    scheduleTreeBackgroundSync(0)
-  }, FILE_TREE_BACKGROUND_SYNC_INTERVAL_MS)
-}
-
-function resetFsEventSyncState() {
-  clearFsEventSyncTimer()
-  fsEventSyncInFlight = false
-  fsEventSyncQueued = false
-  fsEventSyncForceRootRefresh = false
-  fsEventPendingPaths.clear()
-}
-
-function parentDirectoryPathForFsEvent(path: string, rootPath: string): string {
-  const normalized = trimTrailingSlashes(normalizePath(String(path || '').trim()))
-  if (!normalized) return rootPath
-  if (normalized === rootPath) return rootPath
-  const parent = trimTrailingSlashes(normalized.split('/').slice(0, -1).join('/'))
-  if (!parent) return rootPath
-  if (!withinWorkspace(parent, rootPath)) return rootPath
-  return parent
-}
-
-function queueFsEventPathRefresh(path: string, rootPath: string) {
-  const normalized = trimTrailingSlashes(normalizePath(String(path || '').trim()))
-  if (!normalized || !withinWorkspace(normalized, rootPath)) return
-  fsEventPendingPaths.add(parentDirectoryPathForFsEvent(normalized, rootPath))
-  if (loadedDirs.value.has(normalized)) {
-    fsEventPendingPaths.add(normalized)
-  }
-}
-
-function scheduleFsEventSync(delayMs = FILE_TREE_EVENT_SYNC_DEBOUNCE_MS) {
-  clearFsEventSyncTimer()
-  fsEventSyncTimer = window.setTimeout(
-    () => {
-      fsEventSyncTimer = null
-      void flushFsEventSyncQueue()
-    },
-    Math.max(0, Math.floor(delayMs)),
-  )
-}
-
-async function flushFsEventSyncQueue() {
-  if (fsEventSyncInFlight) {
-    fsEventSyncQueued = true
-    return
-  }
-
-  const workspaceRoot = root.value
-  if (!workspaceRoot) return
-
-  fsEventSyncInFlight = true
-  const forceRootRefresh = fsEventSyncForceRootRefresh
-  const targetDirectories = Array.from(fsEventPendingPaths)
-  fsEventSyncForceRootRefresh = false
-  fsEventPendingPaths.clear()
-
-  try {
-    if (forceRootRefresh || targetDirectories.length === 0) {
-      await refreshRoot()
-      return
-    }
-
-    for (const directoryPath of targetDirectories) {
-      if (root.value !== workspaceRoot) return
-      await loadDirectory(directoryPath, { force: true })
-    }
-  } finally {
-    fsEventSyncInFlight = false
-    if (fsEventSyncQueued) {
-      fsEventSyncQueued = false
-      scheduleFsEventSync(90)
-    }
-  }
-}
-
-function queueFsEventSync(event: FsChangeEvent) {
-  const workspaceRoot = root.value
-  if (!workspaceRoot) return
-
-  const eventRoot = trimTrailingSlashes(normalizePath(String(event.directory || '').trim()))
-  const workspacePaths = event.paths
-    .map((path) => trimTrailingSlashes(normalizePath(String(path || '').trim())))
-    .filter((path) => path && withinWorkspace(path, workspaceRoot))
-
-  if (workspacePaths.length === 0) {
-    if (event.truncated && eventRoot === workspaceRoot) {
-      fsEventSyncForceRootRefresh = true
-      scheduleFsEventSync(40)
-    }
-    return
-  }
-
-  for (const path of workspacePaths) {
-    queueFsEventPathRefresh(path, workspaceRoot)
-  }
-
-  scheduleFsEventSync()
 }
 
 function collapseAllDirectories() {
@@ -2570,6 +2424,9 @@ async function openFile(node: FileNode) {
   if (isMobile.value) {
     showMobileViewer.value = true
   }
+  if (props.embedded) {
+    showEmbeddedFileViewer()
+  }
 
   const previewMode = detectPreviewMode(node.path)
   if (previewMode === 'image' || previewMode === 'pdf' || previewMode === 'audio' || previewMode === 'video') {
@@ -3055,19 +2912,6 @@ watch(
 
 onMounted(() => {
   window.addEventListener('keydown', handleGlobalKeydown)
-  filePageVisibilityHandler = () => {
-    if (document.visibilityState === 'visible') {
-      scheduleTreeBackgroundSync(120, { force: true })
-    }
-  }
-  document.addEventListener('visibilitychange', filePageVisibilityHandler)
-  filePageFocusHandler = () => {
-    scheduleTreeBackgroundSync(80, { force: true })
-  }
-  window.addEventListener('focus', filePageFocusHandler)
-
-  startTreeBackgroundSyncInterval()
-  scheduleTreeBackgroundSync(FILE_TREE_BACKGROUND_SYNC_DEBOUNCE_MS, { force: true })
 
   if (autoSaveEnabled.value) {
     startFileAutoRefreshTimer()
@@ -3083,26 +2927,12 @@ onBeforeUnmount(() => {
   closeRefreshConflictDialog()
   clearAutoSaveTimer()
   clearFileAutoRefreshTimer()
-  clearTreeBackgroundSyncTimer()
-  clearTreeBackgroundSyncInterval()
-  resetFsEventSyncState()
-  treeBackgroundSyncInFlight = false
-  treeBackgroundSyncQueued = false
-  lastTreeBackgroundSyncAt = 0
   if (persistExplorerTimer !== null) {
     window.clearTimeout(persistExplorerTimer)
     persistExplorerTimer = null
   }
   persistExplorerNow()
   window.removeEventListener('keydown', handleGlobalKeydown)
-  if (filePageVisibilityHandler) {
-    document.removeEventListener('visibilitychange', filePageVisibilityHandler)
-    filePageVisibilityHandler = null
-  }
-  if (filePageFocusHandler) {
-    window.removeEventListener('focus', filePageFocusHandler)
-    filePageFocusHandler = null
-  }
 })
 
 function normalizeCreateDirectory(basePath: string): string {
@@ -3414,7 +3244,6 @@ async function restoreForRoot(next: string) {
   lastDraftEditAt = 0
 
   closeFileTimeline()
-  resetFsEventSyncState()
 
   selectedFile.value = null
   clearSelectedPaths()
@@ -3467,9 +3296,6 @@ async function restoreForRoot(next: string) {
   }
 
   await restoreSelectedFile(next, seq)
-  if (!isStaleRootRestore(seq, next)) {
-    scheduleTreeBackgroundSync(FILE_TREE_BACKGROUND_SYNC_DEBOUNCE_MS, { force: true })
-  }
 }
 
 watch(
@@ -3481,19 +3307,29 @@ watch(
 )
 
 watch(
-  () => directoryStore.fsEventSeq,
+  () => [root.value, route.query.gitPath, route.query.gitAction] as const,
   () => {
-    if (!pageMounted) return
-    const event = directoryStore.lastFsChangeEvent
-    if (!event) return
-    queueFsEventSync(event)
+    void applyGitNavigationQuery()
   },
 )
 
 watch(
-  () => [root.value, route.query.gitPath, route.query.gitAction] as const,
+  () => [root.value, ui.workspaceDockFileRequestSeq] as const,
   () => {
-    void applyGitNavigationQuery()
+    if (!props.embedded) return
+    if (!pageMounted) return
+
+    const requestSeq = Number(ui.workspaceDockFileRequestSeq || 0)
+    if (!Number.isFinite(requestSeq)) return
+    if (requestSeq <= handledWorkspaceDockFileRequestSeq.value) return
+    if (!root.value) return
+
+    handledWorkspaceDockFileRequestSeq.value = requestSeq
+    const request = ui.workspaceDockFileRequest
+    if (!request?.path) return
+
+    const action: GitNavigationAction = request.action === 'reveal' ? 'reveal' : 'open'
+    void applyGitNavigationTarget(request.path, action)
   },
 )
 
@@ -3550,6 +3386,15 @@ watch(
     }
   },
 )
+
+async function refresh() {
+  await refreshRoot()
+  await refreshCurrentFile({ source: 'manual', silent: true })
+}
+
+defineExpose({
+  refresh,
+})
 
 onMounted(async () => {
   pageMounted = true
@@ -3679,12 +3524,12 @@ onMounted(async () => {
           <div class="flex min-h-0 flex-1 gap-0" :class="isMobile ? 'flex-col' : ''">
             <div
               class="relative min-h-0 overflow-hidden m-0 p-0"
-              :class="isMobile ? 'flex-1' : 'flex-shrink-0'"
-              :style="isMobile ? undefined : { width: `${ui.sidebarWidth}px` }"
+              :class="isMobile || props.embedded ? 'flex-1' : 'flex-shrink-0'"
+              :style="isMobile || props.embedded ? undefined : { width: `${ui.sidebarWidth}px` }"
               v-show="showFilesSidebar"
             >
               <div
-                v-if="!isMobile"
+                v-if="!isMobile && !props.embedded"
                 class="absolute right-0 top-0 z-10 h-full w-1 cursor-col-resize hover:bg-primary/40"
                 @pointerdown="startDesktopSidebarResize"
               />
@@ -4004,7 +3849,25 @@ onMounted(async () => {
               </FilesExplorerPane>
             </div>
 
-            <div class="flex-1 min-h-0 overflow-hidden m-0 p-0" v-show="!isMobile || !ui.isSessionSwitcherOpen">
+            <div
+              class="flex-1 min-h-0 overflow-hidden m-0 p-0"
+              v-show="props.embedded ? embeddedView === 'viewer' : !isMobile || !ui.isSessionSwitcherOpen"
+            >
+              <div v-if="props.embedded" class="flex items-center gap-2 border-b border-sidebar-border/50 px-2 py-1.5">
+                <IconButton
+                  variant="ghost"
+                  size="sm"
+                  class="h-7 w-7"
+                  :tooltip="t('common.back')"
+                  :aria-label="t('common.back')"
+                  @click="showEmbeddedFileList"
+                >
+                  <RiArrowLeftSLine class="h-4 w-4" />
+                </IconButton>
+                <div class="truncate text-xs text-muted-foreground">
+                  {{ displaySelectedPath || t('files.explorer.title') }}
+                </div>
+              </div>
               <FileViewerPane
                 v-model:showMobileViewer="showMobileViewer"
                 v-model:autoSaveEnabled="autoSaveEnabled"
@@ -4064,7 +3927,7 @@ onMounted(async () => {
                 :refresh-timeline="refreshFileTimeline"
                 :select-timeline-commit="selectFileTimelineCommit"
                 :open-timeline="openFileTimeline"
-                :open-sidebar="() => ui.setSessionSwitcherOpen(true)"
+                :open-sidebar="props.embedded ? showEmbeddedFileList : () => ui.setSessionSwitcherOpen(true)"
                 :refresh-file="() => refreshCurrentFile({ source: 'manual' })"
                 :save="() => save()"
                 :confirm-large-file-load="confirmLargeFileLoad"

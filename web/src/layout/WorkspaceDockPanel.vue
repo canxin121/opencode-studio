@@ -1,8 +1,19 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { RiCloseLine, RiGitMergeLine, RiRefreshLine, RiTerminalBoxLine, RiGlobalLine } from '@remixicon/vue'
+import {
+  RiCloseLine,
+  RiFileList2Line,
+  RiFileTextLine,
+  RiGitMergeLine,
+  RiRefreshLine,
+  RiTerminalBoxLine,
+  RiGlobalLine,
+} from '@remixicon/vue'
 
+import ChatSessionChangesDockPanel from '@/components/chat/ChatSessionChangesDockPanel.vue'
+import FilesPage from '@/pages/FilesPage.vue'
 import GitPage from '@/pages/GitPage.vue'
 import { useUiStore } from '@/stores/ui'
 import IconButton from '@/components/ui/IconButton.vue'
@@ -11,22 +22,50 @@ import WorkspacePreviewDockPanel from '@/features/workspacePreview/components/Wo
 
 const { t } = useI18n()
 const ui = useUiStore()
+const route = useRoute()
 
 if (ui.workspaceDockPlacement !== 'right') {
   ui.setWorkspaceDockPlacement('right')
 }
 
+const changesDockRef = ref<{ refresh: () => Promise<void> | void } | null>(null)
+const filesDockRef = ref<{ refresh: () => Promise<void> | void } | null>(null)
 const gitDockRef = ref<{ refresh: () => Promise<void> | void } | null>(null)
 const terminalDockRef = ref<{ refresh: () => Promise<void> | void } | null>(null)
 const previewDockRef = ref<{ refresh: () => Promise<void> | void } | null>(null)
 
+const showChatChangesPanel = computed(() =>
+  String(route.path || '')
+    .trim()
+    .toLowerCase()
+    .startsWith('/chat'),
+)
+
+watch(
+  showChatChangesPanel,
+  (enabled) => {
+    if (!enabled && ui.workspaceDockPanel === 'changes') {
+      ui.setWorkspaceDockPanel('git')
+    }
+  },
+  { immediate: true },
+)
+
 function refreshActivePanel() {
-  if (ui.workspaceDockPanel === 'git') {
-    void gitDockRef.value?.refresh()
+  if (ui.workspaceDockPanel === 'changes') {
+    void changesDockRef.value?.refresh()
     return
   }
   if (ui.workspaceDockPanel === 'preview') {
     void previewDockRef.value?.refresh()
+    return
+  }
+  if (ui.workspaceDockPanel === 'git') {
+    void gitDockRef.value?.refresh()
+    return
+  }
+  if (ui.workspaceDockPanel === 'files') {
+    void filesDockRef.value?.refresh()
     return
   }
   void terminalDockRef.value?.refresh()
@@ -38,7 +77,21 @@ function refreshActivePanel() {
     <div class="flex h-full flex-col">
       <div class="border-b border-border/60 px-2 py-2">
         <div class="flex items-center justify-between gap-2">
-          <div class="flex items-center gap-1 rounded-md bg-background/70 p-1">
+          <div class="flex flex-wrap items-center gap-1 rounded-md bg-background/70 p-1">
+            <button
+              v-if="showChatChangesPanel"
+              type="button"
+              class="inline-flex items-center gap-1 rounded-sm px-2 py-1 text-xs font-medium transition-colors"
+              :class="
+                ui.workspaceDockPanel === 'changes'
+                  ? 'bg-secondary text-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              "
+              @click="ui.setWorkspaceDockPanel('changes')"
+            >
+              <RiFileList2Line class="h-3.5 w-3.5" />
+              {{ t('workspaceDock.changes.tab') }}
+            </button>
             <button
               type="button"
               class="inline-flex items-center gap-1 rounded-sm px-2 py-1 text-xs font-medium transition-colors"
@@ -64,6 +117,19 @@ function refreshActivePanel() {
             >
               <RiGitMergeLine class="h-3.5 w-3.5" />
               {{ t('workspaceDock.git.tab') }}
+            </button>
+            <button
+              type="button"
+              class="inline-flex items-center gap-1 rounded-sm px-2 py-1 text-xs font-medium transition-colors"
+              :class="
+                ui.workspaceDockPanel === 'files'
+                  ? 'bg-secondary text-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              "
+              @click="ui.setWorkspaceDockPanel('files')"
+            >
+              <RiFileTextLine class="h-3.5 w-3.5" />
+              {{ t('workspaceDock.files.tab') }}
             </button>
             <button
               type="button"
@@ -102,16 +168,28 @@ function refreshActivePanel() {
       </div>
 
       <Transition name="fade" mode="out-in">
-        <div v-if="ui.workspaceDockPanel === 'git'" key="git" class="min-h-0 flex-1 overflow-hidden">
+        <div
+          v-if="showChatChangesPanel && ui.workspaceDockPanel === 'changes'"
+          key="changes"
+          class="min-h-0 flex-1 overflow-hidden"
+        >
+          <ChatSessionChangesDockPanel ref="changesDockRef" />
+        </div>
+
+        <div v-else-if="ui.workspaceDockPanel === 'preview'" key="preview" class="min-h-0 flex-1 overflow-hidden">
+          <WorkspacePreviewDockPanel ref="previewDockRef" />
+        </div>
+
+        <div v-else-if="ui.workspaceDockPanel === 'git'" key="git" class="min-h-0 flex-1 overflow-hidden">
           <GitPage ref="gitDockRef" embedded />
         </div>
 
-        <div v-else-if="ui.workspaceDockPanel === 'terminal'" key="terminal" class="min-h-0 flex-1 overflow-hidden">
-          <TerminalDockPanel ref="terminalDockRef" />
+        <div v-else-if="ui.workspaceDockPanel === 'files'" key="files" class="min-h-0 flex-1 overflow-hidden">
+          <FilesPage ref="filesDockRef" embedded />
         </div>
 
-        <div v-else key="preview" class="min-h-0 flex-1 overflow-hidden">
-          <WorkspacePreviewDockPanel ref="previewDockRef" />
+        <div v-else key="terminal" class="min-h-0 flex-1 overflow-hidden">
+          <TerminalDockPanel ref="terminalDockRef" />
         </div>
       </Transition>
     </div>

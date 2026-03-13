@@ -1140,11 +1140,39 @@ async fn invoke_bridge_action(
         cmd.env(key, value);
     }
 
+    // When Studio is launched from a macOS GUI context, PATH is often missing
+    // Homebrew/user-level bins. Most plugin bridges rely on node/bun being
+    // discoverable via PATH; add common locations unless the plugin explicitly
+    // sets PATH.
+    if cfg!(target_os = "macos")
+        && !bridge.env.contains_key("PATH")
+        && !Path::new(&bridge.program).is_absolute()
+    {
+        let base_path = std::env::var("PATH").unwrap_or_default();
+        let augmented = augment_macos_path(&base_path);
+        if augmented != base_path && !augmented.is_empty() {
+            cmd.env("PATH", augmented);
+        }
+    }
+
     let mut child = cmd.spawn().map_err(|err| {
+        let program = bridge.program.clone();
+        let hint = if err.kind() == std::io::ErrorKind::NotFound {
+            Some(format!(
+                "Hint: '{program}' was not found in PATH. Install it or set bridge.env.PATH in the plugin manifest (on macOS, Homebrew is usually /opt/homebrew/bin or /usr/local/bin)."
+            ))
+        } else {
+            None
+        };
         action_failure(
             StatusCode::BAD_GATEWAY,
             "bridge_spawn_failed",
-            format!("Failed to start plugin bridge process: {err}"),
+            match hint {
+                Some(hint) => {
+                    format!("Failed to start plugin bridge process '{program}': {err}\n{hint}")
+                }
+                None => format!("Failed to start plugin bridge process '{program}': {err}"),
+            },
             Some(json!({
                 "program": bridge.program,
                 "args": bridge.args,
@@ -1299,6 +1327,50 @@ async fn invoke_bridge_action(
     })?;
 
     Ok(parsed)
+}
+
+fn augment_macos_path(base: &str) -> String {
+    let mut out = Vec::<String>::new();
+    let mut seen = HashSet::<String>::new();
+
+    for part in base.split(':') {
+        let trimmed = part.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if seen.insert(trimmed.to_string()) {
+            out.push(trimmed.to_string());
+        }
+    }
+
+    let mut extras = vec![
+        "/opt/homebrew/bin".to_string(),
+        "/opt/homebrew/sbin".to_string(),
+        "/usr/local/bin".to_string(),
+        "/usr/local/sbin".to_string(),
+    ];
+
+    if let Some(home) = crate::path_utils::home_dir_path() {
+        extras.push(home.join(".bun").join("bin").to_string_lossy().into_owned());
+        extras.push(
+            home.join(".cargo")
+                .join("bin")
+                .to_string_lossy()
+                .into_owned(),
+        );
+    }
+
+    for extra in extras {
+        let trimmed = extra.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if seen.insert(trimmed.to_string()) {
+            out.push(trimmed.to_string());
+        }
+    }
+
+    out.join(":")
 }
 
 fn truncate_text(input: &str, max_chars: usize) -> String {

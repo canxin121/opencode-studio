@@ -364,6 +364,24 @@ async fn git_basic_endpoints_are_covered_by_automated_test() {
 }
 
 #[tokio::test]
+async fn git_check_returns_conflict_for_non_repo_directory() {
+    let tmp = TempDir::new().expect("tempdir");
+    let dir_s = tmp.path().to_string_lossy().to_string();
+
+    let resp = git_check(Query(DirectoryQuery {
+        directory: Some(dir_s),
+    }))
+    .await;
+    let (status, value) = response_json(resp).await;
+
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(
+        value.get("code").and_then(Value::as_str),
+        Some("not_git_repo")
+    );
+}
+
+#[tokio::test]
 async fn git_conflict_endpoints_are_covered_by_automated_test() {
     let tmp = TempDir::new().expect("tempdir");
     let repo = mk_conflict_repo(tmp.path());

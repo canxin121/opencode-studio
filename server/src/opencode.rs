@@ -455,6 +455,18 @@ fn windows_home_env_defaults() -> Option<String> {
                 .map(|v| v.trim().to_string())
                 .filter(|v| !v.is_empty())
         })
+        .or_else(|| {
+            let drive = std::env::var("HOMEDRIVE").ok().unwrap_or_default();
+            let path = std::env::var("HOMEPATH").ok().unwrap_or_default();
+            let joined = format!("{}{}", drive.trim(), path.trim())
+                .trim()
+                .to_string();
+            if joined.is_empty() {
+                None
+            } else {
+                Some(joined)
+            }
+        })
 }
 
 async fn forward_child_output(label: &'static str, stream: impl tokio::io::AsyncRead + Unpin) {
@@ -483,37 +495,75 @@ async fn forward_child_output_to_writer(
     }
 }
 
+fn parse_pid_list(output: &[u8]) -> Vec<u32> {
+    let mut pids = Vec::new();
+    for pid in String::from_utf8_lossy(output)
+        .lines()
+        .filter_map(|line| line.trim().parse::<u32>().ok())
+    {
+        if !pids.contains(&pid) {
+            pids.push(pid);
+        }
+    }
+    pids
+}
+
+fn listener_lsof_args(port: u16) -> [String; 4] {
+    [
+        "-nP".to_string(),
+        "-t".to_string(),
+        format!("-iTCP:{port}"),
+        "-sTCP:LISTEN".to_string(),
+    ]
+}
+
+#[cfg(unix)]
+async fn listening_pids_on_port(port: u16) -> Vec<u32> {
+    let args = listener_lsof_args(port);
+    let out = Command::new("lsof")
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .output()
+        .await;
+    let Ok(out) = out else {
+        return Vec::new();
+    };
+    if !out.status.success() {
+        return Vec::new();
+    }
+    parse_pid_list(&out.stdout)
+}
+
+#[cfg(unix)]
+async fn signal_pid(pid: u32, signal: &str) {
+    let _ = Command::new("kill")
+        .arg(signal)
+        .arg(pid.to_string())
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .output()
+        .await;
+}
+
 async fn kill_process_on_port(port: u16) {
-    // Best-effort port cleanup using lsof+kill on Unix.
+    // Best-effort port cleanup using listener-only lsof queries on Unix so we
+    // do not kill clients like opencode-studio's own SSE connection.
     #[cfg(unix)]
     {
-        let out = Command::new("lsof")
-            .arg("-ti")
-            .arg(format!(":{port}"))
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .output()
-            .await;
-        let Ok(out) = out else {
-            return;
-        };
-        if !out.status.success() {
-            return;
+        let current_pid = std::process::id();
+        let listener_pids = listening_pids_on_port(port).await;
+        for pid in listener_pids.into_iter().filter(|pid| *pid != current_pid) {
+            signal_pid(pid, "-TERM").await;
         }
-        let txt = String::from_utf8_lossy(&out.stdout);
-        for pid in txt
-            .split_whitespace()
-            .filter_map(|s| s.trim().parse::<i32>().ok())
-        {
-            let _ = Command::new("kill")
-                .arg("-9")
-                .arg(pid.to_string())
-                .stdin(Stdio::null())
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .output()
-                .await;
+
+        tokio::time::sleep(Duration::from_millis(150)).await;
+
+        let listener_pids = listening_pids_on_port(port).await;
+        for pid in listener_pids.into_iter().filter(|pid| *pid != current_pid) {
+            signal_pid(pid, "-KILL").await;
         }
     }
 
@@ -623,14 +673,79 @@ mod tests {
     }
 
     #[test]
+    fn parse_pid_list_skips_invalid_entries_and_duplicates() {
+        let parsed = parse_pid_list(b"123\n456\nnope\n123\n\n789\n");
+        assert_eq!(parsed, vec![123, 456, 789]);
+    }
+
+    #[test]
+    fn listener_lsof_args_only_target_tcp_listeners() {
+        assert_eq!(
+            listener_lsof_args(3210),
+            [
+                "-nP".to_string(),
+                "-t".to_string(),
+                "-iTCP:3210".to_string(),
+                "-sTCP:LISTEN".to_string(),
+            ]
+        );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn listening_pids_on_port_excludes_connected_clients() {
+        let port = pick_free_port().expect("port");
+        let script = format!(
+            "import socket, time; s = socket.socket(); s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1); s.bind(('127.0.0.1', {port})); s.listen(1); conn, _ = s.accept(); time.sleep(5)",
+        );
+        let mut child = Command::new("python3")
+            .arg("-c")
+            .arg(script)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("python listener");
+        let child_pid = child.id().expect("listener pid");
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+
+        let stream = loop {
+            match tokio::net::TcpStream::connect(("127.0.0.1", port)).await {
+                Ok(stream) => break stream,
+                Err(_) => {
+                    if tokio::time::Instant::now() >= deadline {
+                        let _ = child.kill().await;
+                        let _ = child.wait().await;
+                        panic!("timed out waiting for python listener on {port}");
+                    }
+                    tokio::time::sleep(Duration::from_millis(50)).await;
+                }
+            }
+        };
+
+        let pids = listening_pids_on_port(port).await;
+
+        drop(stream);
+        let _ = child.kill().await;
+        let _ = child.wait().await;
+
+        assert!(pids.contains(&child_pid), "{pids:?}");
+        assert!(!pids.contains(&std::process::id()), "{pids:?}");
+    }
+
+    #[test]
     fn windows_home_env_defaults_uses_userprofile_when_home_missing() {
         let _env_lock = ENV_LOCK.lock().unwrap();
         let old_userprofile = std::env::var("USERPROFILE").ok();
         let old_home = std::env::var("HOME").ok();
+        let old_homedrive = std::env::var("HOMEDRIVE").ok();
+        let old_homepath = std::env::var("HOMEPATH").ok();
 
         unsafe {
             std::env::set_var("USERPROFILE", r"C:\Users\Alice");
             std::env::remove_var("HOME");
+            std::env::remove_var("HOMEDRIVE");
+            std::env::remove_var("HOMEPATH");
         }
 
         let home = windows_home_env_defaults().expect("defaults");
@@ -647,6 +762,102 @@ mod tests {
             } else {
                 std::env::remove_var("HOME");
             }
+            if let Some(v) = old_homedrive {
+                std::env::set_var("HOMEDRIVE", v);
+            } else {
+                std::env::remove_var("HOMEDRIVE");
+            }
+            if let Some(v) = old_homepath {
+                std::env::set_var("HOMEPATH", v);
+            } else {
+                std::env::remove_var("HOMEPATH");
+            }
         }
+    }
+
+    #[test]
+    fn windows_home_env_defaults_prefers_home_over_userprofile() {
+        let _env_lock = ENV_LOCK.lock().unwrap();
+        let old_userprofile = std::env::var("USERPROFILE").ok();
+        let old_home = std::env::var("HOME").ok();
+
+        unsafe {
+            std::env::set_var("HOME", r"C:\Users\Primary");
+            std::env::set_var("USERPROFILE", r"C:\Users\Fallback");
+        }
+
+        let home = windows_home_env_defaults().expect("defaults");
+        assert_eq!(home, r"C:\Users\Primary");
+
+        unsafe {
+            if let Some(v) = old_userprofile {
+                std::env::set_var("USERPROFILE", v);
+            } else {
+                std::env::remove_var("USERPROFILE");
+            }
+            if let Some(v) = old_home {
+                std::env::set_var("HOME", v);
+            } else {
+                std::env::remove_var("HOME");
+            }
+        }
+    }
+
+    #[test]
+    fn windows_home_env_defaults_uses_homedrive_homepath_when_needed() {
+        let _env_lock = ENV_LOCK.lock().unwrap();
+        let old_userprofile = std::env::var("USERPROFILE").ok();
+        let old_home = std::env::var("HOME").ok();
+        let old_homedrive = std::env::var("HOMEDRIVE").ok();
+        let old_homepath = std::env::var("HOMEPATH").ok();
+
+        unsafe {
+            std::env::remove_var("HOME");
+            std::env::set_var("USERPROFILE", "   ");
+            std::env::set_var("HOMEDRIVE", " C: ");
+            std::env::set_var("HOMEPATH", " \\Users\\Alice ");
+        }
+
+        let home = windows_home_env_defaults().expect("defaults");
+        assert_eq!(home, r"C:\Users\Alice");
+
+        unsafe {
+            if let Some(v) = old_userprofile {
+                std::env::set_var("USERPROFILE", v);
+            } else {
+                std::env::remove_var("USERPROFILE");
+            }
+            if let Some(v) = old_home {
+                std::env::set_var("HOME", v);
+            } else {
+                std::env::remove_var("HOME");
+            }
+            if let Some(v) = old_homedrive {
+                std::env::set_var("HOMEDRIVE", v);
+            } else {
+                std::env::remove_var("HOMEDRIVE");
+            }
+            if let Some(v) = old_homepath {
+                std::env::set_var("HOMEPATH", v);
+            } else {
+                std::env::remove_var("HOMEPATH");
+            }
+        }
+    }
+
+    #[test]
+    fn format_http_base_url_normalizes_unspecified_bind_hosts() {
+        assert_eq!(
+            format_http_base_url("0.0.0.0", 11434),
+            "http://127.0.0.1:11434"
+        );
+        assert_eq!(format_http_base_url("::", 11434), "http://[::1]:11434");
+        assert_eq!(format_http_base_url("[::]", 11434), "http://[::1]:11434");
+    }
+
+    #[test]
+    fn format_http_base_url_handles_ipv6_inputs() {
+        assert_eq!(format_http_base_url("::1", 9999), "http://[::1]:9999");
+        assert_eq!(format_http_base_url("[::1]", 9999), "http://[::1]:9999");
     }
 }

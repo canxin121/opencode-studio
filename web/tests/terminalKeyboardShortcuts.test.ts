@@ -121,3 +121,144 @@ test('Ctrl+Shift+V and Shift+Insert paste clipboard content', async () => {
   assert.equal(first.pasted(), 'alpha')
   assert.equal(second.pasted(), 'beta')
 })
+
+test('Cmd+C and Cmd+V handle copy/paste on macOS', async () => {
+  const copyTerminal = createTerminal('mac-copy')
+  const pasteTerminal = createTerminal('')
+  const cmdC = makeKeydownEvent('c', { meta: true })
+  const cmdV = makeKeydownEvent('v', { meta: true })
+  let copied = ''
+  let interrupted = false
+
+  const handledCmdC = handleTerminalKeyboardShortcut(cmdC.event, {
+    terminal: copyTerminal.terminal as any,
+    copyTextToClipboard: async (text) => {
+      copied = text
+      return true
+    },
+    readTextFromClipboard: async () => '',
+    sendInterrupt: () => {
+      interrupted = true
+    },
+  })
+
+  const handledCmdV = handleTerminalKeyboardShortcut(cmdV.event, {
+    terminal: pasteTerminal.terminal as any,
+    copyTextToClipboard: async () => true,
+    readTextFromClipboard: async () => 'mac-paste',
+    sendInterrupt: () => {
+      interrupted = true
+    },
+  })
+
+  await Promise.resolve()
+  assert.equal(handledCmdC, true)
+  assert.equal(handledCmdV, true)
+  assert.equal(copied, 'mac-copy')
+  assert.equal(pasteTerminal.pasted(), 'mac-paste')
+  assert.equal(interrupted, false)
+  assert.equal(cmdC.prevented(), true)
+  assert.equal(cmdC.stopped(), true)
+  assert.equal(cmdV.prevented(), true)
+  assert.equal(cmdV.stopped(), true)
+})
+
+test('non-matching modifier combos are not handled', () => {
+  const combos = [
+    makeKeydownEvent('c', { ctrl: true, alt: true }),
+    makeKeydownEvent('c', { meta: true, shift: true }),
+    makeKeydownEvent('v', { meta: true, shift: true }),
+    makeKeydownEvent('v', { ctrl: true, meta: true }),
+  ]
+
+  for (const combo of combos) {
+    const { terminal } = createTerminal('ignored')
+    const handled = handleTerminalKeyboardShortcut(combo.event, {
+      terminal: terminal as any,
+      copyTextToClipboard: async () => true,
+      readTextFromClipboard: async () => 'ignored',
+      sendInterrupt: () => {},
+    })
+
+    assert.equal(handled, false)
+    assert.equal(combo.prevented(), false)
+    assert.equal(combo.stopped(), false)
+  }
+})
+
+test('Ctrl+Shift+C is handled, Cmd+Shift+C is not', async () => {
+  const ctrlShift = createTerminal('linux-copy')
+  const cmdShift = createTerminal('mac-ignored')
+  const ctrlShiftC = makeKeydownEvent('c', { ctrl: true, shift: true })
+  const cmdShiftC = makeKeydownEvent('c', { meta: true, shift: true })
+  let copied = ''
+
+  const handledCtrlShiftC = handleTerminalKeyboardShortcut(ctrlShiftC.event, {
+    terminal: ctrlShift.terminal as any,
+    copyTextToClipboard: async (text) => {
+      copied = text
+      return true
+    },
+    readTextFromClipboard: async () => '',
+    sendInterrupt: () => {},
+  })
+
+  const handledCmdShiftC = handleTerminalKeyboardShortcut(cmdShiftC.event, {
+    terminal: cmdShift.terminal as any,
+    copyTextToClipboard: async () => true,
+    readTextFromClipboard: async () => '',
+    sendInterrupt: () => {},
+  })
+
+  await Promise.resolve()
+  assert.equal(handledCtrlShiftC, true)
+  assert.equal(copied, 'linux-copy')
+  assert.equal(ctrlShiftC.prevented(), true)
+  assert.equal(ctrlShiftC.stopped(), true)
+  assert.equal(handledCmdShiftC, false)
+  assert.equal(cmdShiftC.prevented(), false)
+  assert.equal(cmdShiftC.stopped(), false)
+})
+
+test('Insert variants: Ctrl+Insert copies, Shift+Insert pastes, Ctrl+Shift+Insert is ignored', async () => {
+  const copyTerminal = createTerminal('insert-copy')
+  const pasteTerminal = createTerminal('')
+  const ignoredTerminal = createTerminal('ignored')
+  const ctrlInsert = makeKeydownEvent('Insert', { ctrl: true, code: 'Insert' })
+  const shiftInsert = makeKeydownEvent('Insert', { shift: true, code: 'Insert' })
+  const ctrlShiftInsert = makeKeydownEvent('Insert', { ctrl: true, shift: true, code: 'Insert' })
+  let copied = ''
+
+  const handledCtrlInsert = handleTerminalKeyboardShortcut(ctrlInsert.event, {
+    terminal: copyTerminal.terminal as any,
+    copyTextToClipboard: async (text) => {
+      copied = text
+      return true
+    },
+    readTextFromClipboard: async () => '',
+    sendInterrupt: () => {},
+  })
+
+  const handledShiftInsert = handleTerminalKeyboardShortcut(shiftInsert.event, {
+    terminal: pasteTerminal.terminal as any,
+    copyTextToClipboard: async () => true,
+    readTextFromClipboard: async () => 'insert-paste',
+    sendInterrupt: () => {},
+  })
+
+  const handledCtrlShiftInsert = handleTerminalKeyboardShortcut(ctrlShiftInsert.event, {
+    terminal: ignoredTerminal.terminal as any,
+    copyTextToClipboard: async () => true,
+    readTextFromClipboard: async () => 'ignored',
+    sendInterrupt: () => {},
+  })
+
+  await Promise.resolve()
+  assert.equal(handledCtrlInsert, true)
+  assert.equal(copied, 'insert-copy')
+  assert.equal(handledShiftInsert, true)
+  assert.equal(pasteTerminal.pasted(), 'insert-paste')
+  assert.equal(handledCtrlShiftInsert, false)
+  assert.equal(ctrlShiftInsert.prevented(), false)
+  assert.equal(ctrlShiftInsert.stopped(), false)
+})

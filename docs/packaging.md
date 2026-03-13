@@ -29,10 +29,11 @@ Repository layout:
 - What: one desktop installer/bundle that includes:
   - the frontend UI
   - the Rust server (`opencode-studio`) bundled as the desktop backend service
-  - tray icon + close-to-tray behavior
+  - tray icon support with platform-specific close behavior
 - Behavior:
   - App startup automatically starts the bundled backend service.
-  - Closing the window hides it; the backend continues in the tray.
+  - On Windows/Linux, closing the window hides it and the backend continues in the tray.
+  - On macOS, closing the main window quits the desktop app so the bundled backend is also stopped.
   - Tray menu can start/stop/restart backend, open logs/config, quit.
 - Built from: `desktop/src-tauri/tauri.conf.full.json`.
 
@@ -181,5 +182,17 @@ Service install scripts are not published as release assets. Use GitHub raw URLs
 This project does not require Apple/Windows signing keys to build. Release assets are produced
 unsigned by default:
 
-- macOS: users may see Gatekeeper warnings for unsigned apps.
+- macOS: users may see Gatekeeper warnings for non-notarized apps. We use ad-hoc signing
+  (`bundle.macOS.signingIdentity: "-"`) to reduce "app is damaged" errors on Apple Silicon,
+  but users still need to approve the first launch.
 - Windows: SmartScreen may warn for unsigned installers/binaries.
+
+If a user sees the "is damaged and can't be opened" dialog, it is usually caused by
+Gatekeeper quarantine. Workarounds:
+
+```bash
+# after installing (dragging the .app to /Applications)
+xattr -dr com.apple.quarantine "/Applications/OpenCode Studio.app"
+```
+
+Or use Finder: right-click the app -> Open, then confirm.

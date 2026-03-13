@@ -15,6 +15,9 @@ const WATCH_EVENT_FLUSH_INTERVAL: Duration = Duration::from_millis(200);
 const WATCH_MAX_PENDING_PATHS_PER_ROOT: usize = 4000;
 const WATCH_ROOT_HINT_TTL: Duration = Duration::from_secs(20 * 60);
 const WATCH_ROOT_HINT_MAX_ENTRIES: usize = 320;
+const WATCH_ROOT_HINT_ACTIVE_LIMIT: usize = 64;
+const WATCH_FAILURE_BACKOFF_BASE: Duration = Duration::from_secs(3);
+const WATCH_FAILURE_BACKOFF_MAX: Duration = Duration::from_secs(5 * 60);
 
 struct FsWatchHub {
     started: AtomicBool,
@@ -40,6 +43,12 @@ struct PendingRootEvent {
     new_path: Option<PathBuf>,
 }
 
+#[derive(Clone, Debug)]
+struct WatchRetryState {
+    failures: u32,
+    retry_not_before: tokio::time::Instant,
+}
+
 static FS_WATCH_HUB: LazyLock<FsWatchHub> = LazyLock::new(|| FsWatchHub {
     started: AtomicBool::new(false),
 });
@@ -62,7 +71,7 @@ fn lock_watch_root_hints() -> std::sync::MutexGuard<'static, HashMap<String, i64
         .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
-fn prune_watch_root_hints(hints: &mut HashMap<String, i64>, now_millis: i64) -> Vec<String> {
+fn prune_watch_root_hints(hints: &mut HashMap<String, i64>, now_millis: i64) {
     let ttl_millis = i64::try_from(WATCH_ROOT_HINT_TTL.as_millis()).unwrap_or(i64::MAX);
     hints.retain(|_, seen_at| now_millis.saturating_sub(*seen_at) <= ttl_millis);
 
@@ -77,10 +86,42 @@ fn prune_watch_root_hints(hints: &mut HashMap<String, i64>, now_millis: i64) -> 
             hints.remove(&path);
         }
     }
+}
 
-    let mut roots = hints.keys().cloned().collect::<Vec<_>>();
-    roots.sort();
-    roots
+fn collect_active_hint_roots(hints: &HashMap<String, i64>) -> Vec<String> {
+    let mut active = hints
+        .iter()
+        .map(|(path, seen_at)| (path.as_str(), *seen_at))
+        .collect::<Vec<_>>();
+    active.sort_by(|left, right| right.1.cmp(&left.1).then_with(|| left.0.cmp(right.0)));
+
+    active
+        .into_iter()
+        .take(WATCH_ROOT_HINT_ACTIVE_LIMIT)
+        .map(|(path, _)| path.to_string())
+        .collect()
+}
+
+fn watch_failure_backoff(failures: u32) -> Duration {
+    let failures = failures.min(31);
+    let multiplier = 1_u32 << failures;
+    let backoff = WATCH_FAILURE_BACKOFF_BASE.saturating_mul(multiplier);
+    backoff.min(WATCH_FAILURE_BACKOFF_MAX)
+}
+
+fn watch_root_hint_candidate(path: &Path) -> Option<PathBuf> {
+    if should_ignore_watch_path(path) {
+        return None;
+    }
+
+    match std::fs::metadata(path) {
+        Ok(metadata) if metadata.is_dir() => Some(path.to_path_buf()),
+        Ok(_) => path.parent().map(Path::to_path_buf),
+        Err(_) => path
+            .parent()
+            .map(Path::to_path_buf)
+            .or_else(|| Some(path.to_path_buf())),
+    }
 }
 
 pub(crate) fn hint_watch_root(path: &Path) {
@@ -96,9 +137,16 @@ pub(crate) fn hint_watch_root(path: &Path) {
     {
         let mut hints = lock_watch_root_hints();
         hints.insert(normalized, now);
-        let _ = prune_watch_root_hints(&mut hints, now);
+        prune_watch_root_hints(&mut hints, now);
     }
     WATCH_ROOT_HINT_NOTIFY.notify_one();
+}
+
+pub(crate) fn hint_watch_path(path: &Path) {
+    let Some(candidate) = watch_root_hint_candidate(path) else {
+        return;
+    };
+    hint_watch_root(&candidate);
 }
 
 pub(crate) fn start_fs_watch_hub_if_needed(state: Arc<crate::AppState>) {
@@ -174,10 +222,7 @@ async fn maybe_push_watch_root(
         candidate = base.join(candidate);
     }
 
-    let canonical = tokio::fs::canonicalize(&candidate)
-        .await
-        .unwrap_or(candidate);
-    let metadata = match tokio::fs::metadata(&canonical).await {
+    let metadata = match tokio::fs::metadata(&candidate).await {
         Ok(meta) => meta,
         Err(_) => return,
     };
@@ -185,7 +230,7 @@ async fn maybe_push_watch_root(
         return;
     }
 
-    let Some(normalized) = normalized_path_for_match(&canonical) else {
+    let Some(normalized) = normalized_path_for_match(&candidate) else {
         return;
     };
     if !seen.insert(normalized.clone()) {
@@ -193,32 +238,26 @@ async fn maybe_push_watch_root(
     }
 
     roots.push(WatchRoot {
-        path: canonical,
+        path: candidate,
         normalized,
     });
 }
 
-async fn collect_watch_roots(state: &Arc<crate::AppState>) -> Vec<WatchRoot> {
-    let settings = state.settings.read().await.clone();
+async fn collect_watch_roots(_state: &Arc<crate::AppState>) -> Vec<WatchRoot> {
+    if crate::global_sse_hub::downstream_client_count() == 0 {
+        return Vec::new();
+    }
+
     let cwd = std::env::current_dir().ok();
 
     let mut roots = Vec::<WatchRoot>::new();
     let mut seen = HashSet::<String>::new();
 
-    for project in settings.projects {
-        let raw = project.path.trim();
-        if raw.is_empty() {
-            continue;
-        }
-
-        let candidate = PathBuf::from(crate::path_utils::normalize_directory_path(raw));
-        maybe_push_watch_root(candidate, cwd.as_ref(), &mut roots, &mut seen).await;
-    }
-
     let hinted_roots = {
         let now = now_epoch_millis();
         let mut hints = lock_watch_root_hints();
-        prune_watch_root_hints(&mut hints, now)
+        prune_watch_root_hints(&mut hints, now);
+        collect_active_hint_roots(&hints)
     };
 
     for hinted in hinted_roots {
@@ -345,7 +384,9 @@ fn update_watches(
     watcher: &mut RecommendedWatcher,
     current_roots: &mut Vec<WatchRoot>,
     next_roots: Vec<WatchRoot>,
+    retry_by_root: &mut HashMap<String, WatchRetryState>,
 ) {
+    let now = tokio::time::Instant::now();
     let next_by_key = next_roots
         .iter()
         .map(|root| (root.normalized.clone(), root.clone()))
@@ -355,6 +396,7 @@ fn update_watches(
         if next_by_key.contains_key(&existing.normalized) {
             continue;
         }
+        retry_by_root.remove(&existing.normalized);
         if let Err(err) = watcher.unwatch(&existing.path) {
             tracing::debug!(
                 target: "opencode_studio.fs_watch",
@@ -377,18 +419,44 @@ fn update_watches(
             continue;
         }
 
+        if retry_by_root
+            .get(&root.normalized)
+            .is_some_and(|retry| now < retry.retry_not_before)
+        {
+            continue;
+        }
+
         match watcher.watch(&root.path, RecursiveMode::Recursive) {
-            Ok(_) => applied.push(root),
+            Ok(_) => {
+                retry_by_root.remove(&root.normalized);
+                applied.push(root)
+            }
             Err(err) => {
+                let failures = retry_by_root
+                    .get(&root.normalized)
+                    .map_or(0, |retry| retry.failures)
+                    .saturating_add(1);
+                let backoff = watch_failure_backoff(failures.saturating_sub(1));
+                retry_by_root.insert(
+                    root.normalized.clone(),
+                    WatchRetryState {
+                        failures,
+                        retry_not_before: now + backoff,
+                    },
+                );
                 tracing::warn!(
                     target: "opencode_studio.fs_watch",
                     path = %root.path.display(),
                     error = %err,
+                    retry_in_seconds = backoff.as_secs(),
                     "failed to watch filesystem path"
                 );
             }
         }
     }
+
+    let next_keys = next_by_key.keys().cloned().collect::<HashSet<_>>();
+    retry_by_root.retain(|normalized, _| next_keys.contains(normalized));
 
     *current_roots = applied;
 }
@@ -413,22 +481,38 @@ async fn run_fs_watch_loop(state: Arc<crate::AppState>) {
     };
 
     let mut watched_roots = Vec::<WatchRoot>::new();
+    let mut retry_by_root = HashMap::<String, WatchRetryState>::new();
     let mut pending_by_root = HashMap::<String, PendingRootEvent>::new();
     let mut refresh_tick = tokio::time::interval(WATCH_ROOT_REFRESH_INTERVAL);
     let mut flush_tick = tokio::time::interval(WATCH_EVENT_FLUSH_INTERVAL);
 
     let initial_roots = collect_watch_roots(&state).await;
-    update_watches(&mut watcher, &mut watched_roots, initial_roots);
+    update_watches(
+        &mut watcher,
+        &mut watched_roots,
+        initial_roots,
+        &mut retry_by_root,
+    );
 
     loop {
         tokio::select! {
             _ = refresh_tick.tick() => {
                 let next_roots = collect_watch_roots(&state).await;
-                update_watches(&mut watcher, &mut watched_roots, next_roots);
+                update_watches(
+                    &mut watcher,
+                    &mut watched_roots,
+                    next_roots,
+                    &mut retry_by_root,
+                );
             }
             _ = WATCH_ROOT_HINT_NOTIFY.notified() => {
                 let next_roots = collect_watch_roots(&state).await;
-                update_watches(&mut watcher, &mut watched_roots, next_roots);
+                update_watches(
+                    &mut watcher,
+                    &mut watched_roots,
+                    next_roots,
+                    &mut retry_by_root,
+                );
             }
             _ = flush_tick.tick() => {
                 flush_pending_events(&watched_roots, &mut pending_by_root);
@@ -587,11 +671,122 @@ mod tests {
             );
         }
 
-        let roots = prune_watch_root_hints(&mut hints, now);
+        prune_watch_root_hints(&mut hints, now);
 
         assert_eq!(hints.len(), WATCH_ROOT_HINT_MAX_ENTRIES);
-        assert_eq!(roots.len(), WATCH_ROOT_HINT_MAX_ENTRIES);
         assert!(!hints.contains_key("/workspace/stale"));
+    }
+
+    #[test]
+    fn collect_active_hint_roots_prefers_most_recent() {
+        let mut hints = HashMap::<String, i64>::new();
+        for index in 0..(WATCH_ROOT_HINT_ACTIVE_LIMIT + 6) {
+            hints.insert(format!("/workspace/{index:03}"), index as i64);
+        }
+
+        let selected = collect_active_hint_roots(&hints);
+
+        assert_eq!(selected.len(), WATCH_ROOT_HINT_ACTIVE_LIMIT);
+        assert_eq!(selected.first().map(String::as_str), Some("/workspace/069"));
+        assert_eq!(selected.last().map(String::as_str), Some("/workspace/006"));
+    }
+
+    #[test]
+    fn watch_failure_backoff_is_exponential_and_capped() {
+        assert_eq!(watch_failure_backoff(0), Duration::from_secs(3));
+        assert_eq!(watch_failure_backoff(1), Duration::from_secs(6));
+        assert_eq!(watch_failure_backoff(2), Duration::from_secs(12));
+        assert_eq!(watch_failure_backoff(6), Duration::from_secs(192));
+        assert_eq!(watch_failure_backoff(7), Duration::from_secs(300));
+        assert_eq!(watch_failure_backoff(20), Duration::from_secs(300));
+    }
+
+    #[test]
+    fn watch_root_hint_candidate_uses_parent_for_files() {
+        let temp_root = unique_tmp_dir("hint-candidate");
+        let dir_path = temp_root.join("src");
+        std::fs::create_dir_all(&dir_path).expect("create dir");
+        let file_path = dir_path.join("main.rs");
+        std::fs::write(&file_path, "fn main() {}\n").expect("create file");
+
+        assert_eq!(
+            watch_root_hint_candidate(&file_path).as_deref(),
+            Some(dir_path.as_path())
+        );
+        assert_eq!(
+            watch_root_hint_candidate(&dir_path).as_deref(),
+            Some(dir_path.as_path())
+        );
+        assert_eq!(
+            watch_root_hint_candidate(Path::new("/repo/.git/index")),
+            None
+        );
+
+        let _ = std::fs::remove_dir_all(&temp_root);
+    }
+
+    #[tokio::test]
+    async fn collect_watch_roots_uses_hints_not_saved_projects() {
+        lock_watch_root_hints().clear();
+
+        let temp_root = unique_tmp_dir("hint-scope");
+        let nested_dir = temp_root.join("src");
+        tokio::fs::create_dir_all(&nested_dir)
+            .await
+            .expect("create nested dir");
+        let expected_root = normalized_path_for_match(&temp_root).expect("normalized temp root");
+        let expected_nested =
+            normalized_path_for_match(&nested_dir).expect("normalized nested dir");
+        let state = test_state_with_project(&temp_root);
+        let _downstream = crate::global_sse_hub::subscribe_test_downstream();
+
+        let roots_without_hint = collect_watch_roots(&state).await;
+        assert!(
+            roots_without_hint
+                .iter()
+                .all(|root| root.normalized != expected_root),
+            "saved projects should not become watch roots without an active hint"
+        );
+
+        hint_watch_path(&nested_dir.join("main.rs"));
+        let hinted_roots = collect_watch_roots(&state).await;
+        assert!(
+            hinted_roots
+                .iter()
+                .any(|root| root.normalized == expected_nested),
+            "opened-file hint should add the file parent directory as a watch root"
+        );
+        assert!(
+            hinted_roots
+                .iter()
+                .all(|root| root.normalized != expected_root),
+            "saved projects should still not become watch roots after unrelated test hints"
+        );
+
+        lock_watch_root_hints().clear();
+        let _ = tokio::fs::remove_dir_all(&temp_root).await;
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn maybe_push_watch_root_preserves_symlink_hint_path() {
+        let temp_root = unique_tmp_dir("hint-symlink");
+        let real_root = temp_root.join("real");
+        let link_root = temp_root.join("link");
+        tokio::fs::create_dir_all(&real_root)
+            .await
+            .expect("create real root");
+        std::os::unix::fs::symlink(&real_root, &link_root).expect("create symlink root");
+
+        let mut roots = Vec::new();
+        let mut seen = HashSet::new();
+        maybe_push_watch_root(link_root.clone(), None, &mut roots, &mut seen).await;
+
+        assert_eq!(roots.len(), 1);
+        assert_eq!(roots[0].path, link_root);
+        assert_eq!(roots[0].normalized, to_api_path(&temp_root.join("link")));
+
+        let _ = tokio::fs::remove_dir_all(&temp_root).await;
     }
 
     #[tokio::test]

@@ -83,6 +83,7 @@ const {
   gitReady,
   repoBusy,
   loading,
+  error,
   status,
   headline,
   gitState,
@@ -230,6 +231,7 @@ const {
   selectFile,
   openFirstConflict,
   load,
+  refreshRepository,
   copyCommitHash,
   copyRemoteUrl,
   copyWorktreePath,
@@ -1305,6 +1307,10 @@ void diffPaneRef
           {{ reposError }}
         </div>
 
+        <div v-else-if="error" class="mt-1.5 text-xs text-destructive/90 whitespace-pre-line">
+          {{ error }}
+        </div>
+
         <div v-if="gitReady" class="mt-1.5">
           <div class="relative">
             <button
@@ -2205,6 +2211,7 @@ void diffPaneRef
       :stageAllUntracked="stageAllUntracked"
       :stageAllMerge="stageAllMerge"
       :fetchRemote="fetchRemote"
+      :refreshRepository="refreshRepository"
       :fetchPrune="fetchPrune"
       :fetchAll="fetchAll"
       :openFetchFrom="openFetchFrom"

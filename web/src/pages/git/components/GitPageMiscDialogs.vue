@@ -37,6 +37,7 @@ const props = defineProps<{
   stageAllUntracked: () => void
   stageAllMerge: () => void
 
+  refreshRepository: () => void | Promise<void>
   fetchRemote: () => void | Promise<void>
   fetchPrune: () => void | Promise<void>
   fetchAll: () => void | Promise<void>
@@ -220,6 +221,11 @@ const sourceControlActionGroups = computed<OptionMenuGroup[]>(() => [
     id: 'sync',
     title: t('git.actionsMenu.groups.sync'),
     items: [
+      {
+        id: 'refresh-repository',
+        label: t('common.refresh'),
+        description: t('git.ui.sourceControl'),
+      },
       {
         id: 'fetch',
         label: t('git.actionsMenu.sync.fetch.label'),
@@ -486,6 +492,7 @@ function runSourceControlAction(item: OptionMenuItem) {
   if (id === 'stage-all-untracked') return closeActionsThen(props.stageAllUntracked)
   if (id === 'stage-all-merge') return closeActionsThen(props.stageAllMerge)
 
+  if (id === 'refresh-repository') return closeActionsThen(() => void props.refreshRepository())
   if (id === 'fetch') return closeActionsThen(() => void props.fetchRemote())
   if (id === 'fetch-from') return closeActionsThen(props.openFetchFrom)
   if (id === 'fetch-prune') return closeActionsThen(() => void props.fetchPrune())

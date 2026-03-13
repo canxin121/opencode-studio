@@ -226,17 +226,19 @@ pub async fn update_check(Query(query): Query<UpdateCheckQuery>) -> Json<UpdateC
         .unwrap_or(false);
 
     if let Some(target) = service_target.as_deref() {
-        let asset_name = service_asset_name(target);
-        let asset_url = find_asset_url(&release.assets, &asset_name).or_else(|| {
-            Some(release_asset_url(
-                &repo,
-                release.tag_name.trim(),
-                &asset_name,
-            ))
-        });
-        response.service.asset_name = Some(asset_name);
+        let release_tag = release.tag_name.trim();
+        let (asset_name, asset_url) = resolve_release_asset_url(
+            &release.assets,
+            &repo,
+            release_tag,
+            service_asset_candidates(target, release_tag).as_slice(),
+        );
+        response.service.asset_name = asset_name;
         response.service.asset_url = asset_url.clone();
-        response.service.update_command = build_service_update_command(asset_url.as_deref());
+        response.service.update_command = build_service_update_command(
+            asset_url.as_deref(),
+            response.service.asset_name.as_deref(),
+        );
     }
 
     if let (Some(installer), Some(runtime)) =
@@ -249,25 +251,32 @@ pub async fn update_check(Query(query): Query<UpdateCheckQuery>) -> Json<UpdateC
             .unwrap_or(false);
         installer.available = false;
 
-        if let Some(target) = runtime.target.as_deref() {
-            let mut assets = installer_assets_for_target(
-                &release.assets,
-                &repo,
-                target,
-                &runtime.channel,
-                release.tag_name.trim(),
-            );
-            assets.sort_by(|a, b| a.name.cmp(&b.name));
-            installer.assets = assets;
-            let selected = select_primary_installer_asset(runtime, installer.assets.as_slice());
-            installer.selection_error = selected.selection_error;
-            if let Some(primary) = selected.primary_asset {
-                installer.primary_asset_name = Some(primary.name.clone());
-                installer.primary_asset_url = Some(primary.url.clone());
-                installer.available = version_available;
-            }
-        } else {
+        let Some(target_raw) = runtime.target.as_deref() else {
             installer.selection_error = Some(missing_target_error());
+            return Json(response);
+        };
+
+        let Some(target) = normalize_installer_target(target_raw) else {
+            installer.selection_error = Some(unsupported_target_error(target_raw));
+            return Json(response);
+        };
+
+        installer.target = Some(target.to_string());
+        let mut assets = installer_assets_for_target(
+            &release.assets,
+            &repo,
+            target,
+            &runtime.channel,
+            release.tag_name.trim(),
+        );
+        assets.sort_by(|a, b| a.name.cmp(&b.name));
+        installer.assets = assets;
+        let selected = select_primary_installer_asset(runtime, installer.assets.as_slice());
+        installer.selection_error = selected.selection_error;
+        if let Some(primary) = selected.primary_asset {
+            installer.primary_asset_name = Some(primary.name.clone());
+            installer.primary_asset_url = Some(primary.url.clone());
+            installer.available = version_available;
         }
     }
 
@@ -474,23 +483,99 @@ fn compare_prerelease(a: &str, b: &str) -> Ordering {
 }
 
 fn runtime_target_triple() -> Option<String> {
-    let os = std::env::consts::OS;
-    let arch = std::env::consts::ARCH;
-    match (os, arch) {
-        ("linux", "x86_64") => Some("x86_64-unknown-linux-gnu".to_string()),
-        ("macos", "x86_64") => Some("x86_64-apple-darwin".to_string()),
-        ("macos", "aarch64") => Some("aarch64-apple-darwin".to_string()),
-        ("windows", "x86_64") => Some("x86_64-pc-windows-msvc".to_string()),
+    runtime_target_triple_for(
+        std::env::consts::OS,
+        std::env::consts::ARCH,
+        cfg!(target_env = "musl"),
+    )
+    .map(ToString::to_string)
+}
+
+fn runtime_target_triple_for(os: &str, arch: &str, musl: bool) -> Option<&'static str> {
+    let os = normalize_runtime_os(os);
+    let arch = normalize_runtime_arch(arch);
+
+    match (os.as_str(), arch.as_str(), musl) {
+        ("linux", "x86_64", true) => Some("x86_64-unknown-linux-musl"),
+        ("linux", "x86_64", false) => Some("x86_64-unknown-linux-gnu"),
+        ("linux", "aarch64", true) => Some("aarch64-unknown-linux-musl"),
+        ("linux", "aarch64", false) => Some("aarch64-unknown-linux-gnu"),
+        ("linux", "i686", true) => Some("i686-unknown-linux-musl"),
+        ("linux", "i686", false) => Some("i686-unknown-linux-gnu"),
+        // Release builds only publish armv7 hard-float for 32-bit ARM.
+        ("linux", "armv7", true) => Some("armv7-unknown-linux-musleabihf"),
+        ("linux", "armv7", false) => Some("armv7-unknown-linux-gnueabihf"),
+        ("macos", "x86_64", _) => Some("x86_64-apple-darwin"),
+        ("macos", "aarch64", _) => Some("aarch64-apple-darwin"),
+        ("windows", "x86_64", _) => Some("x86_64-pc-windows-msvc"),
+        ("windows", "aarch64", _) => Some("aarch64-pc-windows-msvc"),
         _ => None,
     }
 }
 
-fn service_asset_name(target: &str) -> String {
-    if target.contains("windows") {
-        format!("opencode-studio-{target}.zip")
-    } else {
-        format!("opencode-studio-{target}.tar.gz")
+fn normalize_runtime_os(raw: &str) -> String {
+    let lower = raw.trim().to_ascii_lowercase();
+    match lower.as_str() {
+        "darwin" | "osx" => "macos".to_string(),
+        "win32" => "windows".to_string(),
+        _ => lower,
     }
+}
+
+fn normalize_runtime_arch(raw: &str) -> String {
+    let lower = raw.trim().to_ascii_lowercase();
+    match lower.as_str() {
+        "amd64" => "x86_64".to_string(),
+        "arm64" => "aarch64".to_string(),
+        // Common variants from uname -m / tooling.
+        "i386" => "i686".to_string(),
+        "x86" => "i686".to_string(),
+        "arm" => "armv7".to_string(),
+        "armv7l" | "armv7" => "armv7".to_string(),
+        _ => lower,
+    }
+}
+
+fn service_asset_candidates(target: &str, release_tag: &str) -> Vec<String> {
+    let tag = release_tag.trim();
+    let (primary_ext, secondary_ext) = if is_windows_target(target) {
+        ("zip", "tar.gz")
+    } else {
+        ("tar.gz", "zip")
+    };
+
+    let mut candidates = Vec::new();
+    for ext in [primary_ext, secondary_ext] {
+        candidates.push(format!("opencode-studio-backend-{target}-{tag}.{ext}"));
+        candidates.push(format!("opencode-studio-backend-{target}.{ext}"));
+        candidates.push(format!("opencode-studio-{target}-{tag}.{ext}"));
+        candidates.push(format!("opencode-studio-{target}.{ext}"));
+    }
+    candidates
+}
+
+fn resolve_release_asset_url(
+    assets: &[GithubReleaseAsset],
+    repo: &str,
+    release_tag: &str,
+    candidates: &[String],
+) -> (Option<String>, Option<String>) {
+    for name in candidates {
+        if let Some(url) = find_asset_url(assets, name) {
+            return (Some(name.clone()), Some(url));
+        }
+    }
+
+    // If GitHub returned an explicit asset list, fail fast instead of guessing.
+    if !assets.is_empty() {
+        return (None, None);
+    }
+
+    let primary = candidates.first().cloned();
+    let url = primary
+        .as_deref()
+        .map(|name| release_asset_url(repo, release_tag, name));
+    (primary, url)
 }
 
 fn find_asset_url(assets: &[GithubReleaseAsset], name: &str) -> Option<String> {
@@ -500,13 +585,27 @@ fn find_asset_url(assets: &[GithubReleaseAsset], name: &str) -> Option<String> {
         .and_then(|asset| nonempty(Some(asset.browser_download_url.as_str())))
 }
 
-fn build_service_update_command(asset_url: Option<&str>) -> Option<String> {
+fn build_service_update_command(
+    asset_url: Option<&str>,
+    asset_name: Option<&str>,
+) -> Option<String> {
     let url = nonempty(asset_url)?;
-    if std::env::consts::OS == "windows" {
-        Some(format!("curl -fL \"{url}\" -o opencode-studio.zip"))
+    Some(build_service_update_command_for(
+        std::env::consts::OS,
+        asset_name,
+        &url,
+    ))
+}
+
+fn build_service_update_command_for(os: &str, asset_name: Option<&str>, url: &str) -> String {
+    let guessed_name = asset_name.unwrap_or("");
+    let lower = guessed_name.to_ascii_lowercase();
+    let out = if lower.ends_with(".zip") || os == "windows" {
+        "opencode-studio.zip"
     } else {
-        Some(format!("curl -fL \"{url}\" -o opencode-studio.tar.gz"))
-    }
+        "opencode-studio.tar.gz"
+    };
+    format!("curl -fL \"{url}\" -o {out}")
 }
 
 fn normalize_installer_channel(raw: Option<&str>) -> String {
@@ -564,7 +663,8 @@ fn installer_assets_for_target(
         })
         .collect::<Vec<_>>();
 
-    if links.is_empty() {
+    // Only guess URLs when we do not have an asset listing (web fallback mode).
+    if links.is_empty() && assets.is_empty() {
         links = installer_expected_asset_names(target, channel, release_tag)
             .into_iter()
             .filter_map(|name| {
@@ -582,6 +682,40 @@ fn installer_assets_for_target(
     links
 }
 
+const SUPPORTED_INSTALLER_TARGETS: &[&str] = &[
+    "x86_64-unknown-linux-gnu",
+    "aarch64-unknown-linux-gnu",
+    "x86_64-apple-darwin",
+    "aarch64-apple-darwin",
+    "x86_64-pc-windows-msvc",
+    "aarch64-pc-windows-msvc",
+];
+
+fn normalize_installer_target(raw: &str) -> Option<&'static str> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    SUPPORTED_INSTALLER_TARGETS
+        .iter()
+        .copied()
+        .find(|candidate| trimmed.eq_ignore_ascii_case(candidate))
+}
+
+fn unsupported_target_error(raw: &str) -> InstallerSelectionError {
+    InstallerSelectionError {
+        code: "unsupportedTarget".to_string(),
+        message: format!(
+            "unsupported installer target: {raw}; expected one of: {}",
+            SUPPORTED_INSTALLER_TARGETS.join(", ")
+        ),
+        expected_target: nonempty(Some(raw)),
+        expected_installer_type: None,
+        expected_manager: None,
+        available_identities: Vec::new(),
+    }
+}
+
 fn installer_asset_prefix(target: &str, channel: &str, release_tag: &str) -> String {
     let suffix = if channel == "cef" { "-cef" } else { "" };
     format!("opencode-studio-desktop-{target}{suffix}-{release_tag}.")
@@ -591,14 +725,14 @@ fn installer_expected_asset_names(target: &str, channel: &str, release_tag: &str
     let suffix = if channel == "cef" { "-cef" } else { "" };
     let stem = format!("opencode-studio-desktop-{target}{suffix}-{release_tag}");
 
-    if target.contains("windows") {
+    if is_windows_target(target) {
         if release_tag.contains('-') {
             return vec![format!("{stem}.exe")];
         }
         return vec![format!("{stem}.msi"), format!("{stem}.exe")];
     }
 
-    if target.contains("apple") || target.contains("darwin") {
+    if is_macos_target(target) {
         return vec![format!("{stem}.dmg")];
     }
 
@@ -611,6 +745,15 @@ fn installer_expected_asset_names(target: &str, channel: &str, release_tag: &str
 
 fn release_asset_url(repo: &str, release_tag: &str, asset_name: &str) -> String {
     format!("{GITHUB_WEB_BASE}/{repo}/releases/download/{release_tag}/{asset_name}")
+}
+
+fn is_windows_target(target: &str) -> bool {
+    target.to_ascii_lowercase().contains("windows")
+}
+
+fn is_macos_target(target: &str) -> bool {
+    let lower = target.to_ascii_lowercase();
+    lower.contains("apple") || lower.contains("darwin")
 }
 
 fn classify_asset_identity(asset_name: &str) -> Option<AssetIdentity> {
@@ -948,5 +1091,201 @@ mod tests {
                 .expect("rpm identity");
         assert_eq!(rpm.installer_type, "rpm");
         assert_eq!(rpm.manager, "dnf");
+    }
+
+    #[test]
+    fn runtime_target_triple_for_maps_linux_and_macos_variants() {
+        assert_eq!(
+            runtime_target_triple_for("linux", "x86_64", false),
+            Some("x86_64-unknown-linux-gnu")
+        );
+        assert_eq!(
+            runtime_target_triple_for("linux", "aarch64", false),
+            Some("aarch64-unknown-linux-gnu")
+        );
+        assert_eq!(
+            runtime_target_triple_for("macos", "x86_64", false),
+            Some("x86_64-apple-darwin")
+        );
+        assert_eq!(
+            runtime_target_triple_for("macos", "aarch64", false),
+            Some("aarch64-apple-darwin")
+        );
+    }
+
+    #[test]
+    fn runtime_target_triple_for_maps_linux_musl_variants() {
+        assert_eq!(
+            runtime_target_triple_for("linux", "x86_64", true),
+            Some("x86_64-unknown-linux-musl")
+        );
+        assert_eq!(
+            runtime_target_triple_for("linux", "aarch64", true),
+            Some("aarch64-unknown-linux-musl")
+        );
+        assert_eq!(
+            runtime_target_triple_for("linux", "x86", true),
+            Some("i686-unknown-linux-musl")
+        );
+        assert_eq!(
+            runtime_target_triple_for("linux", "arm", true),
+            Some("armv7-unknown-linux-musleabihf")
+        );
+    }
+
+    #[test]
+    fn installer_expected_asset_names_match_macos_and_linux_formats() {
+        let mac_assets = installer_expected_asset_names("aarch64-apple-darwin", "main", "v1.2.0");
+        assert_eq!(
+            mac_assets,
+            vec!["opencode-studio-desktop-aarch64-apple-darwin-v1.2.0.dmg".to_string()]
+        );
+
+        let linux_assets =
+            installer_expected_asset_names("aarch64-unknown-linux-gnu", "main", "v1.2.0");
+        assert_eq!(
+            linux_assets,
+            vec![
+                "opencode-studio-desktop-aarch64-unknown-linux-gnu-v1.2.0.AppImage".to_string(),
+                "opencode-studio-desktop-aarch64-unknown-linux-gnu-v1.2.0.deb".to_string(),
+                "opencode-studio-desktop-aarch64-unknown-linux-gnu-v1.2.0.rpm".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn runtime_target_triple_for_maps_windows_and_unknown() {
+        assert_eq!(
+            runtime_target_triple_for("windows", "x86_64", false),
+            Some("x86_64-pc-windows-msvc")
+        );
+        assert_eq!(
+            runtime_target_triple_for("windows", "aarch64", false),
+            Some("aarch64-pc-windows-msvc")
+        );
+        assert_eq!(runtime_target_triple_for("freebsd", "x86_64", false), None);
+    }
+
+    #[test]
+    fn service_asset_candidates_prefer_backend_names_and_platform_extensions() {
+        assert_eq!(
+            service_asset_candidates("x86_64-pc-Windows-msvc", "v1.2.0")[0],
+            "opencode-studio-backend-x86_64-pc-Windows-msvc-v1.2.0.zip"
+        );
+        assert_eq!(
+            service_asset_candidates("x86_64-unknown-linux-gnu", "v1.2.0")[0],
+            "opencode-studio-backend-x86_64-unknown-linux-gnu-v1.2.0.tar.gz"
+        );
+    }
+
+    #[test]
+    fn runtime_target_triple_for_normalizes_common_aliases() {
+        assert_eq!(
+            runtime_target_triple_for("linux", "amd64", false),
+            Some("x86_64-unknown-linux-gnu")
+        );
+        assert_eq!(
+            runtime_target_triple_for("darwin", "arm64", false),
+            Some("aarch64-apple-darwin")
+        );
+        assert_eq!(
+            runtime_target_triple_for("win32", "arm64", false),
+            Some("aarch64-pc-windows-msvc")
+        );
+    }
+
+    #[test]
+    fn normalize_installer_target_accepts_supported_targets_case_insensitive() {
+        assert_eq!(
+            normalize_installer_target("X86_64-pc-Windows-msvc"),
+            Some("x86_64-pc-windows-msvc")
+        );
+        assert_eq!(
+            normalize_installer_target("aarch64-apple-darwin"),
+            Some("aarch64-apple-darwin")
+        );
+        assert_eq!(normalize_installer_target(""), None);
+        assert_eq!(
+            normalize_installer_target("x86_64-unknown-linux-musl"),
+            None
+        );
+    }
+
+    #[test]
+    fn installer_expected_asset_names_use_case_insensitive_target_detection() {
+        let windows = installer_expected_asset_names("x86_64-pc-Windows-msvc", "main", "v1.2.0");
+        assert_eq!(
+            windows,
+            vec![
+                "opencode-studio-desktop-x86_64-pc-Windows-msvc-v1.2.0.msi".to_string(),
+                "opencode-studio-desktop-x86_64-pc-Windows-msvc-v1.2.0.exe".to_string(),
+            ]
+        );
+
+        let mac = installer_expected_asset_names("AARCH64-APPLE-DARWIN", "main", "v1.2.0");
+        assert_eq!(
+            mac,
+            vec!["opencode-studio-desktop-AARCH64-APPLE-DARWIN-v1.2.0.dmg".to_string()]
+        );
+    }
+
+    #[test]
+    fn installer_expected_asset_names_prerelease_windows_prefers_exe_only() {
+        let assets =
+            installer_expected_asset_names("x86_64-pc-windows-msvc", "main", "v1.2.0-rc.1");
+        assert_eq!(
+            assets,
+            vec!["opencode-studio-desktop-x86_64-pc-windows-msvc-v1.2.0-rc.1.exe".to_string()]
+        );
+    }
+
+    #[test]
+    fn parse_manager_from_asset_name_supports_multiple_patterns() {
+        assert_eq!(
+            parse_manager_from_asset_name(
+                "opencode-studio-desktop-x86_64-pc-windows-msvc-v1.2.0-winget-.exe"
+            ),
+            Some("winget")
+        );
+        assert_eq!(
+            parse_manager_from_asset_name("opencode-studio.desktop.scoop.installer.exe"),
+            Some("scoop")
+        );
+        assert_eq!(
+            parse_manager_from_asset_name("opencode_studio_brew_pkg.dmg"),
+            Some("brew")
+        );
+    }
+
+    #[test]
+    fn build_service_update_command_for_varies_by_os() {
+        assert_eq!(
+            build_service_update_command_for("windows", None, "https://example.invalid/a.zip"),
+            "curl -fL \"https://example.invalid/a.zip\" -o opencode-studio.zip"
+        );
+        assert_eq!(
+            build_service_update_command_for("linux", None, "https://example.invalid/a.tar.gz"),
+            "curl -fL \"https://example.invalid/a.tar.gz\" -o opencode-studio.tar.gz"
+        );
+    }
+
+    #[test]
+    fn installer_assets_for_target_falls_back_to_expected_urls() {
+        let assets = installer_assets_for_target(
+            &[],
+            "canxin121/opencode-studio",
+            "x86_64-pc-windows-msvc",
+            "main",
+            "v1.2.0",
+        );
+
+        assert_eq!(assets.len(), 2);
+        assert_eq!(assets[0].installer_type, "msi");
+        assert_eq!(assets[0].manager, "direct");
+        assert_eq!(
+            assets[0].url,
+            "https://github.com/canxin121/opencode-studio/releases/download/v1.2.0/opencode-studio-desktop-x86_64-pc-windows-msvc-v1.2.0.msi"
+        );
+        assert_eq!(assets[1].installer_type, "exe");
     }
 }

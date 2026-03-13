@@ -446,7 +446,7 @@ watch(
 )
 
 watch(
-  () => sessionDiff.value.map((entry) => entry.file).join('|'),
+  sessionDiff,
   () => {
     const list = sessionDiff.value
     if (!list.length) {

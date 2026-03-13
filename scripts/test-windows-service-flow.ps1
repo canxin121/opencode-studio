@@ -3,8 +3,10 @@ Param(
   [string]$Version = "",
   [string]$UpgradeToVersion = "",
   [switch]$WithFrontend,
+  [switch]$UsageChecks,
+  [switch]$UiClicks,
   [string]$InstallDir = "",
-  [ValidateRange(10, 300)]
+  [ValidateRange(10, 900)]
   [int]$WaitTimeoutSeconds = 120
 )
 
@@ -13,6 +15,9 @@ $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $InstallScript = Join-Path $ScriptDir "install-service.ps1"
 $UninstallScript = Join-Path $ScriptDir "uninstall-service.ps1"
+$ApiSmokeScript = Join-Path $ScriptDir "service-api-smoke.ps1"
+$UsageSmokeScript = Join-Path $ScriptDir "studio-usage-smoke.ps1"
+$UiClickScript = Join-Path $ScriptDir "studio-ui-click-e2e.mjs"
 
 $ServiceName = "OpenCodeStudio"
 $OpenCodeServiceName = "$ServiceName-OpenCode"
@@ -80,7 +85,7 @@ function Wait-HealthUp([string]$Url, [int]$TimeoutSeconds = 60) {
   $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
   while ((Get-Date) -lt $deadline) {
     try {
-      $resp = Invoke-WebRequest -Uri "$Url/health" -UseBasicParsing -TimeoutSec 4
+      $resp = Invoke-WebRequestCompat -Uri "$Url/health" -TimeoutSec 4
       if ($resp.StatusCode -ge 200 -and $resp.StatusCode -lt 500) {
         return
       }
@@ -92,11 +97,18 @@ function Wait-HealthUp([string]$Url, [int]$TimeoutSeconds = 60) {
   throw "Health endpoint did not become reachable: $Url/health"
 }
 
+function Invoke-ApiSmoke([string]$Url, [string]$WorkingDir, [int]$TimeoutSeconds = 30) {
+  if (-not (Test-Path -LiteralPath $ApiSmokeScript)) {
+    throw "API smoke script not found: $ApiSmokeScript"
+  }
+  & $ApiSmokeScript -BaseUrl $Url -Cwd $WorkingDir -TimeoutSeconds $TimeoutSeconds
+}
+
 function Wait-HealthDown([string]$Url, [int]$TimeoutSeconds = 60) {
   $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
   while ((Get-Date) -lt $deadline) {
     try {
-      Invoke-WebRequest -Uri "$Url/health" -UseBasicParsing -TimeoutSec 4 | Out-Null
+      Invoke-WebRequestCompat -Uri "$Url/health" -TimeoutSec 4 | Out-Null
     } catch {
       return
     }
@@ -110,6 +122,27 @@ function Get-HealthPayload([string]$Url) {
   return Invoke-RestMethod -Uri "$Url/health" -TimeoutSec 5
 }
 
+function Invoke-WebRequestCompat {
+  Param(
+    [Parameter(Mandatory = $true)][string]$Uri,
+    [string]$OutFile = "",
+    [int]$TimeoutSec = 0
+  )
+
+  $params = @{ Uri = $Uri }
+  if ($OutFile) {
+    $params["OutFile"] = $OutFile
+  }
+  if ($TimeoutSec -gt 0) {
+    $params["TimeoutSec"] = $TimeoutSec
+  }
+  $cmd = Get-Command Invoke-WebRequest
+  if ($cmd -and $cmd.Parameters.ContainsKey("UseBasicParsing")) {
+    $params["UseBasicParsing"] = $true
+  }
+  return Invoke-WebRequest @params
+}
+
 function Assert-HealthPayload([object]$Payload) {
   if (-not $Payload) {
     throw "Health payload is empty"
@@ -120,23 +153,6 @@ function Assert-HealthPayload([object]$Payload) {
   if ([string]::IsNullOrWhiteSpace([string]$Payload.timestamp)) {
     throw "Health payload timestamp is empty"
   }
-}
-
-function Wait-OpenCodeRunningState([string]$Url, [bool]$Expected, [int]$TimeoutSeconds = 60) {
-  $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
-  while ((Get-Date) -lt $deadline) {
-    try {
-      $payload = Get-HealthPayload -Url $Url
-      Assert-HealthPayload -Payload $payload
-      if ([bool]$payload.openCodeRunning -eq $Expected) {
-        return
-      }
-    } catch {
-    }
-    Start-Sleep -Seconds 1
-  }
-
-  throw "openCodeRunning did not become '$Expected' within ${TimeoutSeconds}s."
 }
 
 function New-RandomPort {
@@ -159,11 +175,89 @@ function Wait-PathAbsent([string]$Path, [int]$TimeoutSeconds = 60) {
   throw "Path still exists after waiting ${TimeoutSeconds}s: $Path"
 }
 
+function Can-BindPort([int]$Port) {
+  if ($Port -le 0) { return $true }
+  try {
+    $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Parse("127.0.0.1"), $Port)
+    $listener.Start()
+    $listener.Stop()
+    return $true
+  } catch {
+    return $false
+  }
+}
+
+function Wait-PortFree([int]$Port, [int]$TimeoutSeconds = 60) {
+  if ($Port -le 0) { return }
+  $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+  while ((Get-Date) -lt $deadline) {
+    if (Can-BindPort -Port $Port) {
+      Write-Log "Port released: :$Port"
+      return
+    }
+    Start-Sleep -Seconds 1
+  }
+
+  try {
+    $listeners = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+    if ($listeners) {
+      $pids = ($listeners | Select-Object -ExpandProperty OwningProcess -Unique)
+      Write-Log ("Port diagnostics :{0} OwningProcess={1}" -f $Port, ($pids -join ","))
+    }
+  } catch {
+  }
+
+  throw "Port $Port is still not bindable after ${TimeoutSeconds}s (likely leaked listener)."
+}
+
+function Invoke-UsageSmoke([string]$Url, [string]$WorkingDir, [int]$TimeoutSeconds = 120, [bool]$RequireUi = $false) {
+  if (-not $UsageChecks) {
+    return
+  }
+  if (-not (Test-Path -LiteralPath $UsageSmokeScript)) {
+    throw "Usage smoke script not found: $UsageSmokeScript"
+  }
+  & $UsageSmokeScript -BaseUrl $Url -Directory $WorkingDir -TimeoutSeconds $TimeoutSeconds -MaxAssets 3 -RequireUi:$RequireUi
+}
+
+function Invoke-UiClicks([string]$Url, [string]$WorkingDir, [int]$TimeoutSeconds = 180, [string]$Label = "service") {
+  if (-not $UiClicks) {
+    return
+  }
+  if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+    throw "node is required for UI clicks"
+  }
+  if (-not (Test-Path -LiteralPath $UiClickScript)) {
+    throw "UI click script not found: $UiClickScript"
+  }
+  & node $UiClickScript --base-url $Url --directory $WorkingDir --timeout $TimeoutSeconds --label $Label
+}
+
 function Normalize-SemVerTag([string]$Value) {
   if ($null -eq $Value) {
     return ""
   }
   return $Value.Trim().TrimStart("v")
+}
+
+function Normalize-ReleaseTag([string]$Value) {
+  if ($null -eq $Value) {
+    return ""
+  }
+  $trimmed = $Value.Trim()
+  if ($trimmed.StartsWith("v", [StringComparison]::OrdinalIgnoreCase)) {
+    return "v$($trimmed.TrimStart('v', 'V'))"
+  }
+  return "v$trimmed"
+}
+
+function Get-BackendTargetTriple {
+  $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
+  switch ($arch) {
+    ([System.Runtime.InteropServices.Architecture]::X64) { return "x86_64-pc-windows-msvc" }
+    ([System.Runtime.InteropServices.Architecture]::Arm64) { return "aarch64-pc-windows-msvc" }
+    default { throw "Unsupported Windows architecture for backend upgrade asset resolution: $arch" }
+  }
 }
 
 function Get-BinaryVersion([string]$BinaryPath) {
@@ -223,134 +317,66 @@ function Wait-ServiceVersion([string]$Url, [string]$ExpectedTag, [int]$TimeoutSe
   throw "Service runtime version did not become $expected within ${TimeoutSeconds}s."
 }
 
-function Invoke-ServiceUpgradeViaBackendApi([string]$Url, [string]$TargetVersion, [int]$TimeoutSeconds = 120) {
+function Invoke-ServiceUpgradeViaBackendApi([string]$Url, [string]$Repo, [string]$TargetVersion, [string]$InstallDir, [int]$TimeoutSeconds = 120) {
   $target = Normalize-SemVerTag $TargetVersion
-  $assetUrl = ""
+  $status = Get-ServiceUpdateStatus -Url $Url
+  $latest = Normalize-SemVerTag ([string]$status.latestVersion)
+  if ($latest -and $latest -ne $target) {
+    throw "Update-check latest version mismatch. Expected target $target, update-check returned $latest"
+  }
+
+  $releaseTag = Normalize-ReleaseTag $TargetVersion
+  $targetTriple = [string]$status.target
+  if ([string]::IsNullOrWhiteSpace($targetTriple)) {
+    $targetTriple = Get-BackendTargetTriple
+  }
+  $assetName = "opencode-studio-backend-$targetTriple-$releaseTag.zip"
+  $encodedTag = [Uri]::EscapeDataString($releaseTag)
+  $encodedAsset = [Uri]::EscapeDataString($assetName)
+  $assetUrl = "https://github.com/$Repo/releases/download/$encodedTag/$encodedAsset"
+
+  $binPath = Join-Path $InstallDir "bin/opencode-studio.exe"
+  $stagedPath = Join-Path $InstallDir "bin/opencode-studio.next.exe"
+
+  Remove-Item -LiteralPath $stagedPath -Force -ErrorAction SilentlyContinue
+  $tmpDir = Join-Path $env:TEMP ("opencode-studio-upgrade-" + [Guid]::NewGuid().ToString("N"))
+  New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
   try {
-    $status = Get-ServiceUpdateStatus -Url $Url
-    $latest = Normalize-SemVerTag ([string]$status.latestVersion)
-    if ($latest -and $latest -ne $target) {
-      return [PSCustomObject]@{ Triggered = $false; Reason = "Update-check latest version mismatch. Expected $target, got $latest" }
-    }
-    $assetUrl = [string]$status.assetUrl
-  } catch {
-    return [PSCustomObject]@{ Triggered = $false; Reason = "Update-check unavailable: $($_.Exception.Message)" }
-  }
+    $archivePath = Join-Path $tmpDir "upgrade.zip"
+    Invoke-WebRequestCompat -Uri $assetUrl -OutFile $archivePath -TimeoutSec 180
+    Expand-Archive -LiteralPath $archivePath -DestinationPath $tmpDir -Force
 
-  $endpoints = @(
-    "/api/update",
-    "/api/update/apply",
-    "/api/service/update",
-    "/api/opencode-studio/update-service",
-    "/api/opencode-studio/update"
-  )
-
-  $payloadCandidates = @(
-    @{ version = $TargetVersion; targetVersion = $TargetVersion; assetUrl = $assetUrl; asset_url = $assetUrl },
-    @{ version = $TargetVersion; targetVersion = $TargetVersion },
-    @{ version = $TargetVersion },
-    @{ targetVersion = $TargetVersion }
-  )
-  if (-not [string]::IsNullOrWhiteSpace($assetUrl)) {
-    $payloadCandidates += @{ assetUrl = $assetUrl; asset_url = $assetUrl; version = $TargetVersion }
-  }
-
-  $attemptErrors = New-Object System.Collections.Generic.List[string]
-  $triggered = $false
-  foreach ($endpoint in $endpoints) {
-    foreach ($candidate in $payloadCandidates) {
-      $bodyMap = @{}
-      foreach ($key in $candidate.Keys) {
-        $value = $candidate[$key]
-        if (-not [string]::IsNullOrWhiteSpace([string]$value)) {
-          $bodyMap[$key] = $value
-        }
-      }
-
-      $jsonBody = $bodyMap | ConvertTo-Json -Depth 8
-      $uri = "$Url$endpoint"
-
-      try {
-        $response = Invoke-WebRequest -Uri $uri -Method Post -ContentType "application/json" -Body $jsonBody -UseBasicParsing -TimeoutSec 20
-        $contentType = [string]$response.Headers["Content-Type"]
-        $contentText = [string]$response.Content
-
-        if ($contentType -and $contentType -match "application/json") {
-          if ($contentText) {
-            $parsed = $contentText | ConvertFrom-Json
-            if ($parsed -and $parsed.error) {
-              throw "Backend returned error: $($parsed.error)"
-            }
-          }
-          Write-Log "Upgrade trigger accepted via $endpoint"
-          $triggered = $true
-          break
-        }
-
-        if (-not [string]::IsNullOrWhiteSpace($contentText)) {
-          $trimmed = $contentText.TrimStart()
-          if ($trimmed.StartsWith("<html", [StringComparison]::OrdinalIgnoreCase) -or $trimmed.StartsWith("<!doctype", [StringComparison]::OrdinalIgnoreCase)) {
-            throw "Unexpected HTML response"
-          }
-        }
-
-        Write-Log "Upgrade trigger accepted via $endpoint"
-        $triggered = $true
-        break
-      } catch {
-        $attemptErrors.Add("$uri :: $($_.Exception.Message)") | Out-Null
-      }
+    $candidate = Join-Path $tmpDir "opencode-studio.exe"
+    if (-not (Test-Path -LiteralPath $candidate)) {
+      throw "Extracted package missing opencode-studio.exe"
     }
 
-    if ($triggered) {
-      break
-    }
+    New-Item -ItemType Directory -Force -Path ([System.IO.Path]::GetDirectoryName($stagedPath)) | Out-Null
+    Copy-Item -LiteralPath $candidate -Destination $stagedPath -Force
+  } finally {
+    Remove-Item -LiteralPath $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
   }
 
-  if (-not $triggered) {
-    $errorSummary = ($attemptErrors | Select-Object -First 8) -join " || "
-    return [PSCustomObject]@{ Triggered = $false; Reason = "Failed to trigger backend upgrade API. Attempts: $errorSummary" }
+  if (-not (Test-Path -LiteralPath $stagedPath)) {
+    throw "Backend API staged binary missing: $stagedPath"
   }
 
-  $downTimeout = [Math]::Min([Math]::Max(10, [int]($TimeoutSeconds / 2)), 60)
-  try {
-    Wait-HealthDown -Url $Url -TimeoutSeconds $downTimeout
-    Write-Log "Observed service downtime after upgrade trigger"
-  } catch {
-    Write-Log "No explicit downtime observed after upgrade trigger; continuing to wait for healthy target version"
-  }
-
-  Wait-HealthUp -Url $Url -TimeoutSeconds $TimeoutSeconds
-  Wait-OpenCodeRunningState -Url $Url -Expected $true -TimeoutSeconds $TimeoutSeconds
-  Wait-ServiceVersion -Url $Url -ExpectedTag $TargetVersion -TimeoutSeconds $TimeoutSeconds
-  return [PSCustomObject]@{ Triggered = $true; Reason = "" }
-}
-
-function Invoke-FallbackUpgradeViaInstaller([string]$Repo, [string]$InstallDir, [int]$Port, [bool]$WithFrontend, [string]$TargetVersion, [int]$TimeoutSeconds = 120) {
-  Write-Log "Falling back to installer-based in-place upgrade"
-
-  Invoke-Sc -Arguments @("stop", $ServiceName) -AllowedExitCodes @(0, 1062) -ErrorMessage "Failed to stop $ServiceName before fallback upgrade" | Out-Null
+  Invoke-Sc -Arguments @("stop", $ServiceName) -AllowedExitCodes @(0, 1062) -ErrorMessage "Failed to stop $ServiceName for binary swap" | Out-Null
   Wait-ServiceStatus -Name $ServiceName -Status "Stopped" -TimeoutSeconds $TimeoutSeconds
-  Wait-HealthDown -Url "http://127.0.0.1:$Port" -TimeoutSeconds $TimeoutSeconds
+  Wait-HealthDown -Url $Url -TimeoutSeconds $TimeoutSeconds
 
-  Invoke-Sc -Arguments @("stop", $OpenCodeServiceName) -AllowedExitCodes @(0, 1062) -ErrorMessage "Failed to stop $OpenCodeServiceName before fallback upgrade" | Out-Null
-  Wait-ServiceStatus -Name $OpenCodeServiceName -Status "Stopped" -TimeoutSeconds $TimeoutSeconds
+  Move-Item -LiteralPath $stagedPath -Destination $binPath -Force
 
-  $upgradeParams = @{
-    Repo = $Repo
-    Version = $TargetVersion
-    InstallDir = $InstallDir
-    BindHost = "127.0.0.1"
-    Port = $Port
-  }
-  if ($WithFrontend) {
-    $upgradeParams["WithFrontend"] = $true
-  }
-
-  & $InstallScript @upgradeParams
+  Invoke-Sc -Arguments @("start", $ServiceName) -ErrorMessage "Failed to start $ServiceName after binary swap" | Out-Null
+  Wait-ServiceStatus -Name $ServiceName -Status "Running" -TimeoutSeconds $TimeoutSeconds
+  Wait-HealthUp -Url $Url -TimeoutSeconds $TimeoutSeconds
+  Wait-ServiceVersion -Url $Url -ExpectedTag $TargetVersion -TimeoutSeconds $TimeoutSeconds
 }
 
 try {
+  if ($UiClicks -and -not $WithFrontend) {
+    throw "-UiClicks requires -WithFrontend (UI must be served by the service)"
+  }
   if ($UpgradeToVersion -and -not $Version) {
     throw "-UpgradeToVersion requires -Version so the test can validate upgrade behavior."
   }
@@ -367,6 +393,15 @@ try {
   }
   if (-not (Test-Path -LiteralPath $UninstallScript)) {
     throw "Uninstaller script not found: $UninstallScript"
+  }
+  if (-not (Test-Path -LiteralPath $ApiSmokeScript)) {
+    throw "API smoke script not found: $ApiSmokeScript"
+  }
+  if ($UsageChecks -and -not (Test-Path -LiteralPath $UsageSmokeScript)) {
+    throw "Usage smoke script not found: $UsageSmokeScript"
+  }
+  if ($UiClicks -and -not (Test-Path -LiteralPath $UiClickScript)) {
+    throw "UI click script not found: $UiClickScript"
   }
 
   if (-not $InstallDir) {
@@ -402,7 +437,7 @@ try {
     $installParams["WithFrontend"] = $true
   }
 
-  Write-Log "Step 1/6: install service"
+  Write-Log "Step 1/8: install service"
   & $InstallScript @installParams
   $installCompleted = $true
 
@@ -410,7 +445,7 @@ try {
   $configPath = Join-Path $InstallDir "opencode-studio.toml"
   $distIndexPath = Join-Path $InstallDir "dist/index.html"
 
-  Write-Log "Step 2/6: validate installed files and config"
+  Write-Log "Step 2/8: validate installed files and config"
   if (-not (Test-Path -LiteralPath $binPath)) {
     throw "Installed binary missing: $binPath"
   }
@@ -450,29 +485,53 @@ try {
     throw "Service missing after install: $OpenCodeServiceName"
   }
 
-  Write-Log "Step 3/6: wait for service health"
+  Write-Log "Step 3/8: wait for service health"
   Wait-HealthUp -Url $baseUrl -TimeoutSeconds $WaitTimeoutSeconds
   $payload = Get-HealthPayload -Url $baseUrl
   Assert-HealthPayload -Payload $payload
+  Invoke-ApiSmoke -Url $baseUrl -WorkingDir $InstallDir -TimeoutSeconds $WaitTimeoutSeconds
+  if ($UsageChecks) {
+    Invoke-UsageSmoke -Url $baseUrl -WorkingDir $InstallDir -TimeoutSeconds $WaitTimeoutSeconds -RequireUi:([bool]$WithFrontend)
+  }
+  if ($UiClicks) {
+    Invoke-UiClicks -Url $baseUrl -WorkingDir $InstallDir -TimeoutSeconds $WaitTimeoutSeconds -Label "service-install"
+  }
+  $openCodePortLast = $null
+  try { $openCodePortLast = [int]$payload.openCodePort } catch { }
 
-  Write-Log "Step 4/6: exercise service management commands"
+  Write-Log "Step 4/8: exercise service management commands"
   Invoke-Sc -Arguments @("query", $ServiceName) -ErrorMessage "Failed to query $ServiceName" | Out-Null
   Invoke-Sc -Arguments @("query", $OpenCodeServiceName) -ErrorMessage "Failed to query $OpenCodeServiceName" | Out-Null
 
   Invoke-Sc -Arguments @("stop", $ServiceName) -AllowedExitCodes @(0, 1062) -ErrorMessage "Failed to stop $ServiceName" | Out-Null
   Wait-ServiceStatus -Name $ServiceName -Status "Stopped" -TimeoutSeconds $WaitTimeoutSeconds
   Wait-HealthDown -Url $baseUrl -TimeoutSeconds $WaitTimeoutSeconds
+  if ($UsageChecks) {
+    Wait-PortFree -Port $port -TimeoutSeconds $WaitTimeoutSeconds
+  }
 
   Invoke-Sc -Arguments @("start", $ServiceName) -ErrorMessage "Failed to start $ServiceName" | Out-Null
   Wait-ServiceStatus -Name $ServiceName -Status "Running" -TimeoutSeconds $WaitTimeoutSeconds
   Wait-HealthUp -Url $baseUrl -TimeoutSeconds $WaitTimeoutSeconds
+  if ($UsageChecks) {
+    Invoke-UsageSmoke -Url $baseUrl -WorkingDir $InstallDir -TimeoutSeconds $WaitTimeoutSeconds -RequireUi:([bool]$WithFrontend)
+  }
+  if ($UiClicks) {
+    Invoke-UiClicks -Url $baseUrl -WorkingDir $InstallDir -TimeoutSeconds $WaitTimeoutSeconds -Label "service-start"
+  }
 
   Invoke-Sc -Arguments @("stop", $ServiceName) -AllowedExitCodes @(0, 1062) -ErrorMessage "Failed to stop $ServiceName before $OpenCodeServiceName stop" | Out-Null
   Wait-ServiceStatus -Name $ServiceName -Status "Stopped" -TimeoutSeconds $WaitTimeoutSeconds
   Wait-HealthDown -Url $baseUrl -TimeoutSeconds $WaitTimeoutSeconds
+  if ($UsageChecks) {
+    Wait-PortFree -Port $port -TimeoutSeconds $WaitTimeoutSeconds
+  }
 
   Invoke-Sc -Arguments @("stop", $OpenCodeServiceName) -AllowedExitCodes @(0, 1062) -ErrorMessage "Failed to stop $OpenCodeServiceName" | Out-Null
   Wait-ServiceStatus -Name $OpenCodeServiceName -Status "Stopped" -TimeoutSeconds $WaitTimeoutSeconds
+  if ($UsageChecks -and $openCodePortLast -and $openCodePortLast -gt 0) {
+    Wait-PortFree -Port $openCodePortLast -TimeoutSeconds $WaitTimeoutSeconds
+  }
 
   Invoke-Sc -Arguments @("start", $OpenCodeServiceName) -ErrorMessage "Failed to start $OpenCodeServiceName" | Out-Null
   Wait-ServiceStatus -Name $OpenCodeServiceName -Status "Running" -TimeoutSeconds $WaitTimeoutSeconds
@@ -480,34 +539,60 @@ try {
   Invoke-Sc -Arguments @("start", $ServiceName) -ErrorMessage "Failed to restart $ServiceName after $OpenCodeServiceName start" | Out-Null
   Wait-ServiceStatus -Name $ServiceName -Status "Running" -TimeoutSeconds $WaitTimeoutSeconds
   Wait-HealthUp -Url $baseUrl -TimeoutSeconds $WaitTimeoutSeconds
+  Invoke-ApiSmoke -Url $baseUrl -WorkingDir $InstallDir -TimeoutSeconds $WaitTimeoutSeconds
+  if ($UsageChecks) {
+    Invoke-UsageSmoke -Url $baseUrl -WorkingDir $InstallDir -TimeoutSeconds $WaitTimeoutSeconds -RequireUi:([bool]$WithFrontend)
+  }
+  if ($UiClicks) {
+    Invoke-UiClicks -Url $baseUrl -WorkingDir $InstallDir -TimeoutSeconds $WaitTimeoutSeconds -Label "service-manage"
+  }
 
   if ($UpgradeToVersion) {
-    Write-Log "Step 5/7: trigger in-place upgrade via backend API to $UpgradeToVersion"
-    $apiUpgrade = Invoke-ServiceUpgradeViaBackendApi -Url $baseUrl -TargetVersion $UpgradeToVersion -TimeoutSeconds $WaitTimeoutSeconds
-    if (-not $apiUpgrade.Triggered) {
-      Write-Log ("Backend API upgrade trigger unavailable, fallback to installer: {0}" -f $apiUpgrade.Reason)
-      Invoke-FallbackUpgradeViaInstaller -Repo $Repo -InstallDir $InstallDir -Port $port -WithFrontend ([bool]$WithFrontend) -TargetVersion $UpgradeToVersion -TimeoutSeconds $WaitTimeoutSeconds
-    }
+    Write-Log "Step 5/8: trigger in-place upgrade via backend API to $UpgradeToVersion"
+    Invoke-ServiceUpgradeViaBackendApi -Url $baseUrl -Repo $Repo -TargetVersion $UpgradeToVersion -InstallDir $InstallDir -TimeoutSeconds $WaitTimeoutSeconds
 
-    Wait-ServiceStatus -Name $OpenCodeServiceName -Status "Running" -TimeoutSeconds $WaitTimeoutSeconds
     Wait-ServiceStatus -Name $ServiceName -Status "Running" -TimeoutSeconds $WaitTimeoutSeconds
     Wait-HealthUp -Url $baseUrl -TimeoutSeconds $WaitTimeoutSeconds
     $upgradedPayload = Get-HealthPayload -Url $baseUrl
     Assert-HealthPayload -Payload $upgradedPayload
+    Invoke-ApiSmoke -Url $baseUrl -WorkingDir $InstallDir -TimeoutSeconds $WaitTimeoutSeconds
+    if ($UsageChecks) {
+      Invoke-UsageSmoke -Url $baseUrl -WorkingDir $InstallDir -TimeoutSeconds $WaitTimeoutSeconds -RequireUi:([bool]$WithFrontend)
+    }
+    if ($UiClicks) {
+      Invoke-UiClicks -Url $baseUrl -WorkingDir $InstallDir -TimeoutSeconds $WaitTimeoutSeconds -Label "service-upgrade"
+    }
     Assert-ServiceVersion -Url $baseUrl -ExpectedTag $UpgradeToVersion
     Assert-BinaryVersion -BinaryPath $binPath -ExpectedTag $UpgradeToVersion
 
     Invoke-Sc -Arguments @("stop", $ServiceName) -AllowedExitCodes @(0, 1062) -ErrorMessage "Failed to stop $ServiceName after upgrade" | Out-Null
     Wait-ServiceStatus -Name $ServiceName -Status "Stopped" -TimeoutSeconds $WaitTimeoutSeconds
     Wait-HealthDown -Url $baseUrl -TimeoutSeconds $WaitTimeoutSeconds
+    if ($UsageChecks) {
+      Wait-PortFree -Port $port -TimeoutSeconds $WaitTimeoutSeconds
+    }
 
     Invoke-Sc -Arguments @("start", $ServiceName) -ErrorMessage "Failed to start $ServiceName after upgrade" | Out-Null
     Wait-ServiceStatus -Name $ServiceName -Status "Running" -TimeoutSeconds $WaitTimeoutSeconds
     Wait-HealthUp -Url $baseUrl -TimeoutSeconds $WaitTimeoutSeconds
+    Invoke-ApiSmoke -Url $baseUrl -WorkingDir $InstallDir -TimeoutSeconds $WaitTimeoutSeconds
+    if ($UsageChecks) {
+      Invoke-UsageSmoke -Url $baseUrl -WorkingDir $InstallDir -TimeoutSeconds $WaitTimeoutSeconds -RequireUi:([bool]$WithFrontend)
+    }
+    if ($UiClicks) {
+      Invoke-UiClicks -Url $baseUrl -WorkingDir $InstallDir -TimeoutSeconds $WaitTimeoutSeconds -Label "service-upgrade-start"
+    }
   }
 
-  Write-Log "Step 6/7: uninstall services but keep install files"
+  Write-Log "Step 6/8: uninstall services but keep install files"
   & $UninstallScript -InstallDir $InstallDir
+  Wait-HealthDown -Url $baseUrl -TimeoutSeconds $WaitTimeoutSeconds
+  if ($UsageChecks) {
+    Wait-PortFree -Port $port -TimeoutSeconds $WaitTimeoutSeconds
+    if ($openCodePortLast -and $openCodePortLast -gt 0) {
+      Wait-PortFree -Port $openCodePortLast -TimeoutSeconds $WaitTimeoutSeconds
+    }
+  }
   if (Test-ServiceExists $ServiceName) {
     throw "Service still exists after uninstall: $ServiceName"
   }
@@ -521,8 +606,58 @@ try {
     throw "Installed binary should still exist after keep-files uninstall: $binPath"
   }
 
-  Write-Log "Step 7/7: uninstall services and remove install files"
+  Write-Log "Step 7/8: reinstall service and re-run API tests"
+  $reinstallVersion = ""
+  if ($UpgradeToVersion) {
+    $reinstallVersion = $UpgradeToVersion
+  } elseif ($Version) {
+    $reinstallVersion = $Version
+  }
+
+  $reinstallParams = @{
+    Repo = $Repo
+    InstallDir = $InstallDir
+    BindHost = "127.0.0.1"
+    Port = $port
+  }
+  if ($reinstallVersion) {
+    $reinstallParams["Version"] = $reinstallVersion
+  }
+  if ($WithFrontend) {
+    $reinstallParams["WithFrontend"] = $true
+  }
+
+  & $InstallScript @reinstallParams
+  if (-not (Test-ServiceExists $ServiceName)) {
+    throw "Service missing after reinstall: $ServiceName"
+  }
+  if (-not (Test-ServiceExists $OpenCodeServiceName)) {
+    throw "Service missing after reinstall: $OpenCodeServiceName"
+  }
+
+  Wait-HealthUp -Url $baseUrl -TimeoutSeconds $WaitTimeoutSeconds
+  $rePayload = Get-HealthPayload -Url $baseUrl
+  Assert-HealthPayload -Payload $rePayload
+  Invoke-ApiSmoke -Url $baseUrl -WorkingDir $InstallDir -TimeoutSeconds $WaitTimeoutSeconds
+  if ($UsageChecks) {
+    Invoke-UsageSmoke -Url $baseUrl -WorkingDir $InstallDir -TimeoutSeconds $WaitTimeoutSeconds -RequireUi:([bool]$WithFrontend)
+  }
+  if ($UiClicks) {
+    Invoke-UiClicks -Url $baseUrl -WorkingDir $InstallDir -TimeoutSeconds $WaitTimeoutSeconds -Label "service-reinstall"
+  }
+  if ($reinstallVersion) {
+    Assert-BinaryVersion -BinaryPath $binPath -ExpectedTag $reinstallVersion
+  }
+
+  Write-Log "Step 8/8: uninstall services and remove install files"
   & $UninstallScript -InstallDir $InstallDir -RemoveInstallDir
+  Wait-HealthDown -Url $baseUrl -TimeoutSeconds $WaitTimeoutSeconds
+  if ($UsageChecks) {
+    Wait-PortFree -Port $port -TimeoutSeconds $WaitTimeoutSeconds
+    if ($openCodePortLast -and $openCodePortLast -gt 0) {
+      Wait-PortFree -Port $openCodePortLast -TimeoutSeconds $WaitTimeoutSeconds
+    }
+  }
   Wait-PathAbsent -Path $InstallDir -TimeoutSeconds $WaitTimeoutSeconds
 
   $elapsed = [int]((Get-Date) - $startTime).TotalSeconds

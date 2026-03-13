@@ -44,6 +44,7 @@ export default {
     reload: 'Reload',
     unlock: 'Unlock',
     continue: 'Continue',
+    back: 'Back',
     abort: 'Abort',
     later: 'Later',
     nextSteps: 'Next steps',
@@ -286,6 +287,16 @@ export default {
       staged: 'Staged',
       unstaged: 'Changed',
       untracked: 'Untracked',
+    },
+    changes: {
+      tab: 'Changes',
+      currentSession: 'Current session',
+      noSession: 'No active session',
+      noSessionHint: 'Select a chat session to inspect its file changes here.',
+      openFile: 'Open file in Files panel',
+    },
+    files: {
+      tab: 'Files',
     },
     terminal: {
       tab: 'Terminal',

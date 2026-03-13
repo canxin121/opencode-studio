@@ -68,7 +68,7 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Cache Rust builds
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@8a02ed5e290d8afc7e587930243f3016b3223f50
         with:
           workspaces: |
             desktop/src-tauri -> ${{ env.CARGO_TARGET_DIR }}
@@ -189,7 +189,7 @@ jobs:
             ${{ runner.os }}-tauri-cef-
 
       - name: Cache Rust builds
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@8a02ed5e290d8afc7e587930243f3016b3223f50
         with:
           workspaces: |
             desktop/src-tauri-cef -> ${{ env.CARGO_TARGET_DIR }}
