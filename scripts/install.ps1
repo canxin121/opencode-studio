@@ -14,6 +14,15 @@ Param(
 
 $ErrorActionPreference = "Stop"
 
+function Require-Command([string]$Name, [string]$Hint = "") {
+  if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
+    if ($Hint) {
+      throw "Missing dependency: $Name. $Hint"
+    }
+    throw "Missing dependency: $Name"
+  }
+}
+
 function Invoke-ScCommand {
   Param(
     [string[]]$Arguments,
@@ -267,6 +276,8 @@ function Download([string]$Url, [string]$OutFile) {
 if ([string]::IsNullOrWhiteSpace($BindHost)) {
   throw "Host must be a non-empty hostname or IP address."
 }
+
+Require-Command "opencode" "Install OpenCode first (for example: scoop install opencode, choco install opencode, or bun add -g opencode-ai@latest)."
 
 function Convert-ToTomlBasicString([string]$Value) {
   if ($null -eq $Value) {

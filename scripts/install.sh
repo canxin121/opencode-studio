@@ -28,8 +28,8 @@ Examples:
 
 Notes:
   - This installs the Rust server binary (opencode-studio) from GitHub Releases.
-  - OpenCode itself (the `opencode` CLI) should be available on PATH, or configure
-    OPENCODE_HOST/OPENCODE_PORT in the generated env file.
+  - OpenCode itself (the `opencode` CLI) must already be installed and on PATH.
+  - jq must already be installed (used to parse GitHub Releases metadata).
   - Linux/macOS only. Windows should use scripts/install.ps1.
 EOF
 }
@@ -82,40 +82,17 @@ toml_quote_basic_string() {
 
 need() { command -v "$1" >/dev/null 2>&1 || { echo "Missing dependency: $1" >&2; exit 1; }; }
 
-python_json_get() {
-  need python3
-  python3 -c 'import json, sys
-
-try:
-    value = json.load(sys.stdin)
-except Exception:
-    print("")
-    raise SystemExit(0)
-
-for key in sys.argv[1:]:
-    if isinstance(value, dict):
-        value = value.get(key)
-    elif isinstance(value, list) and key.isdigit():
-        index = int(key)
-        value = value[index] if 0 <= index < len(value) else None
-    else:
-        value = None
-
-    if value is None:
-        break
-
-if value is None:
-    print("")
-elif isinstance(value, bool):
-    print("true" if value else "false")
-elif isinstance(value, (dict, list)):
-    print(json.dumps(value))
-else:
-    print(value)' "$@"
-}
-
 need curl
 need tar
+if ! command -v jq >/dev/null 2>&1; then
+  echo "Missing dependency: jq" >&2
+  echo "Install jq first, then re-run this installer." >&2
+  echo "Examples:" >&2
+  echo "  - macOS (Homebrew): brew install jq" >&2
+  echo "  - Debian/Ubuntu:    sudo apt-get update && sudo apt-get install -y jq" >&2
+  echo "  - Alpine:           apk add --no-cache jq" >&2
+  exit 1
+fi
 if ! command -v opencode >/dev/null 2>&1; then
   echo "Missing dependency: opencode" >&2
   echo "Install OpenCode first, for example: curl -fsSL https://opencode.ai/install | bash" >&2
@@ -311,11 +288,7 @@ fetch_release_json() {
 
   if [[ "$code" != "200" ]]; then
     local msg=""
-    if command -v jq >/dev/null 2>&1; then
-      msg="$(jq -r '.message? // empty' <"$body" 2>/dev/null || true)"
-    elif command -v python3 >/dev/null 2>&1; then
-      msg="$(python_json_get "message" <"$body" 2>/dev/null || true)"
-    fi
+    msg="$(jq -r '.message? // empty' <"$body" 2>/dev/null || true)"
 
     echo "GitHub API request failed ($code): $url" >&2
     if [[ -n "$msg" ]]; then
@@ -337,23 +310,7 @@ fetch_release_json() {
 
 list_release_assets() {
   local json="$1"
-  if command -v jq >/dev/null 2>&1; then
-    jq -r '.assets[]?.name' <<<"$json" 2>/dev/null || true
-    return 0
-  fi
-
-  need python3
-  python3 -c 'import json, sys
-
-try:
-    payload = json.load(sys.stdin)
-except Exception:
-    raise SystemExit(0)
-
-for asset in payload.get("assets", []) or []:
-    name = asset.get("name")
-    if name:
-        print(name)' <<<"$json" 2>/dev/null || true
+  jq -r '.assets[]?.name' <<<"$json" 2>/dev/null || true
 }
 
 download_asset_by_name() {
@@ -381,21 +338,7 @@ download_asset_by_name() {
 asset_url_by_name() {
   local json="$1"
   local name="$2"
-
-  if command -v jq >/dev/null 2>&1; then
-    jq -r --arg NAME "$name" '.assets[] | select(.name==$NAME) | .browser_download_url' <<<"$json" | head -n 1
-    return
-  fi
-
-  need python3
-  python3 -c 'import json,sys
-j=json.loads(sys.stdin.read())
-name=sys.argv[1]
-for a in j.get("assets", []) or []:
-  if a.get("name") == name:
-    print(a.get("browser_download_url", ""))
-    sys.exit(0)
-print("")' "$name" <<<"$json"
+  jq -r --arg NAME "$name" '.assets[] | select(.name==$NAME) | .browser_download_url' <<<"$json" | head -n 1
 }
 
 linux_backend_libc_family() {
@@ -453,11 +396,7 @@ download_first_asset_by_name() {
 }
 
 RELEASE_JSON="$(fetch_release_json)"
-if command -v jq >/dev/null 2>&1; then
-  TAG_NAME="$(jq -r '.tag_name // ""' <<<"$RELEASE_JSON")"
-else
-  TAG_NAME="$(python_json_get "tag_name" <<<"$RELEASE_JSON")"
-fi
+TAG_NAME="$(jq -r '.tag_name // ""' <<<"$RELEASE_JSON")"
 if [[ -z "$TAG_NAME" ]]; then
   echo "Failed to determine release tag_name" >&2
   exit 1
