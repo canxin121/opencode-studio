@@ -3,10 +3,16 @@ import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vu
 import { useI18n } from 'vue-i18n'
 import { RiExternalLinkLine, RiLoader4Line, RiRefreshLine, RiSmartphoneLine, RiComputerLine } from '@remixicon/vue'
 
+import Button from '@/components/ui/Button.vue'
 import IconButton from '@/components/ui/IconButton.vue'
+import Input from '@/components/ui/Input.vue'
 import SegmentedButton from '@/components/ui/SegmentedButton.vue'
 import { apiUrl } from '@/lib/api'
-import type { WorkspacePreviewSession } from '@/features/workspacePreview/api/workspacePreviewApi'
+import {
+  createWorkspacePreviewSession,
+  discoverWorkspacePreviewSession,
+  type WorkspacePreviewSession,
+} from '@/features/workspacePreview/api/workspacePreviewApi'
 import { buildPreviewFrameSrc, type WorkspacePreviewScope } from '@/features/workspacePreview/model/previewUrl'
 import { useDirectoryStore } from '@/stores/directory'
 import { useWorkspacePreviewStore } from '@/stores/workspacePreview'
@@ -18,6 +24,9 @@ const preview = useWorkspacePreviewStore()
 const frameSrc = shallowRef('')
 const iframeLoading = ref(false)
 const iframeError = ref('')
+const createTargetUrl = ref('')
+const actionLoading = ref<'create' | 'discover' | ''>('')
+const actionError = ref('')
 
 const FRAME_UPDATE_THROTTLE_MS = 220
 const AUTO_REFRESH_MS = 12000
@@ -31,6 +40,16 @@ const activeSession = computed(() => preview.activeSession)
 const activeProxyBasePath = computed(() => activeSession.value?.proxyBasePath || '')
 const previewSrc = computed(() => buildPreviewFrameSrc(activeProxyBasePath.value, preview.refreshToken))
 const canOpenInWindow = computed(() => Boolean(previewSrc.value))
+const currentDirectory = computed(() => String(directoryStore.currentDirectory || '').trim())
+const canCreateSession = computed(() =>
+  Boolean(currentDirectory.value && createTargetUrl.value.trim() && !actionLoading.value),
+)
+const canDiscoverSession = computed(() => Boolean(currentDirectory.value && !actionLoading.value))
+const actionLoadingMessage = computed(() => {
+  if (actionLoading.value === 'create') return String(t('workspaceDock.preview.emptyState.createLoading'))
+  if (actionLoading.value === 'discover') return String(t('workspaceDock.preview.emptyState.discoverLoading'))
+  return ''
+})
 
 const effectiveError = computed(() => {
   if (preview.error) {
@@ -159,6 +178,57 @@ async function refreshPreview(opts?: { forceFrameReload?: boolean }) {
   }
   if (opts?.forceFrameReload) {
     preview.bumpRefreshToken()
+  }
+}
+
+async function selectSessionAfterAction(session: WorkspacePreviewSession) {
+  await refreshPreview()
+  preview.selectSession(session.id)
+  preview.bumpRefreshToken()
+}
+
+async function createManagedSession() {
+  if (!currentDirectory.value) {
+    actionError.value = String(t('workspaceDock.preview.emptyState.directoryRequired'))
+    return
+  }
+
+  const targetUrl = createTargetUrl.value.trim()
+  if (!targetUrl) {
+    actionError.value = String(t('workspaceDock.preview.emptyState.targetUrlRequired'))
+    return
+  }
+
+  actionLoading.value = 'create'
+  actionError.value = ''
+  try {
+    const session = await createWorkspacePreviewSession(currentDirectory.value, targetUrl)
+    createTargetUrl.value = ''
+    await selectSessionAfterAction(session)
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err)
+    actionError.value = String(t('workspaceDock.preview.emptyState.createFailed', { detail }))
+  } finally {
+    actionLoading.value = ''
+  }
+}
+
+async function discoverManagedSession() {
+  if (!currentDirectory.value) {
+    actionError.value = String(t('workspaceDock.preview.emptyState.directoryRequired'))
+    return
+  }
+
+  actionLoading.value = 'discover'
+  actionError.value = ''
+  try {
+    const session = await discoverWorkspacePreviewSession(currentDirectory.value)
+    await selectSessionAfterAction(session)
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err)
+    actionError.value = String(t('workspaceDock.preview.emptyState.discoverFailed', { detail }))
+  } finally {
+    actionLoading.value = ''
   }
 }
 
@@ -338,9 +408,52 @@ onBeforeUnmount(() => {
 
     <div class="relative min-h-0 flex-1 overflow-hidden rounded-md border border-sidebar-border/65 bg-background/80">
       <div v-if="showEmptyState" class="flex h-full items-center justify-center p-4 text-center">
-        <div class="max-w-[24rem] rounded-md border border-dashed border-sidebar-border/70 bg-sidebar-accent/10 p-4">
+        <div
+          class="max-w-[24rem] rounded-md border border-dashed border-sidebar-border/70 bg-sidebar-accent/10 p-4 text-left"
+        >
           <p class="text-sm font-medium">{{ t('workspaceDock.preview.states.emptyTitle') }}</p>
           <p class="mt-1 text-xs text-muted-foreground">{{ t('workspaceDock.preview.states.emptyDescription') }}</p>
+          <div class="mt-3 space-y-2">
+            <div class="space-y-1">
+              <label
+                class="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground"
+                for="workspace-preview-target-url"
+              >
+                {{ t('workspaceDock.preview.emptyState.targetUrlLabel') }}
+              </label>
+              <Input
+                id="workspace-preview-target-url"
+                v-model="createTargetUrl"
+                type="url"
+                :placeholder="String(t('workspaceDock.preview.emptyState.targetUrlPlaceholder'))"
+                :disabled="Boolean(actionLoading)"
+                class="h-8 bg-background/80 text-xs"
+                @keydown.enter.prevent="createManagedSession"
+              />
+            </div>
+
+            <p class="truncate text-[11px] text-muted-foreground">
+              {{ t('workspaceDock.preview.directoryLabel') }}
+              <span class="font-mono">{{
+                currentDirectory || t('workspaceDock.preview.emptyState.directoryEmpty')
+              }}</span>
+            </p>
+
+            <div class="flex flex-wrap gap-2">
+              <Button size="sm" :disabled="!canCreateSession" @click="createManagedSession">
+                {{ t('workspaceDock.preview.emptyState.addAction') }}
+              </Button>
+              <Button size="sm" variant="outline" :disabled="!canDiscoverSession" @click="discoverManagedSession">
+                {{ t('workspaceDock.preview.emptyState.autoDetectAction') }}
+              </Button>
+            </div>
+
+            <p v-if="actionLoadingMessage" class="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+              <RiLoader4Line class="h-3.5 w-3.5 animate-spin" />
+              {{ actionLoadingMessage }}
+            </p>
+            <p v-else-if="actionError" class="text-xs text-destructive">{{ actionError }}</p>
+          </div>
         </div>
       </div>
 
