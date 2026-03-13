@@ -188,6 +188,48 @@ build_launchd_path() {
   printf '%s' "$out"
 }
 
+build_systemd_path() {
+  local home_dir="$1"
+  local opencode_bin_dir="$2"
+  local env_path="$3"
+
+  local entries=(
+    "$opencode_bin_dir"
+    "$home_dir/.bun/bin"
+    "$home_dir/.local/bin"
+    "/usr/local/sbin"
+    "/usr/local/bin"
+    "/usr/sbin"
+    "/usr/bin"
+    "/sbin"
+    "/bin"
+  )
+
+  if [[ -n "$env_path" ]]; then
+    local part
+    IFS=':' read -r -a path_parts <<<"$env_path"
+    for part in "${path_parts[@]}"; do
+      entries+=("$part")
+    done
+  fi
+
+  local out=""
+  local seen=":"
+  local item=""
+  for item in "${entries[@]}"; do
+    [[ -n "$item" ]] || continue
+    if [[ "$seen" != *":$item:"* ]]; then
+      seen+="$item:"
+      if [[ -z "$out" ]]; then
+        out="$item"
+      else
+        out+=":$item"
+      fi
+    fi
+  done
+  printf '%s' "$out"
+}
+
 macos_launchctl_domains() {
   local uid
   uid="$(id -u)"
@@ -608,6 +650,7 @@ echo "Wrote runtime config: $CONFIG_FILE"
 
 if [[ "$OS" == "linux" ]]; then
   if command -v systemctl >/dev/null 2>&1; then
+    SYSTEMD_PATH="$(build_systemd_path "$HOME" "$OPENCODE_BIN_DIR" "${PATH:-}")"
     if [[ "$MODE" == "system" ]]; then
       SERVICE_PATH="/etc/systemd/system/opencode-studio.service"
       echo "Installing systemd (system) service: $SERVICE_PATH"
@@ -621,7 +664,7 @@ After=network.target
 Type=simple
 User=$SERVICE_USER
 Group=$SERVICE_GROUP
-Environment="PATH=$OPENCODE_BIN_DIR:${PATH:-}"
+Environment="PATH=$SYSTEMD_PATH"
 Environment="HOME=$HOME"
 ExecStart="$BIN_PATH" --config "$CONFIG_FILE"
 Restart=on-failure
@@ -644,6 +687,8 @@ After=network.target
 
 [Service]
 Type=simple
+Environment="PATH=$SYSTEMD_PATH"
+Environment="HOME=$HOME"
 ExecStart="$BIN_PATH" --config "$CONFIG_FILE"
 Restart=on-failure
 RestartSec=2
