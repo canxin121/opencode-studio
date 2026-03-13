@@ -708,34 +708,36 @@ start_app() {
   log "Launching app: $app_path"
 
   if [[ $# -gt 0 ]]; then
-    # Prefer launching the app binary directly so Chromium flags (e.g. --remote-debugging-port)
-    # reliably reach the CEF runtime.
-    local plist="$app_path/Contents/Info.plist"
-    local exec_name=""
-    local bin=""
-
-    if [[ -f "$plist" ]] && command -v /usr/libexec/PlistBuddy >/dev/null 2>&1; then
-      exec_name="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$plist" 2>/dev/null | tr -d '\r' | xargs || true)"
-      if [[ -n "${exec_name:-}" ]]; then
-        bin="$app_path/Contents/MacOS/$exec_name"
-      fi
-    fi
-
-    if [[ -n "${bin:-}" && -f "$bin" && -x "$bin" ]]; then
-      log "Launching app binary: $bin"
-      if [[ -n "${APP_LAUNCH_LOG_PATH:-}" ]]; then
-        mkdir -p "$(dirname "$APP_LAUNCH_LOG_PATH")" >/dev/null 2>&1 || true
-        log "App launch log: $APP_LAUNCH_LOG_PATH"
-        "$bin" "$@" >"$APP_LAUNCH_LOG_PATH" 2>&1 &
-      else
-        "$bin" "$@" >/dev/null 2>&1 &
-      fi
-      APP_MAIN_PID="$!"
-      return 0
-    fi
-
-    log "Launching via open (fallback): $app_path"
+    # Prefer LaunchServices (open --args) so the app is launched as a proper GUI
+    # application. Directly executing the bundle binary can lead to non-LS-launched
+    # processes and macOS Keychain deadlocks during CEF init on CI.
     open -n "$app_path" --args "$@" || fail "Failed to launch app"
+
+    # Best-effort: capture the pid of the LS-launched main process.
+    # We key off the remote debugging port to avoid matching helper processes.
+    local debug_port=""
+    local arg=""
+    for arg in "$@"; do
+      if [[ "$arg" == --remote-debugging-port=* ]]; then
+        debug_port="${arg#--remote-debugging-port=}"
+        break
+      fi
+    done
+
+    if [[ -n "${debug_port:-}" ]]; then
+      local waited=0
+      local pid=""
+      while ((waited < 10)); do
+        pid="$(pgrep -n -f "opencode-studio-desktop.*--remote-debugging-port=${debug_port}" 2>/dev/null || true)"
+        if [[ -n "${pid:-}" ]]; then
+          APP_MAIN_PID="$pid"
+          log "Detected app pid: $APP_MAIN_PID"
+          break
+        fi
+        sleep 1
+        waited=$((waited + 1))
+      done
+    fi
     return 0
   fi
 
