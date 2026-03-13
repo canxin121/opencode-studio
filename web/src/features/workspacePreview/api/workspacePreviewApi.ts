@@ -16,7 +16,13 @@ type PreviewSessionsResponse =
       sessions?: unknown
     }
 
-function asSessionRecord(value: unknown): WorkspacePreviewSession | null {
+type PreviewSessionResponse =
+  | WorkspacePreviewSession
+  | {
+      session?: unknown
+    }
+
+export function normalizeWorkspacePreviewSession(value: unknown): WorkspacePreviewSession | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
 
   const record = value as Record<string, unknown>
@@ -49,10 +55,18 @@ function normalizePreviewSessions(payload: PreviewSessionsResponse): WorkspacePr
 
   const sessions: WorkspacePreviewSession[] = []
   for (const item of source) {
-    const session = asSessionRecord(item)
+    const session = normalizeWorkspacePreviewSession(item)
     if (session) sessions.push(session)
   }
   return sessions
+}
+
+function normalizeSinglePreviewSession(payload: PreviewSessionResponse): WorkspacePreviewSession | null {
+  const direct = normalizeWorkspacePreviewSession(payload)
+  if (direct) return direct
+
+  const wrapped = (payload as { session?: unknown })?.session
+  return normalizeWorkspacePreviewSession(wrapped)
 }
 
 export async function listWorkspacePreviewSessions(directory?: string): Promise<WorkspacePreviewSession[]> {
@@ -60,4 +74,40 @@ export async function listWorkspacePreviewSessions(directory?: string): Promise<
   const query = trimmedDirectory ? `?directory=${encodeURIComponent(trimmedDirectory)}` : ''
   const payload = await apiJson<PreviewSessionsResponse>(`/api/workspace/preview/sessions${query}`)
   return normalizePreviewSessions(payload)
+}
+
+export async function createWorkspacePreviewSession(
+  directory: string,
+  targetUrl: string,
+): Promise<WorkspacePreviewSession> {
+  const payload = await apiJson<PreviewSessionResponse>('/api/workspace/preview/sessions', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      directory: String(directory || '').trim(),
+      targetUrl: String(targetUrl || '').trim(),
+    }),
+  })
+
+  const session = normalizeSinglePreviewSession(payload)
+  if (!session) throw new Error('Invalid preview session response')
+  return session
+}
+
+export async function discoverWorkspacePreviewSession(directory: string): Promise<WorkspacePreviewSession> {
+  const payload = await apiJson<PreviewSessionResponse>('/api/workspace/preview/sessions/discover', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      directory: String(directory || '').trim(),
+    }),
+  })
+
+  const session = normalizeSinglePreviewSession(payload)
+  if (!session) throw new Error('Invalid preview session response')
+  return session
 }

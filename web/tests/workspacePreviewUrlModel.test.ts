@@ -27,6 +27,20 @@ test('buildPreviewFrameSrc always uses proxy session path and hides target URL',
   assert.equal(src.includes('localhost:5173'), false)
 })
 
+test('selected created session still builds iframe src from proxyBasePath', () => {
+  const createdSession = {
+    id: 'pv_demo-app',
+    proxyBasePath: '/api/workspace/preview/s/pv_demo-app/',
+    targetUrl: 'http://127.0.0.1:8000',
+  }
+  const activeSessionId = createdSession.id
+  const src = buildPreviewFrameSrc(createdSession.proxyBasePath, 3)
+
+  assert.equal(activeSessionId, 'pv_demo-app')
+  assert.equal(src, '/api/workspace/preview/s/pv_demo-app/?__oc_preview_refresh=3')
+  assert.equal(src.includes(createdSession.targetUrl), false)
+})
+
 test('buildPreviewFrameSrc returns empty for invalid proxy base path', () => {
   assert.equal(buildPreviewFrameSrc('javascript:alert(1)', 1), '')
   assert.equal(buildPreviewFrameSrc('', 1), '')
