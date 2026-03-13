@@ -580,6 +580,9 @@ mod tests {
             session_activity: crate::session_activity::SessionActivityManager::new(),
             directory_session_index:
                 crate::directory_session_index::DirectorySessionIndexManager::new(),
+            workspace_preview_registry: Arc::new(
+                crate::workspace_preview_registry::WorkspacePreviewRegistry::new(),
+            ),
             settings_path: std::path::PathBuf::from(
                 "/tmp/opencode-studio-fs-watch-test-settings.json",
             ),

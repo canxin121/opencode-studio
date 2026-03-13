@@ -9,6 +9,7 @@ import {
   RiGitMergeLine,
   RiRefreshLine,
   RiTerminalBoxLine,
+  RiGlobalLine,
 } from '@remixicon/vue'
 
 import ChatSessionChangesDockPanel from '@/components/chat/ChatSessionChangesDockPanel.vue'
@@ -17,6 +18,7 @@ import GitPage from '@/pages/GitPage.vue'
 import { useUiStore } from '@/stores/ui'
 import IconButton from '@/components/ui/IconButton.vue'
 import TerminalDockPanel from '@/features/terminal/components/TerminalDockPanel.vue'
+import WorkspacePreviewDockPanel from '@/features/workspacePreview/components/WorkspacePreviewDockPanel.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -30,6 +32,7 @@ const changesDockRef = ref<{ refresh: () => Promise<void> | void } | null>(null)
 const filesDockRef = ref<{ refresh: () => Promise<void> | void } | null>(null)
 const gitDockRef = ref<{ refresh: () => Promise<void> | void } | null>(null)
 const terminalDockRef = ref<{ refresh: () => Promise<void> | void } | null>(null)
+const previewDockRef = ref<{ refresh: () => Promise<void> | void } | null>(null)
 
 const showChatChangesPanel = computed(() =>
   String(route.path || '')
@@ -51,6 +54,10 @@ watch(
 function refreshActivePanel() {
   if (ui.workspaceDockPanel === 'changes') {
     void changesDockRef.value?.refresh()
+    return
+  }
+  if (ui.workspaceDockPanel === 'preview') {
+    void previewDockRef.value?.refresh()
     return
   }
   if (ui.workspaceDockPanel === 'git') {
@@ -84,6 +91,19 @@ function refreshActivePanel() {
             >
               <RiFileList2Line class="h-3.5 w-3.5" />
               {{ t('workspaceDock.changes.tab') }}
+            </button>
+            <button
+              type="button"
+              class="inline-flex items-center gap-1 rounded-sm px-2 py-1 text-xs font-medium transition-colors"
+              :class="
+                ui.workspaceDockPanel === 'preview'
+                  ? 'bg-secondary text-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              "
+              @click="ui.setWorkspaceDockPanel('preview')"
+            >
+              <RiGlobalLine class="h-3.5 w-3.5" />
+              {{ t('workspaceDock.preview.tab') }}
             </button>
             <button
               type="button"
@@ -154,6 +174,10 @@ function refreshActivePanel() {
           class="min-h-0 flex-1 overflow-hidden"
         >
           <ChatSessionChangesDockPanel ref="changesDockRef" />
+        </div>
+
+        <div v-else-if="ui.workspaceDockPanel === 'preview'" key="preview" class="min-h-0 flex-1 overflow-hidden">
+          <WorkspacePreviewDockPanel ref="previewDockRef" />
         </div>
 
         <div v-else-if="ui.workspaceDockPanel === 'git'" key="git" class="min-h-0 flex-1 overflow-hidden">

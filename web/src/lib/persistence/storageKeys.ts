@@ -15,6 +15,9 @@ export const localStorageKeys = {
     workspaceDockPlacement: namespacedKey('ui.workspace-dock.placement'),
     workspaceDockWidth: namespacedKey('ui.workspace-dock.width'),
     workspaceDockHeight: namespacedKey('ui.workspace-dock.height'),
+    workspacePreviewActiveSessionId: namespacedKey('ui.workspace-preview.active-session-id'),
+    workspacePreviewScope: namespacedKey('ui.workspace-preview.scope'),
+    workspacePreviewViewport: namespacedKey('ui.workspace-preview.viewport'),
     locale: namespacedKey('ui.locale'),
   },
   directory: {

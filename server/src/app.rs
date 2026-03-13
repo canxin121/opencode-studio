@@ -39,6 +39,8 @@ pub(crate) struct AppState {
     pub(crate) session_activity: crate::session_activity::SessionActivityManager,
     pub(crate) directory_session_index:
         crate::directory_session_index::DirectorySessionIndexManager,
+    pub(crate) workspace_preview_registry:
+        Arc<crate::workspace_preview_registry::WorkspacePreviewRegistry>,
     pub(crate) settings_path: PathBuf,
     pub(crate) settings: Arc<RwLock<crate::settings::Settings>>,
 }
@@ -909,6 +911,8 @@ pub(crate) async fn run(args: crate::Args) {
     let activity = crate::session_activity::SessionActivityManager::new();
     let directory_session_index =
         crate::directory_session_index::DirectorySessionIndexManager::new();
+    let workspace_preview_registry =
+        Arc::new(crate::workspace_preview_registry::WorkspacePreviewRegistry::new());
 
     let state = Arc::new(AppState {
         ui_auth,
@@ -921,6 +925,7 @@ pub(crate) async fn run(args: crate::Args) {
         attachment_cache,
         session_activity: activity,
         directory_session_index,
+        workspace_preview_registry,
         settings_path,
         settings: Arc::new(RwLock::new(settings_value)),
     });
@@ -1034,6 +1039,30 @@ pub(crate) async fn run(args: crate::Args) {
         .route(
             "/directories/{directory_id}/sessions",
             get(crate::chat_sidebar::directory_sessions_by_id_get),
+        )
+        .route(
+            "/workspace/preview",
+            get(crate::workspace_preview::workspace_preview_get),
+        )
+        .route(
+            "/workspace/preview-url",
+            get(crate::workspace_preview::workspace_preview_url_get),
+        )
+        .route(
+            "/workspace/preview/proxy",
+            get(crate::workspace_preview::workspace_preview_proxy_get),
+        )
+        .route(
+            "/workspace/preview/sessions",
+            get(crate::workspace_preview::workspace_preview_sessions_get),
+        )
+        .route(
+            "/workspace/preview/s/{id}",
+            any(crate::workspace_preview::workspace_preview_session_proxy_root),
+        )
+        .route(
+            "/workspace/preview/s/{id}/{*path}",
+            any(crate::workspace_preview::workspace_preview_session_proxy_path),
         )
         // OpenCode Studio session list + filtered message history
         .route(
