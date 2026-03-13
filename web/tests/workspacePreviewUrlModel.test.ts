@@ -1,41 +1,33 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import {
-  buildPreviewFrameSrc,
-  normalizePreviewUrl,
-  resolvePreviewTarget,
-} from '../src/features/workspacePreview/model/previewUrl'
+import { buildPreviewFrameSrc, normalizePreviewProxyBasePath } from '../src/features/workspacePreview/model/previewUrl'
 
-test('normalizePreviewUrl accepts bare host and defaults to http', () => {
-  assert.equal(normalizePreviewUrl('localhost:5173'), 'http://localhost:5173/')
-})
-
-test('normalizePreviewUrl rejects unsupported protocols', () => {
-  assert.equal(normalizePreviewUrl('javascript:alert(1)'), '')
-  assert.equal(normalizePreviewUrl('file:///tmp/index.html'), '')
-})
-
-test('resolvePreviewTarget prefers manual URL over detected URL', () => {
-  const resolved = resolvePreviewTarget('https://manual.example.dev', 'http://localhost:3000')
-  assert.equal(resolved, 'https://manual.example.dev/')
-})
-
-test('buildPreviewFrameSrc appends refresh token to URL', () => {
-  const src = buildPreviewFrameSrc('https://example.dev/path?x=1', 12)
+test('normalizePreviewProxyBasePath normalizes preview session paths', () => {
   assert.equal(
-    src,
-    '/api/workspace/preview/proxy?target=https%3A%2F%2Fexample.dev%2Fpath%3Fx%3D1&__oc_preview_refresh=12',
+    normalizePreviewProxyBasePath('/api/workspace/preview/s/session-1'),
+    '/api/workspace/preview/s/session-1/',
   )
 })
 
-test('buildPreviewFrameSrc does not return direct target URL', () => {
-  const src = buildPreviewFrameSrc('localhost:5173', 0)
-  assert.match(src, /^\/api\/workspace\/preview\/proxy\?/)
-  assert.equal(src.includes('http://localhost:5173/'), false)
+test('normalizePreviewProxyBasePath rejects non-session or direct targets', () => {
+  assert.equal(normalizePreviewProxyBasePath('https://example.dev/app'), '')
+  assert.equal(normalizePreviewProxyBasePath('/api/workspace/preview/proxy?target=http://localhost:5173'), '')
 })
 
-test('buildPreviewFrameSrc returns empty for invalid target', () => {
+test('buildPreviewFrameSrc appends refresh token to proxy base path', () => {
+  const src = buildPreviewFrameSrc('/api/workspace/preview/s/session-1/', 12)
+  assert.equal(src, '/api/workspace/preview/s/session-1/?__oc_preview_refresh=12')
+})
+
+test('buildPreviewFrameSrc always uses proxy session path and hides target URL', () => {
+  const src = buildPreviewFrameSrc('/api/workspace/preview/s/demo-app/', 0)
+  assert.match(src, /^\/api\/workspace\/preview\/s\//)
+  assert.equal(src.includes('http://localhost:5173/'), false)
+  assert.equal(src.includes('localhost:5173'), false)
+})
+
+test('buildPreviewFrameSrc returns empty for invalid proxy base path', () => {
   assert.equal(buildPreviewFrameSrc('javascript:alert(1)', 1), '')
   assert.equal(buildPreviewFrameSrc('', 1), '')
 })

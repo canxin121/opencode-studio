@@ -1,50 +1,33 @@
 export type WorkspacePreviewViewport = 'desktop' | 'mobile'
 
-const PREVIEW_PROXY_PATH = '/api/workspace/preview/proxy'
+export type WorkspacePreviewScope = 'current' | 'all'
 
-export function normalizePreviewUrl(input: string): string {
+const PREVIEW_PROXY_BASE_PREFIX = '/api/workspace/preview/s/'
+const PREVIEW_ORIGIN = 'https://preview.local'
+
+export function normalizePreviewProxyBasePath(input: string): string {
   const raw = String(input || '').trim()
-  if (!raw) return ''
-
-  if (/^[a-zA-Z][\w+.-]*:\/\//.test(raw) && !/^https?:\/\//i.test(raw)) {
-    return ''
-  }
-
-  const withProtocol = /^https?:\/\//i.test(raw) ? raw : `http://${raw}`
+  if (!raw || !raw.startsWith('/')) return ''
 
   let parsed: URL
   try {
-    parsed = new URL(withProtocol)
+    parsed = new URL(raw, PREVIEW_ORIGIN)
   } catch {
     return ''
   }
 
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    return ''
-  }
-  if (!parsed.hostname) {
-    return ''
-  }
-  return parsed.toString()
+  if (parsed.origin !== PREVIEW_ORIGIN) return ''
+  if (!parsed.pathname.startsWith(PREVIEW_PROXY_BASE_PREFIX)) return ''
+
+  const pathname = parsed.pathname.endsWith('/') ? parsed.pathname : `${parsed.pathname}/`
+  return `${pathname}${parsed.search}${parsed.hash}`
 }
 
-export function resolvePreviewTarget(manualUrl: string, detectedUrl: string): string {
-  const manual = normalizePreviewUrl(manualUrl)
-  if (manual) return manual
-  return normalizePreviewUrl(detectedUrl)
-}
-
-export function buildPreviewProxyPath(url: string): string {
-  const normalized = normalizePreviewUrl(url)
+export function buildPreviewFrameSrc(proxyBasePath: string, refreshToken: number): string {
+  const normalized = normalizePreviewProxyBasePath(proxyBasePath)
   if (!normalized) return ''
-  const params = new URLSearchParams()
-  params.set('target', normalized)
-  return `${PREVIEW_PROXY_PATH}?${params.toString()}`
-}
 
-export function buildPreviewFrameSrc(url: string, refreshToken: number): string {
-  const proxyPath = buildPreviewProxyPath(url)
-  if (!proxyPath) return ''
-  const token = String(Math.max(0, Math.floor(refreshToken)))
-  return `${proxyPath}&__oc_preview_refresh=${encodeURIComponent(token)}`
+  const parsed = new URL(normalized, PREVIEW_ORIGIN)
+  parsed.searchParams.set('__oc_preview_refresh', String(Math.max(0, Math.floor(refreshToken))))
+  return `${parsed.pathname}${parsed.search}${parsed.hash}`
 }

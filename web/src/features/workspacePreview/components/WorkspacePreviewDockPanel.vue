@@ -6,11 +6,8 @@ import { RiExternalLinkLine, RiLoader4Line, RiRefreshLine, RiSmartphoneLine, RiC
 import IconButton from '@/components/ui/IconButton.vue'
 import SegmentedButton from '@/components/ui/SegmentedButton.vue'
 import { apiUrl } from '@/lib/api'
-import {
-  buildPreviewFrameSrc,
-  buildPreviewProxyPath,
-  normalizePreviewUrl,
-} from '@/features/workspacePreview/model/previewUrl'
+import type { WorkspacePreviewSession } from '@/features/workspacePreview/api/workspacePreviewApi'
+import { buildPreviewFrameSrc, type WorkspacePreviewScope } from '@/features/workspacePreview/model/previewUrl'
 import { useDirectoryStore } from '@/stores/directory'
 import { useWorkspacePreviewStore } from '@/stores/workspacePreview'
 
@@ -18,35 +15,48 @@ const { t } = useI18n()
 const directoryStore = useDirectoryStore()
 const preview = useWorkspacePreviewStore()
 
-const urlDraft = ref(preview.manualUrl)
 const frameSrc = shallowRef('')
 const iframeLoading = ref(false)
 const iframeError = ref('')
-const refreshToken = ref(0)
 
-const INPUT_DEBOUNCE_MS = 340
 const FRAME_UPDATE_THROTTLE_MS = 220
 const AUTO_REFRESH_MS = 12000
 
-let inputTimer: number | null = null
 let frameTimer: number | null = null
 let pollTimer: number | null = null
 let lastFrameUpdateAt = 0
 let frameRequestId = 0
 
-const hasActiveUrl = computed(() => Boolean(preview.activeUrl))
-const proxyAccessPath = computed(() => buildPreviewProxyPath(preview.activeUrl))
-const canOpenInWindow = computed(() => Boolean(proxyAccessPath.value))
-const hasInvalidManualDraft = computed(() => Boolean(urlDraft.value.trim()) && !normalizePreviewUrl(urlDraft.value))
+const activeSession = computed(() => preview.activeSession)
+const activeProxyBasePath = computed(() => activeSession.value?.proxyBasePath || '')
+const previewSrc = computed(() => buildPreviewFrameSrc(activeProxyBasePath.value, preview.refreshToken))
+const canOpenInWindow = computed(() => Boolean(previewSrc.value))
 
 const effectiveError = computed(() => {
-  if (hasInvalidManualDraft.value) return String(t('workspaceDock.preview.states.invalidUrl'))
+  if (preview.error) {
+    const detail = preview.error.trim() || String(t('workspaceDock.preview.states.sessionsFetchFailedNoDetail'))
+    return String(t('workspaceDock.preview.states.sessionsFetchFailed', { detail }))
+  }
+  if (preview.sessions.length > 0 && !activeSession.value) {
+    return String(t('workspaceDock.preview.states.activeSessionMissing'))
+  }
+  if (activeSession.value && !activeProxyBasePath.value) {
+    return String(t('workspaceDock.preview.states.missingProxyBasePath'))
+  }
   if (iframeError.value) return iframeError.value
-  if (preview.resolveError) return preview.resolveError
   return ''
 })
 
-const showEmptyState = computed(() => !hasActiveUrl.value && !preview.resolving && !effectiveError.value)
+const showEmptyState = computed(() => preview.sessions.length === 0 && !preview.loading && !effectiveError.value)
+
+function sessionLabel(session: WorkspacePreviewSession): string {
+  const directory = String(session.directory || '')
+    .trim()
+    .replace(/[\\/]+$/, '')
+  if (!directory) return session.id
+  const parts = directory.split(/[\\/]/).filter(Boolean)
+  return parts[parts.length - 1] || directory
+}
 
 function extractProxyErrorDetail(raw: string, contentType: string): string {
   const body = String(raw || '').trim()
@@ -97,12 +107,6 @@ async function probePreviewProxy(src: string): Promise<string> {
   }
 }
 
-function clearInputTimer() {
-  if (inputTimer === null) return
-  window.clearTimeout(inputTimer)
-  inputTimer = null
-}
-
 function clearFrameTimer() {
   if (frameTimer === null) return
   window.clearTimeout(frameTimer)
@@ -111,9 +115,9 @@ function clearFrameTimer() {
 
 async function setFrameUrlNow() {
   clearFrameTimer()
-  const src = buildPreviewFrameSrc(preview.activeUrl, refreshToken.value)
+  const src = previewSrc.value
   iframeError.value = ''
-  if (!src) {
+  if (!src || effectiveError.value) {
     frameSrc.value = ''
     iframeLoading.value = false
     lastFrameUpdateAt = Date.now()
@@ -147,28 +151,26 @@ function scheduleFrameUpdate() {
   }, waitMs)
 }
 
-function onUrlDraftInput(value: string) {
-  urlDraft.value = String(value || '')
-  clearInputTimer()
-  inputTimer = window.setTimeout(() => {
-    inputTimer = null
-    preview.setManualUrl(urlDraft.value)
-    preview.clearResolveError()
-  }, INPUT_DEBOUNCE_MS)
-}
-
 async function refreshPreview(opts?: { forceFrameReload?: boolean }) {
   const directory = String(directoryStore.currentDirectory || '')
-  await preview.refreshDetectedUrl(directory)
+  const scopes = new Set<WorkspacePreviewScope>(['current', preview.scope])
+  for (const scope of scopes) {
+    await preview.refreshSessions(directory, scope)
+  }
   if (opts?.forceFrameReload) {
-    refreshToken.value += 1
+    preview.bumpRefreshToken()
   }
 }
 
+async function onScopeChange(scope: WorkspacePreviewScope) {
+  if (preview.scope === scope) return
+  preview.setScope(scope)
+  await preview.refreshSessions(String(directoryStore.currentDirectory || ''), scope)
+}
+
 function openInNewWindow() {
-  const src = buildPreviewFrameSrc(preview.activeUrl, refreshToken.value)
-  if (!src) return
-  window.open(src, '_blank', 'noopener,noreferrer')
+  if (!previewSrc.value) return
+  window.open(previewSrc.value, '_blank', 'noopener,noreferrer')
 }
 
 function startAutoRefresh() {
@@ -202,15 +204,7 @@ defineExpose({
 })
 
 watch(
-  () => preview.manualUrl,
-  (next) => {
-    if (normalizePreviewUrl(urlDraft.value) === next) return
-    urlDraft.value = next
-  },
-)
-
-watch(
-  () => [preview.activeUrl, refreshToken.value],
+  () => [activeProxyBasePath.value, preview.refreshToken, preview.error, preview.activeSessionId],
   () => {
     scheduleFrameUpdate()
   },
@@ -230,7 +224,6 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  clearInputTimer()
   clearFrameTimer()
   stopAutoRefresh()
 })
@@ -239,43 +232,89 @@ onBeforeUnmount(() => {
 <template>
   <div class="flex h-full min-h-0 flex-col gap-2 p-3">
     <div class="rounded-md border border-sidebar-border/70 bg-sidebar-accent/20 p-2">
-      <div class="flex items-center gap-1.5">
-        <input
-          :value="urlDraft"
-          class="h-8 w-full rounded-md border border-sidebar-border/70 bg-background/70 px-2.5 text-xs text-foreground outline-none transition-colors placeholder:text-muted-foreground/80 focus:border-primary/55 focus:ring-2 focus:ring-primary/20"
-          :placeholder="String(t('workspaceDock.preview.inputPlaceholder'))"
-          :aria-label="String(t('workspaceDock.preview.inputAria'))"
-          @input="onUrlDraftInput(($event.target as HTMLInputElement).value)"
-        />
-        <IconButton
-          size="sm"
-          :tooltip="String(t('workspaceDock.preview.refresh'))"
-          :aria-label="String(t('workspaceDock.preview.refresh'))"
-          :loading="preview.resolving"
-          @click="refreshPreview({ forceFrameReload: true })"
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div
+          class="inline-flex items-center gap-0.5 rounded-md border border-sidebar-border/65 bg-sidebar-accent/35 p-0.5"
         >
-          <RiRefreshLine class="h-4 w-4" />
-        </IconButton>
-        <IconButton
-          size="sm"
-          :tooltip="String(t('workspaceDock.preview.openInWindow'))"
-          :aria-label="String(t('workspaceDock.preview.openInWindow'))"
-          :disabled="!canOpenInWindow"
-          @click="openInNewWindow"
-        >
-          <RiExternalLinkLine class="h-4 w-4" />
-        </IconButton>
+          <SegmentedButton :active="preview.scope === 'current'" size="xs" @click="onScopeChange('current')">
+            {{ t('workspaceDock.preview.scope.current') }}
+          </SegmentedButton>
+          <SegmentedButton :active="preview.scope === 'all'" size="xs" @click="onScopeChange('all')">
+            {{ t('workspaceDock.preview.scope.all') }}
+          </SegmentedButton>
+        </div>
+
+        <div class="flex items-center gap-1.5">
+          <IconButton
+            size="sm"
+            :tooltip="String(t('workspaceDock.preview.refresh'))"
+            :aria-label="String(t('workspaceDock.preview.refresh'))"
+            :loading="preview.loading"
+            @click="refreshPreview({ forceFrameReload: true })"
+          >
+            <RiRefreshLine class="h-4 w-4" />
+          </IconButton>
+          <IconButton
+            size="sm"
+            :tooltip="String(t('workspaceDock.preview.openInWindow'))"
+            :aria-label="String(t('workspaceDock.preview.openInWindow'))"
+            :disabled="!canOpenInWindow"
+            @click="openInNewWindow"
+          >
+            <RiExternalLinkLine class="h-4 w-4" />
+          </IconButton>
+        </div>
       </div>
 
-      <div class="mt-2 flex items-center justify-between gap-2">
+      <div class="mt-2 rounded-md border border-sidebar-border/60 bg-background/55 p-1.5">
+        <div
+          class="flex items-center justify-between gap-2 px-1 pb-1 text-[11px] uppercase tracking-[0.08em] text-muted-foreground"
+        >
+          <span>{{ t('workspaceDock.preview.sessionsTitle') }}</span>
+          <span>{{ preview.sessions.length }}</span>
+        </div>
+        <div v-if="preview.sessions.length > 0" class="max-h-36 space-y-1 overflow-auto pr-1">
+          <button
+            v-for="session in preview.sessions"
+            :key="session.id"
+            type="button"
+            class="w-full rounded-md border px-2 py-1.5 text-left transition-colors"
+            :class="
+              preview.activeSessionId === session.id
+                ? 'border-primary/45 bg-primary/10 text-foreground'
+                : 'border-transparent bg-sidebar-accent/20 text-foreground hover:border-sidebar-border/65 hover:bg-sidebar-accent/35'
+            "
+            @click="preview.selectSession(session.id)"
+          >
+            <div class="flex items-center justify-between gap-2">
+              <span class="min-w-0 truncate text-xs font-medium">{{ sessionLabel(session) }}</span>
+              <span
+                class="shrink-0 rounded-full border border-sidebar-border/65 px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-muted-foreground"
+              >
+                {{ session.state }}
+              </span>
+            </div>
+            <p class="mt-0.5 truncate text-[11px] text-muted-foreground">{{ session.directory || session.id }}</p>
+          </button>
+        </div>
+        <p v-else class="px-1 py-2 text-xs text-muted-foreground">
+          {{ t('workspaceDock.preview.states.noSessionsForScope') }}
+        </p>
+      </div>
+
+      <div class="mt-2 flex items-start justify-between gap-2">
         <div class="min-w-0 flex-1 space-y-0.5 text-[11px] text-muted-foreground">
           <p class="truncate">
+            {{ t('workspaceDock.preview.directoryLabel') }}
+            <span class="font-mono">{{ activeSession?.directory || t('workspaceDock.preview.urlEmpty') }}</span>
+          </p>
+          <p class="truncate">
             {{ t('workspaceDock.preview.targetLabel') }}
-            <span class="font-mono">{{ hasActiveUrl ? preview.activeUrl : t('workspaceDock.preview.urlEmpty') }}</span>
+            <span class="font-mono">{{ activeSession?.targetUrl || t('workspaceDock.preview.urlEmpty') }}</span>
           </p>
           <p class="truncate">
             {{ t('workspaceDock.preview.proxyPathLabel') }}
-            <span class="font-mono">{{ proxyAccessPath || t('workspaceDock.preview.urlEmpty') }}</span>
+            <span class="font-mono">{{ activeProxyBasePath || t('workspaceDock.preview.urlEmpty') }}</span>
           </p>
         </div>
         <div
@@ -330,7 +369,7 @@ onBeforeUnmount(() => {
       </div>
 
       <div
-        v-if="iframeLoading || preview.resolving"
+        v-if="iframeLoading || preview.loading"
         class="pointer-events-none absolute inset-0 flex items-center justify-center bg-background/50 backdrop-blur-[1px]"
       >
         <span
