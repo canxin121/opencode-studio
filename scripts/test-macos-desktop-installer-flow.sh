@@ -355,11 +355,109 @@ wait_for_health_up() {
 }
 
 clear_cef_cache() {
-  local cef_cache_dir="$HOME/Library/Caches/cn.cxits.opencode-studio/cef"
-  if [[ -d "$cef_cache_dir" ]]; then
-    log "Clearing CEF cache: $cef_cache_dir"
-    rm -rf "$cef_cache_dir" >/dev/null 2>&1 || true
+  local dirs=(
+    "$HOME/Library/Caches/cn.cxits.opencode-studio/cef"
+    "$HOME/Library/Caches/OpenCode Studio/cef"
+  )
+
+  local d=""
+  for d in "${dirs[@]}"; do
+    if [[ -d "$d" ]]; then
+      log "Clearing CEF cache: $d"
+      rm -rf "$d" >/dev/null 2>&1 || true
+    fi
+  done
+}
+
+cleanup_chromium_singletons() {
+  # Chromium/CEF sometimes leaves Singleton* lock files behind after crashy exits.
+  # Those can prevent subsequent launches from starting the embedded browser.
+  local roots=(
+    "$HOME/Library/Application Support/cn.cxits.opencode-studio"
+    "$HOME/Library/Application Support/OpenCode Studio"
+    "$HOME/Library/Caches/cn.cxits.opencode-studio"
+    "$HOME/Library/Caches/OpenCode Studio"
+  )
+
+  local root=""
+  for root in "${roots[@]}"; do
+    [[ -d "$root" ]] || continue
+    find "$root" -maxdepth 6 -type f -name 'Singleton*' -exec rm -f {} + 2>/dev/null || true
+  done
+}
+
+dump_process_diag() {
+  log "Process diagnostics"
+
+  local patterns=(
+    "$APP_PATH"
+    "OpenCode Studio"
+    "opencode-studio"
+    "opencode serve"
+    "Chromium Helper"
+    "CEF"
+  )
+
+  local p=""
+  for p in "${patterns[@]}"; do
+    if pgrep -f "$p" >/dev/null 2>&1; then
+      log "pgrep -fl $p"
+      pgrep -fl "$p" || true
+    fi
+  done
+
+  if [[ -n "${APP_MAIN_PID:-}" ]] && kill -0 "$APP_MAIN_PID" >/dev/null 2>&1; then
+    log "Main pid: $APP_MAIN_PID"
+    ps -p "$APP_MAIN_PID" -o pid,ppid,stat,etime,command 2>/dev/null || true
   fi
+}
+
+capture_sample() {
+  local pid="$1"
+  local label="$2"
+  local attempt="$3"
+  [[ -n "${pid:-}" ]] || return 0
+  kill -0 "$pid" >/dev/null 2>&1 || return 0
+
+  if command -v sample >/dev/null 2>&1; then
+    local out="$HOME/Library/Logs/cn.cxits.opencode-studio/sample-${label}-attempt${attempt}-pid${pid}-$(date '+%Y%m%d-%H%M%S').txt"
+    mkdir -p "$(dirname "$out")" >/dev/null 2>&1 || true
+    log "Capturing stack sample (pid=$pid) to: $out"
+    sample "$pid" 5 -file "$out" >/dev/null 2>&1 || true
+  fi
+}
+
+capture_unified_log() {
+  local label="$1"
+  local attempt="$2"
+  # Note: this script defines a log() function; call /usr/bin/log explicitly.
+  if [[ -x /usr/bin/log ]]; then
+    local out="$HOME/Library/Logs/cn.cxits.opencode-studio/unified-log-${label}-attempt${attempt}-$(date '+%Y%m%d-%H%M%S').txt"
+    mkdir -p "$(dirname "$out")" >/dev/null 2>&1 || true
+    /usr/bin/log show --style syslog --last 10m \
+      --predicate 'process == "opencode-studio-desktop" OR process == "opencode-studio" OR process == "OpenCode Studio"' \
+      >"$out" 2>&1 || true
+    log "Captured unified log to: $out"
+  fi
+}
+
+collect_diagnostic_reports() {
+  local src="$HOME/Library/Logs/DiagnosticReports"
+  local dst="$HOME/Library/Logs/cn.cxits.opencode-studio/diagnostic-reports"
+  [[ -d "$src" ]] || return 0
+  mkdir -p "$dst" >/dev/null 2>&1 || true
+
+  local list=""
+  list="$(ls -1t "$src"/*opencode* "$src"/*OpenCode* 2>/dev/null | head -n 20 || true)"
+  [[ -n "$list" ]] || return 0
+
+  local f=""
+  while IFS= read -r f; do
+    [[ -f "$f" ]] || continue
+    cp "$f" "$dst/" >/dev/null 2>&1 || true
+  done <<<"$list"
+
+  log "Collected diagnostic reports to: $dst"
 }
 
 activate_app() {
@@ -384,15 +482,19 @@ launch_with_cdp_and_usage_smoke() {
     STUDIO_PORT_LAST="$PORT"
     CDP_LAUNCHED="1"
 
+    local chromium_user_data_dir="$WORK_DIR/chromium-user-data-${label}-attempt${attempt}"
+
     APP_LAUNCH_LOG_PATH="$HOME/Library/Logs/cn.cxits.opencode-studio/desktop-e2e-${label}-attempt${attempt}-cdp${DEBUG_PORT}-$(date '+%Y%m%d-%H%M%S').log"
     clear_cef_cache
+    cleanup_chromium_singletons
 
     log "[$label] Launch attempt ${attempt}/${max_attempts} (CDP port: $DEBUG_PORT)"
     start_app \
       "$APP_PATH" \
       "--remote-debugging-port=${DEBUG_PORT}" \
       "--remote-debugging-address=127.0.0.1" \
-      --remote-allow-origins=*
+      --remote-allow-origins=* \
+      "--user-data-dir=${chromium_user_data_dir}"
 
     activate_app
 
@@ -400,6 +502,20 @@ launch_with_cdp_and_usage_smoke() {
       log "[$label] Backend not reachable: $RUN_BASE_URL/health (waited ${health_timeout}s)"
       dump_port_diag "$STUDIO_PORT_LAST"
       dump_cdp_diag "$DEBUG_PORT"
+
+      dump_process_diag
+      capture_sample "${APP_MAIN_PID:-}" "$label" "$attempt"
+      capture_unified_log "$label" "$attempt"
+      collect_diagnostic_reports
+      if [[ -n "${APP_LAUNCH_LOG_PATH:-}" && -f "$APP_LAUNCH_LOG_PATH" ]]; then
+        if test -s "$APP_LAUNCH_LOG_PATH"; then
+          log "App launch log (last 120 lines): $APP_LAUNCH_LOG_PATH"
+          tail -n 120 "$APP_LAUNCH_LOG_PATH" || true
+        else
+          log "App launch log is empty: $APP_LAUNCH_LOG_PATH"
+        fi
+      fi
+
       stop_app || true
       assert_port_free "$STUDIO_PORT_LAST" "$WAIT_TIMEOUT_SECS" || true
       assert_port_free "$DEBUG_PORT" "$WAIT_TIMEOUT_SECS" || true
@@ -411,6 +527,10 @@ launch_with_cdp_and_usage_smoke() {
       log "[$label] Backend is reachable but CDP not ready within ${cdp_timeout}s (last error: ${CDP_LAST_ERROR:-unknown})"
       dump_cdp_diag "$DEBUG_PORT"
       dump_desktop_support_dirs "CDP not ready ($label)"
+      dump_process_diag
+      capture_sample "${APP_MAIN_PID:-}" "$label" "$attempt"
+      capture_unified_log "$label" "$attempt"
+      collect_diagnostic_reports
       stop_app || true
       assert_port_free "$DEBUG_PORT" "$WAIT_TIMEOUT_SECS" || true
       attempt=$((attempt + 1))
@@ -600,18 +720,25 @@ stop_app() {
   sleep 2
 
   # Force-kill any lingering processes.
-  if pgrep -f "OpenCode Studio" >/dev/null 2>&1; then
-    log "Force-killing lingering OpenCode Studio processes"
-    pkill -f "OpenCode Studio" >/dev/null 2>&1 || true
-  fi
-  if pgrep -f "opencode-studio" >/dev/null 2>&1; then
-    log "Force-killing lingering opencode-studio sidecar"
-    pkill -f "opencode-studio" >/dev/null 2>&1 || true
-  fi
-  if pgrep -f "opencode serve" >/dev/null 2>&1; then
-    log "Force-killing lingering opencode serve"
-    pkill -f "opencode serve" >/dev/null 2>&1 || true
-  fi
+  local patterns=(
+    "${APP_PATH}"
+    "OpenCode Studio"
+    "OpenCode Studio Helper"
+    "opencode-studio-desktop"
+    "opencode-studio"
+    "Chromium Helper"
+    "opencode serve"
+  )
+  local pat=""
+  for pat in "${patterns[@]}"; do
+    if pgrep -f "$pat" >/dev/null 2>&1; then
+      log "Force-killing lingering processes matching: $pat"
+      pkill -f "$pat" >/dev/null 2>&1 || true
+    fi
+  done
+
+  # Cleanup CEF/Chromium singleton locks between runs.
+  cleanup_chromium_singletons
 }
 
 dump_desktop_support_dirs() {
@@ -619,6 +746,10 @@ dump_desktop_support_dirs() {
   log "$header"
   local cfg_dir="$HOME/Library/Application Support/cn.cxits.opencode-studio"
   local log_dir="$HOME/Library/Logs/cn.cxits.opencode-studio"
+  local cache_dir="$HOME/Library/Caches/cn.cxits.opencode-studio"
+
+  collect_diagnostic_reports
+
   if [[ -d "$cfg_dir" ]]; then
     log "Config dir: $cfg_dir"
     ls -la "$cfg_dir" || true
@@ -642,6 +773,11 @@ PY
       log "backend.log (last 200 lines): $log_dir/backend.log"
       tail -n 200 "$log_dir/backend.log" || true
     fi
+  fi
+
+  if [[ -d "$cache_dir" ]]; then
+    log "Cache dir: $cache_dir"
+    ls -la "$cache_dir" || true
   fi
 }
 
@@ -775,6 +911,10 @@ if [[ -n "$OPENCODE_PORT_LAST" ]]; then
 fi
 
 log "Step 3/6: quit app + verify port release"
+if [[ "$UI_CLICKS" == "1" ]]; then
+  log "Cooldown before quit (UI clicks)"
+  sleep 3
+fi
 stop_app
 assert_port_free "$STUDIO_PORT_LAST" "$WAIT_TIMEOUT_SECS"
 if [[ "$STUDIO_PORT_LAST" != "$PORT" ]]; then
@@ -807,6 +947,10 @@ else
   bash "$USAGE_SMOKE_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --require-ui || fail "Usage smoke failed"
 fi
 OPENCODE_PORT_LAST="$(read_health_field "$RUN_BASE_URL" "openCodePort" || true)"
+if [[ "$UI_CLICKS" == "1" ]]; then
+  log "Cooldown before quit (UI clicks)"
+  sleep 3
+fi
 stop_app
 assert_port_free "$STUDIO_PORT_LAST" "$WAIT_TIMEOUT_SECS"
 if [[ "$STUDIO_PORT_LAST" != "$PORT" ]]; then
@@ -843,6 +987,10 @@ else
   bash "$USAGE_SMOKE_SCRIPT" --base-url "$RUN_BASE_URL" --directory "$WORK_DIR" --timeout "$WAIT_TIMEOUT_SECS" --require-ui || fail "Usage smoke failed"
 fi
 OPENCODE_PORT_LAST="$(read_health_field "$RUN_BASE_URL" "openCodePort" || true)"
+if [[ "$UI_CLICKS" == "1" ]]; then
+  log "Cooldown before quit (UI clicks)"
+  sleep 3
+fi
 stop_app
 assert_port_free "$STUDIO_PORT_LAST" "$WAIT_TIMEOUT_SECS"
 if [[ "$STUDIO_PORT_LAST" != "$PORT" ]]; then
