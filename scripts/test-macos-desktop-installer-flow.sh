@@ -489,11 +489,13 @@ launch_with_cdp_and_usage_smoke() {
     cleanup_chromium_singletons
 
     log "[$label] Launch attempt ${attempt}/${max_attempts} (CDP port: $DEBUG_PORT)"
+    # Avoid macOS Keychain prompts/hangs during Chromium/CEF init on CI.
     start_app \
       "$APP_PATH" \
       "--remote-debugging-port=${DEBUG_PORT}" \
       "--remote-debugging-address=127.0.0.1" \
       --remote-allow-origins=* \
+      --use-mock-keychain \
       "--user-data-dir=${chromium_user_data_dir}"
 
     activate_app
