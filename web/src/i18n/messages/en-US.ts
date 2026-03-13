@@ -234,6 +234,7 @@ export default {
   nav: {
     chat: 'Chat',
     files: 'Files',
+    preview: 'Preview',
     terminal: 'Terminal',
     git: 'Git',
     settings: 'Settings',
@@ -248,6 +249,7 @@ export default {
     toggleSidebar: 'Toggle sidebar',
     openSessions: 'Open sessions',
     openFilesPanel: 'Open files panel',
+    openPreviewPanel: 'Open preview panel',
     openTerminalPanel: 'Open terminal panel',
     openSourceControlPanel: 'Open source control panel',
     openSettingsPanel: 'Open settings panel',

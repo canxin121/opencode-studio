@@ -1,4 +1,4 @@
-export type MainTabId = 'chat' | 'files' | 'terminal' | 'git'
+export type MainTabId = 'chat' | 'files' | 'preview' | 'terminal' | 'git'
 
 export type MainTabDef = {
   id: MainTabId
@@ -9,6 +9,7 @@ export type MainTabDef = {
 export const MAIN_TABS: MainTabDef[] = [
   { id: 'chat', path: '/chat', labelKey: 'nav.chat' },
   { id: 'files', path: '/files', labelKey: 'nav.files' },
+  { id: 'preview', path: '/preview', labelKey: 'nav.preview' },
   { id: 'terminal', path: '/terminal', labelKey: 'nav.terminal' },
   { id: 'git', path: '/git', labelKey: 'nav.git' },
 ]

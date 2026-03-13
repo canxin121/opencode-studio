@@ -10,6 +10,7 @@ import {
   RiPlayListAddLine,
   RiChat4Line,
   RiFolder6Line,
+  RiGlobalLine,
   RiTerminalBoxLine,
   RiGitMergeLine,
   RiQuestionLine,
@@ -133,6 +134,7 @@ onBeforeUnmount(() => {
 const TAB_ICONS: Record<MainTabId, Component> = {
   chat: RiChat4Line,
   files: RiFolder6Line,
+  preview: RiGlobalLine,
   terminal: RiTerminalBoxLine,
   git: RiGitMergeLine,
 }
@@ -169,6 +171,7 @@ const mobileTitle = computed(() => {
     settings: String(t('nav.settings')),
     sessions: String(t('nav.chat')),
     files: String(t('nav.files')),
+    preview: String(t('nav.preview')),
     terminal: String(t('nav.terminal')),
     git: String(t('nav.git')),
   }
@@ -181,6 +184,7 @@ const mobileTitle = computed(() => {
     chat: String(t('nav.chat')),
     diff: String(t('nav.diff')),
     files: String(t('nav.files')),
+    preview: String(t('nav.preview')),
     terminal: String(t('nav.terminal')),
     git: String(t('nav.git')),
   }
@@ -193,6 +197,7 @@ const mobilePanelToggleLabel = computed(() => {
     .trim()
     .toLowerCase()
   if (panel === 'files') return String(t('header.openFilesPanel'))
+  if (panel === 'preview') return String(t('header.openPreviewPanel'))
   if (panel === 'terminal') return String(t('header.openTerminalPanel'))
   if (panel === 'git') return String(t('header.openSourceControlPanel'))
   if (panel === 'settings') return String(t('header.openSettingsPanel'))

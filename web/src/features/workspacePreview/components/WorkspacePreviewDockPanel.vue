@@ -21,6 +21,17 @@ const { t } = useI18n()
 const directoryStore = useDirectoryStore()
 const preview = useWorkspacePreviewStore()
 
+const props = withDefaults(
+  defineProps<{
+    showControls?: boolean
+  }>(),
+  {
+    showControls: true,
+  },
+)
+
+const controlsVisible = computed(() => props.showControls !== false)
+
 const frameSrc = shallowRef('')
 const iframeLoading = ref(false)
 const iframeError = ref('')
@@ -301,7 +312,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="flex h-full min-h-0 flex-col gap-2 p-3">
-    <div class="rounded-md border border-sidebar-border/70 bg-sidebar-accent/20 p-2">
+    <div v-if="controlsVisible" class="rounded-md border border-sidebar-border/70 bg-sidebar-accent/20 p-2">
       <div class="flex flex-wrap items-center justify-between gap-2">
         <div
           class="inline-flex items-center gap-0.5 rounded-md border border-sidebar-border/65 bg-sidebar-accent/35 p-0.5"
