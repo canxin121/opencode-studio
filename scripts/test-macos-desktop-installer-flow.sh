@@ -14,7 +14,6 @@ UI_CLICKS="0"
 USE_CEF="0"
 APP_MAIN_PID=""
 APP_LAUNCH_LOG_PATH=""
-KEYCHAIN_BOOTSTRAPPED="0"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 USAGE_SMOKE_SCRIPT="$SCRIPT_DIR/studio-usage-smoke.sh"
@@ -391,21 +390,56 @@ cleanup_chromium_singletons() {
   done
 }
 
+seed_cef_safe_storage_item() {
+  local keychain_path="$1"
+  local password="$2"
+  [[ -n "${keychain_path:-}" ]] || return 0
+  [[ -n "${password:-}" ]] || return 0
+
+  # Non-localized identifiers used by Chromium/CEF on macOS.
+  local pairs=(
+    "Chromium Safe Storage|Chromium"
+    "Chrome Safe Storage|Chrome"
+  )
+
+  local pair=""
+  local service=""
+  local account=""
+  for pair in "${pairs[@]}"; do
+    service="${pair%%|*}"
+    account="${pair#*|}"
+    security add-generic-password \
+      -a "$account" \
+      -s "$service" \
+      -w "$password" \
+      -A \
+      -U \
+      "$keychain_path" >/dev/null 2>&1 || true
+  done
+}
+
 bootstrap_keychain_for_cef() {
+  local label="$1"
+  local attempt="$2"
   # On GitHub macOS runners (and other CI), Chromium/CEF can hang in Keychain
-  # APIs (SecItemCopyMatching) during CEF initialization. A temporary unlocked
-  # keychain with a restricted search list avoids UI prompts and deadlocks.
+  # APIs (SecItemCopyMatching) during CEF initialization. Use a temporary
+  # unlocked keychain and pre-seed the Safe Storage item to avoid access prompts.
   [[ "$USE_CEF" == "1" ]] || return 0
-  [[ "$KEYCHAIN_BOOTSTRAPPED" == "1" ]] && return 0
 
   if ! command -v security >/dev/null 2>&1; then
     log "security CLI not found; skipping keychain bootstrap"
     return 0
   fi
 
-  KEYCHAIN_BOOTSTRAPPED="1"
+  local suffix=""
+  if [[ -n "${label:-}" ]]; then
+    suffix="-${label}"
+  fi
+  if [[ -n "${attempt:-}" ]]; then
+    suffix="${suffix}-attempt${attempt}"
+  fi
 
-  local keychain_path="$WORK_DIR/opencode-studio-e2e.keychain-db"
+  local keychain_path="$WORK_DIR/opencode-studio-e2e${suffix}.keychain-db"
   local keychain_password="opencode-studio-e2e"
 
   log "Bootstrapping temporary keychain for CEF: $keychain_path"
@@ -415,7 +449,6 @@ bootstrap_keychain_for_cef() {
 
   if ! security create-keychain -p "$keychain_password" "$keychain_path" >/dev/null 2>&1; then
     log "WARNING: failed to create temporary keychain; continuing"
-    KEYCHAIN_BOOTSTRAPPED="0"
     return 0
   fi
 
@@ -423,6 +456,8 @@ bootstrap_keychain_for_cef() {
   security unlock-keychain -p "$keychain_password" "$keychain_path" >/dev/null 2>&1 || true
   security list-keychains -d user -s "$keychain_path" >/dev/null 2>&1 || true
   security default-keychain -s "$keychain_path" >/dev/null 2>&1 || true
+
+  seed_cef_safe_storage_item "$keychain_path" "$keychain_password"
 
   log "Keychain search list (user):"
   security list-keychains -d user 2>/dev/null || true
@@ -531,7 +566,7 @@ launch_with_cdp_and_usage_smoke() {
     APP_LAUNCH_LOG_PATH="$HOME/Library/Logs/cn.cxits.opencode-studio/desktop-e2e-${label}-attempt${attempt}-cdp${DEBUG_PORT}-$(date '+%Y%m%d-%H%M%S').log"
     clear_cef_cache
     cleanup_chromium_singletons
-    bootstrap_keychain_for_cef
+    bootstrap_keychain_for_cef "$label" "$attempt"
 
     log "[$label] Launch attempt ${attempt}/${max_attempts} (CDP port: $DEBUG_PORT)"
     start_app \
