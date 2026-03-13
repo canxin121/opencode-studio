@@ -2,4 +2,6 @@
 /release-assets/
 .VSCodeCounter
 .ruff_cache
-/.workbench/
+/.workbench
+/.tmp-artifacts
+/.tmp-dmgs
