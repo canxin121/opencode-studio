@@ -1054,7 +1054,12 @@ pub(crate) async fn run(args: crate::Args) {
         )
         .route(
             "/workspace/preview/sessions",
-            get(crate::workspace_preview::workspace_preview_sessions_get),
+            get(crate::workspace_preview::workspace_preview_sessions_get)
+                .post(crate::workspace_preview::workspace_preview_sessions_post),
+        )
+        .route(
+            "/workspace/preview/sessions/discover",
+            post(crate::workspace_preview::workspace_preview_sessions_discover_post),
         )
         .route(
             "/workspace/preview/s/{id}",

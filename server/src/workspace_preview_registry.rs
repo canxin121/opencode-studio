@@ -1,15 +1,18 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use url::{Host, Url};
+use uuid::Uuid;
 
 use crate::{ApiResult, AppError};
 
 const STATE_VERSION: u32 = 1;
 const CACHE_TTL: Duration = Duration::from_millis(750);
 const PREVIEW_STATE_ENV: &str = "OPENCODE_WEB_PREVIEW_STATE_PATH";
+const STUDIO_PREVIEW_STATE_ENV: &str = "OPENCODE_STUDIO_PREVIEW_STATE_PATH";
 const XDG_DATA_HOME_ENV: &str = "XDG_DATA_HOME";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -50,7 +53,7 @@ pub(crate) struct PreviewSessionsResponse {
     pub(crate) sessions: Vec<PreviewSessionRecord>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct PreviewSessionsFile {
     #[serde(default = "default_state_version")]
@@ -64,7 +67,8 @@ struct PreviewSessionsFile {
 #[derive(Debug, Clone)]
 struct RegistryCache {
     loaded_at: Instant,
-    state_path: PathBuf,
+    plugin_state_path: PathBuf,
+    studio_state_path: PathBuf,
     snapshot: PreviewSessionsResponse,
 }
 
@@ -107,22 +111,65 @@ impl WorkspacePreviewRegistry {
             .find(|session| session.id == id)
     }
 
+    pub(crate) async fn invalidate(&self) {
+        let mut cache = self.cache.write().await;
+        *cache = None;
+    }
+
+    pub(crate) async fn create_studio_session(
+        &self,
+        directory: Option<String>,
+        target_url: Url,
+    ) -> ApiResult<PreviewSessionRecord> {
+        let state_path = studio_preview_state_path();
+        let mut file = load_state_file_from_path(&state_path)?;
+        let updated_at = now_millis();
+        let id = generate_preview_session_id();
+        let record = PreviewSessionRecord {
+            id: id.clone(),
+            directory: directory.unwrap_or_default(),
+            opencode_session_id: None,
+            state: "ready".to_string(),
+            proxy_base_path: preview_proxy_base_path(&id),
+            target_url: Some(target_url.to_string()),
+            pid: None,
+            port: target_url.port_or_known_default(),
+            command: None,
+            args: Vec::new(),
+            logs_path: None,
+            started_at: None,
+            updated_at,
+            framework_hint: None,
+            error: None,
+        };
+
+        file.version = STATE_VERSION;
+        file.updated_at = updated_at;
+        file.sessions.push(record.clone());
+        write_state_file_atomically(&state_path, &file)?;
+        self.invalidate().await;
+        Ok(record)
+    }
+
     async fn snapshot(&self) -> PreviewSessionsResponse {
-        let state_path = preview_state_path();
+        let plugin_state_path = preview_state_path();
+        let studio_state_path = studio_preview_state_path();
         {
             let cache = self.cache.read().await;
             if let Some(cache) = cache.as_ref()
-                && cache.state_path == state_path
+                && cache.plugin_state_path == plugin_state_path
+                && cache.studio_state_path == studio_state_path
                 && cache.loaded_at.elapsed() < self.ttl
             {
                 return cache.snapshot.clone();
             }
         }
 
-        let snapshot = load_snapshot_from_path(&state_path);
+        let snapshot = load_snapshot_from_paths(&plugin_state_path, &studio_state_path);
         let cache_entry = RegistryCache {
             loaded_at: Instant::now(),
-            state_path,
+            plugin_state_path,
+            studio_state_path,
             snapshot: snapshot.clone(),
         };
 
@@ -137,7 +184,15 @@ fn default_state_version() -> u32 {
 }
 
 pub(crate) fn preview_state_path() -> PathBuf {
-    if let Ok(path) = std::env::var(PREVIEW_STATE_ENV) {
+    state_path_from_env_or_default(PREVIEW_STATE_ENV, "preview-sessions.json")
+}
+
+pub(crate) fn studio_preview_state_path() -> PathBuf {
+    state_path_from_env_or_default(STUDIO_PREVIEW_STATE_ENV, "studio-preview-sessions.json")
+}
+
+fn state_path_from_env_or_default(env_key: &str, file_name: &str) -> PathBuf {
+    if let Ok(path) = std::env::var(env_key) {
         let trimmed = path.trim();
         if !trimmed.is_empty() {
             return PathBuf::from(trimmed);
@@ -147,7 +202,7 @@ pub(crate) fn preview_state_path() -> PathBuf {
     preview_state_root()
         .join("opencode")
         .join("web-preview")
-        .join("preview-sessions.json")
+        .join(file_name)
 }
 
 fn preview_state_root() -> PathBuf {
@@ -162,12 +217,8 @@ fn preview_state_root() -> PathBuf {
 }
 
 fn load_snapshot_from_path(path: &Path) -> PreviewSessionsResponse {
-    let Ok(contents) = std::fs::read_to_string(path) else {
-        return empty_snapshot();
-    };
-
-    match parse_preview_sessions_file(&contents) {
-        Ok(snapshot) => snapshot,
+    match load_state_file_from_path(path) {
+        Ok(file) => parse_preview_sessions(file),
         Err(err) => {
             tracing::warn!(
                 target: "opencode_studio.preview_registry",
@@ -180,6 +231,30 @@ fn load_snapshot_from_path(path: &Path) -> PreviewSessionsResponse {
     }
 }
 
+fn load_snapshot_from_paths(plugin_path: &Path, studio_path: &Path) -> PreviewSessionsResponse {
+    merge_preview_snapshots(
+        load_snapshot_from_path(plugin_path),
+        load_snapshot_from_path(studio_path),
+    )
+}
+
+fn load_state_file_from_path(path: &Path) -> ApiResult<PreviewSessionsFile> {
+    let Ok(contents) = std::fs::read_to_string(path) else {
+        return Ok(PreviewSessionsFile {
+            version: STATE_VERSION,
+            updated_at: 0,
+            sessions: Vec::new(),
+        });
+    };
+
+    serde_json::from_str(&contents).map_err(|err| {
+        AppError::internal(format!(
+            "invalid preview registry JSON at {}: {err}",
+            path.to_string_lossy()
+        ))
+    })
+}
+
 fn empty_snapshot() -> PreviewSessionsResponse {
     PreviewSessionsResponse {
         version: STATE_VERSION,
@@ -188,10 +263,15 @@ fn empty_snapshot() -> PreviewSessionsResponse {
     }
 }
 
+#[cfg(test)]
 fn parse_preview_sessions_file(contents: &str) -> ApiResult<PreviewSessionsResponse> {
     let file: PreviewSessionsFile = serde_json::from_str(contents)
         .map_err(|err| AppError::bad_request(format!("invalid preview registry JSON: {err}")))?;
 
+    Ok(parse_preview_sessions(file))
+}
+
+fn parse_preview_sessions(file: PreviewSessionsFile) -> PreviewSessionsResponse {
     let mut sessions = Vec::with_capacity(file.sessions.len());
     for session in file.sessions {
         if !is_valid_preview_session_id(&session.id) {
@@ -202,12 +282,89 @@ fn parse_preview_sessions_file(contents: &str) -> ApiResult<PreviewSessionsRespo
         }
         sessions.push(session);
     }
-
-    Ok(PreviewSessionsResponse {
+    PreviewSessionsResponse {
         version: file.version,
         updated_at: file.updated_at,
         sessions,
-    })
+    }
+}
+
+fn merge_preview_snapshots(
+    plugin: PreviewSessionsResponse,
+    studio: PreviewSessionsResponse,
+) -> PreviewSessionsResponse {
+    let updated_at = plugin.updated_at.max(studio.updated_at);
+    let version = plugin.version.max(studio.version).max(STATE_VERSION);
+    let mut merged = HashMap::with_capacity(plugin.sessions.len() + studio.sessions.len());
+
+    for session in plugin.sessions {
+        merged.insert(session.id.clone(), session);
+    }
+    for session in studio.sessions {
+        merged.insert(session.id.clone(), session);
+    }
+
+    let mut sessions = merged.into_values().collect::<Vec<_>>();
+    sessions.sort_by(|left, right| {
+        right
+            .updated_at
+            .cmp(&left.updated_at)
+            .then_with(|| left.id.cmp(&right.id))
+    });
+
+    PreviewSessionsResponse {
+        version,
+        updated_at,
+        sessions,
+    }
+}
+
+fn write_state_file_atomically(path: &Path, file: &PreviewSessionsFile) -> ApiResult<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|err| {
+            AppError::internal(format!(
+                "failed to create preview session state directory {}: {err}",
+                parent.to_string_lossy()
+            ))
+        })?;
+    }
+
+    let json = serde_json::to_string_pretty(file).map_err(|err| {
+        AppError::internal(format!("failed to serialize preview sessions: {err}"))
+    })?;
+    let tmp = temp_state_path(path);
+    std::fs::write(&tmp, json).map_err(|err| {
+        AppError::internal(format!(
+            "failed to write preview session state {}: {err}",
+            tmp.to_string_lossy()
+        ))
+    })?;
+    std::fs::rename(&tmp, path).map_err(|err| {
+        AppError::internal(format!(
+            "failed to finalize preview session state {}: {err}",
+            path.to_string_lossy()
+        ))
+    })?;
+    Ok(())
+}
+
+fn temp_state_path(path: &Path) -> PathBuf {
+    let file_name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("preview-sessions.json");
+    path.with_file_name(format!(".{file_name}.{}.tmp", Uuid::new_v4().simple()))
+}
+
+fn generate_preview_session_id() -> String {
+    format!("pv_{}", Uuid::new_v4().simple())
+}
+
+fn now_millis() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as i64)
+        .unwrap_or(0)
 }
 
 fn is_valid_preview_session_id(id: &str) -> bool {
@@ -414,6 +571,106 @@ mod tests {
         assert_eq!(
             preview_state_path(),
             PathBuf::from("/tmp/xdg-data/opencode/web-preview/preview-sessions.json")
+        );
+    }
+
+    #[test]
+    fn studio_preview_state_path_uses_env_override_before_xdg_default() {
+        let _env_lock = ENV_LOCK.lock().unwrap();
+        let _override =
+            EnvVarGuard::set(STUDIO_PREVIEW_STATE_ENV, "/tmp/custom-studio-preview.json");
+        let _xdg = EnvVarGuard::set(XDG_DATA_HOME_ENV, "/tmp/xdg-data");
+
+        assert_eq!(
+            studio_preview_state_path(),
+            PathBuf::from("/tmp/custom-studio-preview.json")
+        );
+    }
+
+    #[test]
+    fn studio_preview_state_path_uses_xdg_data_home_by_default() {
+        let _env_lock = ENV_LOCK.lock().unwrap();
+        let _override = EnvVarGuard::set(STUDIO_PREVIEW_STATE_ENV, "");
+        let _xdg = EnvVarGuard::set(XDG_DATA_HOME_ENV, "/tmp/xdg-data");
+
+        assert_eq!(
+            studio_preview_state_path(),
+            PathBuf::from("/tmp/xdg-data/opencode/web-preview/studio-preview-sessions.json")
+        );
+    }
+
+    #[test]
+    fn load_snapshot_from_paths_merges_plugin_and_studio_records_with_studio_precedence() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let plugin_path = temp.path().join("preview-sessions.json");
+        let studio_path = temp.path().join("studio-preview-sessions.json");
+
+        std::fs::write(
+            &plugin_path,
+            r#"{
+                "version": 1,
+                "updatedAt": 40,
+                "sessions": [
+                    {
+                        "id": "pv_shared",
+                        "directory": "/repo/plugin",
+                        "state": "ready",
+                        "proxyBasePath": "/api/workspace/preview/s/pv_shared/",
+                        "targetUrl": "http://127.0.0.1:5173/",
+                        "updatedAt": 40
+                    },
+                    {
+                        "id": "pv_plugin_only",
+                        "directory": "/repo/plugin-only",
+                        "state": "ready",
+                        "proxyBasePath": "/api/workspace/preview/s/pv_plugin_only/",
+                        "updatedAt": 20
+                    }
+                ]
+            }"#,
+        )
+        .expect("write plugin state");
+        std::fs::write(
+            &studio_path,
+            r#"{
+                "version": 1,
+                "updatedAt": 90,
+                "sessions": [
+                    {
+                        "id": "pv_shared",
+                        "directory": "/repo/studio",
+                        "state": "ready",
+                        "proxyBasePath": "/api/workspace/preview/s/pv_shared/",
+                        "targetUrl": "http://127.0.0.1:4321/",
+                        "updatedAt": 90
+                    },
+                    {
+                        "id": "pv_studio_only",
+                        "directory": "/repo/studio-only",
+                        "state": "ready",
+                        "proxyBasePath": "/api/workspace/preview/s/pv_studio_only/",
+                        "updatedAt": 60
+                    }
+                ]
+            }"#,
+        )
+        .expect("write studio state");
+
+        let merged = load_snapshot_from_paths(&plugin_path, &studio_path);
+
+        assert_eq!(merged.updated_at, 90);
+        assert_eq!(
+            merged
+                .sessions
+                .iter()
+                .map(|session| session.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["pv_shared", "pv_studio_only", "pv_plugin_only"]
+        );
+        assert_eq!(merged.sessions[0].directory, "/repo/studio");
+        assert_eq!(
+            merged.sessions[0].target_url.as_deref(),
+            Some("http://127.0.0.1:4321/")
         );
     }
 

@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::time::Duration;
 
 use axum::Json;
@@ -16,19 +17,13 @@ use tokio_tungstenite::tungstenite::protocol::{
 use url::Url;
 
 use crate::workspace_preview_registry::{
-    PreviewSessionsResponse, build_proxy_target_url, preview_target_from_record,
-    validate_preview_target_url, websocket_target_url,
+    PreviewSessionRecord, PreviewSessionsResponse, build_proxy_target_url,
+    preview_target_from_record, validate_preview_target_url, websocket_target_url,
 };
 use crate::{ApiResult, AppError, AppState};
 
-const PREVIEW_PROBE_CANDIDATES: [&str; 6] = [
-    "http://127.0.0.1:5173",
-    "http://localhost:5173",
-    "http://127.0.0.1:4173",
-    "http://localhost:4173",
-    "http://127.0.0.1:3000",
-    "http://localhost:3000",
-];
+const PREVIEW_DISCOVERY_HOSTS: [&str; 2] = ["127.0.0.1", "localhost"];
+const PREVIEW_DISCOVERY_PORTS: [u16; 8] = [5173, 3000, 4173, 8080, 8000, 4200, 4321, 5174];
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct WorkspacePreviewQuery {
@@ -52,6 +47,19 @@ pub(crate) struct WorkspacePreviewSessionsQuery {
     pub(crate) directory: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WorkspacePreviewSessionCreateBody {
+    pub(crate) directory: Option<String>,
+    pub(crate) target_url: String,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WorkspacePreviewSessionDiscoverBody {
+    pub(crate) directory: Option<String>,
+}
+
 pub(crate) async fn workspace_preview_get(
     Query(query): Query<WorkspacePreviewQuery>,
 ) -> ApiResult<Json<WorkspacePreviewResponse>> {
@@ -63,25 +71,10 @@ pub(crate) async fn workspace_preview_get(
     }
 
     let _ = query.directory;
-    let client = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .connect_timeout(Duration::from_millis(350))
-        .timeout(Duration::from_millis(700))
-        .build()
-        .map_err(|err| {
-            AppError::internal(format!("failed to build preview probe client: {err}"))
-        })?;
-
-    for candidate in PREVIEW_PROBE_CANDIDATES {
-        let Ok(response) = client.get(candidate).send().await else {
-            continue;
-        };
-
-        if response.status().is_success() || response.status().is_redirection() {
-            return Ok(Json(WorkspacePreviewResponse {
-                url: candidate.to_string(),
-            }));
-        }
+    if let Some(target) = discover_preview_target().await? {
+        return Ok(Json(WorkspacePreviewResponse {
+            url: target.to_string(),
+        }));
     }
 
     Err(AppError::not_found(
@@ -123,6 +116,30 @@ pub(crate) async fn workspace_preview_sessions_get(
         None => state.workspace_preview_registry.list_all().await,
     };
     Ok(Json(sessions))
+}
+
+pub(crate) async fn workspace_preview_sessions_post(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<WorkspacePreviewSessionCreateBody>,
+) -> ApiResult<Json<PreviewSessionRecord>> {
+    let session = create_studio_preview_session(&state, body.directory, &body.target_url).await?;
+    Ok(Json(session))
+}
+
+pub(crate) async fn workspace_preview_sessions_discover_post(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<WorkspacePreviewSessionDiscoverBody>,
+) -> ApiResult<Json<PreviewSessionRecord>> {
+    let Some(target) = discover_preview_target().await? else {
+        return Err(AppError::not_found(
+            "No reachable local preview target found",
+        ));
+    };
+    let session = state
+        .workspace_preview_registry
+        .create_studio_session(body.directory, target)
+        .await?;
+    Ok(Json(session))
 }
 
 pub(crate) async fn workspace_preview_session_proxy_root(
@@ -333,6 +350,53 @@ fn filtered_request_headers(from: &HeaderMap) -> HeaderMap {
     to
 }
 
+async fn create_studio_preview_session(
+    state: &Arc<AppState>,
+    directory: Option<String>,
+    raw_target_url: &str,
+) -> ApiResult<PreviewSessionRecord> {
+    let target = validate_preview_target_url(raw_target_url)?;
+    state
+        .workspace_preview_registry
+        .create_studio_session(directory, target)
+        .await
+}
+
+async fn discover_preview_target() -> ApiResult<Option<Url>> {
+    let client = preview_probe_client()?;
+    for candidate in preview_probe_candidates() {
+        let Ok(response) = client.get(candidate.clone()).send().await else {
+            continue;
+        };
+
+        if response.status().is_success() || response.status().is_redirection() {
+            return Ok(Some(candidate));
+        }
+    }
+    Ok(None)
+}
+
+fn preview_probe_candidates() -> Vec<Url> {
+    PREVIEW_DISCOVERY_PORTS
+        .iter()
+        .flat_map(|port| {
+            PREVIEW_DISCOVERY_HOSTS
+                .iter()
+                .map(move |host| format!("http://{host}:{port}/"))
+        })
+        .filter_map(|candidate| Url::parse(&candidate).ok())
+        .collect()
+}
+
+fn preview_probe_client() -> ApiResult<reqwest::Client> {
+    reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .connect_timeout(Duration::from_millis(350))
+        .timeout(Duration::from_millis(700))
+        .build()
+        .map_err(|err| AppError::internal(format!("failed to build preview probe client: {err}")))
+}
+
 async fn response_from_upstream(upstream: reqwest::Response) -> ApiResult<Response> {
     let status = StatusCode::from_u16(upstream.status().as_u16())
         .map_err(|err| AppError::internal(format!("invalid upstream status code: {err}")))?;
@@ -431,4 +495,64 @@ fn is_websocket_upgrade_request(headers: &HeaderMap, method: &axum::http::Method
         });
 
     has_upgrade && has_connection_upgrade
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::workspace_preview_registry::WorkspacePreviewRegistry;
+
+    fn dummy_state() -> Arc<AppState> {
+        Arc::new(AppState {
+            ui_auth: crate::ui_auth::UiAuth::Disabled,
+            ui_cookie_same_site: axum_extra::extract::cookie::SameSite::Strict,
+            cors_allowed_origins: Vec::new(),
+            cors_allow_all: false,
+            opencode: Arc::new(crate::opencode::OpenCodeManager::new(
+                "127.0.0.1".to_string(),
+                Some(1),
+                true,
+                None,
+            )),
+            plugin_runtime: Arc::new(crate::plugin_runtime::PluginRuntime::new()),
+            terminal: Arc::new(crate::terminal::TerminalManager::new()),
+            attachment_cache: Arc::new(crate::attachment_cache::AttachmentCacheManager::new()),
+            session_activity: crate::session_activity::SessionActivityManager::new(),
+            directory_session_index:
+                crate::directory_session_index::DirectorySessionIndexManager::new(),
+            workspace_preview_registry: Arc::new(WorkspacePreviewRegistry::new()),
+            settings_path: std::path::PathBuf::from(
+                "/tmp/opencode-studio-workspace-preview-test-settings.json",
+            ),
+            settings: Arc::new(tokio::sync::RwLock::new(
+                crate::settings::Settings::default(),
+            )),
+        })
+    }
+
+    #[test]
+    fn preview_probe_candidates_include_common_ports_and_hosts() {
+        let candidates = preview_probe_candidates();
+        let urls = candidates.iter().map(Url::as_str).collect::<Vec<_>>();
+
+        assert!(urls.contains(&"http://127.0.0.1:5173/"));
+        assert!(urls.contains(&"http://localhost:3000/"));
+        assert!(urls.contains(&"http://127.0.0.1:8080/"));
+        assert!(urls.contains(&"http://localhost:4321/"));
+    }
+
+    #[tokio::test]
+    async fn create_preview_session_endpoint_rejects_non_loopback_target() {
+        let err = workspace_preview_sessions_post(
+            State(dummy_state()),
+            Json(WorkspacePreviewSessionCreateBody {
+                directory: Some("/repo".to_string()),
+                target_url: "http://example.com:5173".to_string(),
+            }),
+        )
+        .await
+        .expect_err("non-loopback target should be rejected");
+
+        assert!(matches!(err, AppError::BadRequest { .. }));
+    }
 }
