@@ -311,50 +311,19 @@ normalize_arch() {
 }
 ARCH="$(normalize_arch "$(uname -m)")"
 
-linux_libc_family() {
-  if ! command -v ldd >/dev/null 2>&1; then
-    echo "gnu"
-    return
-  fi
-
-  local info
-  info="$(ldd --version 2>&1 || true)"
-  if [[ "$info" == *musl* ]]; then
-    echo "musl"
-  else
-    echo "gnu"
-  fi
-}
-
 backend_target_candidates() {
   case "${OS}/${ARCH}" in
     linux/x86_64|linux/amd64)
-      if [[ "$(linux_libc_family)" == "musl" ]]; then
-        printf '%s\n' "x86_64-unknown-linux-musl" "x86_64-unknown-linux-gnu"
-      else
-        printf '%s\n' "x86_64-unknown-linux-gnu" "x86_64-unknown-linux-musl"
-      fi
+      printf '%s\n' "x86_64-unknown-linux-musl" "x86_64-unknown-linux-gnu"
       ;;
     linux/aarch64|linux/arm64)
-      if [[ "$(linux_libc_family)" == "musl" ]]; then
-        printf '%s\n' "aarch64-unknown-linux-musl" "aarch64-unknown-linux-gnu"
-      else
-        printf '%s\n' "aarch64-unknown-linux-gnu" "aarch64-unknown-linux-musl"
-      fi
+      printf '%s\n' "aarch64-unknown-linux-musl" "aarch64-unknown-linux-gnu"
       ;;
     linux/armv7l|linux/armv7)
-      if [[ "$(linux_libc_family)" == "musl" ]]; then
-        printf '%s\n' "armv7-unknown-linux-musleabihf" "armv7-unknown-linux-gnueabihf"
-      else
-        printf '%s\n' "armv7-unknown-linux-gnueabihf" "armv7-unknown-linux-musleabihf"
-      fi
+      printf '%s\n' "armv7-unknown-linux-musleabihf" "armv7-unknown-linux-gnueabihf"
       ;;
     linux/i686|linux/i386)
-      if [[ "$(linux_libc_family)" == "musl" ]]; then
-        printf '%s\n' "i686-unknown-linux-musl" "i686-unknown-linux-gnu"
-      else
-        printf '%s\n' "i686-unknown-linux-gnu" "i686-unknown-linux-musl"
-      fi
+      printf '%s\n' "i686-unknown-linux-musl" "i686-unknown-linux-gnu"
       ;;
     darwin/x86_64|darwin/amd64)
       printf '%s\n' "x86_64-apple-darwin"
@@ -489,6 +458,28 @@ for a in j.get("assets", []) or []:
 print("")' "$name" <<<"$json"
 }
 
+linux_backend_libc_family() {
+  local name="$1"
+  case "$name" in
+    *unknown-linux-musl*|*unknown-linux-musleabihf*) printf '%s\n' "musl" ;;
+    *unknown-linux-gnu*|*unknown-linux-gnueabihf*) printf '%s\n' "gnu" ;;
+    *) printf '%s\n' "" ;;
+  esac
+}
+
+warn_if_linux_backend_fallback() {
+  local chosen="$1"
+  local preferred="$2"
+  local chosen_family=""
+  local preferred_family=""
+
+  chosen_family="$(linux_backend_libc_family "$chosen")"
+  preferred_family="$(linux_backend_libc_family "$preferred")"
+  if [[ "$preferred_family" == "musl" && "$chosen_family" == "gnu" ]]; then
+    echo "Warning: Linux musl backend asset not found for ${OS}/${ARCH}; falling back to glibc build: $chosen" >&2
+  fi
+}
+
 download_asset_by_name() {
   local json="$1"
   local name="$2"
@@ -515,11 +506,15 @@ download_first_asset_by_name() {
   local out="$2"
   shift 2
 
+  local preferred_name="${1:-}"
   local name=""
   local url=""
   for name in "$@"; do
     url="$(asset_url_by_name "$json" "$name")"
     if [[ -n "$url" && "$url" != "null" ]]; then
+      if [[ -n "$preferred_name" ]]; then
+        warn_if_linux_backend_fallback "$name" "$preferred_name"
+      fi
       echo "Downloading: $name"
       curl -fL --retry 3 --retry-delay 1 -o "$out" "$url"
       return 0

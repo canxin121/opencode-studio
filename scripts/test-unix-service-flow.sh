@@ -285,10 +285,10 @@ detect_backend_target_triple() {
   case "$OS" in
     Linux)
       case "$machine" in
-        x86_64|amd64) printf '%s\n' "x86_64-unknown-linux-gnu" ;;
-        aarch64|arm64) printf '%s\n' "aarch64-unknown-linux-gnu" ;;
-        armv7l|armv7) printf '%s\n' "armv7-unknown-linux-gnueabihf" ;;
-        i686|i386) printf '%s\n' "i686-unknown-linux-gnu" ;;
+        x86_64|amd64) printf '%s\n' "x86_64-unknown-linux-musl" ;;
+        aarch64|arm64) printf '%s\n' "aarch64-unknown-linux-musl" ;;
+        armv7l|armv7) printf '%s\n' "armv7-unknown-linux-musleabihf" ;;
+        i686|i386) printf '%s\n' "i686-unknown-linux-musl" ;;
         *) return 1 ;;
       esac
       ;;

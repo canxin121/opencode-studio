@@ -169,7 +169,7 @@ pub async fn update_check(Query(query): Query<UpdateCheckQuery>) -> Json<UpdateC
             current_version: service_current_version.clone(),
             latest_version: None,
             available: false,
-            target: runtime_target_triple(),
+            target: preferred_service_target_triple(),
             asset_name: None,
             asset_url: None,
             update_command: None,
@@ -233,6 +233,10 @@ pub async fn update_check(Query(query): Query<UpdateCheckQuery>) -> Json<UpdateC
             release_tag,
             service_asset_candidates(target, release_tag).as_slice(),
         );
+        if let Some(asset_name) = asset_name.as_deref() {
+            response.service.target = service_asset_target_from_name(asset_name, release_tag)
+                .or_else(|| response.service.target.clone());
+        }
         response.service.asset_name = asset_name;
         response.service.asset_url = asset_url.clone();
         response.service.update_command = build_service_update_command(
@@ -482,13 +486,22 @@ fn compare_prerelease(a: &str, b: &str) -> Ordering {
     Ordering::Equal
 }
 
-fn runtime_target_triple() -> Option<String> {
-    runtime_target_triple_for(
-        std::env::consts::OS,
-        std::env::consts::ARCH,
-        cfg!(target_env = "musl"),
-    )
-    .map(ToString::to_string)
+fn preferred_service_target_triple() -> Option<String> {
+    preferred_service_target_triple_for(std::env::consts::OS, std::env::consts::ARCH)
+        .map(ToString::to_string)
+}
+
+fn preferred_service_target_triple_for(os: &str, arch: &str) -> Option<&'static str> {
+    let os = normalize_runtime_os(os);
+    let arch = normalize_runtime_arch(arch);
+
+    match (os.as_str(), arch.as_str()) {
+        ("linux", "x86_64") => Some("x86_64-unknown-linux-musl"),
+        ("linux", "aarch64") => Some("aarch64-unknown-linux-musl"),
+        ("linux", "i686") => Some("i686-unknown-linux-musl"),
+        ("linux", "armv7") => Some("armv7-unknown-linux-musleabihf"),
+        _ => runtime_target_triple_for(os.as_str(), arch.as_str(), cfg!(target_env = "musl")),
+    }
 }
 
 fn runtime_target_triple_for(os: &str, arch: &str, musl: bool) -> Option<&'static str> {
@@ -545,13 +558,61 @@ fn service_asset_candidates(target: &str, release_tag: &str) -> Vec<String> {
     };
 
     let mut candidates = Vec::new();
-    for ext in [primary_ext, secondary_ext] {
-        candidates.push(format!("opencode-studio-backend-{target}-{tag}.{ext}"));
-        candidates.push(format!("opencode-studio-backend-{target}.{ext}"));
-        candidates.push(format!("opencode-studio-{target}-{tag}.{ext}"));
-        candidates.push(format!("opencode-studio-{target}.{ext}"));
+    for candidate_target in service_target_candidates(target) {
+        for ext in [primary_ext, secondary_ext] {
+            candidates.push(format!(
+                "opencode-studio-backend-{candidate_target}-{tag}.{ext}"
+            ));
+            candidates.push(format!("opencode-studio-backend-{candidate_target}.{ext}"));
+            candidates.push(format!("opencode-studio-{candidate_target}-{tag}.{ext}"));
+            candidates.push(format!("opencode-studio-{candidate_target}.{ext}"));
+        }
     }
     candidates
+}
+
+fn service_target_candidates(target: &str) -> Vec<&str> {
+    match target.trim() {
+        "x86_64-unknown-linux-musl" | "x86_64-unknown-linux-gnu" => {
+            vec!["x86_64-unknown-linux-musl", "x86_64-unknown-linux-gnu"]
+        }
+        "aarch64-unknown-linux-musl" | "aarch64-unknown-linux-gnu" => {
+            vec!["aarch64-unknown-linux-musl", "aarch64-unknown-linux-gnu"]
+        }
+        "i686-unknown-linux-musl" | "i686-unknown-linux-gnu" => {
+            vec!["i686-unknown-linux-musl", "i686-unknown-linux-gnu"]
+        }
+        "armv7-unknown-linux-musleabihf" | "armv7-unknown-linux-gnueabihf" => {
+            vec![
+                "armv7-unknown-linux-musleabihf",
+                "armv7-unknown-linux-gnueabihf",
+            ]
+        }
+        _ => vec![target.trim()],
+    }
+}
+
+fn service_asset_target_from_name(asset_name: &str, release_tag: &str) -> Option<String> {
+    let tag = release_tag.trim();
+    for prefix in ["opencode-studio-backend-", "opencode-studio-"] {
+        let Some(rest) = asset_name.strip_prefix(prefix) else {
+            continue;
+        };
+        for suffix in [
+            format!("-{tag}.tar.gz"),
+            ".tar.gz".to_string(),
+            format!("-{tag}.zip"),
+            ".zip".to_string(),
+        ] {
+            if let Some(target) = rest.strip_suffix(&suffix)
+                && !target.is_empty()
+            {
+                return Some(target.to_string());
+            }
+        }
+    }
+
+    None
 }
 
 fn resolve_release_asset_url(
@@ -1114,6 +1175,26 @@ mod tests {
     }
 
     #[test]
+    fn preferred_service_target_triple_for_prefers_linux_musl_defaults() {
+        assert_eq!(
+            preferred_service_target_triple_for("linux", "x86_64"),
+            Some("x86_64-unknown-linux-musl")
+        );
+        assert_eq!(
+            preferred_service_target_triple_for("linux", "aarch64"),
+            Some("aarch64-unknown-linux-musl")
+        );
+        assert_eq!(
+            preferred_service_target_triple_for("linux", "arm"),
+            Some("armv7-unknown-linux-musleabihf")
+        );
+        assert_eq!(
+            preferred_service_target_triple_for("darwin", "arm64"),
+            Some("aarch64-apple-darwin")
+        );
+    }
+
+    #[test]
     fn runtime_target_triple_for_maps_linux_musl_variants() {
         assert_eq!(
             runtime_target_triple_for("linux", "x86_64", true),
@@ -1174,7 +1255,29 @@ mod tests {
         );
         assert_eq!(
             service_asset_candidates("x86_64-unknown-linux-gnu", "v1.2.0")[0],
+            "opencode-studio-backend-x86_64-unknown-linux-musl-v1.2.0.tar.gz"
+        );
+        assert_eq!(
+            service_asset_candidates("x86_64-unknown-linux-gnu", "v1.2.0")[8],
             "opencode-studio-backend-x86_64-unknown-linux-gnu-v1.2.0.tar.gz"
+        );
+    }
+
+    #[test]
+    fn service_asset_target_from_name_extracts_selected_target() {
+        assert_eq!(
+            service_asset_target_from_name(
+                "opencode-studio-backend-aarch64-unknown-linux-gnu-v1.2.0.tar.gz",
+                "v1.2.0"
+            ),
+            Some("aarch64-unknown-linux-gnu".to_string())
+        );
+        assert_eq!(
+            service_asset_target_from_name(
+                "opencode-studio-x86_64-unknown-linux-musl.zip",
+                "v1.2.0"
+            ),
+            Some("x86_64-unknown-linux-musl".to_string())
         );
     }
 
