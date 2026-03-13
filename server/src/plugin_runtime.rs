@@ -1129,7 +1129,8 @@ async fn invoke_bridge_action(
         )
     })?;
 
-    let mut cmd = tokio::process::Command::new(&bridge.program);
+    let resolved_program = resolve_bridge_program_override(&bridge.program);
+    let mut cmd = tokio::process::Command::new(&resolved_program);
     cmd.args(&bridge.args)
         .current_dir(&bridge.cwd)
         .stdin(Stdio::piped())
@@ -1158,9 +1159,7 @@ async fn invoke_bridge_action(
     let mut child = cmd.spawn().map_err(|err| {
         let program = bridge.program.clone();
         let hint = if err.kind() == std::io::ErrorKind::NotFound {
-            Some(format!(
-                "Hint: '{program}' was not found in PATH. Install it or set bridge.env.PATH in the plugin manifest (on macOS, Homebrew is usually /opt/homebrew/bin or /usr/local/bin)."
-            ))
+            bridge_program_not_found_hint(&program)
         } else {
             None
         };
@@ -1371,6 +1370,34 @@ fn augment_macos_path(base: &str) -> String {
     }
 
     out.join(":")
+}
+
+fn resolve_bridge_program_override(program: &str) -> String {
+    if program == "bun" {
+        for key in ["OPENCODE_STUDIO_BUN_PATH", "OPENCODE_BUN_PATH"] {
+            if let Some(value) = std::env::var_os(key) {
+                let value = value.to_string_lossy().trim().to_string();
+                if !value.is_empty() {
+                    return value;
+                }
+            }
+        }
+    }
+
+    program.to_string()
+}
+
+fn bridge_program_not_found_hint(program: &str) -> Option<String> {
+    if program == "bun" {
+        return Some(
+            "Hint: 'bun' was not found. For systemd installs, ensure the service PATH includes ~/.bun/bin (the installer now writes that by default), or set OPENCODE_STUDIO_BUN_PATH=/absolute/path/to/bun in the service unit. Plugins can also set bridge.env.PATH explicitly."
+                .to_string(),
+        );
+    }
+
+    Some(format!(
+        "Hint: '{program}' was not found in PATH. Install it or set bridge.env.PATH in the plugin manifest (on macOS, Homebrew is usually /opt/homebrew/bin or /usr/local/bin)."
+    ))
 }
 
 fn truncate_text(input: &str, max_chars: usize) -> String {
@@ -1930,9 +1957,10 @@ fn canonicalize_fallback(path: PathBuf) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::{
-        PluginStatus, RegisteredPlugin, discover_plugins, extract_cursor_from_poll_result,
-        extract_events_from_poll_result, normalize_specs, resolve_bridge_invocation,
-        resolve_bridge_program, resolve_manifest_path, sanitize_plugin_id,
+        PluginStatus, RegisteredPlugin, bridge_program_not_found_hint, discover_plugins,
+        extract_cursor_from_poll_result, extract_events_from_poll_result, normalize_specs,
+        resolve_bridge_invocation, resolve_bridge_program, resolve_bridge_program_override,
+        resolve_manifest_path, sanitize_plugin_id,
     };
     use serde_json::{Value, json};
     use std::path::PathBuf;
@@ -2383,6 +2411,29 @@ mod tests {
             Some(&"bridge".to_string())
         );
         assert!(!bridge.env.contains_key(""));
+    }
+
+    #[test]
+    fn resolve_bridge_program_override_prefers_explicit_bun_path() {
+        let bun = tempfile::NamedTempFile::new().expect("temp bun");
+        unsafe {
+            std::env::set_var("OPENCODE_STUDIO_BUN_PATH", bun.path());
+        }
+
+        let resolved = resolve_bridge_program_override("bun");
+
+        unsafe {
+            std::env::remove_var("OPENCODE_STUDIO_BUN_PATH");
+        }
+        assert_eq!(resolved, bun.path().to_string_lossy());
+        assert_eq!(resolve_bridge_program_override("node"), "node");
+    }
+
+    #[test]
+    fn bridge_program_not_found_hint_mentions_systemd_override_for_bun() {
+        let hint = bridge_program_not_found_hint("bun").expect("bun hint");
+        assert!(hint.contains("~/.bun/bin"));
+        assert!(hint.contains("OPENCODE_STUDIO_BUN_PATH"));
     }
 
     #[test]

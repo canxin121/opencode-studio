@@ -124,10 +124,10 @@ def validate_unix_service_flow_mapping(relpath: str) -> None:
     assert_contains(src, "detect_backend_target_triple()", context=relpath)
 
     expected = [
-        "x86_64-unknown-linux-gnu",
-        "aarch64-unknown-linux-gnu",
-        "armv7-unknown-linux-gnueabihf",
-        "i686-unknown-linux-gnu",
+        "x86_64-unknown-linux-musl",
+        "aarch64-unknown-linux-musl",
+        "armv7-unknown-linux-musleabihf",
+        "i686-unknown-linux-musl",
         "x86_64-apple-darwin",
         "aarch64-apple-darwin",
     ]

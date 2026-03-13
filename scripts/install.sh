@@ -81,6 +81,39 @@ toml_quote_basic_string() {
 }
 
 need() { command -v "$1" >/dev/null 2>&1 || { echo "Missing dependency: $1" >&2; exit 1; }; }
+
+python_json_get() {
+  need python3
+  python3 -c 'import json, sys
+
+try:
+    value = json.load(sys.stdin)
+except Exception:
+    print("")
+    raise SystemExit(0)
+
+for key in sys.argv[1:]:
+    if isinstance(value, dict):
+        value = value.get(key)
+    elif isinstance(value, list) and key.isdigit():
+        index = int(key)
+        value = value[index] if 0 <= index < len(value) else None
+    else:
+        value = None
+
+    if value is None:
+        break
+
+if value is None:
+    print("")
+elif isinstance(value, bool):
+    print("true" if value else "false")
+elif isinstance(value, (dict, list)):
+    print(json.dumps(value))
+else:
+    print(value)' "$@"
+}
+
 need curl
 need tar
 if ! command -v opencode >/dev/null 2>&1; then
@@ -142,6 +175,48 @@ build_launchd_path() {
   printf '%s' "$out"
 }
 
+build_systemd_path() {
+  local home_dir="$1"
+  local opencode_bin_dir="$2"
+  local env_path="$3"
+
+  local entries=(
+    "$opencode_bin_dir"
+    "$home_dir/.bun/bin"
+    "$home_dir/.local/bin"
+    "/usr/local/sbin"
+    "/usr/local/bin"
+    "/usr/sbin"
+    "/usr/bin"
+    "/sbin"
+    "/bin"
+  )
+
+  if [[ -n "$env_path" ]]; then
+    local part
+    IFS=':' read -r -a path_parts <<<"$env_path"
+    for part in "${path_parts[@]}"; do
+      entries+=("$part")
+    done
+  fi
+
+  local out=""
+  local seen=":"
+  local item=""
+  for item in "${entries[@]}"; do
+    [[ -n "$item" ]] || continue
+    if [[ "$seen" != *":$item:"* ]]; then
+      seen+="$item:"
+      if [[ -z "$out" ]]; then
+        out="$item"
+      else
+        out+=":$item"
+      fi
+    fi
+  done
+  printf '%s' "$out"
+}
+
 OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
 normalize_arch() {
   local arch="$1"
@@ -153,50 +228,19 @@ normalize_arch() {
 }
 ARCH="$(normalize_arch "$(uname -m)")"
 
-linux_libc_family() {
-  if ! command -v ldd >/dev/null 2>&1; then
-    echo "gnu"
-    return
-  fi
-
-  local info
-  info="$(ldd --version 2>&1 || true)"
-  if [[ "$info" == *musl* ]]; then
-    echo "musl"
-  else
-    echo "gnu"
-  fi
-}
-
 backend_target_candidates() {
   case "${OS}/${ARCH}" in
     linux/x86_64|linux/amd64)
-      if [[ "$(linux_libc_family)" == "musl" ]]; then
-        printf '%s\n' "x86_64-unknown-linux-musl" "x86_64-unknown-linux-gnu"
-      else
-        printf '%s\n' "x86_64-unknown-linux-gnu" "x86_64-unknown-linux-musl"
-      fi
+      printf '%s\n' "x86_64-unknown-linux-musl" "x86_64-unknown-linux-gnu"
       ;;
     linux/aarch64|linux/arm64)
-      if [[ "$(linux_libc_family)" == "musl" ]]; then
-        printf '%s\n' "aarch64-unknown-linux-musl" "aarch64-unknown-linux-gnu"
-      else
-        printf '%s\n' "aarch64-unknown-linux-gnu" "aarch64-unknown-linux-musl"
-      fi
+      printf '%s\n' "aarch64-unknown-linux-musl" "aarch64-unknown-linux-gnu"
       ;;
     linux/armv7l|linux/armv7)
-      if [[ "$(linux_libc_family)" == "musl" ]]; then
-        printf '%s\n' "armv7-unknown-linux-musleabihf" "armv7-unknown-linux-gnueabihf"
-      else
-        printf '%s\n' "armv7-unknown-linux-gnueabihf" "armv7-unknown-linux-musleabihf"
-      fi
+      printf '%s\n' "armv7-unknown-linux-musleabihf" "armv7-unknown-linux-gnueabihf"
       ;;
     linux/i686|linux/i386)
-      if [[ "$(linux_libc_family)" == "musl" ]]; then
-        printf '%s\n' "i686-unknown-linux-musl" "i686-unknown-linux-gnu"
-      else
-        printf '%s\n' "i686-unknown-linux-gnu" "i686-unknown-linux-musl"
-      fi
+      printf '%s\n' "i686-unknown-linux-musl" "i686-unknown-linux-gnu"
       ;;
     darwin/x86_64|darwin/amd64)
       printf '%s\n' "x86_64-apple-darwin"
@@ -270,15 +314,7 @@ fetch_release_json() {
     if command -v jq >/dev/null 2>&1; then
       msg="$(jq -r '.message? // empty' <"$body" 2>/dev/null || true)"
     elif command -v python3 >/dev/null 2>&1; then
-      msg="$(python3 - <<'PY' <"$body" 2>/dev/null || true
-import json,sys
-try:
-  j=json.load(sys.stdin)
-except Exception:
-  j={}
-print(j.get('message',''))
-PY
-      )"
+      msg="$(python_json_get "message" <"$body" 2>/dev/null || true)"
     fi
 
     echo "GitHub API request failed ($code): $url" >&2
@@ -307,14 +343,17 @@ list_release_assets() {
   fi
 
   need python3
-  python3 - <<'PY' <<<"$json" 2>/dev/null || true
-import json,sys
-j=json.loads(sys.stdin.read())
-for a in j.get('assets', []) or []:
-  n=a.get('name')
-  if n:
-    print(n)
-PY
+  python3 -c 'import json, sys
+
+try:
+    payload = json.load(sys.stdin)
+except Exception:
+    raise SystemExit(0)
+
+for asset in payload.get("assets", []) or []:
+    name = asset.get("name")
+    if name:
+        print(name)' <<<"$json" 2>/dev/null || true
 }
 
 download_asset_by_name() {
@@ -352,11 +391,33 @@ asset_url_by_name() {
   python3 -c 'import json,sys
 j=json.loads(sys.stdin.read())
 name=sys.argv[1]
-for a in j.get("assets", []):
+for a in j.get("assets", []) or []:
   if a.get("name") == name:
     print(a.get("browser_download_url", ""))
     sys.exit(0)
 print("")' "$name" <<<"$json"
+}
+
+linux_backend_libc_family() {
+  local name="$1"
+  case "$name" in
+    *unknown-linux-musl*|*unknown-linux-musleabihf*) printf '%s\n' "musl" ;;
+    *unknown-linux-gnu*|*unknown-linux-gnueabihf*) printf '%s\n' "gnu" ;;
+    *) printf '%s\n' "" ;;
+  esac
+}
+
+warn_if_linux_backend_fallback() {
+  local chosen="$1"
+  local preferred="$2"
+  local chosen_family=""
+  local preferred_family=""
+
+  chosen_family="$(linux_backend_libc_family "$chosen")"
+  preferred_family="$(linux_backend_libc_family "$preferred")"
+  if [[ "$preferred_family" == "musl" && "$chosen_family" == "gnu" ]]; then
+    echo "Warning: Linux musl backend asset not found for ${OS}/${ARCH}; falling back to glibc build: $chosen" >&2
+  fi
 }
 
 download_first_asset_by_name() {
@@ -364,11 +425,15 @@ download_first_asset_by_name() {
   local out="$2"
   shift 2
 
+  local preferred_name="${1:-}"
   local name=""
   local url=""
   for name in "$@"; do
     url="$(asset_url_by_name "$json" "$name")"
     if [[ -n "$url" && "$url" != "null" ]]; then
+      if [[ -n "$preferred_name" ]]; then
+        warn_if_linux_backend_fallback "$name" "$preferred_name"
+      fi
       echo "Downloading: $name"
       curl -fL --retry 3 --retry-delay 1 -o "$out" "$url"
       return 0
@@ -391,12 +456,7 @@ RELEASE_JSON="$(fetch_release_json)"
 if command -v jq >/dev/null 2>&1; then
   TAG_NAME="$(jq -r '.tag_name // ""' <<<"$RELEASE_JSON")"
 else
-  need python3
-  TAG_NAME="$(python3 - <<'PY' <<<"$RELEASE_JSON"
-import json,sys
-print(json.loads(sys.stdin.read()).get('tag_name',''))
-PY
-  )"
+  TAG_NAME="$(python_json_get "tag_name" <<<"$RELEASE_JSON")"
 fi
 if [[ -z "$TAG_NAME" ]]; then
   echo "Failed to determine release tag_name" >&2
@@ -468,6 +528,7 @@ echo "Wrote runtime config: $CONFIG_FILE"
 
 if [[ "$OS" == "linux" ]]; then
   if command -v systemctl >/dev/null 2>&1; then
+    SYSTEMD_PATH="$(build_systemd_path "$HOME" "$OPENCODE_BIN_DIR" "${PATH:-}")"
     if [[ "$SYSTEMD_MODE" == "system" ]]; then
       SERVICE_PATH="/etc/systemd/system/opencode-studio.service"
       echo "Installing systemd (system) service: $SERVICE_PATH"
@@ -479,6 +540,8 @@ After=network.target
 
 [Service]
 Type=simple
+Environment="PATH=$SYSTEMD_PATH"
+Environment="HOME=$HOME"
 ExecStart=$BIN_PATH
 Restart=on-failure
 RestartSec=2
@@ -500,6 +563,8 @@ After=network.target
 
 [Service]
 Type=simple
+Environment="PATH=$SYSTEMD_PATH"
+Environment="HOME=$HOME"
 ExecStart=$BIN_PATH
 Restart=on-failure
 RestartSec=2
