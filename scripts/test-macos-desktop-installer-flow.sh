@@ -14,6 +14,7 @@ UI_CLICKS="0"
 USE_CEF="0"
 APP_MAIN_PID=""
 APP_LAUNCH_LOG_PATH=""
+KEYCHAIN_BOOTSTRAPPED="0"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 USAGE_SMOKE_SCRIPT="$SCRIPT_DIR/studio-usage-smoke.sh"
@@ -390,6 +391,43 @@ cleanup_chromium_singletons() {
   done
 }
 
+bootstrap_keychain_for_cef() {
+  # On GitHub macOS runners (and other CI), Chromium/CEF can hang in Keychain
+  # APIs (SecItemCopyMatching) during CEF initialization. A temporary unlocked
+  # keychain with a restricted search list avoids UI prompts and deadlocks.
+  [[ "$USE_CEF" == "1" ]] || return 0
+  [[ "$KEYCHAIN_BOOTSTRAPPED" == "1" ]] && return 0
+
+  if ! command -v security >/dev/null 2>&1; then
+    log "security CLI not found; skipping keychain bootstrap"
+    return 0
+  fi
+
+  KEYCHAIN_BOOTSTRAPPED="1"
+
+  local keychain_path="$WORK_DIR/opencode-studio-e2e.keychain-db"
+  local keychain_password="opencode-studio-e2e"
+
+  log "Bootstrapping temporary keychain for CEF: $keychain_path"
+
+  security delete-keychain "$keychain_path" >/dev/null 2>&1 || true
+  rm -f "$keychain_path" >/dev/null 2>&1 || true
+
+  if ! security create-keychain -p "$keychain_password" "$keychain_path" >/dev/null 2>&1; then
+    log "WARNING: failed to create temporary keychain; continuing"
+    KEYCHAIN_BOOTSTRAPPED="0"
+    return 0
+  fi
+
+  security set-keychain-settings -t 21600 -u "$keychain_path" >/dev/null 2>&1 || true
+  security unlock-keychain -p "$keychain_password" "$keychain_path" >/dev/null 2>&1 || true
+  security list-keychains -d user -s "$keychain_path" >/dev/null 2>&1 || true
+  security default-keychain -s "$keychain_path" >/dev/null 2>&1 || true
+
+  log "Keychain search list (user):"
+  security list-keychains -d user 2>/dev/null || true
+}
+
 dump_process_diag() {
   log "Process diagnostics"
 
@@ -493,6 +531,7 @@ launch_with_cdp_and_usage_smoke() {
     APP_LAUNCH_LOG_PATH="$HOME/Library/Logs/cn.cxits.opencode-studio/desktop-e2e-${label}-attempt${attempt}-cdp${DEBUG_PORT}-$(date '+%Y%m%d-%H%M%S').log"
     clear_cef_cache
     cleanup_chromium_singletons
+    bootstrap_keychain_for_cef
 
     log "[$label] Launch attempt ${attempt}/${max_attempts} (CDP port: $DEBUG_PORT)"
     start_app \
