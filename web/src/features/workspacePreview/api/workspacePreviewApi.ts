@@ -6,21 +6,14 @@ export type WorkspacePreviewSession = {
   id: string
   state: string
   directory: string
+  opencodeSessionId?: string
   proxyBasePath: string
   targetUrl?: string
 }
 
-type PreviewSessionsResponse =
-  | WorkspacePreviewSession[]
-  | {
-      sessions?: unknown
-    }
-
-type PreviewSessionResponse =
-  | WorkspacePreviewSession
-  | {
-      session?: unknown
-    }
+type PreviewSessionsResponse = {
+  sessions: unknown
+}
 
 export function normalizeWorkspacePreviewSession(value: unknown): WorkspacePreviewSession | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
@@ -37,21 +30,23 @@ export function normalizeWorkspacePreviewSession(value: unknown): WorkspacePrevi
   const targetUrl =
     typeof record.targetUrl === 'string' && record.targetUrl.trim() ? record.targetUrl.trim() : undefined
 
+  const opencodeSessionId =
+    typeof record.opencodeSessionId === 'string' && record.opencodeSessionId.trim()
+      ? record.opencodeSessionId.trim()
+      : undefined
+
   return {
     id,
     state,
     directory,
+    ...(opencodeSessionId ? { opencodeSessionId } : {}),
     proxyBasePath,
     ...(targetUrl ? { targetUrl } : {}),
   }
 }
 
 function normalizePreviewSessions(payload: PreviewSessionsResponse): WorkspacePreviewSession[] {
-  const source = Array.isArray(payload)
-    ? payload
-    : Array.isArray((payload as { sessions?: unknown })?.sessions)
-      ? ((payload as { sessions?: unknown[] }).sessions ?? [])
-      : []
+  const source = Array.isArray(payload?.sessions) ? payload.sessions : []
 
   const sessions: WorkspacePreviewSession[] = []
   for (const item of source) {
@@ -61,53 +56,53 @@ function normalizePreviewSessions(payload: PreviewSessionsResponse): WorkspacePr
   return sessions
 }
 
-function normalizeSinglePreviewSession(payload: PreviewSessionResponse): WorkspacePreviewSession | null {
-  const direct = normalizeWorkspacePreviewSession(payload)
-  if (direct) return direct
-
-  const wrapped = (payload as { session?: unknown })?.session
-  return normalizeWorkspacePreviewSession(wrapped)
-}
-
-export async function listWorkspacePreviewSessions(directory?: string): Promise<WorkspacePreviewSession[]> {
-  const trimmedDirectory = String(directory || '').trim()
-  const query = trimmedDirectory ? `?directory=${encodeURIComponent(trimmedDirectory)}` : ''
-  const payload = await apiJson<PreviewSessionsResponse>(`/api/workspace/preview/sessions${query}`)
+export async function listWorkspacePreviewSessions(): Promise<WorkspacePreviewSession[]> {
+  const payload = await apiJson<PreviewSessionsResponse>('/api/workspace/preview/sessions')
   return normalizePreviewSessions(payload)
 }
 
 export async function createWorkspacePreviewSession(
-  directory: string,
+  directory: string | undefined,
   targetUrl: string,
+  opencodeSessionId?: string,
 ): Promise<WorkspacePreviewSession> {
-  const payload = await apiJson<PreviewSessionResponse>('/api/workspace/preview/sessions', {
+  const trimmedDirectory = String(directory || '').trim()
+  const trimmedSessionId = String(opencodeSessionId || '').trim()
+  const payload = await apiJson<unknown>('/api/workspace/preview/sessions', {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
     },
     body: JSON.stringify({
-      directory: String(directory || '').trim(),
+      ...(trimmedDirectory ? { directory: trimmedDirectory } : {}),
+      ...(trimmedSessionId ? { opencodeSessionId: trimmedSessionId } : {}),
       targetUrl: String(targetUrl || '').trim(),
     }),
   })
 
-  const session = normalizeSinglePreviewSession(payload)
+  const session = normalizeWorkspacePreviewSession(payload)
   if (!session) throw new Error('Invalid preview session response')
   return session
 }
 
-export async function discoverWorkspacePreviewSession(directory: string): Promise<WorkspacePreviewSession> {
-  const payload = await apiJson<PreviewSessionResponse>('/api/workspace/preview/sessions/discover', {
+export async function discoverWorkspacePreviewSession(
+  directory: string | undefined,
+  opencodeSessionId?: string,
+): Promise<WorkspacePreviewSession> {
+  const trimmedDirectory = String(directory || '').trim()
+  const trimmedSessionId = String(opencodeSessionId || '').trim()
+  const payload = await apiJson<unknown>('/api/workspace/preview/sessions/discover', {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
     },
     body: JSON.stringify({
-      directory: String(directory || '').trim(),
+      ...(trimmedDirectory ? { directory: trimmedDirectory } : {}),
+      ...(trimmedSessionId ? { opencodeSessionId: trimmedSessionId } : {}),
     }),
   })
 
-  const session = normalizeSinglePreviewSession(payload)
+  const session = normalizeWorkspacePreviewSession(payload)
   if (!session) throw new Error('Invalid preview session response')
   return session
 }

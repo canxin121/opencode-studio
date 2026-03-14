@@ -1,18 +1,17 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute } from 'vue-router'
 import {
   RiArrowDownSLine,
   RiAddLine,
   RiAnticlockwiseLine,
   RiComputerLine,
   RiExternalLinkLine,
-  RiFileList2Line,
   RiLoader4Line,
   RiRefreshLine,
   RiSmartphoneLine,
   RiSubtractLine,
-  RiStackLine,
 } from '@remixicon/vue'
 
 import Button from '@/components/ui/Button.vue'
@@ -26,12 +25,15 @@ import {
   discoverWorkspacePreviewSession,
   type WorkspacePreviewSession,
 } from '@/features/workspacePreview/api/workspacePreviewApi'
-import { buildPreviewFrameSrc, type WorkspacePreviewScope } from '@/features/workspacePreview/model/previewUrl'
+import { buildPreviewFrameSrc } from '@/features/workspacePreview/model/previewUrl'
+import { useChatStore } from '@/stores/chat'
 import { useDirectoryStore } from '@/stores/directory'
 import { useUiStore } from '@/stores/ui'
 import { useWorkspacePreviewStore } from '@/stores/workspacePreview'
 
 const { t } = useI18n()
+const route = useRoute()
+const chat = useChatStore()
 const directoryStore = useDirectoryStore()
 const ui = useUiStore()
 const preview = useWorkspacePreviewStore()
@@ -624,10 +626,16 @@ const activeProxyBasePath = computed(() => activeSession.value?.proxyBasePath ||
 const previewSrc = computed(() => buildPreviewFrameSrc(activeProxyBasePath.value, preview.refreshToken))
 const canOpenInWindow = computed(() => Boolean(previewSrc.value))
 const currentDirectory = computed(() => String(directoryStore.currentDirectory || '').trim())
+
+const opencodeSessionId = computed(() => {
+  const path = String(route.path || '').trim().toLowerCase()
+  if (path.startsWith('/preview')) return ''
+  return String(chat.selectedSessionId || '').trim()
+})
 const canCreateSession = computed(() =>
-  Boolean(currentDirectory.value && createTargetUrl.value.trim() && !actionLoading.value),
+  Boolean(createTargetUrl.value.trim() && !actionLoading.value),
 )
-const canDiscoverSession = computed(() => Boolean(currentDirectory.value && !actionLoading.value))
+const canDiscoverSession = computed(() => Boolean(!actionLoading.value))
 const actionLoadingMessage = computed(() => {
   if (actionLoading.value === 'create') return String(t('workspaceDock.preview.emptyState.createLoading'))
   if (actionLoading.value === 'discover') return String(t('workspaceDock.preview.emptyState.discoverLoading'))
@@ -639,7 +647,7 @@ const effectiveError = computed(() => {
     const detail = preview.error.trim() || String(t('workspaceDock.preview.states.sessionsFetchFailedNoDetail'))
     return String(t('workspaceDock.preview.states.sessionsFetchFailed', { detail }))
   }
-  if (preview.sessions.length > 0 && !activeSession.value) {
+  if (String(preview.activeSessionId || '').trim() && !activeSession.value) {
     return String(t('workspaceDock.preview.states.activeSessionMissing'))
   }
   if (activeSession.value && !activeProxyBasePath.value) {
@@ -649,14 +657,24 @@ const effectiveError = computed(() => {
   return ''
 })
 
-const showEmptyState = computed(() => preview.sessions.length === 0 && !preview.loading && !effectiveError.value)
+const showEmptyState = computed(() => {
+  if (preview.loading || effectiveError.value) return false
+  if (preview.sessions.length === 0) return true
+  return !activeSession.value
+})
+
+const emptyStateTitle = computed(() => {
+  if (preview.sessions.length > 0 && !activeSession.value) return String(t('workspaceDock.preview.urlEmpty'))
+  return String(t('workspaceDock.preview.states.emptyTitle'))
+})
+
+const emptyStateDescription = computed(() => String(t('workspaceDock.preview.states.emptyDescription')))
 
 const sessionPickerLabel = computed(() => String(t('workspaceDock.preview.sessionsTitle')))
 
 const activeSessionLabel = computed(() => {
   const active = preview.sessions.find((session) => session.id === preview.activeSessionId)
   if (active) return sessionLabel(active)
-  if (preview.sessions.length > 0) return sessionLabel(preview.sessions[0]!)
   return String(t('workspaceDock.preview.urlEmpty'))
 })
 
@@ -778,11 +796,7 @@ function scheduleFrameUpdate() {
 }
 
 async function refreshPreview(opts?: { forceFrameReload?: boolean }) {
-  const directory = String(directoryStore.currentDirectory || '')
-  const scopes = new Set<WorkspacePreviewScope>(['current', preview.scope])
-  for (const scope of scopes) {
-    await preview.refreshSessions(directory, scope)
-  }
+  await preview.refreshSessions()
   if (opts?.forceFrameReload) {
     preview.bumpRefreshToken()
   }
@@ -795,11 +809,6 @@ async function selectSessionAfterAction(session: WorkspacePreviewSession) {
 }
 
 async function createManagedSession() {
-  if (!currentDirectory.value) {
-    actionError.value = String(t('workspaceDock.preview.emptyState.directoryRequired'))
-    return
-  }
-
   const targetUrl = createTargetUrl.value.trim()
   if (!targetUrl) {
     actionError.value = String(t('workspaceDock.preview.emptyState.targetUrlRequired'))
@@ -809,7 +818,7 @@ async function createManagedSession() {
   actionLoading.value = 'create'
   actionError.value = ''
   try {
-    const session = await createWorkspacePreviewSession(currentDirectory.value, targetUrl)
+    const session = await createWorkspacePreviewSession(currentDirectory.value, targetUrl, opencodeSessionId.value)
     createTargetUrl.value = ''
     await selectSessionAfterAction(session)
   } catch (err) {
@@ -821,15 +830,10 @@ async function createManagedSession() {
 }
 
 async function discoverManagedSession() {
-  if (!currentDirectory.value) {
-    actionError.value = String(t('workspaceDock.preview.emptyState.directoryRequired'))
-    return
-  }
-
   actionLoading.value = 'discover'
   actionError.value = ''
   try {
-    const session = await discoverWorkspacePreviewSession(currentDirectory.value)
+    const session = await discoverWorkspacePreviewSession(currentDirectory.value, opencodeSessionId.value)
     await selectSessionAfterAction(session)
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err)
@@ -837,12 +841,6 @@ async function discoverManagedSession() {
   } finally {
     actionLoading.value = ''
   }
-}
-
-async function onScopeChange(scope: WorkspacePreviewScope) {
-  if (preview.scope === scope) return
-  preview.setScope(scope)
-  await preview.refreshSessions(String(directoryStore.currentDirectory || ''), scope)
 }
 
 function setSessionMenuOpen(open: boolean) {
@@ -941,25 +939,6 @@ onBeforeUnmount(() => {
   <div class="flex h-full min-h-0 flex-col gap-2 p-3">
     <div v-if="controlsVisible" class="rounded-md border border-sidebar-border/70 bg-sidebar-accent/20 p-2">
       <div class="relative flex items-center gap-1.5">
-        <IconButton
-          size="sm"
-          :disabled="preview.loading"
-          :tooltip="
-            preview.scope === 'current'
-              ? String(t('workspaceDock.preview.scope.current'))
-              : String(t('workspaceDock.preview.scope.all'))
-          "
-          :aria-label="
-            preview.scope === 'current'
-              ? String(t('workspaceDock.preview.scope.current'))
-              : String(t('workspaceDock.preview.scope.all'))
-          "
-          @click="onScopeChange(preview.scope === 'current' ? 'all' : 'current')"
-        >
-          <RiFileList2Line v-if="preview.scope === 'current'" class="h-4 w-4" />
-          <RiStackLine v-else class="h-4 w-4" />
-        </IconButton>
-
         <button
           type="button"
           class="inline-flex h-8 min-w-0 flex-1 items-center justify-between gap-2 rounded-md border-0 bg-transparent px-1.5 text-xs text-foreground transition-colors hover:bg-sidebar-accent/35 disabled:cursor-not-allowed disabled:opacity-60"
@@ -1109,8 +1088,8 @@ onBeforeUnmount(() => {
         <div
           class="max-w-[24rem] rounded-md border border-dashed border-sidebar-border/70 bg-sidebar-accent/10 p-4 text-left"
         >
-          <p class="text-sm font-medium">{{ t('workspaceDock.preview.states.emptyTitle') }}</p>
-          <p class="mt-1 text-xs text-muted-foreground">{{ t('workspaceDock.preview.states.emptyDescription') }}</p>
+          <p class="text-sm font-medium">{{ emptyStateTitle }}</p>
+          <p class="mt-1 text-xs text-muted-foreground">{{ emptyStateDescription }}</p>
           <div class="mt-3 space-y-2">
             <div class="space-y-1">
               <label

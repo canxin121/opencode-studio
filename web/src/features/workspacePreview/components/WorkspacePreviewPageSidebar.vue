@@ -6,16 +6,14 @@ import {
   RiAnticlockwiseLine,
   RiComputerLine,
   RiExternalLinkLine,
-  RiFileList2Line,
   RiRefreshLine,
   RiSmartphoneLine,
   RiSubtractLine,
-  RiStackLine,
 } from '@remixicon/vue'
 
 import ListItemFrame from '@/components/ui/ListItemFrame.vue'
 import SidebarIconButton from '@/components/ui/SidebarIconButton.vue'
-import { buildPreviewFrameSrc, type WorkspacePreviewScope } from '@/features/workspacePreview/model/previewUrl'
+import { buildPreviewFrameSrc } from '@/features/workspacePreview/model/previewUrl'
 import type { WorkspacePreviewSession } from '@/features/workspacePreview/api/workspacePreviewApi'
 import { useDirectoryStore } from '@/stores/directory'
 import { useUiStore } from '@/stores/ui'
@@ -49,20 +47,10 @@ function sessionLabel(session: WorkspacePreviewSession): string {
 }
 
 async function refreshSessions(opts?: { forceFrameReload?: boolean }) {
-  const directory = currentDirectory.value
-  const scopes = new Set<WorkspacePreviewScope>(['current', preview.scope])
-  for (const scope of scopes) {
-    await preview.refreshSessions(directory, scope)
-  }
+  await preview.refreshSessions()
   if (opts?.forceFrameReload) {
     preview.bumpRefreshToken()
   }
-}
-
-async function toggleScope() {
-  const next: WorkspacePreviewScope = preview.scope === 'current' ? 'all' : 'current'
-  preview.setScope(next)
-  await preview.refreshSessions(currentDirectory.value, next)
 }
 
 function clampViewportScale(value: unknown): number {
@@ -268,25 +256,6 @@ function selectSession(sessionId: string) {
 
       <div class="oc-vscode-toolbar">
         <SidebarIconButton
-          :tooltip="
-            preview.scope === 'current'
-              ? String(t('workspaceDock.preview.scope.current'))
-              : String(t('workspaceDock.preview.scope.all'))
-          "
-          :aria-label="
-            preview.scope === 'current'
-              ? String(t('workspaceDock.preview.scope.current'))
-              : String(t('workspaceDock.preview.scope.all'))
-          "
-          :is-mobile-pointer="ui.isMobilePointer"
-          :disabled="preview.loading"
-          @click="toggleScope"
-        >
-          <RiFileList2Line v-if="preview.scope === 'current'" class="h-3.5 w-3.5" />
-          <RiStackLine v-else class="h-3.5 w-3.5" />
-        </SidebarIconButton>
-
-        <SidebarIconButton
           :active="preview.viewport === 'mobile'"
           :tooltip="
             preview.viewport === 'desktop'
@@ -410,20 +379,6 @@ function selectSession(sessionId: string) {
       <div class="flex items-center justify-between gap-2 px-2 py-1.5">
         <div class="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
           {{ t('workspaceDock.preview.sessionsTitle') }}
-        </div>
-        <div
-          class="rounded-sm border border-sidebar-border/70 bg-sidebar-accent/35 px-1.5 py-[1px] text-[10px] font-medium text-muted-foreground"
-          :title="
-            preview.scope === 'current'
-              ? String(t('workspaceDock.preview.scope.current'))
-              : String(t('workspaceDock.preview.scope.all'))
-          "
-        >
-          {{
-            preview.scope === 'current'
-              ? t('workspaceDock.preview.scope.current')
-              : t('workspaceDock.preview.scope.all')
-          }}
         </div>
       </div>
     </div>

@@ -1,7 +1,5 @@
 export type WorkspacePreviewViewport = 'desktop' | 'mobile'
 
-export type WorkspacePreviewScope = 'current' | 'all'
-
 const PREVIEW_PROXY_BASE_PREFIX = '/api/workspace/preview/s/'
 const PREVIEW_ORIGIN = 'https://preview.local'
 

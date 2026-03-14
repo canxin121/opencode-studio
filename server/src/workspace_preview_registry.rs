@@ -94,15 +94,6 @@ impl WorkspacePreviewRegistry {
         self.snapshot().await
     }
 
-    pub(crate) async fn list_by_directory(&self, directory: &str) -> PreviewSessionsResponse {
-        let normalized = crate::path_utils::normalize_directory_for_match(directory);
-        let mut snapshot = self.snapshot().await;
-        snapshot.sessions.retain(|session| {
-            crate::path_utils::normalize_directory_for_match(&session.directory) == normalized
-        });
-        snapshot
-    }
-
     pub(crate) async fn get_by_id(&self, id: &str) -> Option<PreviewSessionRecord> {
         self.snapshot()
             .await
@@ -119,16 +110,21 @@ impl WorkspacePreviewRegistry {
     pub(crate) async fn create_studio_session(
         &self,
         directory: Option<String>,
+        opencode_session_id: Option<String>,
         target_url: Url,
     ) -> ApiResult<PreviewSessionRecord> {
         let state_path = studio_preview_state_path();
         let mut file = load_state_file_from_path(&state_path)?;
         let updated_at = now_millis();
         let id = generate_preview_session_id();
+
+        let opencode_session_id = opencode_session_id
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
         let record = PreviewSessionRecord {
             id: id.clone(),
             directory: directory.unwrap_or_default(),
-            opencode_session_id: None,
+            opencode_session_id,
             state: "ready".to_string(),
             proxy_base_path: preview_proxy_base_path(&id),
             target_url: Some(target_url.to_string()),

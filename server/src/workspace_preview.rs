@@ -43,14 +43,10 @@ pub(crate) struct WorkspacePreviewResponse {
 }
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct WorkspacePreviewSessionsQuery {
-    pub(crate) directory: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct WorkspacePreviewSessionCreateBody {
     pub(crate) directory: Option<String>,
+    pub(crate) opencode_session_id: Option<String>,
     pub(crate) target_url: String,
 }
 
@@ -58,6 +54,7 @@ pub(crate) struct WorkspacePreviewSessionCreateBody {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct WorkspacePreviewSessionDiscoverBody {
     pub(crate) directory: Option<String>,
+    pub(crate) opencode_session_id: Option<String>,
 }
 
 pub(crate) async fn workspace_preview_get(
@@ -104,25 +101,16 @@ pub(crate) async fn workspace_preview_proxy_get(
 
 pub(crate) async fn workspace_preview_sessions_get(
     State(state): State<std::sync::Arc<AppState>>,
-    Query(query): Query<WorkspacePreviewSessionsQuery>,
 ) -> ApiResult<Json<PreviewSessionsResponse>> {
-    let sessions = match query.directory.as_deref() {
-        Some(directory) => {
-            state
-                .workspace_preview_registry
-                .list_by_directory(directory)
-                .await
-        }
-        None => state.workspace_preview_registry.list_all().await,
-    };
-    Ok(Json(sessions))
+    Ok(Json(state.workspace_preview_registry.list_all().await))
 }
 
 pub(crate) async fn workspace_preview_sessions_post(
     State(state): State<Arc<AppState>>,
     Json(body): Json<WorkspacePreviewSessionCreateBody>,
 ) -> ApiResult<Json<PreviewSessionRecord>> {
-    let session = create_studio_preview_session(&state, body.directory, &body.target_url).await?;
+    let session =
+        create_studio_preview_session(&state, body.directory, body.opencode_session_id, &body.target_url).await?;
     Ok(Json(session))
 }
 
@@ -137,7 +125,7 @@ pub(crate) async fn workspace_preview_sessions_discover_post(
     };
     let session = state
         .workspace_preview_registry
-        .create_studio_session(body.directory, target)
+        .create_studio_session(body.directory, body.opencode_session_id, target)
         .await?;
     Ok(Json(session))
 }
@@ -353,12 +341,13 @@ fn filtered_request_headers(from: &HeaderMap) -> HeaderMap {
 async fn create_studio_preview_session(
     state: &Arc<AppState>,
     directory: Option<String>,
+    opencode_session_id: Option<String>,
     raw_target_url: &str,
 ) -> ApiResult<PreviewSessionRecord> {
     let target = validate_preview_target_url(raw_target_url)?;
     state
         .workspace_preview_registry
-        .create_studio_session(directory, target)
+        .create_studio_session(directory, opencode_session_id, target)
         .await
 }
 
@@ -547,6 +536,7 @@ mod tests {
             State(dummy_state()),
             Json(WorkspacePreviewSessionCreateBody {
                 directory: Some("/repo".to_string()),
+                opencode_session_id: None,
                 target_url: "http://example.com:5173".to_string(),
             }),
         )

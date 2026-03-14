@@ -5,12 +5,11 @@ import {
   listWorkspacePreviewSessions,
   type WorkspacePreviewSession,
 } from '@/features/workspacePreview/api/workspacePreviewApi'
-import type { WorkspacePreviewScope, WorkspacePreviewViewport } from '@/features/workspacePreview/model/previewUrl'
+import type { WorkspacePreviewViewport } from '@/features/workspacePreview/model/previewUrl'
 import { getLocalString, setLocalString } from '@/lib/persist'
 import { localStorageKeys } from '@/lib/persistence/storageKeys'
 
 const STORAGE_PREVIEW_ACTIVE_SESSION_ID = localStorageKeys.ui.workspacePreviewActiveSessionId
-const STORAGE_PREVIEW_SCOPE = localStorageKeys.ui.workspacePreviewScope
 const STORAGE_PREVIEW_VIEWPORT = localStorageKeys.ui.workspacePreviewViewport
 const STORAGE_PREVIEW_DESKTOP_WIDTH = localStorageKeys.ui.workspacePreviewViewportDesktopWidth
 const STORAGE_PREVIEW_DESKTOP_HEIGHT = localStorageKeys.ui.workspacePreviewViewportDesktopHeight
@@ -32,10 +31,6 @@ const DEFAULT_MOBILE_VIEWPORT_HEIGHT_PX = 844
 const DEFAULT_VIEWPORT_SCALE_PCT = 100
 
 const VIEWPORT_PERSIST_DEBOUNCE_MS = 250
-
-function normalizeScope(value: string): WorkspacePreviewScope {
-  return value === 'all' ? 'all' : 'current'
-}
 
 function normalizeViewport(value: string): WorkspacePreviewViewport {
   return value === 'mobile' ? 'mobile' : 'desktop'
@@ -84,19 +79,9 @@ function readStoredViewportSize(mode: WorkspacePreviewViewport): { width: number
   }
 }
 
-function listForScope(
-  currentSessions: WorkspacePreviewSession[],
-  allSessions: WorkspacePreviewSession[],
-  scope: WorkspacePreviewScope,
-): WorkspacePreviewSession[] {
-  return scope === 'all' ? allSessions : currentSessions
-}
-
 export const useWorkspacePreviewStore = defineStore('workspacePreview', () => {
-  const currentSessions = ref<WorkspacePreviewSession[]>([])
-  const allSessions = ref<WorkspacePreviewSession[]>([])
+  const sessions = ref<WorkspacePreviewSession[]>([])
   const activeSessionId = ref(getLocalString(STORAGE_PREVIEW_ACTIVE_SESSION_ID).trim())
-  const scope = ref<WorkspacePreviewScope>(normalizeScope(getLocalString(STORAGE_PREVIEW_SCOPE)))
 
   const viewport = ref<WorkspacePreviewViewport>(normalizeViewport(getLocalString(STORAGE_PREVIEW_VIEWPORT)))
   const storedViewportSize = readStoredViewportSize(viewport.value)
@@ -111,15 +96,10 @@ export const useWorkspacePreviewStore = defineStore('workspacePreview', () => {
   const error = ref('')
   const refreshToken = ref(0)
 
-  const sessions = computed(() => listForScope(currentSessions.value, allSessions.value, scope.value))
   const activeSession = computed(() => sessions.value.find((session) => session.id === activeSessionId.value) || null)
 
   watch(activeSessionId, (value) => {
     setLocalString(STORAGE_PREVIEW_ACTIVE_SESSION_ID, String(value || '').trim())
-  })
-
-  watch(scope, (value) => {
-    setLocalString(STORAGE_PREVIEW_SCOPE, value)
   })
 
   watch(viewport, (value) => {
@@ -168,20 +148,16 @@ export const useWorkspacePreviewStore = defineStore('workspacePreview', () => {
     scheduleViewportPersist()
   })
 
-  function ensureActiveSession(nextScope = scope.value) {
-    const available = listForScope(currentSessions.value, allSessions.value, nextScope)
-    if (available.some((session) => session.id === activeSessionId.value)) return
-    activeSessionId.value = available[0]?.id || ''
-  }
-
-  function setScope(value: WorkspacePreviewScope) {
-    scope.value = value === 'all' ? 'all' : 'current'
-    ensureActiveSession(scope.value)
+  function ensureActiveSession() {
+    const active = String(activeSessionId.value || '').trim()
+    if (!active) return
+    if (sessions.value.some((session) => session.id === active)) return
+    activeSessionId.value = ''
   }
 
   function selectSession(sessionId: string) {
     activeSessionId.value = String(sessionId || '').trim()
-    ensureActiveSession(scope.value)
+    ensureActiveSession()
   }
 
   function setViewport(value: WorkspacePreviewViewport) {
@@ -216,17 +192,13 @@ export const useWorkspacePreviewStore = defineStore('workspacePreview', () => {
     refreshToken.value += 1
   }
 
-  async function refreshSessions(directory: string, targetScope: WorkspacePreviewScope = scope.value) {
+  async function refreshSessions() {
     loading.value = true
     error.value = ''
     try {
-      const nextSessions = await listWorkspacePreviewSessions(targetScope === 'current' ? directory : '')
-      if (targetScope === 'all') {
-        allSessions.value = nextSessions
-      } else {
-        currentSessions.value = nextSessions
-      }
-      ensureActiveSession(targetScope === scope.value ? targetScope : scope.value)
+      const nextSessions = await listWorkspacePreviewSessions()
+      sessions.value = nextSessions
+      ensureActiveSession()
     } catch (err) {
       error.value = err instanceof Error ? err.message : String(err)
     } finally {
@@ -235,12 +207,9 @@ export const useWorkspacePreviewStore = defineStore('workspacePreview', () => {
   }
 
   return {
-    currentSessions,
-    allSessions,
     sessions,
     activeSessionId,
     activeSession,
-    scope,
     viewport,
     viewportWidth,
     viewportHeight,
@@ -248,7 +217,6 @@ export const useWorkspacePreviewStore = defineStore('workspacePreview', () => {
     loading,
     error,
     refreshToken,
-    setScope,
     selectSession,
     setViewport,
     setViewportSize,
