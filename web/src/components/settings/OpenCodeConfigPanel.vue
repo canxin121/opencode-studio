@@ -74,7 +74,7 @@ import { useOpenCodeConfigPanelFields } from './OpenCodeConfigPanelFields'
 import { createOpenCodeConfigPanelValidation } from './OpenCodeConfigPanelValidation'
 import { PERMISSION_QUICK_GROUPS } from './OpenCodeConfigPanelPermissionQuickGroups'
 import { useOpenCodeConfigPanelPersistence } from './OpenCodeConfigPanelPersistence'
-import type { RemoteModel } from './OpenCodeConfigPanelOptionTypes'
+import type { AgentListItem, RemoteModel } from './OpenCodeConfigPanelOptionTypes'
 import type { JsonValue as JsonLike } from '@/types/json'
 import { pickEffectiveAgentId } from './opencode/agentSelection'
 
@@ -89,7 +89,8 @@ import { useToastsStore } from '@/stores/toasts'
 const props = defineProps<{ activeSection?: string }>()
 
 type JsonObject = Record<string, JsonLike>
-type AgentRow = [string, JsonObject]
+type AgentConfigRow = [string, JsonObject]
+type AgentOptionRow = [string, AgentListItem]
 
 const configStore = useOpencodeConfigStore()
 const directoryStore = useDirectoryStore()
@@ -222,7 +223,6 @@ const actionDisabled = computed(() => !dirty.value || !canWrite.value)
 const resetDisabled = computed(() => !dirty.value)
 
 const commandsList = computed(() => Object.entries(getMap('command')).sort(([a], [b]) => a.localeCompare(b)))
-const agentsList = computed(() => Object.entries(getMap('agent')).sort(([a], [b]) => a.localeCompare(b)))
 const providersList = computed(() => Object.entries(getMap('provider')).sort(([a], [b]) => a.localeCompare(b)))
 const filteredProvidersList = computed(() => {
   const q = providerFilterDebounced.value.trim().toLowerCase()
@@ -240,60 +240,8 @@ const filteredCommandsList = computed(() => {
   })
 })
 
-const filteredAgentsList = computed(() => {
-  const q = agentFilterDebounced.value.trim().toLowerCase()
-  if (!q) return agentsList.value
-  return agentsList.value.filter(([id, agent]) => {
-    const hay = `${id} ${JSON.stringify(agent || {})}`.toLowerCase()
-    return hay.includes(q)
-  })
-})
-
-const effectiveSelectedAgentId = computed<string | null>(() => {
-  return pickEffectiveAgentId(
-    selectedAgentId.value,
-    filteredAgentsList.value.map(([id]) => id),
-    agentsList.value.map(([id]) => id),
-  )
-})
-
-function selectAgent(id: string | null) {
-  if (!id) {
-    selectedAgentId.value = null
-    return
-  }
-  if (agentsList.value.some(([aid]) => aid === id)) {
-    selectedAgentId.value = id
-    return
-  }
-  selectedAgentId.value = null
-}
-
-const selectedAgentRows = computed(() => {
-  const id = effectiveSelectedAgentId.value
-  if (!id) return [] as AgentRow[]
-  return [[id, getAgentEntry(id)] as AgentRow]
-})
-
-watch(effectiveSelectedAgentId, (nextId, prevId) => {
-  if (nextId && nextId !== selectedAgentId.value) {
-    selectedAgentId.value = nextId
-  }
-  if (nextId === prevId) return
-  agentEditorTab.value = 'basics'
-})
-
-watch(
-  agentsList,
-  (list) => {
-    const id = selectedAgentId.value
-    if (!id) return
-    if (!list.some(([aid]) => aid === id)) {
-      selectedAgentId.value = null
-    }
-  },
-  { immediate: true },
-)
+// Agent picker/editor selection is derived from optionLists.agentOptions (remote + config)
+// and initialized later once optionLists is available.
 
 function addCommand() {
   const name = newCommandName.value.trim()
@@ -408,6 +356,77 @@ const optionLists = useOpenCodeConfigPanelOptionLists({
   dirQuery,
   toasts,
 })
+
+const agentsList = computed<AgentOptionRow[]>(() => {
+  const list = Array.isArray(optionLists.agentOptions.value) ? optionLists.agentOptions.value : []
+  return list
+    .map((a) => {
+      const name = String(a?.name || '').trim()
+      if (!name) return null
+      return [name, a] as AgentOptionRow
+    })
+    .filter(Boolean) as AgentOptionRow[]
+})
+
+const filteredAgentsList = computed<AgentOptionRow[]>(() => {
+  const q = agentFilterDebounced.value.trim().toLowerCase()
+  if (!q) return agentsList.value
+  return agentsList.value.filter(([id, meta]) => {
+    const hay = `${id} ${String(meta?.description || '')} ${String(meta?.mode || '')}`.toLowerCase()
+    return hay.includes(q)
+  })
+})
+
+const effectiveSelectedAgentId = computed<string | null>(() => {
+  return pickEffectiveAgentId(
+    selectedAgentId.value,
+    filteredAgentsList.value.map(([id]) => id),
+    agentsList.value.map(([id]) => id),
+  )
+})
+
+function selectAgent(id: string | null) {
+  if (!id) {
+    selectedAgentId.value = null
+    return
+  }
+  const ok = agentsList.value.some(([aid]) => aid === id)
+  selectedAgentId.value = ok ? id : null
+}
+
+function isAgentConfigured(agentId: string): boolean {
+  const m = getMap('agent')
+  return Object.prototype.hasOwnProperty.call(m, String(agentId || '').trim())
+}
+
+const selectedAgentRows = computed(() => {
+  const id = effectiveSelectedAgentId.value
+  if (!id) return [] as AgentConfigRow[]
+  const m = getMap('agent')
+  const raw = m[id]
+  const agent = isPlainObject(raw) ? (raw as JsonObject) : ({} as JsonObject)
+  return [[id, agent] as AgentConfigRow]
+})
+
+watch(effectiveSelectedAgentId, (nextId, prevId) => {
+  if (nextId && nextId !== selectedAgentId.value) {
+    selectedAgentId.value = nextId
+  }
+  if (nextId === prevId) return
+  agentEditorTab.value = 'basics'
+})
+
+watch(
+  agentsList,
+  (list) => {
+    const id = selectedAgentId.value
+    if (!id) return
+    if (!list.some(([aid]) => aid === id)) {
+      selectedAgentId.value = null
+    }
+  },
+  { immediate: true },
+)
 
 function modelFormatWarning(value: string): string {
   const v = (value || '').trim()
@@ -877,6 +896,7 @@ const panelContext = reactive({
   effectiveSelectedAgentId,
   selectedAgentRows,
   selectAgent,
+  isAgentConfigured,
   agentEditorTab,
   addAgent,
   PROMPT_SKELETON,

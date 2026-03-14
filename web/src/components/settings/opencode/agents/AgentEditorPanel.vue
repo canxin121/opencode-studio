@@ -1,47 +1,53 @@
 <script lang="ts">
-import { computed, defineComponent } from 'vue'
+import { computed, defineComponent, ref, watch } from 'vue'
 import {
-  RiAddLine,
-  RiArrowDownLine,
-  RiArrowUpLine,
   RiCheckLine,
   RiClipboardLine,
-  RiCloseLine,
   RiDeleteBinLine,
-  RiFileTextLine,
   RiFileUploadLine,
   RiRestartLine,
   RiSettings3Line,
   RiStackLine,
 } from '@remixicon/vue'
 
-import Button from '@/components/ui/Button.vue'
 import IconButton from '@/components/ui/IconButton.vue'
 import Input from '@/components/ui/Input.vue'
 import OptionPicker from '@/components/ui/OptionPicker.vue'
 import type { PickerOption } from '@/components/ui/pickerOption.types'
-import Tooltip from '@/components/ui/Tooltip.vue'
 import MonacoCodeEditor from '@/components/MonacoCodeEditor.vue'
 import type { JsonValue } from '@/types/json'
+import { i18n } from '@/i18n'
 
+import CrudStringListEditor from '../CrudStringListEditor.vue'
 import { useOpencodeConfigPanelContext } from '../opencodeConfigContext'
+
+type AnyRecord = Record<string, unknown>
+type LocalJsonBuffer = {
+  text: string
+  error: string | null
+  get: () => JsonValue
+  set: (value: JsonValue) => void
+  fallback: JsonValue
+}
+
+function isPlainObject(value: unknown): value is AnyRecord {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value))
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((v) => typeof v === 'string')
+}
 
 export default defineComponent({
   components: {
-    Button,
+    CrudStringListEditor,
     IconButton,
     Input,
     OptionPicker,
-    Tooltip,
     MonacoCodeEditor,
-    RiAddLine,
-    RiArrowDownLine,
-    RiArrowUpLine,
     RiCheckLine,
     RiClipboardLine,
-    RiCloseLine,
     RiDeleteBinLine,
-    RiFileTextLine,
     RiFileUploadLine,
     RiRestartLine,
     RiSettings3Line,
@@ -50,47 +56,228 @@ export default defineComponent({
   setup() {
     const ctx = useOpencodeConfigPanelContext()
 
-    const t = ctx.t as unknown as (key: string, params?: Record<string, unknown>) => string
+    const tt = (key: string, params?: Record<string, unknown>) => {
+      const t = ctx.t
+      if (typeof t === 'function') return t(key, params)
+      return i18n.global.t(key, params as never)
+    }
 
     const modelPickerOptions = computed<PickerOption[]>(() => {
       const list = Array.isArray(ctx.modelSlugOptions) ? ctx.modelSlugOptions : []
       return list.map((slug: string) => ({ value: slug, label: slug }))
     })
 
-    const toolIdPickerOptions = computed<PickerOption[]>(() => {
-      const list = Array.isArray(ctx.toolIdOptions) ? ctx.toolIdOptions : []
-      return list.map((id: string) => ({ value: id, label: id }))
+    const agentModePickerOptions = computed<PickerOption[]>(() => [
+      { value: 'default', label: tt('settings.opencodeConfig.sections.agents.editor.modeOptions.default') },
+      { value: 'primary', label: tt('settings.opencodeConfig.sections.agents.editor.modeOptions.primary') },
+      { value: 'subagent', label: tt('settings.opencodeConfig.sections.agents.editor.modeOptions.subagent') },
+      { value: 'all', label: tt('settings.opencodeConfig.sections.agents.editor.modeOptions.all') },
+    ])
+
+    const selectedAgentId = computed(() => String(ctx.effectiveSelectedAgentId || '').trim() || null)
+
+    const agentMeta = computed(() => {
+      const id = selectedAgentId.value
+      if (!id) return null
+      const list = Array.isArray(ctx.agentOptions) ? ctx.agentOptions : []
+      return list.find((a: any) => String(a?.name || '').trim() === id) || null
     })
 
-    const agentModePickerOptions = computed<PickerOption[]>(() => [
-      { value: 'default', label: t('settings.opencodeConfig.sections.agents.editor.modeOptions.default') },
-      { value: 'primary', label: t('settings.opencodeConfig.sections.agents.editor.modeOptions.primary') },
-      { value: 'subagent', label: t('settings.opencodeConfig.sections.agents.editor.modeOptions.subagent') },
-      { value: 'all', label: t('settings.opencodeConfig.sections.agents.editor.modeOptions.all') },
-    ])
+    const agentEntry = computed<AnyRecord>(() => {
+      const id = selectedAgentId.value
+      if (!id) return {}
+      const rows = Array.isArray(ctx.selectedAgentRows) ? ctx.selectedAgentRows : []
+      const hit = rows.find((r: any) => Array.isArray(r) && String(r[0] || '') === id)
+      const raw = hit?.[1]
+      return isPlainObject(raw) ? raw : {}
+    })
 
-    const permissionRulePickerOptions = computed<PickerOption[]>(() => [
-      { value: 'default', label: t('settings.opencodeConfig.sections.permissions.rules.options.default') },
-      { value: 'allow', label: t('settings.opencodeConfig.sections.permissions.rules.options.allow') },
-      { value: 'ask', label: t('settings.opencodeConfig.sections.permissions.rules.options.ask') },
-      { value: 'deny', label: t('settings.opencodeConfig.sections.permissions.rules.options.deny') },
-      { value: 'pattern', label: t('settings.opencodeConfig.sections.permissions.rules.options.patternMap') },
-    ])
+    const isConfigured = computed(() => {
+      const id = selectedAgentId.value
+      if (!id) return false
+      try {
+        return typeof ctx.isAgentConfigured === 'function' ? Boolean(ctx.isAgentConfigured(id)) : false
+      } catch {
+        return false
+      }
+    })
 
-    const permissionActionPickerOptions = computed<PickerOption[]>(() => [
-      { value: 'allow', label: t('settings.opencodeConfig.sections.permissions.rules.options.allow') },
-      { value: 'ask', label: t('settings.opencodeConfig.sections.permissions.rules.options.ask') },
-      { value: 'deny', label: t('settings.opencodeConfig.sections.permissions.rules.options.deny') },
-    ])
+    const stringListFields = computed(() => {
+      const id = selectedAgentId.value
+      if (!id) return [] as Array<{ key: string; label: string; kind: 'root' | 'options' }>
 
-    // Vue template type-checking doesn't propagate the index signature through a spread.
-    // Keep the injected ctx object shape and attach local computed helpers.
+      const out: Array<{ key: string; label: string; kind: 'root' | 'options' }> = []
+      const entry = agentEntry.value
+
+      const blocked = new Set([
+        'model',
+        'variant',
+        'temperature',
+        'top_p',
+        'prompt',
+        'disable',
+        'description',
+        'mode',
+        'hidden',
+        'options',
+        'color',
+        'steps',
+        'permission',
+      ])
+
+      for (const [k, v] of Object.entries(entry)) {
+        if (blocked.has(k)) continue
+        if (isStringArray(v)) {
+          out.push({ key: k, label: k, kind: 'root' })
+        }
+      }
+
+      const opt = entry.options
+      if (isPlainObject(opt)) {
+        for (const [k, v] of Object.entries(opt)) {
+          if (isStringArray(v)) {
+            out.push({ key: k, label: `options.${k}`, kind: 'options' })
+          }
+        }
+      }
+
+      return out.sort((a, b) => a.label.localeCompare(b.label))
+    })
+
+    function setAgentField(agentId: string, field: string, value: unknown) {
+      try {
+        ctx.setEntryField?.('agent', agentId, field, value)
+      } catch {
+        // ignore
+      }
+    }
+
+    function setAgentOptionsField(agentId: string, key: string, value: JsonValue) {
+      try {
+        ctx.setOrClear?.(`agent.${agentId}.options.${key}`, value)
+      } catch {
+        // ignore
+      }
+    }
+
+    function agentStringListValue(agentId: string, fieldKey: string, kind: 'root' | 'options'): string[] {
+      const entry = agentEntry.value
+      if (kind === 'options') {
+        const opt = isPlainObject(entry.options) ? entry.options : null
+        const v = opt ? (opt as AnyRecord)[fieldKey] : undefined
+        return isStringArray(v) ? v : []
+      }
+      const v = entry[fieldKey]
+      return isStringArray(v) ? v : []
+    }
+
+    function updateAgentStringList(agentId: string, fieldKey: string, kind: 'root' | 'options', next: string[]) {
+      if (kind === 'options') {
+        setAgentOptionsField(agentId, fieldKey, next)
+        return
+      }
+      setAgentField(agentId, fieldKey, next)
+    }
+
+    const showDebug = Boolean(import.meta.env.DEV)
+
+    const localJsonBuffers = ref<Record<string, LocalJsonBuffer>>({})
+
+    function stringifyJson(value: unknown, fallback: JsonValue): string {
+      try {
+        return JSON.stringify((value as JsonValue) ?? fallback, null, 2)
+      } catch {
+        return JSON.stringify(fallback, null, 2)
+      }
+    }
+
+    function ensureLocalJsonBuffer(
+      id: string,
+      get: () => JsonValue,
+      set: (value: JsonValue) => void,
+      fallback: JsonValue,
+    ): LocalJsonBuffer {
+      const current = localJsonBuffers.value[id]
+      if (!current) {
+        const next: LocalJsonBuffer = {
+          text: stringifyJson(get(), fallback),
+          error: null,
+          get,
+          set,
+          fallback,
+        }
+        localJsonBuffers.value = { ...localJsonBuffers.value, [id]: next }
+        return next
+      }
+      current.get = get
+      current.set = set
+      current.fallback = fallback
+      return current
+    }
+
+    function updateLocalJsonText(id: string, text: string) {
+      const buf = localJsonBuffers.value[id]
+      if (!buf) return
+      buf.text = text
+    }
+
+    function applyLocalJsonBuffer(id: string): boolean {
+      const buf = localJsonBuffers.value[id]
+      if (!buf) return true
+      const raw = buf.text.trim()
+      if (!raw) {
+        try {
+          buf.set(null)
+          buf.error = null
+          return true
+        } catch {
+          buf.error = 'Failed to apply'
+          return false
+        }
+      }
+      try {
+        const parsed = JSON.parse(raw)
+        buf.set(parsed)
+        buf.error = null
+        return true
+      } catch (err) {
+        buf.error = err instanceof Error ? err.message : String(err)
+        return false
+      }
+    }
+
+    function resetLocalJsonBuffer(id: string) {
+      const buf = localJsonBuffers.value[id]
+      if (!buf) return
+      buf.text = stringifyJson(buf.get(), buf.fallback)
+      buf.error = null
+    }
+
+    watch(
+      () => selectedAgentId.value,
+      () => {
+        localJsonBuffers.value = {}
+      },
+    )
+
     return Object.assign(ctx, {
+      tt,
+      showDebug,
+      selectedAgentId,
+      agentMeta,
+      agentEntry,
+      isConfigured,
+      stringListFields,
       modelPickerOptions,
-      toolIdPickerOptions,
       agentModePickerOptions,
-      permissionRulePickerOptions,
-      permissionActionPickerOptions,
+      agentStringListValue,
+      updateAgentStringList,
+      setAgentField,
+      localJsonBuffers,
+      ensureLocalJsonBuffer,
+      updateLocalJsonText,
+      applyLocalJsonBuffer,
+      resetLocalJsonBuffer,
     })
   },
 })
@@ -98,69 +285,54 @@ export default defineComponent({
 
 <template>
   <div class="rounded-md border border-border p-3 lg:p-4 space-y-4 min-h-[360px]">
-    <div v-if="!effectiveSelectedAgentId" class="text-sm text-muted-foreground">
-      {{ t('settings.opencodeConfig.sections.agents.editor.empty') }}
+    <div v-if="!selectedAgentId" class="space-y-2">
+      <div class="text-sm text-muted-foreground">
+        {{ tt('settings.opencodeConfig.sections.agents.editor.empty') }}
+      </div>
+      <div v-if="optionsLoading" class="text-xs text-muted-foreground">{{ tt('common.loading') }}</div>
+      <div v-else-if="optionsError" class="text-xs text-amber-700 break-words">{{ String(optionsError) }}</div>
     </div>
 
-    <div v-for="[agentId, agent] in selectedAgentRows" :key="`agent-edit:${agentId}`" class="space-y-4">
+    <div v-else class="space-y-4">
       <div class="flex flex-wrap items-center justify-between gap-3">
-        <div class="min-w-0">
-          <div class="font-mono text-sm break-all">@{{ agentId }}</div>
-          <div class="text-[11px] text-muted-foreground">
-            {{ t('settings.opencodeConfig.sections.agents.editor.help.singleEdit') }}
+        <div class="min-w-0 space-y-1">
+          <div class="font-mono text-sm break-all">@{{ selectedAgentId }}</div>
+          <div v-if="agentMeta?.description" class="text-[11px] text-muted-foreground break-words">
+            {{ agentMeta.description }}
+          </div>
+          <div v-else-if="!isConfigured" class="text-[11px] text-muted-foreground">
+            {{ tt('settings.opencodeConfig.sections.common.none') }}
           </div>
         </div>
         <div class="flex items-center gap-2">
           <IconButton
             variant="ghost"
             class="h-8 w-8"
-            :title="t('settings.opencodeConfig.sections.agents.editor.actions.copyJson')"
-            :aria-label="t('settings.opencodeConfig.sections.agents.editor.actions.copyJson')"
-            @click="copyEntryJson('agent', agentId)"
-            :tooltip="t('settings.opencodeConfig.sections.agents.editor.actions.copyJson')"
+            :title="tt('settings.opencodeConfig.sections.agents.editor.actions.copyJson')"
+            :aria-label="tt('settings.opencodeConfig.sections.agents.editor.actions.copyJson')"
+            @click="copyEntryJson?.('agent', selectedAgentId)"
+            :tooltip="tt('settings.opencodeConfig.sections.agents.editor.actions.copyJson')"
           >
             <RiClipboardLine class="h-4 w-4" />
           </IconButton>
           <IconButton
             variant="ghost"
             class="h-8 w-8"
-            :title="t('settings.opencodeConfig.sections.agents.editor.actions.importJson')"
-            :aria-label="t('settings.opencodeConfig.sections.agents.editor.actions.importJson')"
-            @click="importEntryJson('agent', agentId)"
-            :tooltip="t('settings.opencodeConfig.sections.agents.editor.actions.importJson')"
+            :title="tt('settings.opencodeConfig.sections.agents.editor.actions.importJson')"
+            :aria-label="tt('settings.opencodeConfig.sections.agents.editor.actions.importJson')"
+            @click="importEntryJson?.('agent', selectedAgentId)"
+            :tooltip="tt('settings.opencodeConfig.sections.agents.editor.actions.importJson')"
           >
             <RiFileUploadLine class="h-4 w-4" />
           </IconButton>
           <IconButton
-            variant="ghost"
-            class="h-8 w-8"
-            :title="
-              showAgentAdvanced[agentId]
-                ? t('settings.opencodeConfig.sections.agents.editor.actions.hideAdvanced')
-                : t('settings.opencodeConfig.sections.agents.editor.actions.showAdvanced')
-            "
-            :aria-label="t('settings.opencodeConfig.sections.agents.editor.actions.toggleAdvancedAria')"
-            @click="toggleAgentAdvanced(agentId)"
-            :tooltip="
-              showAgentAdvanced[agentId]
-                ? t('settings.opencodeConfig.sections.agents.editor.actions.hideAdvanced')
-                : t('settings.opencodeConfig.sections.agents.editor.actions.showAdvanced')
-            "
-          >
-            <RiSettings3Line class="h-4 w-4" />
-          </IconButton>
-          <IconButton
             variant="ghost-destructive"
             class="h-8 w-8"
-            :title="t('common.remove')"
-            :aria-label="t('settings.opencodeConfig.sections.agents.editor.actions.removeAgentAria')"
-            :tooltip="t('common.remove')"
-            @click="
-              () => {
-                removeEntry('agent', agentId)
-                selectAgent(null)
-              }
-            "
+            :disabled="!isConfigured"
+            :title="tt('common.remove')"
+            :aria-label="tt('settings.opencodeConfig.sections.agents.editor.actions.removeAgentAria')"
+            :tooltip="tt('common.remove')"
+            @click="() => (removeEntry?.('agent', selectedAgentId), selectAgent?.(null))"
           >
             <RiDeleteBinLine class="h-4 w-4" />
           </IconButton>
@@ -178,7 +350,7 @@ export default defineComponent({
           "
           @click="agentEditorTab = 'basics'"
         >
-          {{ t('settings.opencodeConfig.sections.agents.editor.tabs.basics') }}
+          {{ tt('settings.opencodeConfig.sections.agents.editor.tabs.basics') }}
         </button>
         <button
           type="button"
@@ -190,7 +362,7 @@ export default defineComponent({
           "
           @click="agentEditorTab = 'prompt'"
         >
-          {{ t('settings.opencodeConfig.sections.agents.editor.tabs.prompt') }}
+          {{ tt('settings.opencodeConfig.sections.agents.editor.tabs.prompt') }}
         </button>
         <button
           type="button"
@@ -202,7 +374,7 @@ export default defineComponent({
           "
           @click="agentEditorTab = 'permissions'"
         >
-          {{ t('settings.opencodeConfig.sections.agents.editor.tabs.permissions') }}
+          {{ tt('settings.opencodeConfig.sections.agents.editor.tabs.permissions') }}
         </button>
         <button
           type="button"
@@ -214,62 +386,59 @@ export default defineComponent({
           "
           @click="agentEditorTab = 'json'"
         >
-          {{ t('settings.opencodeConfig.sections.agents.editor.tabs.json') }}
+          {{ tt('settings.opencodeConfig.sections.agents.editor.tabs.json') }}
         </button>
       </div>
 
       <div v-if="agentEditorTab === 'basics'" class="space-y-4">
+        <div v-if="!isConfigured" class="text-xs text-muted-foreground">
+          {{ tt('settings.opencodeConfig.sections.common.none') }} ·
+          {{ tt('settings.opencodeConfig.sections.agents.title') }}
+        </div>
+
         <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <label class="grid gap-1">
             <span class="text-xs text-muted-foreground">{{
-              t('settings.opencodeConfig.sections.agents.editor.fields.model')
+              tt('settings.opencodeConfig.sections.agents.editor.fields.model')
             }}</span>
             <OptionPicker
-              :model-value="agent.model || ''"
-              @update:model-value="(v) => setEntryField('agent', agentId, 'model', String(v || '').trim())"
+              :model-value="agentEntry.model || ''"
+              @update:model-value="(v) => setEntryField?.('agent', selectedAgentId, 'model', String(v || '').trim())"
               :options="modelPickerOptions"
-              :title="t('settings.opencodeConfig.sections.agents.editor.fields.model')"
-              :search-placeholder="t('settings.opencodeConfig.sections.agents.editor.search.searchModels')"
-              :empty-label="t('settings.opencodeConfig.sections.agents.editor.defaults.modelInherit')"
+              :title="tt('settings.opencodeConfig.sections.agents.editor.fields.model')"
+              :search-placeholder="tt('settings.opencodeConfig.sections.agents.editor.search.searchModels')"
+              :empty-label="tt('settings.opencodeConfig.sections.agents.editor.defaults.modelInherit')"
               :icon="RiStackLine"
               allow-custom
               monospace
             />
-            <span v-if="issueText(`agent.${agentId}.model`)" class="text-xs text-destructive">{{
-              issueText(`agent.${agentId}.model`)
-            }}</span>
-            <span v-else-if="commandModelMeta(agent.model)" class="text-[11px] text-muted-foreground">
-              {{ commandModelMeta(agent.model)?.name || '' }}{{ commandModelMeta(agent.model)?.name ? ' · ' : ''
-              }}{{ formatModelMeta(commandModelMeta(agent.model)) }}
-            </span>
-            <span
-              v-if="commandModelMeta(agent.model) && formatModelCost(commandModelMeta(agent.model))"
-              class="text-[11px] text-muted-foreground"
-            >
-              {{ formatModelCost(commandModelMeta(agent.model)) }}
-            </span>
           </label>
 
           <label class="grid gap-1">
             <span class="text-xs text-muted-foreground">{{
-              t('settings.opencodeConfig.sections.agents.editor.fields.variant')
+              tt('settings.opencodeConfig.sections.agents.editor.fields.variant')
             }}</span>
             <Input
-              :model-value="agent.variant || ''"
-              @update:model-value="(v) => setEntryField('agent', agentId, 'variant', String(v || '').trim())"
-              :placeholder="t('settings.opencodeConfig.sections.agents.editor.placeholders.variant')"
+              :model-value="agentEntry.variant || ''"
+              @update:model-value="(v) => setEntryField?.('agent', selectedAgentId, 'variant', String(v || '').trim())"
+              :placeholder="tt('settings.opencodeConfig.sections.agents.editor.placeholders.variant')"
             />
           </label>
 
           <label class="grid gap-1">
             <span class="text-xs text-muted-foreground">{{
-              t('settings.opencodeConfig.sections.agents.editor.fields.temperature')
+              tt('settings.opencodeConfig.sections.agents.editor.fields.temperature')
             }}</span>
             <input
-              :value="agent.temperature ?? ''"
+              :value="agentEntry.temperature ?? ''"
               @input="
                 (e) =>
-                  setEntryField('agent', agentId, 'temperature', parseNumberInput((e.target as HTMLInputElement).value))
+                  setEntryField?.(
+                    'agent',
+                    selectedAgentId,
+                    'temperature',
+                    parseNumberInput?.((e.target as HTMLInputElement).value),
+                  )
               "
               type="number"
               step="0.01"
@@ -279,12 +448,18 @@ export default defineComponent({
 
           <label class="grid gap-1">
             <span class="text-xs text-muted-foreground">{{
-              t('settings.opencodeConfig.sections.agents.editor.fields.topP')
+              tt('settings.opencodeConfig.sections.agents.editor.fields.topP')
             }}</span>
             <input
-              :value="agent.top_p ?? ''"
+              :value="agentEntry.top_p ?? ''"
               @input="
-                (e) => setEntryField('agent', agentId, 'top_p', parseNumberInput((e.target as HTMLInputElement).value))
+                (e) =>
+                  setEntryField?.(
+                    'agent',
+                    selectedAgentId,
+                    'top_p',
+                    parseNumberInput?.((e.target as HTMLInputElement).value),
+                  )
               "
               type="number"
               step="0.01"
@@ -294,52 +469,61 @@ export default defineComponent({
 
           <label class="grid gap-1">
             <span class="text-xs text-muted-foreground">{{
-              t('settings.opencodeConfig.sections.agents.editor.fields.description')
+              tt('settings.opencodeConfig.sections.agents.editor.fields.description')
             }}</span>
             <Input
-              :model-value="agent.description || ''"
-              @update:model-value="(v) => setEntryField('agent', agentId, 'description', v)"
+              :model-value="agentEntry.description || ''"
+              @update:model-value="(v) => setEntryField?.('agent', selectedAgentId, 'description', v)"
             />
           </label>
 
           <label class="grid gap-1">
             <span class="text-xs text-muted-foreground">{{
-              t('settings.opencodeConfig.sections.agents.editor.fields.mode')
+              tt('settings.opencodeConfig.sections.agents.editor.fields.mode')
             }}</span>
             <OptionPicker
-              :model-value="agent.mode || 'default'"
+              :model-value="agentEntry.mode || 'default'"
               @update:model-value="
-                (v) => setEntryField('agent', agentId, 'mode', String(v || '') === 'default' ? null : String(v || ''))
+                (v) =>
+                  setEntryField?.(
+                    'agent',
+                    selectedAgentId,
+                    'mode',
+                    String(v || '') === 'default' ? null : String(v || ''),
+                  )
               "
               :options="agentModePickerOptions"
-              :title="t('settings.opencodeConfig.sections.agents.editor.fields.mode')"
-              :search-placeholder="t('settings.opencodeConfig.sections.agents.editor.search.searchModes')"
+              :title="tt('settings.opencodeConfig.sections.agents.editor.fields.mode')"
+              :search-placeholder="tt('settings.opencodeConfig.sections.agents.editor.search.searchModes')"
               :include-empty="false"
             />
-            <span v-if="issuesForPathPrefix(`agent.${agentId}.hidden`).length" class="text-[11px] text-amber-600">
-              {{ issuesForPathPrefix(`agent.${agentId}.hidden`)[0]?.message }}
-            </span>
           </label>
 
           <label class="grid gap-1">
             <span class="text-xs text-muted-foreground">{{
-              t('settings.opencodeConfig.sections.agents.editor.fields.color')
+              tt('settings.opencodeConfig.sections.agents.editor.fields.color')
             }}</span>
             <Input
-              :model-value="agent.color || ''"
-              @update:model-value="(v) => setEntryField('agent', agentId, 'color', v)"
-              :placeholder="t('settings.opencodeConfig.sections.agents.editor.placeholders.color')"
+              :model-value="agentEntry.color || ''"
+              @update:model-value="(v) => setEntryField?.('agent', selectedAgentId, 'color', v)"
+              :placeholder="tt('settings.opencodeConfig.sections.agents.editor.placeholders.color')"
             />
           </label>
 
           <label class="grid gap-1">
             <span class="text-xs text-muted-foreground">{{
-              t('settings.opencodeConfig.sections.agents.editor.fields.steps')
+              tt('settings.opencodeConfig.sections.agents.editor.fields.steps')
             }}</span>
             <input
-              :value="agent.steps ?? ''"
+              :value="agentEntry.steps ?? ''"
               @input="
-                (e) => setEntryField('agent', agentId, 'steps', parseNumberInput((e.target as HTMLInputElement).value))
+                (e) =>
+                  setEntryField?.(
+                    'agent',
+                    selectedAgentId,
+                    'steps',
+                    parseNumberInput?.((e.target as HTMLInputElement).value),
+                  )
               "
               type="number"
               min="1"
@@ -352,322 +536,171 @@ export default defineComponent({
           <label class="inline-flex items-center gap-2 text-sm">
             <input
               type="checkbox"
-              :checked="agent.disable === true"
-              @change="(e) => setEntryField('agent', agentId, 'disable', (e.target as HTMLInputElement).checked)"
+              :checked="agentEntry.disable === true"
+              @change="
+                (e) => setEntryField?.('agent', selectedAgentId, 'disable', (e.target as HTMLInputElement).checked)
+              "
             />
-            {{ t('settings.opencodeConfig.sections.agents.editor.toggles.disabled') }}
+            {{ tt('settings.opencodeConfig.sections.agents.editor.toggles.disabled') }}
           </label>
           <label class="inline-flex items-center gap-2 text-sm">
             <input
               type="checkbox"
-              :checked="agent.hidden === true"
-              @change="(e) => setEntryField('agent', agentId, 'hidden', (e.target as HTMLInputElement).checked)"
+              :checked="agentEntry.hidden === true"
+              @change="
+                (e) => setEntryField?.('agent', selectedAgentId, 'hidden', (e.target as HTMLInputElement).checked)
+              "
             />
-            {{ t('settings.opencodeConfig.sections.agents.editor.toggles.hidden') }}
+            {{ tt('settings.opencodeConfig.sections.agents.editor.toggles.hidden') }}
           </label>
+        </div>
+
+        <div v-if="stringListFields.length" class="rounded-md border border-border/60 bg-muted/10 p-3 space-y-3">
+          <div class="flex items-center justify-between">
+            <div class="text-sm font-semibold inline-flex items-center gap-2">
+              <RiSettings3Line class="h-4 w-4" />
+              <span>String lists</span>
+            </div>
+            <div class="text-[11px] text-muted-foreground">{{ stringListFields.length }}</div>
+          </div>
+          <div class="grid gap-4">
+            <div v-for="f in stringListFields" :key="`sl:${f.kind}:${f.key}`" class="grid gap-2">
+              <div class="text-xs text-muted-foreground font-mono break-all">{{ f.label }}</div>
+              <CrudStringListEditor
+                :model-value="agentStringListValue(selectedAgentId, f.key, f.kind)"
+                @update:model-value="(v) => updateAgentStringList(selectedAgentId, f.key, f.kind, v)"
+                :empty-text="tt('settings.opencodeConfig.sections.common.none')"
+                show-filter
+              />
+            </div>
+          </div>
         </div>
       </div>
 
       <div v-else-if="agentEditorTab === 'prompt'" class="space-y-2">
-        <div class="flex items-center justify-between">
-          <span class="text-xs text-muted-foreground">{{
-            t('settings.opencodeConfig.sections.agents.editor.tabs.prompt')
-          }}</span>
-          <div class="flex items-center gap-2">
-            <IconButton
-              variant="ghost"
-              class="h-8 w-8"
-              :title="t('settings.opencodeConfig.sections.agents.editor.prompt.actions.insertSkeleton')"
-              :aria-label="t('settings.opencodeConfig.sections.agents.editor.prompt.actions.insertSkeleton')"
-              @click="insertAgentPromptSnippet(agentId, PROMPT_SKELETON)"
-              :tooltip="t('settings.opencodeConfig.sections.agents.editor.prompt.actions.insertSkeleton')"
-            >
-              <RiFileTextLine class="h-4 w-4" />
-            </IconButton>
-            <IconButton
-              variant="ghost"
-              class="h-8 w-8"
-              :title="t('settings.opencodeConfig.sections.agents.editor.prompt.actions.insertFrontmatter')"
-              :aria-label="t('settings.opencodeConfig.sections.agents.editor.prompt.actions.insertFrontmatter')"
-              @click="insertAgentPromptSnippet(agentId, FRONTMATTER_SKELETON)"
-              :tooltip="t('settings.opencodeConfig.sections.agents.editor.prompt.actions.insertFrontmatter')"
-            >
-              <RiFileTextLine class="h-4 w-4" />
-            </IconButton>
-          </div>
+        <div class="text-xs text-muted-foreground">
+          {{ tt('settings.opencodeConfig.sections.agents.editor.tabs.prompt') }}
         </div>
         <div class="h-72 rounded-md border border-input overflow-hidden">
           <MonacoCodeEditor
-            :ref="(el) => setAgentPromptEditorRef(agentId, el)"
-            :model-value="agent.prompt || ''"
-            @update:model-value="(v) => setEntryField('agent', agentId, 'prompt', v)"
-            :path="`agent/${agentId}.md`"
+            :model-value="String(agentEntry.prompt || '')"
+            @update:model-value="(v) => setEntryField?.('agent', selectedAgentId, 'prompt', v)"
+            :path="`agent/${selectedAgentId}.md`"
             :use-files-theme="true"
             :wrap="true"
           />
         </div>
       </div>
 
-      <div v-else-if="agentEditorTab === 'permissions'" class="space-y-4">
-        <div class="rounded-md border border-border p-3 space-y-2">
-          <div class="flex items-center justify-between">
-            <div class="text-sm font-semibold">
-              {{ t('settings.opencodeConfig.sections.agents.editor.permissions.title') }}
-            </div>
-            <div class="text-[11px] text-muted-foreground">
-              {{ t('settings.opencodeConfig.sections.agents.editor.permissions.help.inherit') }}
-            </div>
-          </div>
-
-          <div class="grid gap-3">
-            <div class="flex flex-wrap items-center gap-2">
-              <div class="min-w-0 flex-1 basis-[260px]">
-                <OptionPicker
-                  v-model="agentPermissionNewTool[agentId]"
-                  :options="toolIdPickerOptions"
-                  :title="t('settings.opencodeConfig.sections.permissions.customRules.fields.toolId')"
-                  :search-placeholder="t('settings.opencodeConfig.sections.permissions.customRules.search.searchTools')"
-                  :empty-label="t('settings.opencodeConfig.sections.permissions.customRules.placeholders.selectTool')"
-                  monospace
-                />
-              </div>
-
-              <div class="w-full sm:w-[160px]">
-                <OptionPicker
-                  v-model="agentPermissionNewAction[agentId]"
-                  :options="permissionActionPickerOptions"
-                  :title="t('settings.opencodeConfig.sections.permissions.customRules.fields.action')"
-                  :search-placeholder="
-                    t('settings.opencodeConfig.sections.permissions.customRules.search.searchActions')
-                  "
-                  :include-empty="false"
-                />
-              </div>
-              <IconButton
-                variant="outline"
-                class="h-9 w-9"
-                :title="t('common.add')"
-                :aria-label="t('settings.opencodeConfig.sections.permissions.customRules.actions.addRule')"
-                @click="addAgentPermissionRule(agentId)"
-                :disabled="!String(agentPermissionNewTool[agentId] || '').trim()"
-                :tooltip="t('common.add')"
-              >
-                <RiAddLine class="h-4 w-4" />
-              </IconButton>
-            </div>
-
-            <div class="grid gap-3">
-              <div v-for="(group, gi) in permissionQuickGroups" :key="`apg:${agentId}:${gi}`" class="grid gap-3">
-                <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                  <label v-for="item in group" :key="`ap:${agentId}:${item.key}`" class="grid gap-1">
-                    <span class="text-xs text-muted-foreground">{{ item.label }}</span>
-                    <OptionPicker
-                      :model-value="agentPermissionRuleValue(agentId, item.key, false)"
-                      @update:model-value="(v) => onAgentPermissionSelectChange(agentId, item.key, String(v || ''))"
-                      :options="permissionRulePickerOptions"
-                      :title="t('settings.opencodeConfig.sections.permissions.rules.fields.permission')"
-                      :search-placeholder="t('settings.opencodeConfig.sections.permissions.rules.search.searchRules')"
-                      :include-empty="false"
-                    />
-                    <div class="flex items-center justify-between gap-2">
-                      <button
-                        type="button"
-                        class="text-[11px] text-muted-foreground hover:text-foreground"
-                        @click="toggleAgentPermissionPatternEditor(agentId, item.key)"
-                        :disabled="agentPermissionRuleValue(agentId, item.key, false) !== 'pattern'"
-                      >
-                        {{ t('settings.opencodeConfig.sections.permissions.rules.actions.editPatterns') }}
-                      </button>
-                      <span
-                        v-if="agentPermissionRuleValue(agentId, item.key, false) === 'pattern'"
-                        class="text-[11px] text-muted-foreground"
-                      >
-                        {{
-                          t('settings.opencodeConfig.sections.permissions.rules.rulesCount', {
-                            count: agentPermissionPatternCount(agentId, item.key, false),
-                          })
-                        }}
-                      </span>
-                    </div>
-
-                    <div
-                      v-if="agentPermissionPatternEditors[`${agentId}::${item.key}`]?.open"
-                      class="mt-2 rounded-md border border-border p-3 space-y-2"
-                    >
-                      <div class="flex items-center justify-between">
-                        <div class="font-mono text-xs break-all">
-                          {{
-                            t('settings.opencodeConfig.sections.permissions.rules.patternMapTitle', { key: item.key })
-                          }}
-                        </div>
-                        <div class="flex items-center gap-2">
-                          <IconButton
-                            variant="outline"
-                            class="h-8 w-8"
-                            :title="t('settings.opencodeConfig.sections.permissions.rules.actions.addPattern')"
-                            :aria-label="t('settings.opencodeConfig.sections.permissions.rules.actions.addPattern')"
-                            @click="addAgentPermissionPatternRow(agentId, item.key)"
-                            :tooltip="t('settings.opencodeConfig.sections.permissions.rules.actions.addPattern')"
-                          >
-                            <RiAddLine class="h-4 w-4" />
-                          </IconButton>
-                          <IconButton
-                            variant="ghost"
-                            class="h-8 w-8"
-                            :title="t('common.reset')"
-                            :aria-label="t('common.reset')"
-                            @click="resetAgentPermissionPatternEditor(agentId, item.key)"
-                            :tooltip="t('common.reset')"
-                          >
-                            <RiRestartLine class="h-4 w-4" />
-                          </IconButton>
-                          <IconButton
-                            variant="ghost"
-                            class="h-8 w-8"
-                            :title="t('common.close')"
-                            :aria-label="t('common.close')"
-                            @click="toggleAgentPermissionPatternEditor(agentId, item.key)"
-                            :tooltip="t('common.close')"
-                          >
-                            <RiCloseLine class="h-4 w-4" />
-                          </IconButton>
-                        </div>
-                      </div>
-
-                      <div class="grid gap-2">
-                        <div
-                          v-for="(row, idx) in agentPermissionPatternEditors[`${agentId}::${item.key}`]?.entries || []"
-                          :key="`apr:${agentId}:${item.key}:${idx}`"
-                          class="grid gap-2 md:grid-cols-[minmax(0,1fr)_160px_auto] items-center"
-                        >
-                          <Input
-                            v-model="row.pattern"
-                            :placeholder="t('settings.opencodeConfig.sections.permissions.rules.placeholders.pattern')"
-                            class="font-mono"
-                            @keydown="
-                              onAgentPermissionPatternKeydown(agentId, item.key, idx, row, $event as KeyboardEvent)
-                            "
-                          />
-                          <OptionPicker
-                            v-model="row.action"
-                            :options="permissionActionPickerOptions"
-                            :title="t('settings.opencodeConfig.sections.permissions.rules.fields.action')"
-                            :search-placeholder="
-                              t('settings.opencodeConfig.sections.permissions.rules.search.searchActions')
-                            "
-                            :include-empty="false"
-                          />
-                          <div class="flex items-center gap-1">
-                            <IconButton
-                              variant="ghost"
-                              class="h-8 w-8"
-                              :title="t('common.moveUp')"
-                              :tooltip="t('common.moveUp')"
-                              :aria-label="t('common.moveUp')"
-                              @click="moveAgentPermissionPatternRow(agentId, item.key, idx, -1)"
-                            >
-                              <RiArrowUpLine class="h-4 w-4" />
-                            </IconButton>
-                            <IconButton
-                              variant="ghost"
-                              class="h-8 w-8"
-                              :title="t('common.moveDown')"
-                              :tooltip="t('common.moveDown')"
-                              :aria-label="t('common.moveDown')"
-                              @click="moveAgentPermissionPatternRow(agentId, item.key, idx, 1)"
-                            >
-                              <RiArrowDownLine class="h-4 w-4" />
-                            </IconButton>
-                            <IconButton
-                              variant="ghost-destructive"
-                              class="h-8 w-8"
-                              :title="t('common.remove')"
-                              :tooltip="t('common.remove')"
-                              :aria-label="t('common.remove')"
-                              @click="removeAgentPermissionPatternRow(agentId, item.key, idx)"
-                            >
-                              <RiDeleteBinLine class="h-4 w-4" />
-                            </IconButton>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div class="flex items-center gap-2">
-                        <IconButton
-                          variant="outline"
-                          class="h-8 w-8"
-                          :title="t('settings.opencodeConfig.sections.permissions.rules.actions.applyPatterns')"
-                          :aria-label="t('settings.opencodeConfig.sections.permissions.rules.actions.applyPatterns')"
-                          @click="applyAgentPermissionPatternEditor(agentId, item.key)"
-                          :tooltip="t('settings.opencodeConfig.sections.permissions.rules.actions.applyPatterns')"
-                        >
-                          <RiCheckLine class="h-4 w-4" />
-                        </IconButton>
-                        <span
-                          v-if="agentPermissionPatternEditors[`${agentId}::${item.key}`]?.error"
-                          class="text-xs text-destructive"
-                        >
-                          {{ agentPermissionPatternEditors[`${agentId}::${item.key}`]?.error }}
-                        </span>
-                        <span v-else class="text-[11px] text-muted-foreground">{{
-                          t('settings.opencodeConfig.sections.permissions.rules.help.orderMatters')
-                        }}</span>
-                      </div>
-                    </div>
-                  </label>
-                </div>
-              </div>
-            </div>
-          </div>
+      <div v-else-if="agentEditorTab === 'permissions'" class="space-y-2">
+        <div class="text-xs text-muted-foreground">
+          {{ tt('settings.opencodeConfig.sections.agents.editor.tabs.permissions') }}
+        </div>
+        <div class="text-[11px] text-muted-foreground">
+          Permission overrides are edited as JSON to avoid relying on internal rule structure.
+        </div>
+        <textarea
+          :value="
+            ensureLocalJsonBuffer(
+              `agent:${selectedAgentId}:permission`,
+              () => agentEntry.permission as JsonValue,
+              (val: JsonValue) => setEntryField?.('agent', selectedAgentId, 'permission', val),
+              {},
+            ).text
+          "
+          @input="
+            (e) => updateLocalJsonText(`agent:${selectedAgentId}:permission`, (e.target as HTMLTextAreaElement).value)
+          "
+          rows="8"
+          class="w-full rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs"
+        />
+        <div class="flex items-center gap-2">
+          <IconButton
+            variant="outline"
+            class="h-8 w-8"
+            :title="tt('common.apply')"
+            :aria-label="tt('settings.opencodeConfig.sections.common.applyJson')"
+            @click="applyLocalJsonBuffer(`agent:${selectedAgentId}:permission`)"
+            :tooltip="tt('common.apply')"
+          >
+            <RiCheckLine class="h-4 w-4" />
+          </IconButton>
+          <IconButton
+            variant="ghost"
+            class="h-8 w-8"
+            :title="tt('common.reset')"
+            :aria-label="tt('common.reset')"
+            @click="resetLocalJsonBuffer(`agent:${selectedAgentId}:permission`)"
+            :tooltip="tt('common.reset')"
+          >
+            <RiRestartLine class="h-4 w-4" />
+          </IconButton>
+          <span
+            v-if="localJsonBuffers[`agent:${selectedAgentId}:permission`]?.error"
+            class="text-xs text-destructive"
+            >{{ localJsonBuffers[`agent:${selectedAgentId}:permission`]?.error }}</span
+          >
         </div>
       </div>
 
       <div v-else-if="agentEditorTab === 'json'" class="space-y-4">
         <div class="grid gap-2">
-          <span class="text-xs text-muted-foreground">{{
-            t('settings.opencodeConfig.sections.agents.editor.json.optionsTitle')
-          }}</span>
+          <span class="text-xs text-muted-foreground">Agent JSON</span>
           <textarea
-            v-model="
-              ensureJsonBuffer(
-                `agent:${agentId}:options`,
-                () => agent.options,
-                (val: JsonValue) => setEntryField('agent', agentId, 'options', val),
+            :value="
+              ensureLocalJsonBuffer(
+                `agent:${selectedAgentId}:full`,
+                () => agentEntry as unknown as JsonValue,
+                (val: JsonValue) => setOrClear?.(`agent.${selectedAgentId}`, val),
                 {},
               ).text
             "
-            rows="6"
+            @input="
+              (e) => updateLocalJsonText(`agent:${selectedAgentId}:full`, (e.target as HTMLTextAreaElement).value)
+            "
+            rows="10"
             class="w-full rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs"
           />
           <div class="flex items-center gap-2">
             <IconButton
               variant="outline"
               class="h-8 w-8"
-              :title="t('common.apply')"
-              :aria-label="t('settings.opencodeConfig.sections.common.applyJson')"
-              @click="applyJsonBuffer(`agent:${agentId}:options`)"
-              :tooltip="t('common.apply')"
+              :title="tt('common.apply')"
+              :aria-label="tt('settings.opencodeConfig.sections.common.applyJson')"
+              @click="applyLocalJsonBuffer(`agent:${selectedAgentId}:full`)"
+              :tooltip="tt('common.apply')"
             >
               <RiCheckLine class="h-4 w-4" />
             </IconButton>
-            <span v-if="jsonBuffers[`agent:${agentId}:options`]?.error" class="text-xs text-destructive">{{
-              jsonBuffers[`agent:${agentId}:options`]?.error
+            <IconButton
+              variant="ghost"
+              class="h-8 w-8"
+              :title="tt('common.reset')"
+              :aria-label="tt('common.reset')"
+              @click="resetLocalJsonBuffer(`agent:${selectedAgentId}:full`)"
+              :tooltip="tt('common.reset')"
+            >
+              <RiRestartLine class="h-4 w-4" />
+            </IconButton>
+            <span v-if="localJsonBuffers[`agent:${selectedAgentId}:full`]?.error" class="text-xs text-destructive">{{
+              localJsonBuffers[`agent:${selectedAgentId}:full`]?.error
             }}</span>
           </div>
         </div>
 
-        <div v-if="showAgentAdvanced[agentId]" class="grid gap-2">
-          <span class="text-xs text-muted-foreground">{{
-            t('settings.opencodeConfig.sections.agents.editor.json.permissionAdvancedTitle')
-          }}</span>
+        <div class="grid gap-2">
+          <span class="text-xs text-muted-foreground">Options JSON</span>
           <textarea
-            v-model="
-              ensureJsonBuffer(
-                `agent:${agentId}:permission`,
-                () => agent.permission,
-                (val: JsonValue) => setEntryField('agent', agentId, 'permission', val),
+            :value="
+              ensureLocalJsonBuffer(
+                `agent:${selectedAgentId}:options`,
+                () => agentEntry.options as JsonValue,
+                (val: JsonValue) => setEntryField?.('agent', selectedAgentId, 'options', val),
                 {},
               ).text
+            "
+            @input="
+              (e) => updateLocalJsonText(`agent:${selectedAgentId}:options`, (e.target as HTMLTextAreaElement).value)
             "
             rows="6"
             class="w-full rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs"
@@ -676,17 +709,34 @@ export default defineComponent({
             <IconButton
               variant="outline"
               class="h-8 w-8"
-              :title="t('common.apply')"
-              :aria-label="t('settings.opencodeConfig.sections.common.applyJson')"
-              @click="applyJsonBuffer(`agent:${agentId}:permission`)"
-              :tooltip="t('common.apply')"
+              :title="tt('common.apply')"
+              :aria-label="tt('settings.opencodeConfig.sections.common.applyJson')"
+              @click="applyLocalJsonBuffer(`agent:${selectedAgentId}:options`)"
+              :tooltip="tt('common.apply')"
             >
               <RiCheckLine class="h-4 w-4" />
             </IconButton>
-            <span v-if="jsonBuffers[`agent:${agentId}:permission`]?.error" class="text-xs text-destructive">{{
-              jsonBuffers[`agent:${agentId}:permission`]?.error
+            <IconButton
+              variant="ghost"
+              class="h-8 w-8"
+              :title="tt('common.reset')"
+              :aria-label="tt('common.reset')"
+              @click="resetLocalJsonBuffer(`agent:${selectedAgentId}:options`)"
+              :tooltip="tt('common.reset')"
+            >
+              <RiRestartLine class="h-4 w-4" />
+            </IconButton>
+            <span v-if="localJsonBuffers[`agent:${selectedAgentId}:options`]?.error" class="text-xs text-destructive">{{
+              localJsonBuffers[`agent:${selectedAgentId}:options`]?.error
             }}</span>
           </div>
+        </div>
+
+        <div v-if="showDebug" class="rounded-md border border-border/60 bg-muted/10 p-3 space-y-2">
+          <div class="text-xs text-muted-foreground">Debug (dev only)</div>
+          <pre class="text-[11px] overflow-auto whitespace-pre-wrap break-words">{{
+            JSON.stringify(agentEntry, null, 2)
+          }}</pre>
         </div>
       </div>
     </div>
