@@ -18,6 +18,11 @@ export const localStorageKeys = {
     workspacePreviewActiveSessionId: namespacedKey('ui.workspace-preview.active-session-id'),
     workspacePreviewScope: namespacedKey('ui.workspace-preview.scope'),
     workspacePreviewViewport: namespacedKey('ui.workspace-preview.viewport'),
+    workspacePreviewViewportDesktopWidth: namespacedKey('ui.workspace-preview.viewport.desktop.width'),
+    workspacePreviewViewportDesktopHeight: namespacedKey('ui.workspace-preview.viewport.desktop.height'),
+    workspacePreviewViewportMobileWidth: namespacedKey('ui.workspace-preview.viewport.mobile.width'),
+    workspacePreviewViewportMobileHeight: namespacedKey('ui.workspace-preview.viewport.mobile.height'),
+    workspacePreviewViewportScale: namespacedKey('ui.workspace-preview.viewport.scale'),
     locale: namespacedKey('ui.locale'),
   },
   directory: {

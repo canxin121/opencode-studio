@@ -323,6 +323,13 @@ export default {
       },
       viewportDesktop: '桌面',
       viewportMobile: '手机',
+      viewportWidth: '视口宽度',
+      viewportHeight: '视口高度',
+      rotateViewport: '切换方向',
+      zoomOut: '缩小',
+      zoomIn: '放大',
+      zoomReset: '重置缩放',
+      resizeViewport: '调整视口大小',
       iframeTitle: '工作区实时预览',
       emptyState: {
         targetUrlLabel: '目标 URL',

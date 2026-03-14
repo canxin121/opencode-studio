@@ -323,6 +323,13 @@ export default {
       },
       viewportDesktop: 'Desktop',
       viewportMobile: 'Mobile',
+      viewportWidth: 'Viewport width',
+      viewportHeight: 'Viewport height',
+      rotateViewport: 'Rotate viewport',
+      zoomOut: 'Zoom out',
+      zoomIn: 'Zoom in',
+      zoomReset: 'Reset zoom',
+      resizeViewport: 'Resize viewport',
       iframeTitle: 'Workspace live preview',
       emptyState: {
         targetUrlLabel: 'Target URL',

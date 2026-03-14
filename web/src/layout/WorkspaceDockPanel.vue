@@ -177,7 +177,7 @@ function refreshActivePanel() {
         </div>
 
         <div v-else-if="ui.workspaceDockPanel === 'preview'" key="preview" class="min-h-0 flex-1 overflow-hidden">
-          <WorkspacePreviewDockPanel ref="previewDockRef" />
+          <WorkspacePreviewDockPanel ref="previewDockRef" viewer-mode="responsive" />
         </div>
 
         <div v-else-if="ui.workspaceDockPanel === 'git'" key="git" class="min-h-0 flex-1 overflow-hidden">
