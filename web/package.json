@@ -4,14 +4,15 @@
   "version": "0.1.10",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "bun run check:imports && vue-tsc -b && vite build",
-    "build:rust-debug": "bun run check:imports && vue-tsc -b && vite build --mode rust-debug",
-    "check:imports": "node ./scripts/check-import-rules.mjs",
+    "dev": "bun run vite",
+    "typecheck": "bun ./node_modules/vue-tsc/bin/vue-tsc.js -b",
+    "build": "bun run check:imports && bun run typecheck && bun run vite build",
+    "build:rust-debug": "bun run check:imports && bun run typecheck && bun run vite build --mode rust-debug",
+    "check:imports": "bun ./scripts/check-import-rules.mjs",
     "fmt": "bun ./node_modules/prettier/bin/prettier.cjs -w .",
     "fmt:check": "bun ./node_modules/prettier/bin/prettier.cjs -c .",
     "test": "bun test",
-    "preview": "vite preview",
+    "preview": "bun run vite preview",
     "vite": "bun ./node_modules/vite/bin/vite.js"
   },
   "dependencies": {
