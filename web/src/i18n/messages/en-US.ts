@@ -609,7 +609,6 @@ export default {
       },
 
       stringListEditor: {
-        advancedLabel: 'Advanced text',
         itemsCount: '{count} items',
       },
 
@@ -656,14 +655,12 @@ export default {
               help: 'If non-empty, only these providers are used.',
               clearAria: 'Clear enabled providers',
               toggleTitle: 'Toggle enabled providers',
-              advancedLabel: 'Enabled providers (advanced)',
             },
             disabled: {
               title: 'Disabled',
               help: 'These providers will be excluded.',
               clearAria: 'Clear disabled providers',
               toggleTitle: 'Toggle disabled providers',
-              advancedLabel: 'Disabled providers (advanced)',
             },
             picker: {
               panelTitle: 'Providers',
@@ -671,8 +668,6 @@ export default {
             },
             placeholders: {
               filterProviders: 'Filter providers (e.g. openai)',
-              enabledAdvanced: 'anthropic\nopenai',
-              disabledAdvanced: 'openrouter',
             },
             empty: {
               noMatchingProviders: 'No matching providers.',
@@ -1312,7 +1307,6 @@ export default {
             toolIdsUnavailable: 'Tool IDs unavailable: {error}',
             placeholders: {
               filterTools: 'Filter tools (e.g. bash)',
-              advanced: 'bash\nread',
             },
           },
         },
@@ -1323,11 +1317,6 @@ export default {
             sourcesHelp: 'Edit as plain text. One source per line.',
             extensionsTitle: 'Skills and plugins',
             extensionsHelp: 'Keep paths and plugin specifiers editable in multiline text blocks.',
-          },
-          labels: {
-            instructionsAdvanced: 'Instruction sources (one per line)',
-            skillsPathsAdvanced: 'Skills paths (one per line)',
-            pluginsAdvanced: 'Plugins (one per line)',
           },
           panels: {
             instructionsTitle: 'Instructions',
@@ -1369,21 +1358,18 @@ export default {
             mdnsDomain: 'opencode.local',
             corsOrigin: 'https://example.com',
             watcherIgnoreGlob: '**/dist',
-            watcherIgnoreAdvanced: '**/dist\n**/.git',
           },
           listsTitle: 'Lists',
           cors: {
             title: 'CORS origins',
             help: 'One origin per entry (exact match).',
             panelTitle: 'CORS',
-            advancedLabel: 'CORS origins (advanced text)',
             clearAria: 'Clear CORS origins',
           },
           watcherIgnore: {
             title: 'Watcher ignore globs',
             help: 'Glob patterns to ignore for file watching.',
             panelTitle: 'Ignore globs',
-            advancedLabel: 'Watcher ignore globs (advanced text)',
             clearAria: 'Clear watcher ignore globs',
           },
         },
@@ -1445,11 +1431,9 @@ export default {
             command: {
               panelTitle: 'Formatter command',
               placeholder: 'prettier',
-              advancedPlaceholder: 'prettier\n--write\n$FILE',
             },
             extensions: {
               placeholder: '.ts',
-              advancedPlaceholder: '.ts\n.tsx',
             },
           },
           lsp: {
@@ -1479,7 +1463,6 @@ export default {
             command: {
               panelTitle: 'LSP command',
               placeholder: 'typescript-language-server',
-              advancedPlaceholder: 'typescript-language-server\n--stdio',
             },
             runtime: {
               title: 'LSP runtime status',
@@ -1523,7 +1506,6 @@ export default {
           command: {
             panelTitle: 'MCP launch command',
             placeholder: 'npx',
-            advancedPlaceholder: "npx\n{'@modelcontextprotocol/server-filesystem'}",
           },
           oauth: {
             clientId: 'Client ID',

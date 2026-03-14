@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils'
 const props = withDefaults(
   defineProps<{
     options: PickerOption[]
+    modelValue?: string
     placeholder?: string
     panelTitle?: string
     allowCustom?: boolean
@@ -18,6 +19,7 @@ const props = withDefaults(
     disabled?: boolean
   }>(),
   {
+    modelValue: undefined,
     placeholder: 'Search…',
     panelTitle: '',
     allowCustom: true,
@@ -33,12 +35,24 @@ const emit = defineEmits<{
   (e: 'add', raw: string): void
   (e: 'remove', value: string): void
   (e: 'backspace-empty'): void
+  (e: 'update:modelValue', value: string): void
 }>()
 
 const rootRef = ref<HTMLElement | null>(null)
 
 const open = ref(false)
-const query = ref('')
+const internalQuery = ref('')
+
+const query = computed<string>({
+  get: () => (typeof props.modelValue === 'string' ? props.modelValue : internalQuery.value),
+  set: (v) => {
+    if (typeof props.modelValue === 'string') {
+      emit('update:modelValue', v)
+      return
+    }
+    internalQuery.value = v
+  },
+})
 
 const q = computed(() => query.value.trim().toLowerCase())
 const selectedSet = computed(

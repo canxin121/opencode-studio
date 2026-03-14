@@ -9,7 +9,7 @@ import type { PickerOption } from '@/components/ui/pickerOption.types'
 import Tooltip from '@/components/ui/Tooltip.vue'
 import VirtualList from '@/components/ui/VirtualList.vue'
 import MonacoCodeEditor from '@/components/MonacoCodeEditor.vue'
-import StringListEditor from '../StringListEditor.vue'
+import CrudStringListEditor from '../CrudStringListEditor.vue'
 
 type OptionPickerOption = PickerOption
 
@@ -23,7 +23,7 @@ export default defineComponent({
     Tooltip,
     VirtualList,
     MonacoCodeEditor,
-    StringListEditor,
+    CrudStringListEditor,
     RiAddLine,
     RiArrowDownSLine,
     RiArrowUpSLine,
@@ -147,20 +147,7 @@ export default defineComponent({
         </label>
       </div>
 
-      <div class="flex items-center justify-between">
-        <div class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.server.listsTitle') }}</div>
-        <button
-          type="button"
-          class="text-[11px] text-muted-foreground hover:text-foreground"
-          @click="showAdvancedServerLists = !showAdvancedServerLists"
-        >
-          {{
-            showAdvancedServerLists
-              ? t('settings.opencodeConfig.sections.common.hideAdvancedText')
-              : t('settings.opencodeConfig.sections.common.showAdvancedText')
-          }}
-        </button>
-      </div>
+      <div class="text-xs text-muted-foreground">{{ t('settings.opencodeConfig.sections.server.listsTitle') }}</div>
 
       <div class="grid gap-4 lg:grid-cols-2">
         <div class="rounded-md border border-border p-3 space-y-2">
@@ -168,15 +155,11 @@ export default defineComponent({
           <div class="text-[11px] text-muted-foreground">
             {{ t('settings.opencodeConfig.sections.server.cors.help') }}
           </div>
-          <StringListEditor
+          <CrudStringListEditor
             v-model="serverCorsArr"
             :suggestions="corsSuggestionOptions"
             :panel-title="t('settings.opencodeConfig.sections.server.cors.panelTitle')"
             :placeholder="t('settings.opencodeConfig.sections.server.placeholders.corsOrigin')"
-            :advanced-label="t('settings.opencodeConfig.sections.server.cors.advancedLabel')"
-            :advanced-placeholder="t('settings.opencodeConfig.sections.server.placeholders.corsOrigin')"
-            :advanced-always-visible="showAdvancedServerLists"
-            :show-advanced-toggle="false"
           />
         </div>
 
@@ -187,15 +170,11 @@ export default defineComponent({
           <div class="text-[11px] text-muted-foreground">
             {{ t('settings.opencodeConfig.sections.server.watcherIgnore.help') }}
           </div>
-          <StringListEditor
+          <CrudStringListEditor
             v-model="watcherIgnoreArr"
             :suggestions="watcherIgnoreSuggestionOptions"
             :panel-title="t('settings.opencodeConfig.sections.server.watcherIgnore.panelTitle')"
             :placeholder="t('settings.opencodeConfig.sections.server.placeholders.watcherIgnoreGlob')"
-            :advanced-label="t('settings.opencodeConfig.sections.server.watcherIgnore.advancedLabel')"
-            :advanced-placeholder="t('settings.opencodeConfig.sections.server.placeholders.watcherIgnoreAdvanced')"
-            :advanced-always-visible="showAdvancedServerLists"
-            :show-advanced-toggle="false"
           />
         </div>
       </div>

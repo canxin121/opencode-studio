@@ -6,7 +6,7 @@ import Button from '@/components/ui/Button.vue'
 import OptionPicker from '@/components/ui/OptionPicker.vue'
 import type { PickerOption } from '@/components/ui/pickerOption.types'
 import Tooltip from '@/components/ui/Tooltip.vue'
-import StringListEditor from '../StringListEditor.vue'
+import CrudStringListEditor from '../CrudStringListEditor.vue'
 
 type OptionPickerOption = PickerOption
 
@@ -16,7 +16,7 @@ export default defineComponent({
   components: {
     Button,
     OptionPicker,
-    StringListEditor,
+    CrudStringListEditor,
     Tooltip,
     RiCheckLine,
     RiListCheck3,
@@ -118,13 +118,12 @@ export default defineComponent({
       <div class="text-xs text-muted-foreground">
         {{ t('settings.opencodeConfig.sections.permissions.bulk.fields.selection') }}
       </div>
-      <StringListEditor
+      <CrudStringListEditor
         :model-value="permissionBulkSelection"
         :suggestions="toolPickerOptions"
         :panel-title="t('settings.opencodeConfig.sections.permissions.bulk.picker.panelTitle')"
         :placeholder="t('settings.opencodeConfig.sections.permissions.bulk.picker.placeholder')"
         :empty-text="t('settings.opencodeConfig.sections.permissions.bulk.picker.emptyText')"
-        :show-advanced-toggle="false"
         split-mode="tags"
         @update:model-value="(v) => (permissionBulkSelection = v)"
       />

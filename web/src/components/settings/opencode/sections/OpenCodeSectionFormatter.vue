@@ -17,7 +17,7 @@ import type { PickerOption } from '@/components/ui/pickerOption.types'
 import Tooltip from '@/components/ui/Tooltip.vue'
 import VirtualList from '@/components/ui/VirtualList.vue'
 import MonacoCodeEditor from '@/components/MonacoCodeEditor.vue'
-import StringListEditor from '../StringListEditor.vue'
+import CrudStringListEditor from '../CrudStringListEditor.vue'
 import { useOpencodeConfigPanelContext } from '../opencodeConfigContext'
 
 export default defineComponent({
@@ -29,7 +29,7 @@ export default defineComponent({
     Tooltip,
     VirtualList,
     MonacoCodeEditor,
-    StringListEditor,
+    CrudStringListEditor,
     RiAddLine,
     RiArrowDownSLine,
     RiArrowUpSLine,
@@ -176,16 +176,12 @@ export default defineComponent({
             <span class="text-xs text-muted-foreground">{{
               t('settings.opencodeConfig.sections.formatter.fields.command')
             }}</span>
-            <StringListEditor
+            <CrudStringListEditor
               :model-value="fmt.command || []"
               :suggestions="formatterCommandSuggestions"
               :panel-title="t('settings.opencodeConfig.sections.formatter.formatters.command.panelTitle')"
               :placeholder="t('settings.opencodeConfig.sections.formatter.formatters.command.placeholder')"
               split-mode="lines"
-              :advanced-rows="3"
-              :advanced-placeholder="
-                t('settings.opencodeConfig.sections.formatter.formatters.command.advancedPlaceholder')
-              "
               @update:model-value="(v) => setEntryField('formatter', fmtId, 'command', v)"
             />
           </label>
@@ -193,16 +189,12 @@ export default defineComponent({
             <span class="text-xs text-muted-foreground">{{
               t('settings.opencodeConfig.sections.formatter.fields.extensions')
             }}</span>
-            <StringListEditor
+            <CrudStringListEditor
               :model-value="fmt.extensions || []"
               :suggestions="extensionSuggestions"
               :panel-title="t('settings.opencodeConfig.sections.formatter.fields.extensions')"
               :placeholder="t('settings.opencodeConfig.sections.formatter.formatters.extensions.placeholder')"
               split-mode="tags"
-              :advanced-rows="3"
-              :advanced-placeholder="
-                t('settings.opencodeConfig.sections.formatter.formatters.extensions.advancedPlaceholder')
-              "
               @update:model-value="(v) => setEntryField('formatter', fmtId, 'extensions', v)"
             />
           </label>
@@ -320,14 +312,12 @@ export default defineComponent({
               <span class="text-xs text-muted-foreground">{{
                 t('settings.opencodeConfig.sections.formatter.fields.command')
               }}</span>
-              <StringListEditor
+              <CrudStringListEditor
                 :model-value="lsp.command || []"
                 :suggestions="lspCommandSuggestions"
                 :panel-title="t('settings.opencodeConfig.sections.formatter.lsp.command.panelTitle')"
                 :placeholder="t('settings.opencodeConfig.sections.formatter.lsp.command.placeholder')"
                 split-mode="lines"
-                :advanced-rows="3"
-                :advanced-placeholder="t('settings.opencodeConfig.sections.formatter.lsp.command.advancedPlaceholder')"
                 @update:model-value="(v) => setEntryField('lsp', lspId, 'command', v)"
               />
             </label>
@@ -335,16 +325,12 @@ export default defineComponent({
               <span class="text-xs text-muted-foreground">{{
                 t('settings.opencodeConfig.sections.formatter.fields.extensions')
               }}</span>
-              <StringListEditor
+              <CrudStringListEditor
                 :model-value="lsp.extensions || []"
                 :suggestions="extensionSuggestions"
                 :panel-title="t('settings.opencodeConfig.sections.formatter.fields.extensions')"
                 :placeholder="t('settings.opencodeConfig.sections.formatter.formatters.extensions.placeholder')"
                 split-mode="tags"
-                :advanced-rows="3"
-                :advanced-placeholder="
-                  t('settings.opencodeConfig.sections.formatter.formatters.extensions.advancedPlaceholder')
-                "
                 @update:model-value="(v) => setEntryField('lsp', lspId, 'extensions', v)"
               />
             </label>

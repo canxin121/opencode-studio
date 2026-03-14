@@ -17,7 +17,7 @@ import OptionPicker from '@/components/ui/OptionPicker.vue'
 import type { PickerOption } from '@/components/ui/pickerOption.types'
 import VirtualList from '@/components/ui/VirtualList.vue'
 import MonacoCodeEditor from '@/components/MonacoCodeEditor.vue'
-import StringListEditor from '../StringListEditor.vue'
+import CrudStringListEditor from '../CrudStringListEditor.vue'
 import { useUiStore } from '@/stores/ui'
 
 import { useOpencodeConfigPanelContext } from '../opencodeConfigContext'
@@ -30,7 +30,7 @@ export default defineComponent({
     OptionPicker,
     VirtualList,
     MonacoCodeEditor,
-    StringListEditor,
+    CrudStringListEditor,
     RiAddLine,
     RiArrowDownSLine,
     RiArrowUpSLine,
@@ -173,14 +173,12 @@ export default defineComponent({
             <span class="text-xs text-muted-foreground">{{
               t('settings.opencodeConfig.sections.mcp.fields.command')
             }}</span>
-            <StringListEditor
+            <CrudStringListEditor
               :model-value="mcp.command || []"
               :suggestions="mcpCommandSuggestions"
               :panel-title="t('settings.opencodeConfig.sections.mcp.command.panelTitle')"
               :placeholder="t('settings.opencodeConfig.sections.mcp.command.placeholder')"
               split-mode="lines"
-              :advanced-rows="3"
-              :advanced-placeholder="t('settings.opencodeConfig.sections.mcp.command.advancedPlaceholder')"
               @update:model-value="(v) => setEntryField('mcp', mcpName, 'command', v)"
             />
           </label>

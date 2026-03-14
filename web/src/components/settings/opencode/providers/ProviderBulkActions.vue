@@ -7,7 +7,7 @@ import Button from '@/components/ui/Button.vue'
 import OptionPicker from '@/components/ui/OptionPicker.vue'
 import type { PickerOption } from '@/components/ui/pickerOption.types'
 import Tooltip from '@/components/ui/Tooltip.vue'
-import StringListEditor from '../StringListEditor.vue'
+import CrudStringListEditor from '../CrudStringListEditor.vue'
 
 type OptionPickerOption = PickerOption
 
@@ -71,13 +71,11 @@ const conflictPolicyPickerOptions = computed<OptionPickerOption[]>(() => [
         <span class="text-xs text-muted-foreground">{{
           t('settings.opencodeConfig.sections.providers.bulkActions.fields.selection')
         }}</span>
-        <StringListEditor
+        <CrudStringListEditor
           v-model="bulkProviderSelection"
           :suggestions="providerPickerOptions"
           :panel-title="t('settings.opencodeConfig.sections.providers.bulkActions.picker.panelTitle')"
           :placeholder="t('settings.opencodeConfig.sections.providers.bulkActions.picker.placeholder')"
-          :show-advanced-toggle="false"
-          :advanced-always-visible="false"
         >
           <template #adder-actions>
             <Tooltip>
@@ -94,7 +92,7 @@ const conflictPolicyPickerOptions = computed<OptionPickerOption[]>(() => [
               <template #content>{{ t('common.all') }}</template>
             </Tooltip>
           </template>
-        </StringListEditor>
+        </CrudStringListEditor>
       </div>
     </div>
   </div>

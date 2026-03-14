@@ -460,7 +460,6 @@ const providerFilter = ref('')
 const providerFilterDebounced = refDebounced(providerFilter, 150)
 const providerListOpen = ref<Record<string, boolean>>({})
 const showProviderBrowse = ref(false)
-const showAdvancedProviderLists = ref(false)
 const enabledProviderInput = ref('')
 const disabledProviderInput = ref('')
 
@@ -820,7 +819,6 @@ const panelContext = reactive({
   // Providers
   providerFilter,
   showProviderBrowse,
-  showAdvancedProviderLists,
   providerConflictPolicy,
   providersList,
   filteredProvidersList,

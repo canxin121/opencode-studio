@@ -607,7 +607,6 @@ export default {
       },
 
       stringListEditor: {
-        advancedLabel: '高级文本',
         itemsCount: '{count} 项',
       },
 
@@ -654,14 +653,12 @@ export default {
               help: '如果非空，则仅使用这些 provider。',
               clearAria: '清除启用的 provider',
               toggleTitle: '切换启用的 provider',
-              advancedLabel: '启用的 provider（高级）',
             },
             disabled: {
               title: '禁用',
               help: '这些 provider 将被排除。',
               clearAria: '清除禁用的 provider',
               toggleTitle: '切换禁用的 provider',
-              advancedLabel: '禁用的 provider（高级）',
             },
             picker: {
               panelTitle: 'Providers',
@@ -669,8 +666,6 @@ export default {
             },
             placeholders: {
               filterProviders: '筛选 provider（例如 openai）',
-              enabledAdvanced: 'anthropic\nopenai',
-              disabledAdvanced: 'openrouter',
             },
             empty: {
               noMatchingProviders: '没有匹配的 provider。',
@@ -1310,7 +1305,6 @@ export default {
             toolIdsUnavailable: '无法获取工具 ID：{error}',
             placeholders: {
               filterTools: '筛选工具（例如 bash）',
-              advanced: 'bash\nread',
             },
           },
         },
@@ -1321,11 +1315,6 @@ export default {
             sourcesHelp: '直接编辑多行文本，每行一个来源。',
             extensionsTitle: '技能与插件',
             extensionsHelp: '用多行文本维护技能路径与插件说明符，编辑更直观。',
-          },
-          labels: {
-            instructionsAdvanced: '指令来源（每行一项）',
-            skillsPathsAdvanced: '技能路径（每行一项）',
-            pluginsAdvanced: '插件（每行一项）',
           },
           panels: {
             instructionsTitle: '指令',
@@ -1367,21 +1356,18 @@ export default {
             mdnsDomain: 'opencode.local',
             corsOrigin: 'https://example.com',
             watcherIgnoreGlob: '**/dist',
-            watcherIgnoreAdvanced: '**/dist\n**/.git',
           },
           listsTitle: '列表',
           cors: {
             title: 'CORS 来源',
             help: '每项一个 origin（精确匹配）。',
             panelTitle: 'CORS',
-            advancedLabel: 'CORS 来源（高级文本）',
             clearAria: '清除 CORS 来源',
           },
           watcherIgnore: {
             title: '监视忽略规则',
             help: '文件监视需要忽略的 glob 模式。',
             panelTitle: '忽略 globs',
-            advancedLabel: '监视忽略规则（高级文本）',
             clearAria: '清除监视忽略规则',
           },
         },
@@ -1443,11 +1429,9 @@ export default {
             command: {
               panelTitle: '格式化命令',
               placeholder: 'prettier',
-              advancedPlaceholder: 'prettier\n--write\n$FILE',
             },
             extensions: {
               placeholder: '.ts',
-              advancedPlaceholder: '.ts\n.tsx',
             },
           },
           lsp: {
@@ -1477,7 +1461,6 @@ export default {
             command: {
               panelTitle: 'LSP 命令',
               placeholder: 'typescript-language-server',
-              advancedPlaceholder: 'typescript-language-server\n--stdio',
             },
             runtime: {
               title: 'LSP 运行时状态',
@@ -1521,7 +1504,6 @@ export default {
           command: {
             panelTitle: 'MCP 启动命令',
             placeholder: 'npx',
-            advancedPlaceholder: "npx\n{'@modelcontextprotocol/server-filesystem'}",
           },
           oauth: {
             clientId: '客户端 ID',

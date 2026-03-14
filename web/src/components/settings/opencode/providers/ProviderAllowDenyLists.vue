@@ -1,12 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { RiCloseLine } from '@remixicon/vue'
 import { useI18n } from 'vue-i18n'
 
 import Input from '@/components/ui/Input.vue'
 import type { PickerOption } from '@/components/ui/pickerOption.types'
 import VirtualList from '@/components/ui/VirtualList.vue'
-import StringListEditor from '../StringListEditor.vue'
+import CrudStringListEditor from '../CrudStringListEditor.vue'
 
 import { useOpencodeConfigPanelContext } from '../opencodeConfigContext'
 import { asStringArray } from '../utils'
@@ -17,7 +16,6 @@ const { t } = useI18n()
 
 const {
   showProviderBrowse,
-  showAdvancedProviderLists,
   enabledProvidersArr,
   disabledProvidersArr,
   providerFilter,
@@ -51,17 +49,6 @@ const providerPickerOptions = computed<PickerOption[]>(() => {
               : t('settings.opencodeConfig.sections.providers.allowDeny.actions.showBrowse')
           }}
         </button>
-        <button
-          type="button"
-          class="text-[11px] text-muted-foreground hover:text-foreground"
-          @click="showAdvancedProviderLists = !showAdvancedProviderLists"
-        >
-          {{
-            showAdvancedProviderLists
-              ? t('settings.opencodeConfig.sections.common.hideAdvancedText')
-              : t('settings.opencodeConfig.sections.common.showAdvancedText')
-          }}
-        </button>
       </div>
     </div>
 
@@ -74,22 +61,18 @@ const providerPickerOptions = computed<PickerOption[]>(() => {
           {{ t('settings.opencodeConfig.sections.providers.allowDeny.enabled.help') }}
         </div>
 
-        <StringListEditor
+        <CrudStringListEditor
           v-model="enabledProvidersArr"
           :suggestions="providerPickerOptions"
           :panel-title="t('settings.opencodeConfig.sections.providers.allowDeny.picker.panelTitle')"
           :placeholder="t('settings.opencodeConfig.sections.providers.allowDeny.picker.placeholder')"
-          :advanced-label="t('settings.opencodeConfig.sections.providers.allowDeny.enabled.advancedLabel')"
-          :advanced-placeholder="t('settings.opencodeConfig.sections.providers.allowDeny.placeholders.enabledAdvanced')"
-          :advanced-always-visible="showAdvancedProviderLists"
-          :show-advanced-toggle="false"
         >
           <template #item="{ value }">
             <span class="font-mono break-all" :class="isKnownProviderId(value) ? '' : 'text-amber-600'">{{
               value
             }}</span>
           </template>
-        </StringListEditor>
+        </CrudStringListEditor>
       </div>
 
       <div class="rounded-md border border-border p-3 space-y-2">
@@ -100,24 +83,18 @@ const providerPickerOptions = computed<PickerOption[]>(() => {
           {{ t('settings.opencodeConfig.sections.providers.allowDeny.disabled.help') }}
         </div>
 
-        <StringListEditor
+        <CrudStringListEditor
           v-model="disabledProvidersArr"
           :suggestions="providerPickerOptions"
           :panel-title="t('settings.opencodeConfig.sections.providers.allowDeny.picker.panelTitle')"
           :placeholder="t('settings.opencodeConfig.sections.providers.allowDeny.picker.placeholder')"
-          :advanced-label="t('settings.opencodeConfig.sections.providers.allowDeny.disabled.advancedLabel')"
-          :advanced-placeholder="
-            t('settings.opencodeConfig.sections.providers.allowDeny.placeholders.disabledAdvanced')
-          "
-          :advanced-always-visible="showAdvancedProviderLists"
-          :show-advanced-toggle="false"
         >
           <template #item="{ value }">
             <span class="font-mono break-all" :class="isKnownProviderId(value) ? '' : 'text-amber-600'">{{
               value
             }}</span>
           </template>
-        </StringListEditor>
+        </CrudStringListEditor>
       </div>
     </div>
 

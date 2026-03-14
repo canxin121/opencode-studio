@@ -13,7 +13,7 @@ import type { JsonValue as JsonLike } from '@/types/json'
 import ProviderStatusChips from './ProviderStatusChips.vue'
 import ProviderMapsEditor from './ProviderMapsEditor.vue'
 import ProviderModelsEditor from './ProviderModelsEditor.vue'
-import StringListEditor from '../StringListEditor.vue'
+import CrudStringListEditor from '../CrudStringListEditor.vue'
 
 import { useOpencodeConfigPanelContext } from '../opencodeConfigContext'
 
@@ -189,14 +189,12 @@ const providerModelSuggestions = computed(() => {
           <span class="text-xs text-muted-foreground">{{
             t('settings.opencodeConfig.sections.providers.providerCard.fields.environmentVariables')
           }}</span>
-          <StringListEditor
+          <CrudStringListEditor
             :model-value="provider.env || []"
             :suggestions="providerEnvSuggestions"
             :panel-title="t('settings.opencodeConfig.sections.providers.providerCard.fields.environmentVariables')"
             :placeholder="t('settings.opencodeConfig.sections.providers.providerCard.placeholders.envVar')"
             split-mode="lines"
-            :advanced-rows="3"
-            :advanced-placeholder="t('settings.opencodeConfig.sections.providers.providerCard.placeholders.envVar')"
             @update:model-value="(v) => setEntryField('provider', providerId, 'env', v)"
           />
         </label>
@@ -204,16 +202,12 @@ const providerModelSuggestions = computed(() => {
           <span class="text-xs text-muted-foreground">{{
             t('settings.opencodeConfig.sections.providers.providerCard.fields.whitelistModels')
           }}</span>
-          <StringListEditor
+          <CrudStringListEditor
             :model-value="provider.whitelist || []"
             :suggestions="providerModelSuggestions"
             :panel-title="t('settings.opencodeConfig.sections.providers.providerCard.fields.modelSlugs')"
             :placeholder="t('settings.opencodeConfig.sections.providers.providerCard.placeholders.modelSlugExampleA')"
             split-mode="tags"
-            :advanced-rows="3"
-            :advanced-placeholder="
-              t('settings.opencodeConfig.sections.providers.providerCard.placeholders.modelSlugExampleA')
-            "
             @update:model-value="(v) => setEntryField('provider', providerId, 'whitelist', v)"
           />
         </label>
@@ -221,16 +215,12 @@ const providerModelSuggestions = computed(() => {
           <span class="text-xs text-muted-foreground">{{
             t('settings.opencodeConfig.sections.providers.providerCard.fields.blacklistModels')
           }}</span>
-          <StringListEditor
+          <CrudStringListEditor
             :model-value="provider.blacklist || []"
             :suggestions="providerModelSuggestions"
             :panel-title="t('settings.opencodeConfig.sections.providers.providerCard.fields.modelSlugs')"
             :placeholder="t('settings.opencodeConfig.sections.providers.providerCard.placeholders.modelSlugExampleB')"
             split-mode="tags"
-            :advanced-rows="3"
-            :advanced-placeholder="
-              t('settings.opencodeConfig.sections.providers.providerCard.placeholders.modelSlugExampleB')
-            "
             @update:model-value="(v) => setEntryField('provider', providerId, 'blacklist', v)"
           />
         </label>

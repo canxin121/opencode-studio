@@ -1,21 +1,22 @@
 <script lang="ts">
-import { computed, defineComponent, ref } from 'vue'
+import { computed, defineComponent } from 'vue'
 import { RiArrowDownSLine, RiArrowUpSLine, RiRestartLine } from '@remixicon/vue'
 
 import Button from '@/components/ui/Button.vue'
-import Input from '@/components/ui/Input.vue'
 import OptionPicker from '@/components/ui/OptionPicker.vue'
 import type { PickerOption } from '@/components/ui/pickerOption.types'
 import Tooltip from '@/components/ui/Tooltip.vue'
+
+import CrudStringListEditor from '../CrudStringListEditor.vue'
 
 import { useOpencodeConfigPanelContext } from '../opencodeConfigContext'
 
 export default defineComponent({
   components: {
     Button,
-    Input,
     OptionPicker,
     Tooltip,
+    CrudStringListEditor,
     RiArrowDownSLine,
     RiArrowUpSLine,
     RiRestartLine,
@@ -23,7 +24,6 @@ export default defineComponent({
   setup() {
     const ctx = useOpencodeConfigPanelContext()
     const t = ctx.t as unknown as (key: string, params?: Record<string, unknown>) => string
-    const showAdvancedPrimaryTools = ref(false)
 
     const triStatePickerOptions = computed<PickerOption[]>(() => [
       { value: 'default', label: t('settings.opencodeConfig.sections.common.options.triState.default') },
@@ -31,7 +31,13 @@ export default defineComponent({
       { value: 'false', label: t('settings.opencodeConfig.sections.common.options.triState.false') },
     ])
 
-    return Object.assign(ctx, { showAdvancedPrimaryTools, triStatePickerOptions })
+    const toolPickerOptions = computed<PickerOption[]>(() => {
+      const raw = ctx.toolIdOptions
+      const list: string[] = Array.isArray(raw) ? raw : Array.isArray(raw?.value) ? raw.value : []
+      return list.map((id) => ({ value: String(id), label: String(id) }))
+    })
+
+    return Object.assign(ctx, { triStatePickerOptions, toolPickerOptions })
   },
 })
 </script>
@@ -146,38 +152,16 @@ export default defineComponent({
 
       <div class="grid gap-4 lg:grid-cols-2">
         <div class="grid gap-2">
-          <div class="flex items-center justify-between">
-            <span class="text-xs text-muted-foreground">{{
-              t('settings.opencodeConfig.sections.experimental.primaryTools.title')
-            }}</span>
-            <button
-              type="button"
-              class="text-[11px] text-muted-foreground hover:text-foreground"
-              @click="showAdvancedPrimaryTools = !showAdvancedPrimaryTools"
-            >
-              {{
-                showAdvancedPrimaryTools
-                  ? t('settings.opencodeConfig.sections.common.hideAdvancedText')
-                  : t('settings.opencodeConfig.sections.common.showAdvancedText')
-              }}
-            </button>
+          <div class="text-xs text-muted-foreground">
+            {{ t('settings.opencodeConfig.sections.experimental.primaryTools.title') }}
           </div>
-          <Input
-            v-model="toolFilter"
+          <CrudStringListEditor
+            v-model="experimentalPrimaryToolsArr"
+            :suggestions="toolPickerOptions"
+            :panel-title="t('settings.opencodeConfig.sections.experimental.primaryTools.title')"
             :placeholder="t('settings.opencodeConfig.sections.experimental.primaryTools.placeholders.filterTools')"
-            class="max-w-sm"
+            split-mode="tags"
           />
-          <div class="rounded-md border border-border p-3">
-            <div class="grid gap-2 max-h-44 overflow-auto pr-1">
-              <label v-for="id in filteredToolIdOptions" :key="`primary:${id}`" class="flex items-center gap-2 text-sm">
-                <input type="checkbox" v-model="experimentalPrimaryToolsArr" :value="id" />
-                <span class="font-mono text-xs break-all">{{ id }}</span>
-              </label>
-              <div v-if="filteredToolIdOptions.length === 0" class="text-xs text-muted-foreground">
-                {{ t('settings.opencodeConfig.sections.experimental.primaryTools.empty') }}
-              </div>
-            </div>
-          </div>
           <div class="text-[11px] text-muted-foreground">
             {{ t('settings.opencodeConfig.sections.experimental.primaryTools.help') }}
           </div>
@@ -188,13 +172,6 @@ export default defineComponent({
               })
             }}
           </div>
-          <textarea
-            v-if="showAdvancedPrimaryTools"
-            v-model="experimentalPrimaryTools"
-            rows="4"
-            class="w-full rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs"
-            :placeholder="t('settings.opencodeConfig.sections.experimental.primaryTools.placeholders.advanced')"
-          />
         </div>
       </div>
     </div>

@@ -5,14 +5,14 @@ import { RiArrowDownSLine, RiArrowUpSLine, RiCloseLine, RiRestartLine } from '@r
 import Button from '@/components/ui/Button.vue'
 import Tooltip from '@/components/ui/Tooltip.vue'
 
-import StringListEditor from '../StringListEditor.vue'
+import CrudStringListEditor from '../CrudStringListEditor.vue'
 import { useOpencodeConfigPanelContext } from '../opencodeConfigContext'
 
 export default defineComponent({
   components: {
     Button,
     Tooltip,
-    StringListEditor,
+    CrudStringListEditor,
     RiArrowDownSLine,
     RiArrowUpSLine,
     RiCloseLine,
@@ -100,14 +100,12 @@ export default defineComponent({
           <div class="text-[11px] text-muted-foreground">
             {{ t('settings.opencodeConfig.sections.instructions.panels.instructionsHelp') }}
           </div>
-          <StringListEditor
+          <CrudStringListEditor
             v-model="instructionsArr"
             :empty-text="t('settings.opencodeConfig.sections.instructions.empty.instructions')"
-            :show-inline-adder="false"
-            :advanced-default-open="true"
-            advanced-first
-            :advanced-label="t('settings.opencodeConfig.sections.instructions.labels.instructionsAdvanced')"
-            :advanced-placeholder="t('settings.opencodeConfig.sections.instructions.placeholders.instructions')"
+            split-mode="lines"
+            :panel-title="t('settings.opencodeConfig.sections.instructions.panels.instructionsTitle')"
+            :placeholder="t('settings.opencodeConfig.sections.instructions.placeholders.instructions')"
           />
         </div>
       </div>
@@ -143,14 +141,12 @@ export default defineComponent({
             <div class="text-[11px] text-muted-foreground">
               {{ t('settings.opencodeConfig.sections.instructions.panels.skillsPathsHelp') }}
             </div>
-            <StringListEditor
+            <CrudStringListEditor
               v-model="skillsPathsArr"
               :empty-text="t('settings.opencodeConfig.sections.instructions.empty.skillsPaths')"
-              :show-inline-adder="false"
-              :advanced-default-open="true"
-              advanced-first
-              :advanced-label="t('settings.opencodeConfig.sections.instructions.labels.skillsPathsAdvanced')"
-              :advanced-placeholder="t('settings.opencodeConfig.sections.instructions.placeholders.skillsPath')"
+              split-mode="lines"
+              :panel-title="t('settings.opencodeConfig.sections.instructions.panels.skillsPathsTitle')"
+              :placeholder="t('settings.opencodeConfig.sections.instructions.placeholders.skillsPath')"
             />
           </div>
 
@@ -176,14 +172,12 @@ export default defineComponent({
             <div class="text-[11px] text-muted-foreground">
               {{ t('settings.opencodeConfig.sections.instructions.panels.pluginsHelp') }}
             </div>
-            <StringListEditor
+            <CrudStringListEditor
               v-model="pluginsArr"
               :empty-text="t('settings.opencodeConfig.sections.instructions.empty.plugins')"
-              :show-inline-adder="false"
-              :advanced-default-open="true"
-              advanced-first
-              :advanced-label="t('settings.opencodeConfig.sections.instructions.labels.pluginsAdvanced')"
-              :advanced-placeholder="t('settings.opencodeConfig.sections.instructions.placeholders.plugin')"
+              :panel-title="t('settings.opencodeConfig.sections.instructions.panels.pluginsTitle')"
+              :placeholder="t('settings.opencodeConfig.sections.instructions.placeholders.plugin')"
+              split-mode="lines"
             />
           </div>
         </div>
