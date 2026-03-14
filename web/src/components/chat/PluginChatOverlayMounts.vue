@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type CSSProperties } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useWindowSize } from '@vueuse/core'
 import {
   RiArrowLeftSLine,
   RiCloseLine,
@@ -68,7 +67,6 @@ const diffListEl = ref<HTMLElement | null>(null)
 const lspRuntimeLoading = ref(false)
 const lspRuntimeError = ref('')
 const lspRuntimeItems = ref<LspRuntimeItem[]>([])
-const { width: viewportWidth } = useWindowSize()
 
 let reserveObserver: ResizeObserver | null = null
 let reserveRaf = 0
@@ -175,10 +173,8 @@ const selectedDiffPreview = computed(() => {
     compactSnapshots: true,
   })
 })
-const isNarrowViewport = computed(() => viewportWidth.value < 640)
 const sessionDiffNavigationView = computed(() =>
   resolveSessionDiffNavigationView({
-    isNarrowViewport: isNarrowViewport.value,
     hasDiffEntries: sessionDiffCount.value > 0,
     selectedDiffPath: selectedDiffPath.value,
     mobileView: mobileDiffView.value,
@@ -383,9 +379,7 @@ function handleDiffListScroll() {
 
 function selectDiffFile(path: string) {
   selectedDiffFile.value = path
-  if (isNarrowViewport.value) {
-    mobileDiffView.value = 'detail'
-  }
+  mobileDiffView.value = 'detail'
 }
 
 function backToDiffList() {
@@ -597,12 +591,11 @@ onBeforeUnmount(() => {
         <div
           v-else
           class="flex min-h-0 flex-col h-[min(56dvh,calc(100dvh-var(--oc-safe-area-top,0px)-var(--oc-safe-area-bottom,0px)-9rem))] max-h-[520px] min-h-[280px] sm:min-h-[320px]"
-          :class="sessionDiffNavigationView === 'split' ? 'sm:flex-row' : ''"
         >
           <div
-            v-if="sessionDiffNavigationView !== 'detail'"
+            v-if="sessionDiffNavigationView === 'list'"
             ref="diffListEl"
-            class="flex-1 min-h-0 overflow-auto border-border/60 sm:w-72 sm:max-w-72 sm:min-w-72 sm:border-r"
+            class="flex-1 min-h-0 overflow-auto"
             @scroll.passive="handleDiffListScroll"
           >
             <div
@@ -680,49 +673,6 @@ onBeforeUnmount(() => {
                 :wrap="sessionDiffWrap"
               />
             </div>
-          </div>
-          <div
-            v-else-if="sessionDiffNavigationView === 'split'"
-            class="min-w-0 flex flex-1 min-h-[200px] flex-col sm:min-h-0"
-          >
-            <div class="flex items-center gap-2 border-b border-border/50 px-2 py-1">
-              <div class="min-w-0 flex-1 text-[11px] font-medium text-foreground truncate" :title="selectedDiffPath">
-                {{ selectedDiffPath }}
-              </div>
-              <IconButton
-                variant="outline"
-                size="xs"
-                class="h-6 w-6 transition-colors"
-                :class="
-                  sessionDiffWrap
-                    ? 'bg-secondary/70 text-foreground shadow-inner'
-                    : 'text-muted-foreground hover:bg-secondary/40 hover:text-foreground'
-                "
-                :aria-pressed="sessionDiffWrap"
-                :title="sessionDiffWrap ? t('chat.sessionDiff.wrap.disable') : t('chat.sessionDiff.wrap.enable')"
-                :aria-label="sessionDiffWrap ? t('chat.sessionDiff.wrap.disable') : t('chat.sessionDiff.wrap.enable')"
-                @click.stop="sessionDiffWrap = !sessionDiffWrap"
-              >
-                <RiTextWrap class="h-4 w-4" />
-              </IconButton>
-            </div>
-            <MonacoDiffEditor
-              class="h-full"
-              :path="selectedDiffPreview?.path || selectedDiffPath"
-              :language-path="selectedDiffPreview?.path || selectedDiffPath"
-              :model-id="selectedDiffPreview?.modelId || ''"
-              :original-model-id="selectedDiffPreview ? `${selectedDiffPreview.modelId}:base` : ''"
-              :original-value="selectedDiffPreview?.original || ''"
-              :modified-value="selectedDiffPreview?.modified || ''"
-              :initial-top-line="selectedDiffPreview?.initialTopLine || null"
-              :original-start-line="selectedDiffPreview?.originalStartLine || null"
-              :modified-start-line="selectedDiffPreview?.modifiedStartLine || null"
-              :original-line-numbers="selectedDiffPreview?.originalLineNumbers || null"
-              :modified-line-numbers="selectedDiffPreview?.modifiedLineNumbers || null"
-              :use-files-theme="true"
-              :read-only="true"
-              :wrap="sessionDiffWrap"
-            />
           </div>
         </div>
       </div>

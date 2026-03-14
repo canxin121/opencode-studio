@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import { useElementSize } from '@vueuse/core'
 import { RiArrowLeftSLine, RiExternalLinkLine, RiLoader4Line, RiRefreshLine, RiTextWrap } from '@remixicon/vue'
 import { useI18n } from 'vue-i18n'
 
@@ -18,13 +17,10 @@ const { t } = useI18n()
 const chat = useChatStore()
 const ui = useUiStore()
 
-const rootEl = ref<HTMLElement | null>(null)
 const diffListEl = ref<HTMLElement | null>(null)
 const selectedDiffFile = ref('')
 const sessionDiffWrap = ref(true)
 const mobileDiffView = ref<SessionDiffMobileView>('list')
-
-const { width: panelWidth } = useElementSize(rootEl)
 
 const sessionDiff = computed<SessionFileDiff[]>(() => {
   const list = chat.selectedSessionDiff
@@ -65,10 +61,8 @@ const selectedDiffPreview = computed(() => {
     compactSnapshots: true,
   })
 })
-const isNarrowPanel = computed(() => panelWidth.value > 0 && panelWidth.value < 520)
 const sessionDiffNavigationView = computed(() =>
   resolveSessionDiffNavigationView({
-    isNarrowViewport: isNarrowPanel.value,
     hasDiffEntries: sessionDiffCount.value > 0,
     selectedDiffPath: selectedDiffPath.value,
     mobileView: mobileDiffView.value,
@@ -77,7 +71,7 @@ const sessionDiffNavigationView = computed(() =>
 
 function selectDiffFile(path: string) {
   selectedDiffFile.value = path
-  if (isNarrowPanel.value) mobileDiffView.value = 'detail'
+  mobileDiffView.value = 'detail'
 }
 
 function backToDiffList() {
@@ -143,7 +137,7 @@ defineExpose({ refresh })
 </script>
 
 <template>
-  <section ref="rootEl" class="flex h-full min-h-0 flex-col overflow-hidden bg-sidebar text-sidebar-foreground">
+  <section class="flex h-full min-h-0 flex-col overflow-hidden bg-sidebar text-sidebar-foreground">
     <div class="border-b border-sidebar-border/50 px-2 py-2">
       <div class="flex items-center justify-between gap-2">
         <div class="min-w-0">
@@ -186,12 +180,11 @@ defineExpose({ refresh })
     <div v-else-if="sessionDiffPanelView === 'empty'" class="px-3 py-6 text-xs text-muted-foreground">
       {{ t('chat.sessionDiff.empty') }}
     </div>
-    <div v-else class="flex min-h-0 flex-1 flex-col" :class="sessionDiffNavigationView === 'split' ? 'flex-row' : ''">
+    <div v-else class="flex min-h-0 flex-1 flex-col">
       <div
-        v-if="sessionDiffNavigationView !== 'detail'"
+        v-if="sessionDiffNavigationView === 'list'"
         ref="diffListEl"
         class="min-h-0 flex-1 overflow-auto border-sidebar-border/60"
-        :class="sessionDiffNavigationView === 'split' ? 'w-72 max-w-72 min-w-72 border-r' : ''"
         @scroll.passive="maybeLoadMoreSessionDiff"
       >
         <div class="px-2 py-1.5 text-[11px] font-medium text-muted-foreground">
@@ -280,59 +273,6 @@ defineExpose({ refresh })
             :wrap="sessionDiffWrap"
           />
         </div>
-      </div>
-
-      <div v-else-if="sessionDiffNavigationView === 'split'" class="min-w-0 flex flex-1 flex-col">
-        <div class="flex items-center gap-2 border-b border-sidebar-border/50 px-2 py-1">
-          <div class="min-w-0 flex-1 truncate text-[11px] font-medium text-foreground" :title="selectedDiffPath">
-            {{ selectedDiffPath }}
-          </div>
-
-          <IconButton
-            variant="outline"
-            size="xs"
-            class="h-6 w-6 transition-colors"
-            :class="
-              sessionDiffWrap
-                ? 'bg-sidebar-accent/70 text-foreground shadow-inner'
-                : 'text-muted-foreground hover:bg-sidebar-accent/40 hover:text-foreground'
-            "
-            :aria-pressed="sessionDiffWrap"
-            :title="sessionDiffWrap ? t('chat.sessionDiff.wrap.disable') : t('chat.sessionDiff.wrap.enable')"
-            :aria-label="sessionDiffWrap ? t('chat.sessionDiff.wrap.disable') : t('chat.sessionDiff.wrap.enable')"
-            @click="sessionDiffWrap = !sessionDiffWrap"
-          >
-            <RiTextWrap class="h-4 w-4" />
-          </IconButton>
-          <IconButton
-            variant="outline"
-            size="xs"
-            class="h-6 w-6"
-            :title="t('workspaceDock.changes.openFile')"
-            :aria-label="t('workspaceDock.changes.openFile')"
-            @click="openSelectedFile"
-          >
-            <RiExternalLinkLine class="h-4 w-4" />
-          </IconButton>
-        </div>
-
-        <MonacoDiffEditor
-          class="h-full"
-          :path="selectedDiffPreview?.path || selectedDiffPath"
-          :language-path="selectedDiffPreview?.path || selectedDiffPath"
-          :model-id="selectedDiffPreview?.modelId || ''"
-          :original-model-id="selectedDiffPreview ? `${selectedDiffPreview.modelId}:base` : ''"
-          :original-value="selectedDiffPreview?.original || ''"
-          :modified-value="selectedDiffPreview?.modified || ''"
-          :initial-top-line="selectedDiffPreview?.initialTopLine || null"
-          :original-start-line="selectedDiffPreview?.originalStartLine || null"
-          :modified-start-line="selectedDiffPreview?.modifiedStartLine || null"
-          :original-line-numbers="selectedDiffPreview?.originalLineNumbers || null"
-          :modified-line-numbers="selectedDiffPreview?.modifiedLineNumbers || null"
-          :use-files-theme="true"
-          :read-only="true"
-          :wrap="sessionDiffWrap"
-        />
       </div>
     </div>
   </section>

@@ -3,20 +3,8 @@ import test from 'node:test'
 
 import { resolveSessionDiffNavigationView } from '../src/components/chat/sessionDiffMobileNav'
 
-test('uses split layout on desktop widths', () => {
+test('defaults to list view when requested', () => {
   const view = resolveSessionDiffNavigationView({
-    isNarrowViewport: false,
-    hasDiffEntries: true,
-    selectedDiffPath: 'src/main.ts',
-    mobileView: 'detail',
-  })
-
-  assert.equal(view, 'split')
-})
-
-test('defaults to file list on narrow screens', () => {
-  const view = resolveSessionDiffNavigationView({
-    isNarrowViewport: true,
     hasDiffEntries: true,
     selectedDiffPath: 'src/main.ts',
     mobileView: 'list',
@@ -25,9 +13,8 @@ test('defaults to file list on narrow screens', () => {
   assert.equal(view, 'list')
 })
 
-test('shows detail on narrow screens after selecting a file', () => {
+test('shows detail when requested and a selected file exists', () => {
   const view = resolveSessionDiffNavigationView({
-    isNarrowViewport: true,
     hasDiffEntries: true,
     selectedDiffPath: 'src/main.ts',
     mobileView: 'detail',
@@ -38,7 +25,6 @@ test('shows detail on narrow screens after selecting a file', () => {
 
 test('falls back to list when no selected file exists', () => {
   const view = resolveSessionDiffNavigationView({
-    isNarrowViewport: true,
     hasDiffEntries: true,
     selectedDiffPath: '',
     mobileView: 'detail',
@@ -49,7 +35,6 @@ test('falls back to list when no selected file exists', () => {
 
 test('stays on list empty state when there are no file changes', () => {
   const view = resolveSessionDiffNavigationView({
-    isNarrowViewport: true,
     hasDiffEntries: false,
     selectedDiffPath: '',
     mobileView: 'detail',
