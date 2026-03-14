@@ -13,7 +13,6 @@ export default defineConfig(({ mode }) => {
         '@': path.resolve(__dirname, './src'),
       },
     },
-    esbuild: isRustDebugBuild ? { keepNames: true } : undefined,
     build: {
       // Monaco workers are intentionally large and lazy-loaded; keep build output noise low.
       chunkSizeWarningLimit: 8192,

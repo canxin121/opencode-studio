@@ -15,13 +15,11 @@ import ListItemFrame from '@/components/ui/ListItemFrame.vue'
 import SidebarIconButton from '@/components/ui/SidebarIconButton.vue'
 import { buildPreviewFrameSrc } from '@/features/workspacePreview/model/previewUrl'
 import type { WorkspacePreviewSession } from '@/features/workspacePreview/api/workspacePreviewApi'
-import { useDirectoryStore } from '@/stores/directory'
 import { useUiStore } from '@/stores/ui'
 import { useWorkspacePreviewStore } from '@/stores/workspacePreview'
 
 const { t } = useI18n()
 const ui = useUiStore()
-const directoryStore = useDirectoryStore()
 const preview = useWorkspacePreviewStore()
 
 const MIN_VIEWPORT_SCALE = 25
@@ -31,7 +29,6 @@ const VIEWPORT_SCALE_STEP = 10
 const VIEWPORT_SIZE_STEP_PX = 1
 const VIEWPORT_SIZE_FAST_STEP_PX = 10
 
-const currentDirectory = computed(() => String(directoryStore.currentDirectory || '').trim())
 const activeSession = computed(() => preview.activeSession)
 const activeProxyBasePath = computed(() => activeSession.value?.proxyBasePath || '')
 const previewSrc = computed(() => buildPreviewFrameSrc(activeProxyBasePath.value, preview.refreshToken))
