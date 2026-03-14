@@ -40,6 +40,11 @@ const routes: RouteRecordRaw[] = [
     meta: { shellSidebar: 'none', mobilePanel: 'files' },
   },
   {
+    path: '/preview',
+    component: () => import('./pages/PreviewPage.vue'),
+    meta: { shellSidebar: 'none', mobilePanel: 'preview' },
+  },
+  {
     path: '/git',
     component: () => import('./pages/GitPage.vue'),
     meta: { shellSidebar: 'none', mobilePanel: 'git' },

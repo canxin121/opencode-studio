@@ -234,6 +234,7 @@ export default {
   nav: {
     chat: '聊天',
     files: '文件',
+    preview: '预览',
     terminal: '终端',
     git: 'Git',
     settings: '设置',
@@ -248,6 +249,7 @@ export default {
     toggleSidebar: '切换侧边栏',
     openSessions: '打开会话列表',
     openFilesPanel: '打开文件面板',
+    openPreviewPanel: '打开预览面板',
     openTerminalPanel: '打开终端面板',
     openSourceControlPanel: '打开源代码管理面板',
     openSettingsPanel: '打开设置面板',
