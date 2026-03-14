@@ -628,13 +628,13 @@ const canOpenInWindow = computed(() => Boolean(previewSrc.value))
 const currentDirectory = computed(() => String(directoryStore.currentDirectory || '').trim())
 
 const opencodeSessionId = computed(() => {
-  const path = String(route.path || '').trim().toLowerCase()
+  const path = String(route.path || '')
+    .trim()
+    .toLowerCase()
   if (path.startsWith('/preview')) return ''
   return String(chat.selectedSessionId || '').trim()
 })
-const canCreateSession = computed(() =>
-  Boolean(createTargetUrl.value.trim() && !actionLoading.value),
-)
+const canCreateSession = computed(() => Boolean(createTargetUrl.value.trim() && !actionLoading.value))
 const canDiscoverSession = computed(() => Boolean(!actionLoading.value))
 const actionLoadingMessage = computed(() => {
   if (actionLoading.value === 'create') return String(t('workspaceDock.preview.emptyState.createLoading'))

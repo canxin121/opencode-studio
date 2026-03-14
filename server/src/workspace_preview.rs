@@ -109,8 +109,13 @@ pub(crate) async fn workspace_preview_sessions_post(
     State(state): State<Arc<AppState>>,
     Json(body): Json<WorkspacePreviewSessionCreateBody>,
 ) -> ApiResult<Json<PreviewSessionRecord>> {
-    let session =
-        create_studio_preview_session(&state, body.directory, body.opencode_session_id, &body.target_url).await?;
+    let session = create_studio_preview_session(
+        &state,
+        body.directory,
+        body.opencode_session_id,
+        &body.target_url,
+    )
+    .await?;
     Ok(Json(session))
 }
 

@@ -85,7 +85,9 @@ const providerPickerOptions = computed<PickerOption[]>(() => {
           :show-advanced-toggle="false"
         >
           <template #item="{ value }">
-            <span class="font-mono break-all" :class="isKnownProviderId(value) ? '' : 'text-amber-600'">{{ value }}</span>
+            <span class="font-mono break-all" :class="isKnownProviderId(value) ? '' : 'text-amber-600'">{{
+              value
+            }}</span>
           </template>
         </StringListEditor>
       </div>
@@ -104,12 +106,16 @@ const providerPickerOptions = computed<PickerOption[]>(() => {
           :panel-title="t('settings.opencodeConfig.sections.providers.allowDeny.picker.panelTitle')"
           :placeholder="t('settings.opencodeConfig.sections.providers.allowDeny.picker.placeholder')"
           :advanced-label="t('settings.opencodeConfig.sections.providers.allowDeny.disabled.advancedLabel')"
-          :advanced-placeholder="t('settings.opencodeConfig.sections.providers.allowDeny.placeholders.disabledAdvanced')"
+          :advanced-placeholder="
+            t('settings.opencodeConfig.sections.providers.allowDeny.placeholders.disabledAdvanced')
+          "
           :advanced-always-visible="showAdvancedProviderLists"
           :show-advanced-toggle="false"
         >
           <template #item="{ value }">
-            <span class="font-mono break-all" :class="isKnownProviderId(value) ? '' : 'text-amber-600'">{{ value }}</span>
+            <span class="font-mono break-all" :class="isKnownProviderId(value) ? '' : 'text-amber-600'">{{
+              value
+            }}</span>
           </template>
         </StringListEditor>
       </div>
