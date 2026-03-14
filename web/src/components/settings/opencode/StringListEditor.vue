@@ -185,7 +185,9 @@ function clearAll() {
         :key="`list-item:${value}`"
         class="inline-flex items-center gap-1 rounded-full border border-border/60 bg-background/80 px-2 py-1 text-xs"
       >
-        <span class="font-mono break-all">{{ value }}</span>
+        <slot name="item" :value="value">
+          <span class="font-mono break-all">{{ value }}</span>
+        </slot>
         <IconButton size="xs" class="h-5 w-5 text-muted-foreground hover:text-foreground" @click="removeItem(value)">
           ×
         </IconButton>
@@ -193,17 +195,19 @@ function clearAll() {
       <span v-if="items.length === 0" class="text-xs text-muted-foreground">{{ emptyTextLabel }}</span>
     </div>
 
-    <InlineSearchAdd
-      v-if="showInlineAdder"
-      :options="pickerOptions"
-      :panel-title="panelTitle"
-      :placeholder="placeholder"
-      monospace
-      :selected-values="items"
-      @add="addRaw"
-      @remove="removeItem"
-      @backspace-empty="removeLast"
-    />
+    <div v-if="showInlineAdder" class="flex items-center gap-2">
+      <InlineSearchAdd
+        :options="pickerOptions"
+        :panel-title="panelTitle"
+        :placeholder="placeholder"
+        monospace
+        :selected-values="items"
+        @add="addRaw"
+        @remove="removeItem"
+        @backspace-empty="removeLast"
+      />
+      <slot name="adder-actions"></slot>
+    </div>
 
     <label v-if="!advancedFirst && showAdvancedEditor" class="grid gap-1">
       <span class="text-xs text-muted-foreground">{{ advancedLabelText }}</span>

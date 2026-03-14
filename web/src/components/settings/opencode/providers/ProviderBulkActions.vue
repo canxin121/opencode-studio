@@ -4,12 +4,12 @@ import { RiCloseLine, RiListCheck3 } from '@remixicon/vue'
 import { useI18n } from 'vue-i18n'
 
 import Button from '@/components/ui/Button.vue'
-import InlineSearchAdd from '@/components/ui/InlineSearchAdd.vue'
 import OptionPicker from '@/components/ui/OptionPicker.vue'
 import type { PickerOption } from '@/components/ui/pickerOption.types'
+import Tooltip from '@/components/ui/Tooltip.vue'
+import StringListEditor from '../StringListEditor.vue'
 
 type OptionPickerOption = PickerOption
-import Tooltip from '@/components/ui/Tooltip.vue'
 
 import { useOpencodeConfigPanelContext } from '../opencodeConfigContext'
 import { asStringArray } from '../utils'
@@ -23,8 +23,6 @@ const {
   bulkProviderSelection,
   providerIdOptions,
   providerEnvError,
-  removeFromList,
-  addBulkProviderTags,
   applyBulkEnableOnly,
   applyBulkDisableAllExcept,
 } = ctx
@@ -73,68 +71,30 @@ const conflictPolicyPickerOptions = computed<OptionPickerOption[]>(() => [
         <span class="text-xs text-muted-foreground">{{
           t('settings.opencodeConfig.sections.providers.bulkActions.fields.selection')
         }}</span>
-        <div class="flex flex-wrap gap-2">
-          <span
-            v-for="id in bulkProviderSelection"
-            :key="`bulk:${id}`"
-            class="inline-flex items-center gap-1 rounded-full border border-border bg-muted/20 px-2 py-1 text-xs"
-          >
-            <span class="font-mono break-all">{{ id }}</span>
-            <button
-              type="button"
-              class="text-muted-foreground hover:text-foreground"
-              @click="bulkProviderSelection = removeFromList(bulkProviderSelection, id)"
-            >
-              ×
-            </button>
-          </span>
-          <span v-if="bulkProviderSelection.length === 0" class="text-xs text-muted-foreground">{{
-            t('settings.opencodeConfig.sections.common.none')
-          }}</span>
-        </div>
-        <div class="flex items-center gap-2">
-          <InlineSearchAdd
-            :options="providerPickerOptions"
-            :panel-title="t('settings.opencodeConfig.sections.providers.bulkActions.picker.panelTitle')"
-            :placeholder="t('settings.opencodeConfig.sections.providers.bulkActions.picker.placeholder')"
-            monospace
-            :selected-values="bulkProviderSelection"
-            @add="addBulkProviderTags"
-            @remove="(v: string) => (bulkProviderSelection = removeFromList(bulkProviderSelection, v))"
-            @backspace-empty="
-              () => {
-                if (bulkProviderSelection.length) bulkProviderSelection = bulkProviderSelection.slice(0, -1)
-              }
-            "
-          />
-          <Tooltip>
-            <Button
-              size="icon"
-              variant="ghost"
-              class="h-9 w-9"
-              :title="t('common.selectAll')"
-              :aria-label="t('common.selectAll')"
-              @click="bulkProviderSelection = providerIdOptions"
-            >
-              <RiListCheck3 class="h-4 w-4" />
-            </Button>
-            <template #content>{{ t('common.all') }}</template>
-          </Tooltip>
-          <Tooltip>
-            <Button
-              size="icon"
-              variant="ghost"
-              class="h-9 w-9"
-              :title="t('common.clear')"
-              :aria-label="t('settings.opencodeConfig.sections.providers.bulkActions.actions.clearSelectionAria')"
-              @click="bulkProviderSelection = []"
-              :disabled="bulkProviderSelection.length === 0"
-            >
-              <RiCloseLine class="h-4 w-4" />
-            </Button>
-            <template #content>{{ t('common.clear') }}</template>
-          </Tooltip>
-        </div>
+        <StringListEditor
+          v-model="bulkProviderSelection"
+          :suggestions="providerPickerOptions"
+          :panel-title="t('settings.opencodeConfig.sections.providers.bulkActions.picker.panelTitle')"
+          :placeholder="t('settings.opencodeConfig.sections.providers.bulkActions.picker.placeholder')"
+          :show-advanced-toggle="false"
+          :advanced-always-visible="false"
+        >
+          <template #adder-actions>
+            <Tooltip>
+              <Button
+                size="icon"
+                variant="ghost"
+                class="h-9 w-9"
+                :title="t('common.selectAll')"
+                :aria-label="t('common.selectAll')"
+                @click="bulkProviderSelection = providerIdOptions"
+              >
+                <RiListCheck3 class="h-4 w-4" />
+              </Button>
+              <template #content>{{ t('common.all') }}</template>
+            </Tooltip>
+          </template>
+        </StringListEditor>
       </div>
     </div>
   </div>
