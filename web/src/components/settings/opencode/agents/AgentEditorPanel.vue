@@ -160,10 +160,6 @@ export default defineComponent({
       }
     }
 
-    function asString(value: unknown): string {
-      return typeof value === 'string' ? value : ''
-    }
-
     function agentStringListValue(fieldKey: string, kind: 'root' | 'options'): string[] {
       const entry = agentEntry.value
       if (kind === 'options') {
@@ -175,7 +171,13 @@ export default defineComponent({
       return isStringArray(v) ? v : []
     }
 
-    function updateAgentStringList(agentId: string, fieldKey: string, kind: 'root' | 'options', next: string[] | null) {
+    function updateAgentStringList(
+      agentId: string | null,
+      fieldKey: string,
+      kind: 'root' | 'options',
+      next: string[] | null,
+    ) {
+      if (!agentId) return
       const normalized = next ?? []
       if (kind === 'options') {
         setAgentOptionsField(agentId, fieldKey, normalized)
@@ -407,7 +409,7 @@ export default defineComponent({
               tt('settings.opencodeConfig.sections.agents.editor.fields.model')
             }}</span>
             <OptionPicker
-              :model-value="asString(agentEntry.model)"
+              :model-value="typeof agentEntry.model === 'string' ? agentEntry.model : ''"
               @update:model-value="(v) => setEntryField?.('agent', selectedAgentId, 'model', String(v || '').trim())"
               :options="modelPickerOptions"
               :title="tt('settings.opencodeConfig.sections.agents.editor.fields.model')"
@@ -424,7 +426,7 @@ export default defineComponent({
               tt('settings.opencodeConfig.sections.agents.editor.fields.variant')
             }}</span>
             <Input
-              :model-value="asString(agentEntry.variant)"
+              :model-value="typeof agentEntry.variant === 'string' ? agentEntry.variant : ''"
               @update:model-value="(v) => setEntryField?.('agent', selectedAgentId, 'variant', String(v || '').trim())"
               :placeholder="tt('settings.opencodeConfig.sections.agents.editor.placeholders.variant')"
             />
@@ -477,7 +479,7 @@ export default defineComponent({
               tt('settings.opencodeConfig.sections.agents.editor.fields.description')
             }}</span>
             <Input
-              :model-value="asString(agentEntry.description)"
+              :model-value="typeof agentEntry.description === 'string' ? agentEntry.description : ''"
               @update:model-value="
                 (v) => setEntryField?.('agent', selectedAgentId, 'description', String(v || '').trim())
               "
@@ -489,7 +491,7 @@ export default defineComponent({
               tt('settings.opencodeConfig.sections.agents.editor.fields.mode')
             }}</span>
             <OptionPicker
-              :model-value="asString(agentEntry.mode) || 'default'"
+              :model-value="(typeof agentEntry.mode === 'string' ? agentEntry.mode : '') || 'default'"
               @update:model-value="
                 (v) =>
                   setEntryField?.(
@@ -511,7 +513,7 @@ export default defineComponent({
               tt('settings.opencodeConfig.sections.agents.editor.fields.color')
             }}</span>
             <Input
-              :model-value="asString(agentEntry.color)"
+              :model-value="typeof agentEntry.color === 'string' ? agentEntry.color : ''"
               @update:model-value="(v) => setEntryField?.('agent', selectedAgentId, 'color', String(v || '').trim())"
               :placeholder="tt('settings.opencodeConfig.sections.agents.editor.placeholders.color')"
             />
