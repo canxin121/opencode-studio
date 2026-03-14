@@ -441,7 +441,12 @@ function tryDispatchPointerEvent(
 
 function dispatchClick(ctx: { win: Window }, target: Element, point: { x: number; y: number }) {
   try {
-    const ev = new ctx.win.MouseEvent('click', {
+    const MouseEventCtor = (ctx.win as unknown as { MouseEvent?: unknown }).MouseEvent
+    const Ctor =
+      typeof MouseEventCtor === 'function'
+        ? (MouseEventCtor as new (type: string, init: MouseEventInit) => MouseEvent)
+        : MouseEvent
+    const ev = new Ctor('click', {
       bubbles: true,
       cancelable: true,
       composed: true,
