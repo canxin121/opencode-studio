@@ -16,19 +16,21 @@ const STORAGE_PREVIEW_DESKTOP_HEIGHT = localStorageKeys.ui.workspacePreviewViewp
 const STORAGE_PREVIEW_MOBILE_WIDTH = localStorageKeys.ui.workspacePreviewViewportMobileWidth
 const STORAGE_PREVIEW_MOBILE_HEIGHT = localStorageKeys.ui.workspacePreviewViewportMobileHeight
 const STORAGE_PREVIEW_SCALE = localStorageKeys.ui.workspacePreviewViewportScale
+const STORAGE_PREVIEW_TOUCH_SIMULATION = localStorageKeys.ui.workspacePreviewTouchSimulation
 
 const VIEWPORT_WIDTH_MIN_PX = 240
 const VIEWPORT_WIDTH_MAX_PX = 4096
 const VIEWPORT_HEIGHT_MIN_PX = 180
 const VIEWPORT_HEIGHT_MAX_PX = 4096
 const VIEWPORT_SCALE_MIN_PCT = 25
-const VIEWPORT_SCALE_MAX_PCT = 200
+const VIEWPORT_SCALE_MAX_PCT = 500
 
 const DEFAULT_DESKTOP_VIEWPORT_WIDTH_PX = 1024
 const DEFAULT_DESKTOP_VIEWPORT_HEIGHT_PX = 768
 const DEFAULT_MOBILE_VIEWPORT_WIDTH_PX = 390
 const DEFAULT_MOBILE_VIEWPORT_HEIGHT_PX = 844
 const DEFAULT_VIEWPORT_SCALE_PCT = 100
+const DEFAULT_TOUCH_SIMULATION = false
 
 const VIEWPORT_PERSIST_DEBOUNCE_MS = 250
 
@@ -40,6 +42,14 @@ function clampInt(value: unknown, fallback: number, min: number, max: number): n
   const raw = typeof value === 'number' ? value : Number(value)
   if (!Number.isFinite(raw)) return fallback
   return Math.max(min, Math.min(max, Math.floor(raw)))
+}
+
+function readStoredBool(key: string, fallback: boolean): boolean {
+  const raw = getLocalString(key).trim().toLowerCase()
+  if (!raw) return fallback
+  if (raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on') return true
+  if (raw === '0' || raw === 'false' || raw === 'no' || raw === 'off') return false
+  return fallback
 }
 
 function readStoredInt(key: string, fallback: number, min: number, max: number): number {
@@ -91,6 +101,10 @@ export const useWorkspacePreviewStore = defineStore('workspacePreview', () => {
     readStoredInt(STORAGE_PREVIEW_SCALE, DEFAULT_VIEWPORT_SCALE_PCT, VIEWPORT_SCALE_MIN_PCT, VIEWPORT_SCALE_MAX_PCT),
   )
 
+  // Touch simulation is a responsive-mode feature for desktop pointers.
+  // Keep this as a user preference (Firefox-like toggle) instead of auto-enabling.
+  const touchSimulation = ref<boolean>(readStoredBool(STORAGE_PREVIEW_TOUCH_SIMULATION, DEFAULT_TOUCH_SIMULATION))
+
   let viewportPersistTimer: ReturnType<typeof setTimeout> | null = null
   const loading = ref(false)
   const error = ref('')
@@ -104,6 +118,10 @@ export const useWorkspacePreviewStore = defineStore('workspacePreview', () => {
 
   watch(viewport, (value) => {
     setLocalString(STORAGE_PREVIEW_VIEWPORT, value)
+  })
+
+  watch(touchSimulation, (value) => {
+    setLocalString(STORAGE_PREVIEW_TOUCH_SIMULATION, value ? '1' : '0')
   })
 
   function scheduleViewportPersist() {
@@ -188,6 +206,10 @@ export const useWorkspacePreviewStore = defineStore('workspacePreview', () => {
     viewportScale.value = clampInt(value, viewportScale.value, VIEWPORT_SCALE_MIN_PCT, VIEWPORT_SCALE_MAX_PCT)
   }
 
+  function setTouchSimulation(value: boolean) {
+    touchSimulation.value = Boolean(value)
+  }
+
   function bumpRefreshToken() {
     refreshToken.value += 1
   }
@@ -214,6 +236,7 @@ export const useWorkspacePreviewStore = defineStore('workspacePreview', () => {
     viewportWidth,
     viewportHeight,
     viewportScale,
+    touchSimulation,
     loading,
     error,
     refreshToken,
@@ -221,6 +244,7 @@ export const useWorkspacePreviewStore = defineStore('workspacePreview', () => {
     setViewport,
     setViewportSize,
     setViewportScale,
+    setTouchSimulation,
     bumpRefreshToken,
     refreshSessions,
   }

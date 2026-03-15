@@ -6,6 +6,7 @@ import {
   RiAnticlockwiseLine,
   RiComputerLine,
   RiExternalLinkLine,
+  RiHand,
   RiRefreshLine,
   RiSmartphoneLine,
   RiSubtractLine,
@@ -23,8 +24,25 @@ const ui = useUiStore()
 const preview = useWorkspacePreviewStore()
 
 const MIN_VIEWPORT_SCALE = 25
-const MAX_VIEWPORT_SCALE = 200
-const VIEWPORT_SCALE_STEP = 10
+const MAX_VIEWPORT_SCALE = 500
+
+// Common desktop browser zoom levels (Ctrl+ / Ctrl-)
+const BROWSER_ZOOM_LEVELS = [25, 33, 50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200, 250, 300, 400, 500] as const
+
+function nextZoomIn(current: number): number {
+  for (const level of BROWSER_ZOOM_LEVELS) {
+    if (level > current) return level
+  }
+  return BROWSER_ZOOM_LEVELS[BROWSER_ZOOM_LEVELS.length - 1] || 100
+}
+
+function nextZoomOut(current: number): number {
+  for (let i = BROWSER_ZOOM_LEVELS.length - 1; i >= 0; i -= 1) {
+    const level = BROWSER_ZOOM_LEVELS[i]
+    if (level < current) return level
+  }
+  return BROWSER_ZOOM_LEVELS[0] || 100
+}
 
 const VIEWPORT_SIZE_STEP_PX = 1
 const VIEWPORT_SIZE_FAST_STEP_PX = 10
@@ -33,6 +51,9 @@ const activeSession = computed(() => preview.activeSession)
 const activeProxyBasePath = computed(() => activeSession.value?.proxyBasePath || '')
 const previewSrc = computed(() => buildPreviewFrameSrc(activeProxyBasePath.value, preview.refreshToken))
 const canOpenInWindow = computed(() => Boolean(previewSrc.value))
+
+const touchSimulationSupported = computed(() => preview.viewport === 'mobile' && ui.isMobilePointer !== true)
+const touchSimulationEnabled = computed(() => touchSimulationSupported.value && preview.touchSimulation === true)
 
 function sessionLabel(session: WorkspacePreviewSession): string {
   const directory = String(session.directory || '')
@@ -215,11 +236,11 @@ function setViewportScale(next: number) {
 }
 
 function zoomOut() {
-  setViewportScale(viewportScalePct.value - VIEWPORT_SCALE_STEP)
+  setViewportScale(nextZoomOut(viewportScalePct.value))
 }
 
 function zoomIn() {
-  setViewportScale(viewportScalePct.value + VIEWPORT_SCALE_STEP)
+  setViewportScale(nextZoomIn(viewportScalePct.value))
 }
 
 function resetZoom() {
@@ -233,6 +254,10 @@ function toggleViewportMode() {
 function openInNewWindow() {
   if (!previewSrc.value) return
   window.open(previewSrc.value, '_blank', 'noopener,noreferrer')
+}
+
+function toggleTouchSimulation() {
+  preview.setTouchSimulation(!preview.touchSimulation)
 }
 
 function selectSession(sessionId: string) {
@@ -269,6 +294,25 @@ function selectSession(sessionId: string) {
         >
           <RiComputerLine v-if="preview.viewport === 'desktop'" class="h-3.5 w-3.5" />
           <RiSmartphoneLine v-else class="h-3.5 w-3.5" />
+        </SidebarIconButton>
+
+        <SidebarIconButton
+          v-if="touchSimulationSupported"
+          :active="touchSimulationEnabled"
+          :tooltip="
+            touchSimulationEnabled
+              ? String(t('workspaceDock.preview.touchSimulationOn'))
+              : String(t('workspaceDock.preview.touchSimulationOff'))
+          "
+          :aria-label="
+            touchSimulationEnabled
+              ? String(t('workspaceDock.preview.touchSimulationOn'))
+              : String(t('workspaceDock.preview.touchSimulationOff'))
+          "
+          :is-mobile-pointer="ui.isMobilePointer"
+          @click="toggleTouchSimulation"
+        >
+          <RiHand class="h-3.5 w-3.5" />
         </SidebarIconButton>
 
         <SidebarIconButton

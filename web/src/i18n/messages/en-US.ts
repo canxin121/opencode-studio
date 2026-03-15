@@ -323,6 +323,8 @@ export default {
       },
       viewportDesktop: 'Desktop',
       viewportMobile: 'Mobile',
+      touchSimulationOn: 'Touch simulation: on',
+      touchSimulationOff: 'Touch simulation: off',
       viewportWidth: 'Viewport width',
       viewportHeight: 'Viewport height',
       rotateViewport: 'Rotate viewport',

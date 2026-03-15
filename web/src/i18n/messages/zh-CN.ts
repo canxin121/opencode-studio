@@ -323,6 +323,8 @@ export default {
       },
       viewportDesktop: '桌面',
       viewportMobile: '手机',
+      touchSimulationOn: '触摸模拟：开',
+      touchSimulationOff: '触摸模拟：关',
       viewportWidth: '视口宽度',
       viewportHeight: '视口高度',
       rotateViewport: '切换方向',

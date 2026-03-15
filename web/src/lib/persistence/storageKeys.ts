@@ -22,6 +22,7 @@ export const localStorageKeys = {
     workspacePreviewViewportMobileWidth: namespacedKey('ui.workspace-preview.viewport.mobile.width'),
     workspacePreviewViewportMobileHeight: namespacedKey('ui.workspace-preview.viewport.mobile.height'),
     workspacePreviewViewportScale: namespacedKey('ui.workspace-preview.viewport.scale'),
+    workspacePreviewTouchSimulation: namespacedKey('ui.workspace-preview.touch-simulation'),
     locale: namespacedKey('ui.locale'),
   },
   directory: {

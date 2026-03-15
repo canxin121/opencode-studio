@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import {
@@ -8,6 +8,7 @@ import {
   RiAnticlockwiseLine,
   RiComputerLine,
   RiExternalLinkLine,
+  RiHand,
   RiLoader4Line,
   RiRefreshLine,
   RiSmartphoneLine,
@@ -56,19 +57,36 @@ const controlsVisible = computed(() => props.showControls !== false)
 const viewerMode = computed<PreviewViewerMode>(() => (props.viewerMode === 'responsive' ? 'responsive' : 'fill'))
 
 const MIN_VIEWPORT_SCALE = 25
-const MAX_VIEWPORT_SCALE = 200
-const VIEWPORT_SCALE_STEP = 10
+const MAX_VIEWPORT_SCALE = 500
+
+// Common desktop browser zoom levels (Ctrl+ / Ctrl-)
+const BROWSER_ZOOM_LEVELS = [25, 33, 50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200, 250, 300, 400, 500] as const
+
+function nextZoomIn(current: number): number {
+  for (const level of BROWSER_ZOOM_LEVELS) {
+    if (level > current) return level
+  }
+  return BROWSER_ZOOM_LEVELS[BROWSER_ZOOM_LEVELS.length - 1] || 100
+}
+
+function nextZoomOut(current: number): number {
+  for (let i = BROWSER_ZOOM_LEVELS.length - 1; i >= 0; i -= 1) {
+    const level = BROWSER_ZOOM_LEVELS[i]
+    if (level < current) return level
+  }
+  return BROWSER_ZOOM_LEVELS[0] || 100
+}
 
 const headerViewportScalePct = computed(() =>
   Math.max(MIN_VIEWPORT_SCALE, Math.min(MAX_VIEWPORT_SCALE, Math.round(Number(preview.viewportScale) || 100))),
 )
 
 function zoomOut() {
-  preview.setViewportScale(headerViewportScalePct.value - VIEWPORT_SCALE_STEP)
+  preview.setViewportScale(nextZoomOut(headerViewportScalePct.value))
 }
 
 function zoomIn() {
-  preview.setViewportScale(headerViewportScalePct.value + VIEWPORT_SCALE_STEP)
+  preview.setViewportScale(nextZoomIn(headerViewportScalePct.value))
 }
 
 function resetZoom() {
@@ -90,8 +108,14 @@ const viewportWidthPx = computed(() => clampInt(preview.viewportWidth, 1024, MIN
 const viewportHeightPx = computed(() => clampInt(preview.viewportHeight, 768, MIN_VIEWPORT_HEIGHT, MAX_VIEWPORT_HEIGHT))
 const viewportScalePct = computed(() => clampInt(preview.viewportScale, 100, MIN_VIEWPORT_SCALE, MAX_VIEWPORT_SCALE))
 const viewportScale = computed(() => viewportScalePct.value / 100)
-const scaledViewportWidthPx = computed(() => Math.max(1, Math.round(viewportWidthPx.value * viewportScale.value)))
-const scaledViewportHeightPx = computed(() => Math.max(1, Math.round(viewportHeightPx.value * viewportScale.value)))
+const zoomedViewportWidthPx = computed(() => {
+  const zoom = viewportScale.value || 1
+  return Math.max(1, Math.round(viewportWidthPx.value / zoom))
+})
+const zoomedViewportHeightPx = computed(() => {
+  const zoom = viewportScale.value || 1
+  return Math.max(1, Math.round(viewportHeightPx.value / zoom))
+})
 
 const VIEWPORT_SIZE_STEP_PX = 1
 const VIEWPORT_SIZE_FAST_STEP_PX = 10
@@ -247,6 +271,7 @@ function onHeightWheel(event: WheelEvent) {
 
 type ViewportResizeState = {
   pointerId: number
+  axis: 'both' | 'x' | 'y'
   startX: number
   startY: number
   startWidth: number
@@ -256,7 +281,7 @@ type ViewportResizeState = {
 const viewportResize = ref<ViewportResizeState | null>(null)
 const resizingViewport = computed(() => viewerMode.value === 'responsive' && viewportResize.value !== null)
 
-function startViewportResize(event: PointerEvent) {
+function startViewportResize(event: PointerEvent, axis: ViewportResizeState['axis']) {
   if (viewerMode.value !== 'responsive') return
   if (event.button !== 0) return
   const target = event.currentTarget as HTMLElement | null
@@ -270,6 +295,7 @@ function startViewportResize(event: PointerEvent) {
 
   viewportResize.value = {
     pointerId: event.pointerId,
+    axis,
     startX: event.clientX,
     startY: event.clientY,
     startWidth: viewportWidthPx.value,
@@ -283,10 +309,17 @@ function moveViewportResize(event: PointerEvent) {
   if (event.pointerId !== state.pointerId) return
   event.preventDefault()
 
-  const scale = viewportScale.value || 1
-  const dx = (event.clientX - state.startX) / scale
-  const dy = (event.clientY - state.startY) / scale
-  preview.setViewportSize({ width: Math.round(state.startWidth + dx), height: Math.round(state.startHeight + dy) })
+  const dx = event.clientX - state.startX
+  const dy = event.clientY - state.startY
+
+  const next: { width?: number; height?: number } = {}
+  if (state.axis === 'both' || state.axis === 'x') {
+    next.width = Math.round(state.startWidth + dx)
+  }
+  if (state.axis === 'both' || state.axis === 'y') {
+    next.height = Math.round(state.startHeight + dy)
+  }
+  preview.setViewportSize(next)
 }
 
 function stopViewportResize(event: PointerEvent) {
@@ -307,7 +340,11 @@ function stopViewportResize(event: PointerEvent) {
 const iframeEl = ref<HTMLIFrameElement | null>(null)
 const touchOverlayEl = ref<HTMLElement | null>(null)
 
-const touchSimulationEnabled = computed(() => viewerMode.value === 'responsive' && preview.viewport === 'mobile')
+const touchSimulationSupported = computed(
+  () => viewerMode.value === 'responsive' && preview.viewport === 'mobile' && ui.isMobilePointer !== true,
+)
+
+const touchSimulationEnabled = computed(() => touchSimulationSupported.value && preview.touchSimulation === true)
 const touchSimulationReady = ref(false)
 
 type TouchSimAxis = 'none' | 'x' | 'y'
@@ -352,8 +389,8 @@ function resolveViewportPoint(event: PointerEvent): { x: number; y: number } | n
 
   const rawX = (event.clientX - rect.left) / scale
   const rawY = (event.clientY - rect.top) / scale
-  const maxX = Math.max(0, viewportWidthPx.value - 1)
-  const maxY = Math.max(0, viewportHeightPx.value - 1)
+  const maxX = Math.max(0, zoomedViewportWidthPx.value - 1)
+  const maxY = Math.max(0, zoomedViewportHeightPx.value - 1)
   return {
     x: Math.max(0, Math.min(maxX, Math.round(rawX))),
     y: Math.max(0, Math.min(maxY, Math.round(rawY))),
@@ -441,6 +478,15 @@ function tryDispatchPointerEvent(
 
 function dispatchClick(ctx: { win: Window }, target: Element, point: { x: number; y: number }) {
   try {
+    const HTMLElementCtor = (ctx.win as unknown as { HTMLElement?: unknown }).HTMLElement
+    if (typeof HTMLElementCtor === 'function' && target instanceof (HTMLElementCtor as unknown as typeof HTMLElement)) {
+      const el = target as unknown as HTMLElement
+      if (typeof el.click === 'function') {
+        el.click()
+        return
+      }
+    }
+
     const MouseEventCtor = (ctx.win as unknown as { MouseEvent?: unknown }).MouseEvent
     const Ctor =
       typeof MouseEventCtor === 'function'
@@ -602,8 +648,39 @@ function touchOverlayWheel(event: WheelEvent) {
   if (!touchSimulationEnabled.value || !touchSimulationReady.value) return
   const ctx = resolveIframeContext()
   if (!ctx) return
+  const scale = viewportScale.value || 1
   try {
-    ctx.win.scrollBy(event.deltaX || 0, event.deltaY || 0)
+    ctx.win.scrollBy((event.deltaX || 0) / scale, (event.deltaY || 0) / scale)
+  } catch {
+    // ignore
+  }
+}
+
+let zoomScrollRequestId = 0
+
+async function keepIframeCenterOnZoom() {
+  const ctx = resolveIframeContext()
+  if (!ctx) return
+  const win = ctx.win
+
+  const anchorX = Number(win.scrollX) + Number(win.innerWidth) / 2
+  const anchorY = Number(win.scrollY) + Number(win.innerHeight) / 2
+  if (!Number.isFinite(anchorX) || !Number.isFinite(anchorY)) return
+
+  const requestId = (zoomScrollRequestId += 1)
+  await nextTick()
+  await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()))
+  if (requestId !== zoomScrollRequestId) return
+
+  const ctx2 = resolveIframeContext()
+  if (!ctx2) return
+  const win2 = ctx2.win
+  const w = Number(win2.innerWidth)
+  const h = Number(win2.innerHeight)
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return
+
+  try {
+    win2.scrollTo({ left: Math.max(0, anchorX - w / 2), top: Math.max(0, anchorY - h / 2), behavior: 'auto' })
   } catch {
     // ignore
   }
@@ -866,6 +943,10 @@ function openInNewWindow() {
   window.open(previewSrc.value, '_blank', 'noopener,noreferrer')
 }
 
+function toggleTouchSimulation() {
+  preview.setTouchSimulation(!preview.touchSimulation)
+}
+
 function startAutoRefresh() {
   if (pollTimer !== null) {
     window.clearInterval(pollTimer)
@@ -908,6 +989,15 @@ watch(
     touchSimulationReady.value = Boolean(resolveIframeContext())
   },
   { immediate: true },
+)
+
+watch(
+  viewportScalePct,
+  (next, prev) => {
+    if (next === prev) return
+    void keepIframeCenterOnZoom()
+  },
+  { flush: 'pre' },
 )
 
 watch(frameSrc, () => {
@@ -976,6 +1066,28 @@ onBeforeUnmount(() => {
             <RiComputerLine v-if="preview.viewport === 'desktop'" class="h-4 w-4" />
             <RiSmartphoneLine v-else class="h-4 w-4" />
           </IconButton>
+
+          <IconButton
+            v-if="touchSimulationSupported"
+            size="sm"
+            class="transition-colors"
+            :class="touchSimulationEnabled ? 'bg-sidebar-accent/70 text-foreground shadow-inner' : ''"
+            :aria-pressed="touchSimulationEnabled"
+            :tooltip="
+              touchSimulationEnabled
+                ? String(t('workspaceDock.preview.touchSimulationOn'))
+                : String(t('workspaceDock.preview.touchSimulationOff'))
+            "
+            :aria-label="
+              touchSimulationEnabled
+                ? String(t('workspaceDock.preview.touchSimulationOn'))
+                : String(t('workspaceDock.preview.touchSimulationOff'))
+            "
+            @click="toggleTouchSimulation"
+          >
+            <RiHand class="h-4 w-4" />
+          </IconButton>
+
           <IconButton
             size="sm"
             :tooltip="String(t('workspaceDock.preview.refresh'))"
@@ -1149,60 +1261,94 @@ onBeforeUnmount(() => {
       <div v-else class="h-full">
         <div v-if="viewerMode === 'responsive'" class="flex h-full w-full overflow-auto bg-sidebar-accent/10 p-4">
           <div class="mx-auto my-auto">
-            <div
-              class="relative overflow-hidden rounded-md border border-sidebar-border/60 bg-background shadow-sm"
-              :style="{ width: `${scaledViewportWidthPx}px`, height: `${scaledViewportHeightPx}px` }"
-            >
+            <div class="relative" :style="{ width: `${viewportWidthPx}px`, height: `${viewportHeightPx}px` }">
               <div
-                class="origin-top-left"
-                :style="{
-                  width: `${viewportWidthPx}px`,
-                  height: `${viewportHeightPx}px`,
-                  transform: `scale(${viewportScale})`,
-                }"
+                class="relative h-full w-full overflow-hidden rounded-md border border-sidebar-border/60 bg-background shadow-sm"
               >
-                <iframe
-                  v-if="frameSrc"
-                  ref="iframeEl"
-                  :src="frameSrc"
-                  class="h-full w-full border-0"
+                <div
+                  class="origin-top-left"
+                  :style="{
+                    width: `${zoomedViewportWidthPx}px`,
+                    height: `${zoomedViewportHeightPx}px`,
+                    transform: `scale(${viewportScale})`,
+                  }"
+                >
+                  <iframe
+                    v-if="frameSrc"
+                    ref="iframeEl"
+                    :src="frameSrc"
+                    class="h-full w-full border-0"
+                    :class="resizingViewport ? 'pointer-events-none' : ''"
+                    :title="String(t('workspaceDock.preview.iframeTitle'))"
+                    loading="eager"
+                    @load="onIframeLoad"
+                    @error="onIframeError"
+                  />
+                </div>
+
+                <div
+                  v-if="touchSimulationReady && frameSrc"
+                  ref="touchOverlayEl"
+                  class="absolute inset-0 z-10 touch-none cursor-grab active:cursor-grabbing"
                   :class="resizingViewport ? 'pointer-events-none' : ''"
-                  :title="String(t('workspaceDock.preview.iframeTitle'))"
-                  loading="eager"
-                  @load="onIframeLoad"
-                  @error="onIframeError"
+                  @pointerdown="touchOverlayPointerDown"
+                  @pointermove="touchOverlayPointerMove"
+                  @pointerup="touchOverlayPointerUp"
+                  @pointercancel="touchOverlayPointerCancel"
+                  @wheel.prevent="touchOverlayWheel"
                 />
+
+                <div
+                  class="pointer-events-none absolute left-2 top-2 rounded-sm border border-sidebar-border/60 bg-background/75 px-1.5 py-1 text-[11px] font-mono text-muted-foreground backdrop-blur"
+                >
+                  {{ zoomedViewportWidthPx }} x {{ zoomedViewportHeightPx }} · {{ viewportScalePct }}%
+                </div>
               </div>
 
-              <div
-                v-if="touchSimulationReady && frameSrc"
-                ref="touchOverlayEl"
-                class="absolute inset-0 z-10 touch-none cursor-grab active:cursor-grabbing"
-                :class="resizingViewport ? 'pointer-events-none' : ''"
-                @pointerdown="touchOverlayPointerDown"
-                @pointermove="touchOverlayPointerMove"
-                @pointerup="touchOverlayPointerUp"
-                @pointercancel="touchOverlayPointerCancel"
-                @wheel.prevent="touchOverlayWheel"
-              />
-
-              <div
-                class="pointer-events-none absolute left-2 top-2 rounded-sm border border-sidebar-border/60 bg-background/75 px-1.5 py-1 text-[11px] font-mono text-muted-foreground backdrop-blur"
-              >
-                {{ viewportWidthPx }} x {{ viewportHeightPx }} · {{ viewportScalePct }}%
-              </div>
-
+              <!-- Firefox-like resize handles (external) -->
               <button
                 type="button"
-                class="absolute bottom-0 right-0 z-20 h-6 w-6 touch-none cursor-nwse-resize"
+                class="group absolute -right-4 top-0 bottom-0 z-30 w-4 touch-none cursor-ew-resize"
                 :title="String(t('workspaceDock.preview.resizeViewport'))"
                 :aria-label="String(t('workspaceDock.preview.resizeViewport'))"
-                @pointerdown.prevent.stop="startViewportResize"
+                @pointerdown.prevent.stop="startViewportResize($event, 'x')"
                 @pointermove="moveViewportResize"
                 @pointerup="stopViewportResize"
                 @pointercancel="stopViewportResize"
               >
-                <span class="absolute bottom-1 right-1 h-3 w-3 border-b-2 border-r-2 border-sidebar-border/70" />
+                <span
+                  class="absolute left-1/2 top-6 bottom-6 w-px -translate-x-1/2 rounded bg-sidebar-border/60 transition-colors group-hover:bg-sidebar-border"
+                />
+              </button>
+
+              <button
+                type="button"
+                class="group absolute left-0 right-0 -bottom-4 z-30 h-4 touch-none cursor-ns-resize"
+                :title="String(t('workspaceDock.preview.resizeViewport'))"
+                :aria-label="String(t('workspaceDock.preview.resizeViewport'))"
+                @pointerdown.prevent.stop="startViewportResize($event, 'y')"
+                @pointermove="moveViewportResize"
+                @pointerup="stopViewportResize"
+                @pointercancel="stopViewportResize"
+              >
+                <span
+                  class="absolute top-1/2 left-6 right-6 h-px -translate-y-1/2 rounded bg-sidebar-border/60 transition-colors group-hover:bg-sidebar-border"
+                />
+              </button>
+
+              <button
+                type="button"
+                class="group absolute -right-5 -bottom-5 z-40 h-5 w-5 touch-none cursor-nwse-resize"
+                :title="String(t('workspaceDock.preview.resizeViewport'))"
+                :aria-label="String(t('workspaceDock.preview.resizeViewport'))"
+                @pointerdown.prevent.stop="startViewportResize($event, 'both')"
+                @pointermove="moveViewportResize"
+                @pointerup="stopViewportResize"
+                @pointercancel="stopViewportResize"
+              >
+                <span
+                  class="absolute bottom-1 right-1 h-3 w-3 border-b-2 border-r-2 border-sidebar-border/70 transition-colors group-hover:border-sidebar-border"
+                />
               </button>
             </div>
           </div>
