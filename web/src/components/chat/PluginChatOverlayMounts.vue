@@ -24,6 +24,7 @@ import {
   type LspRuntimeItem,
   type LspRuntimeListResponse,
 } from '@/lib/lspRuntime'
+import { mcpStatusTone, normalizeMcpStatus, type McpStatusItem, type McpStatusResponse } from '@/lib/mcpStatus'
 import type { ChatMount } from '@/plugins/host/mounts'
 import { useChatStore } from '@/stores/chat'
 import type { SessionFileDiff } from '@/types/chat'
@@ -60,6 +61,7 @@ const activeMountKey = ref('')
 const menuQuery = ref('')
 const diffPanelOpen = ref(false)
 const lspPanelOpen = ref(false)
+const mcpPanelOpen = ref(false)
 const selectedDiffFile = ref('')
 const sessionDiffWrap = ref(true)
 const mobileDiffView = ref<SessionDiffMobileView>('list')
@@ -67,9 +69,13 @@ const diffListEl = ref<HTMLElement | null>(null)
 const lspRuntimeLoading = ref(false)
 const lspRuntimeError = ref('')
 const lspRuntimeItems = ref<LspRuntimeItem[]>([])
+const mcpStatusLoading = ref(false)
+const mcpStatusError = ref('')
+const mcpStatusItems = ref<McpStatusItem[]>([])
 
 let reserveObserver: ResizeObserver | null = null
 let reserveRaf = 0
+let mcpPollId: number | null = null
 
 function mountKey(mount: ChatMount): string {
   return `${mount.pluginId}:${mount.surface}:${mount.entry}:${mount.mode}`
@@ -134,6 +140,12 @@ const sessionDiffBadge = computed(() => {
 })
 const lspRuntimeBadge = computed(() => {
   const count = lspRuntimeItems.value.length
+  if (count <= 0) return ''
+  if (count > 99) return '99+'
+  return String(count)
+})
+const mcpStatusBadge = computed(() => {
+  const count = mcpStatusItems.value.length
   if (count <= 0) return ''
   if (count > 99) return '99+'
   return String(count)
@@ -218,7 +230,8 @@ const launcherHidden = computed(
     menuOpen.value ||
     Boolean(activeMountWithHostMode.value) ||
     Boolean(diffPanelOpen.value) ||
-    Boolean(lspPanelOpen.value),
+    Boolean(lspPanelOpen.value) ||
+    Boolean(mcpPanelOpen.value),
 )
 const optionMenuAnchorEl = computed(() => launcherBtnEl.value || launcherAnchorEl.value)
 
@@ -258,7 +271,7 @@ function recomputeReserve() {
     emit('reserve-change', 0)
     return
   }
-  if (!hasMounts.value && !diffPanelOpen.value && !lspPanelOpen.value) {
+  if (!hasMounts.value && !diffPanelOpen.value && !lspPanelOpen.value && !mcpPanelOpen.value) {
     emit('reserve-change', 0)
     return
   }
@@ -303,10 +316,17 @@ function closeLspPanel() {
   scheduleReserveUpdate()
 }
 
+function closeMcpPanel() {
+  if (!mcpPanelOpen.value) return
+  mcpPanelOpen.value = false
+  scheduleReserveUpdate()
+}
+
 function toggleMenu() {
   if (!hasMounts.value) return
   closeDiffPanel()
   closeLspPanel()
+  closeMcpPanel()
   menuOpen.value = !menuOpen.value
   if (!menuOpen.value) menuQuery.value = ''
   scheduleReserveUpdate()
@@ -318,6 +338,7 @@ function toggleDiffPanel() {
   if (!diffPanelOpen.value) {
     closeMenu()
     closeLspPanel()
+    closeMcpPanel()
     activeMountKey.value = ''
     mobileDiffView.value = 'list'
     void chat.refreshSessionDiff(sid, { silent: true })
@@ -354,10 +375,47 @@ function toggleLspPanel() {
   if (!lspPanelOpen.value) {
     closeMenu()
     closeDiffPanel()
+    closeMcpPanel()
     activeMountKey.value = ''
     void refreshLspRuntimeStatus()
   }
   lspPanelOpen.value = !lspPanelOpen.value
+  scheduleReserveUpdate()
+}
+
+async function refreshMcpStatus() {
+  const sessionToken = String(chat.selectedSessionId || '').trim()
+  if (!sessionToken) {
+    mcpStatusItems.value = []
+    mcpStatusError.value = ''
+    return
+  }
+
+  mcpStatusLoading.value = true
+  mcpStatusError.value = ''
+  try {
+    const payload = await apiJson<McpStatusResponse>('/api/mcp')
+    if (sessionToken !== String(chat.selectedSessionId || '').trim()) return
+    mcpStatusItems.value = normalizeMcpStatus(payload)
+  } catch (err) {
+    mcpStatusError.value = err instanceof Error ? err.message : String(err)
+    mcpStatusItems.value = []
+  } finally {
+    mcpStatusLoading.value = false
+  }
+}
+
+function toggleMcpPanel() {
+  const sid = String(chat.selectedSessionId || '').trim()
+  if (!sid) return
+  if (!mcpPanelOpen.value) {
+    closeMenu()
+    closeDiffPanel()
+    closeLspPanel()
+    activeMountKey.value = ''
+    void refreshMcpStatus()
+  }
+  mcpPanelOpen.value = !mcpPanelOpen.value
   scheduleReserveUpdate()
 }
 
@@ -389,6 +447,7 @@ function backToDiffList() {
 function selectMount(key: string) {
   closeDiffPanel()
   closeLspPanel()
+  closeMcpPanel()
   activeMountKey.value = activeMountKey.value === key ? '' : key
   closeMenu()
   scheduleReserveUpdate()
@@ -399,12 +458,14 @@ function clearActiveMount() {
   closeMenu()
   closeDiffPanel()
   closeLspPanel()
+  closeMcpPanel()
   scheduleReserveUpdate()
 }
 
 function handleMenuOpenChange(open: boolean) {
   if (open) closeDiffPanel()
   if (open) closeLspPanel()
+  if (open) closeMcpPanel()
   menuOpen.value = Boolean(open)
   if (!open) menuQuery.value = ''
   scheduleReserveUpdate()
@@ -462,10 +523,27 @@ watch(
   () => {
     diffPanelOpen.value = false
     lspPanelOpen.value = false
+    mcpPanelOpen.value = false
     lspRuntimeItems.value = []
     lspRuntimeError.value = ''
+    mcpStatusItems.value = []
+    mcpStatusError.value = ''
     selectedDiffFile.value = ''
     mobileDiffView.value = 'list'
+  },
+)
+
+watch(
+  () => mcpPanelOpen.value,
+  (open) => {
+    if (!open) {
+      if (mcpPollId) window.clearInterval(mcpPollId)
+      mcpPollId = null
+      return
+    }
+
+    if (mcpPollId) window.clearInterval(mcpPollId)
+    mcpPollId = window.setInterval(() => void refreshMcpStatus(), 10_000)
   },
 )
 
@@ -477,6 +555,7 @@ watch(
     isComposerPlacement.value,
     diffPanelOpen.value,
     lspPanelOpen.value,
+    mcpPanelOpen.value,
   ],
   () => {
     scheduleReserveUpdate()
@@ -510,6 +589,11 @@ onBeforeUnmount(() => {
   reserveObserver?.disconnect()
   reserveObserver = null
 
+  if (mcpPollId) {
+    window.clearInterval(mcpPollId)
+    mcpPollId = null
+  }
+
   if (reserveRaf) {
     window.cancelAnimationFrame(reserveRaf)
     reserveRaf = 0
@@ -539,6 +623,7 @@ onBeforeUnmount(() => {
         :key="activeMountKey"
         class="pointer-events-auto w-full min-w-0"
         :mount="activeMountWithHostMode"
+        :full-width-loading="isComposerPlacement"
         @reserve-change="(px) => (activeMountKey ? setReserve(activeMountKey, px) : undefined)"
         @request-close="clearActiveMount"
       />
@@ -770,6 +855,88 @@ onBeforeUnmount(() => {
       </div>
 
       <div
+        v-if="mcpPanelOpen"
+        class="pointer-events-auto w-full rounded-lg border border-border/70 bg-background/95 shadow-lg backdrop-blur overflow-hidden flex flex-col min-h-0 max-h-full"
+        :style="sessionDiffPanelStyle"
+      >
+        <div class="flex items-center justify-between gap-2 px-3 py-0.5 border-b border-border/60">
+          <div class="min-w-0 flex items-baseline gap-1.5">
+            <div class="text-xs font-medium leading-4 text-foreground">{{ t('chat.mcpStatus.panelTitle') }}</div>
+            <div
+              v-if="!mcpStatusLoading && !mcpStatusError"
+              class="truncate text-[11px] leading-4 text-muted-foreground"
+            >
+              {{ t('chat.mcpStatus.listTitle') }} · {{ mcpStatusItems.length }}
+            </div>
+          </div>
+          <div class="flex items-center gap-1">
+            <IconButton
+              size="sm"
+              class="text-muted-foreground hover:text-foreground"
+              :disabled="mcpStatusLoading"
+              :title="t('common.refresh')"
+              :aria-label="t('common.refresh')"
+              @click.stop="refreshMcpStatus"
+            >
+              <RiLoader4Line v-if="mcpStatusLoading" class="h-4 w-4 animate-spin" />
+              <RiRefreshLine v-else class="h-4 w-4" />
+            </IconButton>
+            <IconButton
+              size="sm"
+              class="text-muted-foreground hover:text-foreground"
+              :title="t('chat.mcpStatus.close')"
+              :aria-label="t('chat.mcpStatus.close')"
+              @click.stop="closeMcpPanel"
+            >
+              <RiCloseLine class="h-4 w-4" />
+            </IconButton>
+          </div>
+        </div>
+
+        <div v-if="mcpStatusLoading" class="px-3 py-6 text-xs text-muted-foreground">
+          {{ t('chat.mcpStatus.loading') }}
+        </div>
+        <div v-else-if="mcpStatusError" class="px-3 py-6 text-xs text-destructive">
+          {{ mcpStatusError }}
+        </div>
+        <div v-else-if="mcpStatusItems.length === 0" class="px-3 py-6 text-xs text-muted-foreground">
+          {{ t('chat.mcpStatus.empty') }}
+        </div>
+        <div
+          v-else
+          class="flex min-h-0 flex-col max-h-[min(56dvh,calc(100dvh-var(--oc-safe-area-top,0px)-var(--oc-safe-area-bottom,0px)-9rem))]"
+        >
+          <div class="flex-1 min-h-0 overflow-auto px-3 py-2 divide-y divide-border/30">
+            <div v-for="server in mcpStatusItems" :key="server.name" class="w-full px-1 py-2">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="min-w-0 truncate text-xs" :title="server.name">{{ server.name }}</span>
+                <span
+                  class="inline-flex h-2 w-2 rounded-full"
+                  :class="
+                    mcpStatusTone(server.status) === 'ok'
+                      ? 'bg-emerald-500'
+                      : mcpStatusTone(server.status) === 'warn'
+                        ? 'bg-red-500'
+                        : 'bg-border'
+                  "
+                  :aria-label="server.status || t('common.unknown')"
+                  :title="server.status || t('common.unknown')"
+                >
+                  <span class="sr-only">{{ server.status || t('common.unknown') }}</span>
+                </span>
+                <span class="text-[11px] font-mono text-muted-foreground">{{
+                  server.status || t('common.unknown')
+                }}</span>
+              </div>
+              <div v-if="server.error" class="mt-1 text-[11px] text-muted-foreground break-words">
+                {{ server.error }}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div
         v-if="!launcherHidden"
         :class="
           isComposerPlacement
@@ -817,6 +984,27 @@ onBeforeUnmount(() => {
               aria-hidden="true"
             >
               {{ lspRuntimeBadge }}
+            </span>
+          </button>
+
+          <button
+            v-if="chat.selectedSessionId"
+            type="button"
+            class="pointer-events-auto relative h-7 sm:h-8 min-w-7 sm:min-w-8 px-1 sm:px-1.5 inline-flex items-center justify-center rounded-md border border-border/60 bg-background/80 shadow-sm backdrop-blur transition-colors text-muted-foreground hover:text-foreground hover:bg-background"
+            :title="t('chat.mcpStatus.toggleAria')"
+            :aria-label="t('chat.mcpStatus.toggleAria')"
+            :aria-expanded="mcpPanelOpen"
+            data-oc-keyboard-tap="keep"
+            @pointerdown.prevent.stop
+            @click.stop="toggleMcpPanel"
+          >
+            <span class="text-[9px] font-semibold leading-none">MCP</span>
+            <span
+              v-if="mcpStatusBadge"
+              class="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] leading-4 font-mono text-center"
+              aria-hidden="true"
+            >
+              {{ mcpStatusBadge }}
             </span>
           </button>
 

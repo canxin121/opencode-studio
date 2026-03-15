@@ -1796,9 +1796,9 @@ export default {
       saveRename: 'Save rename',
     },
     connection: {
-      connectLabel: 'Connect terminal stream',
-      disconnectLabel: 'Disconnect terminal stream',
-      disconnectDescription: 'You can reconnect at any time. Terminal session itself will not be deleted.',
+      connectLabel: 'Start terminal session',
+      disconnectLabel: 'Stop terminal session',
+      disconnectDescription: 'Stops the backend session. You can start it again at any time.',
     },
     dialogs: {
       newTerminal: {
@@ -1814,10 +1814,10 @@ export default {
       title: 'Terminal actions',
       titleWithName: 'Terminal actions: {name}',
       rename: 'Rename terminal',
-      disconnectStream: 'Disconnect stream',
-      disconnectConfirmTitle: 'Disconnect terminal stream?',
-      disconnectConfirmDescription: 'Terminal session is kept and can reconnect later.',
-      disconnect: 'Disconnect',
+      disconnectStream: 'Stop session',
+      disconnectConfirmTitle: 'Stop terminal session?',
+      disconnectConfirmDescription: 'This closes the backend terminal. You can start it again later.',
+      disconnect: 'Stop',
       pin: 'Pin terminal',
       unpin: 'Unpin terminal',
       delete: 'Delete terminal',
@@ -1830,6 +1830,8 @@ export default {
       streamRecoveredPartialHistory: 'Terminal stream recovered with partial history; some older output may be missing',
       terminalExited: 'Terminal exited',
       sessionNoLongerExists: 'Terminal session no longer exists',
+      failedToStartSession: 'Failed to start terminal session',
+      failedToStopSession: 'Failed to stop terminal session',
       failedToSendInput: 'Failed to send terminal input',
       failedToResize: 'Failed to resize terminal',
       failedToCloseSession: 'Failed to close terminal session',
@@ -1999,6 +2001,15 @@ export default {
       noRootGroup: 'No workspace root',
       loading: 'Loading LSP runtime status...',
       empty: 'No active LSP runtime sessions.',
+    },
+
+    mcpStatus: {
+      toggleAria: 'Toggle MCP server status',
+      panelTitle: 'MCP Server Status',
+      close: 'Close',
+      listTitle: 'Servers',
+      loading: 'Loading MCP server status...',
+      empty: 'No MCP servers configured.',
     },
 
     attachments: {

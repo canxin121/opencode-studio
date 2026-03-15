@@ -490,6 +490,30 @@ impl TerminalManager {
         self.try_restore_session(sid)
     }
 
+    pub fn peek_info(&self, session_id: &str) -> Option<(String, bool)> {
+        let sid = session_id.trim();
+        if sid.is_empty() {
+            return None;
+        }
+
+        if let Some(existing) = self.sessions.get(sid) {
+            return Some((existing.value().cwd.clone(), true));
+        }
+
+        let persisted = self.persisted_session(sid)?;
+        if let Ok(meta) = std::fs::metadata(&persisted.cwd) {
+            if !meta.is_dir() {
+                self.remove_persisted_session(sid);
+                return None;
+            }
+        } else {
+            self.remove_persisted_session(sid);
+            return None;
+        }
+
+        Some((persisted.cwd, false))
+    }
+
     pub async fn create(
         &self,
         cwd: String,
@@ -576,6 +600,25 @@ impl TerminalManager {
 
         self.remove_persisted_session(sid);
         Ok(())
+    }
+
+    pub fn stop_session(&self, session_id: &str) -> Result<(), TerminalError> {
+        let sid = session_id.trim();
+        if sid.is_empty() {
+            return Err(TerminalError::NotFound);
+        }
+
+        if let Some((_, session)) = self.sessions.remove(sid) {
+            session.stop_runtime().map_err(TerminalError::Kill)?;
+            return Ok(());
+        }
+
+        // If we still have a persisted entry, treat stop as a no-op.
+        if self.persisted_session(sid).is_some() {
+            return Ok(());
+        }
+
+        Err(TerminalError::NotFound)
     }
 }
 
@@ -807,6 +850,13 @@ impl TerminalSession {
         }
 
         // portable-pty kill is best-effort.
+        let _ = self.killer.lock().unwrap().kill();
+        Ok(())
+    }
+
+    pub fn stop_runtime(&self) -> Result<(), anyhow::Error> {
+        // Stop the attached runtime process. For tmux-backed sessions this terminates the
+        // client while leaving the tmux session alive.
         let _ = self.killer.lock().unwrap().kill();
         Ok(())
     }
@@ -1128,9 +1178,25 @@ pub async fn terminal_delete(
 pub struct TerminalInfoResponse {
     pub session_id: String,
     pub cwd: String,
+    pub running: bool,
 }
 
 pub async fn terminal_get(
+    State(state): State<Arc<crate::AppState>>,
+    AxumPath(session_id): AxumPath<String>,
+) -> ApiResult<Json<TerminalInfoResponse>> {
+    let (cwd, running) = state
+        .terminal
+        .peek_info(&session_id)
+        .ok_or_else(|| AppError::not_found("Terminal session not found"))?;
+    Ok(Json(TerminalInfoResponse {
+        session_id,
+        cwd,
+        running,
+    }))
+}
+
+pub async fn terminal_start(
     State(state): State<Arc<crate::AppState>>,
     AxumPath(session_id): AxumPath<String>,
 ) -> ApiResult<Json<TerminalInfoResponse>> {
@@ -1141,7 +1207,19 @@ pub async fn terminal_get(
     Ok(Json(TerminalInfoResponse {
         session_id,
         cwd: session.cwd.clone(),
+        running: true,
     }))
+}
+
+pub async fn terminal_stop(
+    State(state): State<Arc<crate::AppState>>,
+    AxumPath(session_id): AxumPath<String>,
+) -> ApiResult<Json<TerminalSuccessResponse>> {
+    match state.terminal.stop_session(&session_id) {
+        Ok(()) => Ok(Json(TerminalSuccessResponse { success: true })),
+        Err(TerminalError::NotFound) => Err(AppError::not_found("Terminal session not found")),
+        Err(err) => Err(AppError::internal(err.to_string())),
+    }
 }
 
 pub async fn terminal_restart(

@@ -1092,6 +1092,7 @@ pub(crate) async fn run(args: crate::Args) {
             get(crate::opencode_session::session_message_part_get),
         )
         .route("/lsp", get(crate::opencode_proxy::lsp_list))
+        .route("/mcp", get(crate::opencode_proxy::mcp_status))
         .route("/permission", get(crate::opencode_proxy::permission_list))
         .route("/question", get(crate::opencode_proxy::question_list))
         // OpenCode Studio activity tracking
@@ -1145,6 +1146,14 @@ pub(crate) async fn run(args: crate::Args) {
         .route(
             "/terminal/{session_id}",
             get(crate::terminal::terminal_get).delete(crate::terminal::terminal_delete),
+        )
+        .route(
+            "/terminal/{session_id}/start",
+            post(crate::terminal::terminal_start),
+        )
+        .route(
+            "/terminal/{session_id}/stop",
+            post(crate::terminal::terminal_stop),
         )
         .route(
             "/terminal/{session_id}/restart",
