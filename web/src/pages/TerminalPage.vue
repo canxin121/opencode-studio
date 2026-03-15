@@ -44,6 +44,8 @@ import {
   putTerminalUiState,
   resizeTerminal,
   sendTerminalInput,
+  startTerminalSession,
+  stopTerminalSession,
   terminalStreamUrl,
   terminalUiStateEventsUrl,
   type TerminalUiState,
@@ -401,6 +403,11 @@ async function ensureGitHandoffSessionExists(): Promise<string> {
   status.value = 'creating'
 
   const json = await createTerminalSession({ cwd: createCwd, cols: 80, rows: 24 })
+  const sid = normalizeSessionId(json.sessionId)
+  if (sid && !sessionList.value.includes(sid)) {
+    sessionList.value = [sid, ...sessionList.value]
+    persistSessionList({ remote: false })
+  }
   patchSessionMeta(json.sessionId, {
     name: GIT_HANDOFF_SESSION_NAME,
     pinned: undefined,
@@ -880,13 +887,14 @@ async function createSessionWithName(name: string) {
   status.value = 'creating'
 
   const json = await createTerminalSession({ cwd: createCwd, cols: 80, rows: 24 })
+  // Ensure the newly created session is tracked before persisting meta.
+  // `patchSessionMeta` compacts meta against `sessionList`, so ordering matters.
+  setActiveSession(json.sessionId, { remote: false })
   patchSessionMeta(json.sessionId, {
     name: sessionName,
     pinned: undefined,
     lastUsedAt: Date.now(),
   })
-
-  setActiveSession(json.sessionId)
   clearSessionOutput(json.sessionId)
   setStreamStatusForSession(json.sessionId, 'disconnected')
   renderSessionOutput(json.sessionId)
@@ -983,10 +991,18 @@ function canDisconnectSession(id: string): boolean {
   return streamStatus === 'connected' || streamStatus === 'connecting' || streamStatus === 'reconnecting'
 }
 
-function disconnectSessionFromSidebar(id: string) {
+async function disconnectSessionFromSidebar(id: string) {
   const sid = normalizeSessionId(id)
   if (!sid) return
   if (!canDisconnectSession(sid)) return
+
+  try {
+    await stopTerminalSession(sid)
+  } catch (err) {
+    handleTerminalRequestError(String(t('terminal.errors.failedToStopSession')), err, sid)
+    return
+  }
+
   closeSessionStream(sid, { manual: true })
   if (sessionId.value === sid) {
     status.value = 'disconnected'
@@ -1679,32 +1695,33 @@ function ensureTerminalMounted() {
 }
 
 async function connect() {
+  const sid = normalizeSessionId(sessionId.value || '')
+  if (!sid) {
+    status.value = 'disconnected'
+    return
+  }
+
   try {
-    const sid = normalizeSessionId(sessionId.value || '')
-    if (!sid) {
-      status.value = 'disconnected'
-      return
-    }
-
-    renderSessionOutput(sid)
-    connectSessionStream(sid)
-    ensureTrackedSessionStreams()
-
-    const streamStatus = streamStatusForSession(sid)
-    if (streamStatus === 'connected') {
-      status.value = 'connected'
-      maybeSendPendingForActiveSession()
-    } else if (streamStatus === 'reconnecting' || streamStatus === 'connecting') {
-      status.value = streamStatus
-    } else if (streamStatus === 'exited') {
-      status.value = 'exited'
-    } else {
-      status.value = 'connecting'
-    }
+    await startTerminalSession(sid)
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    status.value = 'error'
-    setError(msg)
+    handleTerminalRequestError(String(t('terminal.errors.failedToStartSession')), err, sid)
+    return
+  }
+
+  renderSessionOutput(sid)
+  connectSessionStream(sid)
+  ensureTrackedSessionStreams()
+
+  const streamStatus = streamStatusForSession(sid)
+  if (streamStatus === 'connected') {
+    status.value = 'connected'
+    maybeSendPendingForActiveSession()
+  } else if (streamStatus === 'reconnecting' || streamStatus === 'connecting') {
+    status.value = streamStatus
+  } else if (streamStatus === 'exited') {
+    status.value = 'exited'
+  } else {
+    status.value = 'connecting'
   }
 }
 
@@ -1712,6 +1729,13 @@ async function disconnect() {
   const sid = normalizeSessionId(sessionId.value || '')
   if (!sid) {
     status.value = 'disconnected'
+    return
+  }
+
+  try {
+    await stopTerminalSession(sid)
+  } catch (err) {
+    handleTerminalRequestError(String(t('terminal.errors.failedToStopSession')), err, sid)
     return
   }
   closeSessionStream(sid, { manual: true })
@@ -1750,6 +1774,15 @@ async function openSessionFromSidebar(id: string) {
   setActiveSession(sid)
   setError(null)
   renderSessionOutput(sid)
+
+  try {
+    await startTerminalSession(sid)
+    if (switchToken !== sessionSwitchToken) return
+  } catch (err) {
+    if (switchToken !== sessionSwitchToken) return
+    handleTerminalRequestError(String(t('terminal.errors.failedToStartSession')), err, sid)
+    return
+  }
   if (!hasSessionStreamSource(sid) || streamStatusForSession(sid) === 'disconnected') {
     connectSessionStream(sid)
   }
@@ -1758,28 +1791,12 @@ async function openSessionFromSidebar(id: string) {
   const initialStatus = streamStatusForSession(sid)
   status.value = initialStatus === 'disconnected' ? 'connecting' : initialStatus
 
-  try {
-    const exists = await getSessionInfo(sid)
-    if (switchToken !== sessionSwitchToken) return
-    if (!exists) {
-      removeTrackedSession(sid)
-      setError(String(t('terminal.errors.sessionNoLongerExists')))
-      return
-    }
-    if (!hasSessionStreamSource(sid) || streamStatusForSession(sid) === 'disconnected') {
-      connectSessionStream(sid)
-    }
-    ensureTrackedSessionStreams()
-    if (streamStatusForSession(sid) === 'connected') {
-      status.value = 'connected'
-      maybeSendPendingForActiveSession()
-    } else {
-      status.value = streamStatusForSession(sid)
-    }
-  } catch (err) {
-    if (switchToken !== sessionSwitchToken) return
-    const msg = err instanceof Error ? err.message : String(err)
-    setError(msg)
+  // `terminal_start` already ensures the backend session exists.
+  if (streamStatusForSession(sid) === 'connected') {
+    status.value = 'connected'
+    maybeSendPendingForActiveSession()
+  } else {
+    status.value = streamStatusForSession(sid)
   }
 }
 

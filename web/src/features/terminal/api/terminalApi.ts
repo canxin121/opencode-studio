@@ -1,6 +1,6 @@
 export type TerminalCreateResponse = { sessionId: string; cols: number; rows: number }
 
-export type TerminalSessionInfo = { sessionId: string; cwd: string }
+export type TerminalSessionInfo = { sessionId: string; cwd: string; running: boolean }
 
 export type TerminalUiSessionMeta = {
   name?: string
@@ -157,11 +157,28 @@ export async function getTerminalSessionInfo(id: string): Promise<TerminalSessio
     return {
       sessionId: String(json.sessionId || id),
       cwd: String(json.cwd || ''),
+      running: typeof json.running === 'boolean' ? json.running : true,
     }
   } catch (err) {
     if (err instanceof ApiError && err.status === 404) return null
     throw err
   }
+}
+
+export async function startTerminalSession(id: string): Promise<TerminalSessionInfo> {
+  const payload = await apiJson<JsonLike>(`${terminalPath(id)}/start`, {
+    method: 'POST',
+  })
+  const json = asObject(payload) || {}
+  return {
+    sessionId: String(json.sessionId || id),
+    cwd: String(json.cwd || ''),
+    running: typeof json.running === 'boolean' ? json.running : true,
+  }
+}
+
+export async function stopTerminalSession(id: string): Promise<void> {
+  await apiText(`${terminalPath(id)}/stop`, { method: 'POST' })
 }
 
 export async function sendTerminalInput(id: string, data: string): Promise<void> {

@@ -1147,6 +1147,14 @@ pub(crate) async fn run(args: crate::Args) {
             get(crate::terminal::terminal_get).delete(crate::terminal::terminal_delete),
         )
         .route(
+            "/terminal/{session_id}/start",
+            post(crate::terminal::terminal_start),
+        )
+        .route(
+            "/terminal/{session_id}/stop",
+            post(crate::terminal::terminal_stop),
+        )
+        .route(
             "/terminal/{session_id}/restart",
             post(crate::terminal::terminal_restart),
         )
