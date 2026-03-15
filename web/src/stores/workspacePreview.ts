@@ -2,14 +2,19 @@ import { computed, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 
 import {
+  createWorkspacePreviewSession,
+  deleteWorkspacePreviewSession,
   listWorkspacePreviewSessions,
   type WorkspacePreviewSession,
+  updateWorkspacePreviewSession,
 } from '@/features/workspacePreview/api/workspacePreviewApi'
 import type { WorkspacePreviewViewport } from '@/features/workspacePreview/model/previewUrl'
 import { getLocalString, setLocalString } from '@/lib/persist'
 import { localStorageKeys } from '@/lib/persistence/storageKeys'
 
 const STORAGE_PREVIEW_ACTIVE_SESSION_ID = localStorageKeys.ui.workspacePreviewActiveSessionId
+const STORAGE_PREVIEW_SIDEBAR_QUERY = localStorageKeys.ui.workspacePreviewSidebarQuery
+const STORAGE_PREVIEW_SIDEBAR_PAGE = localStorageKeys.ui.workspacePreviewSidebarPage
 const STORAGE_PREVIEW_VIEWPORT = localStorageKeys.ui.workspacePreviewViewport
 const STORAGE_PREVIEW_DESKTOP_WIDTH = localStorageKeys.ui.workspacePreviewViewportDesktopWidth
 const STORAGE_PREVIEW_DESKTOP_HEIGHT = localStorageKeys.ui.workspacePreviewViewportDesktopHeight
@@ -17,6 +22,8 @@ const STORAGE_PREVIEW_MOBILE_WIDTH = localStorageKeys.ui.workspacePreviewViewpor
 const STORAGE_PREVIEW_MOBILE_HEIGHT = localStorageKeys.ui.workspacePreviewViewportMobileHeight
 const STORAGE_PREVIEW_SCALE = localStorageKeys.ui.workspacePreviewViewportScale
 const STORAGE_PREVIEW_TOUCH_SIMULATION = localStorageKeys.ui.workspacePreviewTouchSimulation
+
+const PREVIEW_SIDEBAR_PAGE_SIZE = 24
 
 const VIEWPORT_WIDTH_MIN_PX = 240
 const VIEWPORT_WIDTH_MAX_PX = 4096
@@ -93,6 +100,9 @@ export const useWorkspacePreviewStore = defineStore('workspacePreview', () => {
   const sessions = ref<WorkspacePreviewSession[]>([])
   const activeSessionId = ref(getLocalString(STORAGE_PREVIEW_ACTIVE_SESSION_ID).trim())
 
+  const sidebarQuery = ref(getLocalString(STORAGE_PREVIEW_SIDEBAR_QUERY))
+  const sidebarPage = ref(Math.max(0, Number.parseInt(getLocalString(STORAGE_PREVIEW_SIDEBAR_PAGE).trim(), 10) || 0))
+
   const viewport = ref<WorkspacePreviewViewport>(normalizeViewport(getLocalString(STORAGE_PREVIEW_VIEWPORT)))
   const storedViewportSize = readStoredViewportSize(viewport.value)
   const viewportWidth = ref<number>(storedViewportSize.width)
@@ -112,8 +122,66 @@ export const useWorkspacePreviewStore = defineStore('workspacePreview', () => {
 
   const activeSession = computed(() => sessions.value.find((session) => session.id === activeSessionId.value) || null)
 
+  function sessionLabel(session: WorkspacePreviewSession): string {
+    return String(session.id || '').trim()
+  }
+
+  const sidebarQueryNorm = computed(() =>
+    String(sidebarQuery.value || '')
+      .trim()
+      .toLowerCase(),
+  )
+
+  const filteredSessions = computed(() => {
+    const q = sidebarQueryNorm.value
+    if (!q) return sessions.value
+    return sessions.value.filter((session) => {
+      const haystack = [
+        sessionLabel(session),
+        session.id,
+        session.state,
+        session.directory,
+        session.targetUrl,
+        session.proxyBasePath,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+      return haystack.includes(q)
+    })
+  })
+
+  const sidebarPageCount = computed(() =>
+    Math.max(1, Math.ceil(filteredSessions.value.length / PREVIEW_SIDEBAR_PAGE_SIZE)),
+  )
+
+  const sidebarPageClamped = computed(() => {
+    const maxPage = Math.max(0, sidebarPageCount.value - 1)
+    return Math.max(0, Math.min(maxPage, Math.floor(sidebarPage.value || 0)))
+  })
+
+  const pagedSessions = computed(() => {
+    const page = sidebarPageClamped.value
+    const start = page * PREVIEW_SIDEBAR_PAGE_SIZE
+    const end = start + PREVIEW_SIDEBAR_PAGE_SIZE
+    return filteredSessions.value.slice(start, end)
+  })
+
   watch(activeSessionId, (value) => {
     setLocalString(STORAGE_PREVIEW_ACTIVE_SESSION_ID, String(value || '').trim())
+  })
+
+  watch(sidebarQuery, (value) => {
+    setLocalString(STORAGE_PREVIEW_SIDEBAR_QUERY, String(value || ''))
+  })
+
+  watch(sidebarPage, (value) => {
+    setLocalString(STORAGE_PREVIEW_SIDEBAR_PAGE, String(Math.max(0, Math.floor(Number(value) || 0))))
+  })
+
+  watch(sidebarQueryNorm, () => {
+    // Reset paging when searching.
+    sidebarPage.value = 0
   })
 
   watch(viewport, (value) => {
@@ -173,6 +241,11 @@ export const useWorkspacePreviewStore = defineStore('workspacePreview', () => {
     activeSessionId.value = ''
   }
 
+  function ensureSidebarPageInRange() {
+    const clamped = sidebarPageClamped.value
+    if (clamped !== sidebarPage.value) sidebarPage.value = clamped
+  }
+
   function selectSession(sessionId: string) {
     activeSessionId.value = String(sessionId || '').trim()
     ensureActiveSession()
@@ -221,6 +294,7 @@ export const useWorkspacePreviewStore = defineStore('workspacePreview', () => {
       const nextSessions = await listWorkspacePreviewSessions()
       sessions.value = nextSessions
       ensureActiveSession()
+      ensureSidebarPageInRange()
     } catch (err) {
       error.value = err instanceof Error ? err.message : String(err)
     } finally {
@@ -228,10 +302,53 @@ export const useWorkspacePreviewStore = defineStore('workspacePreview', () => {
     }
   }
 
+  async function createSession(input: {
+    id: string
+    directory?: string
+    targetUrl: string
+    opencodeSessionId?: string
+    select?: boolean
+  }) {
+    const session = await createWorkspacePreviewSession(
+      input.id,
+      input.directory,
+      input.targetUrl,
+      input.opencodeSessionId,
+    )
+    await refreshSessions()
+    if (input.select !== false) {
+      selectSession(session.id)
+      bumpRefreshToken()
+    }
+    return session
+  }
+
+  async function updateSession(
+    sessionId: string,
+    patch: { directory?: string; opencodeSessionId?: string; targetUrl?: string },
+  ) {
+    const session = await updateWorkspacePreviewSession(sessionId, patch)
+    await refreshSessions()
+    if (activeSessionId.value === session.id) bumpRefreshToken()
+    return session
+  }
+
+  async function deleteSession(sessionId: string) {
+    await deleteWorkspacePreviewSession(sessionId)
+    if (activeSessionId.value === sessionId) activeSessionId.value = ''
+    await refreshSessions()
+    bumpRefreshToken()
+  }
+
   return {
     sessions,
     activeSessionId,
     activeSession,
+    sidebarQuery,
+    sidebarPage,
+    sidebarPageCount,
+    pagedSessions,
+    filteredSessions,
     viewport,
     viewportWidth,
     viewportHeight,
@@ -241,6 +358,10 @@ export const useWorkspacePreviewStore = defineStore('workspacePreview', () => {
     error,
     refreshToken,
     selectSession,
+    sessionLabel,
+    createSession,
+    updateSession,
+    deleteSession,
     setViewport,
     setViewportSize,
     setViewportScale,

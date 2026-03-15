@@ -1,465 +1,1179 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   RiAddLine,
-  RiAnticlockwiseLine,
-  RiComputerLine,
-  RiExternalLinkLine,
-  RiHand,
+  RiArrowDownSLine,
+  RiArrowRightSLine,
+  RiDeleteBinLine,
+  RiPencilLine,
   RiRefreshLine,
-  RiSmartphoneLine,
-  RiSubtractLine,
 } from '@remixicon/vue'
 
-import ListItemFrame from '@/components/ui/ListItemFrame.vue'
-import SidebarIconButton from '@/components/ui/SidebarIconButton.vue'
-import { buildPreviewFrameSrc } from '@/features/workspacePreview/model/previewUrl'
+import Button from '@/components/ui/Button.vue'
+import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
+import FormDialog from '@/components/ui/FormDialog.vue'
+import IconButton from '@/components/ui/IconButton.vue'
+import Input from '@/components/ui/Input.vue'
+import ListItemOverflowActionButton from '@/components/ui/ListItemOverflowActionButton.vue'
+import OptionMenu from '@/components/ui/OptionMenu.vue'
+import type { OptionMenuGroup, OptionMenuItem } from '@/components/ui/optionMenu.types'
+import SearchInput from '@/components/ui/SearchInput.vue'
+import SidebarListItem from '@/components/ui/SidebarListItem.vue'
 import type { WorkspacePreviewSession } from '@/features/workspacePreview/api/workspacePreviewApi'
+import { buildPreviewFrameSrc } from '@/features/workspacePreview/model/previewUrl'
+import { normalizeDirForCompare } from '@/features/sessions/model/labels'
+import SidebarPager from '@/layout/chatSidebar/components/SidebarPager.vue'
+import SidebarSectionSkeleton from '@/layout/chatSidebar/components/SidebarSectionSkeleton.vue'
+import { apiUrl } from '@/lib/api'
+import { useChatStore } from '@/stores/chat'
+import { useDirectoryStore } from '@/stores/directory'
 import { useUiStore } from '@/stores/ui'
 import { useWorkspacePreviewStore } from '@/stores/workspacePreview'
 
 const { t } = useI18n()
 const ui = useUiStore()
+const chat = useChatStore()
 const preview = useWorkspacePreviewStore()
+const directoryStore = useDirectoryStore()
 
-const MIN_VIEWPORT_SCALE = 25
-const MAX_VIEWPORT_SCALE = 500
-
-// Common desktop browser zoom levels (Ctrl+ / Ctrl-)
-const BROWSER_ZOOM_LEVELS = [25, 33, 50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200, 250, 300, 400, 500] as const
-
-function nextZoomIn(current: number): number {
-  for (const level of BROWSER_ZOOM_LEVELS) {
-    if (level > current) return level
-  }
-  return BROWSER_ZOOM_LEVELS[BROWSER_ZOOM_LEVELS.length - 1] || 100
-}
-
-function nextZoomOut(current: number): number {
-  for (let i = BROWSER_ZOOM_LEVELS.length - 1; i >= 0; i -= 1) {
-    const level = BROWSER_ZOOM_LEVELS[i]
-    if (level < current) return level
-  }
-  return BROWSER_ZOOM_LEVELS[0] || 100
-}
-
-const VIEWPORT_SIZE_STEP_PX = 1
-const VIEWPORT_SIZE_FAST_STEP_PX = 10
-
-const activeSession = computed(() => preview.activeSession)
-const activeProxyBasePath = computed(() => activeSession.value?.proxyBasePath || '')
-const previewSrc = computed(() => buildPreviewFrameSrc(activeProxyBasePath.value, preview.refreshToken))
-const canOpenInWindow = computed(() => Boolean(previewSrc.value))
-
-const touchSimulationSupported = computed(() => preview.viewport === 'mobile' && ui.isMobilePointer !== true)
-const touchSimulationEnabled = computed(() => touchSimulationSupported.value && preview.touchSimulation === true)
-
-function sessionLabel(session: WorkspacePreviewSession): string {
-  const directory = String(session.directory || '')
+const currentDirectory = computed(() => String(directoryStore.currentDirectory || '').trim())
+const currentChatSessionId = computed(() => String(chat.selectedSessionId || '').trim())
+const currentDirectoryNorm = computed(() => normalizeDirForCompare(currentDirectory.value))
+const sidebarQueryNorm = computed(() =>
+  String(preview.sidebarQuery || '')
     .trim()
-    .replace(/[\\/]+$/, '')
-  if (!directory) return session.id
-  const parts = directory.split(/[\\/]/).filter(Boolean)
-  return parts[parts.length - 1] || directory
+    .toLowerCase(),
+)
+
+const createDialogOpen = ref(false)
+const createPreviewId = ref('')
+const createTargetUrl = ref('')
+const actionLoading = ref(false)
+const actionError = ref('')
+
+const editDialogOpen = ref(false)
+const editSessionId = ref('')
+const editTargetUrl = ref('')
+const editBusy = ref(false)
+const editError = ref('')
+
+const rowMenuOpen = ref(false)
+const rowMenuSessionId = ref('')
+const rowMenuAnchorEl = ref<HTMLElement | null>(null)
+
+const rowMenuSession = computed(() => preview.sessions.find((session) => session.id === rowMenuSessionId.value) || null)
+
+type SessionHealthState = 'unknown' | 'checking' | 'ok' | 'error'
+type SessionHealthEntry = { state: SessionHealthState; checkedAt: number }
+
+const HEALTH_TTL_MS = 15_000
+const HEALTH_POLL_MS = 15_000
+const HEALTH_TIMEOUT_MS = 3_500
+
+const healthBySessionId = ref<Record<string, SessionHealthEntry>>({})
+const healthInFlight = new Set<string>()
+const healthControllers = new Map<string, AbortController>()
+let healthPollTimer: number | null = null
+
+const createPreviewIdNorm = computed(() => String(createPreviewId.value || '').trim())
+const createPreviewIdValid = computed(() => /^[A-Za-z0-9_-]+$/.test(createPreviewIdNorm.value))
+
+function normalizeSessionState(input: unknown): string {
+  return String(input || '')
+    .trim()
+    .toLowerCase()
 }
+
+function sessionStateLooksError(state: unknown): boolean {
+  const s = normalizeSessionState(state)
+  return s === 'error' || s === 'failed' || s === 'crashed'
+}
+
+function setSessionHealth(sessionId: string, entry: SessionHealthEntry) {
+  healthBySessionId.value = {
+    ...healthBySessionId.value,
+    [sessionId]: entry,
+  }
+}
+
+function clearSessionHealth(sessionId?: string) {
+  if (!sessionId) {
+    for (const controller of healthControllers.values()) {
+      try {
+        controller.abort()
+      } catch {
+        // ignore
+      }
+    }
+    healthControllers.clear()
+    healthInFlight.clear()
+    healthBySessionId.value = {}
+    return
+  }
+
+  const controller = healthControllers.get(sessionId)
+  if (controller) {
+    try {
+      controller.abort()
+    } catch {
+      // ignore
+    }
+    healthControllers.delete(sessionId)
+  }
+  healthInFlight.delete(sessionId)
+
+  const { [sessionId]: _removed, ...rest } = healthBySessionId.value
+  healthBySessionId.value = rest
+}
+
+function sessionHealthState(sessionId: string): SessionHealthState {
+  const entry = healthBySessionId.value[sessionId]
+  return entry?.state || 'unknown'
+}
+
+function sessionHealthLabel(state: SessionHealthState): string {
+  if (state === 'ok') return String(t('header.status.online'))
+  if (state === 'error') return String(t('header.status.offline'))
+  if (state === 'checking') return String(t('workspaceDock.loading'))
+  return String(t('common.unknown'))
+}
+
+function sessionDotClass(session: WorkspacePreviewSession): string {
+  const health = sessionHealthState(session.id)
+  if (health === 'ok') return 'bg-primary'
+  if (health === 'error') return 'bg-destructive'
+  if (sessionStateLooksError(session.state)) return 'bg-destructive'
+  if (health === 'checking') return 'bg-muted-foreground/60 animate-pulse'
+  return 'bg-muted-foreground/40'
+}
+
+function sessionDotLabel(session: WorkspacePreviewSession): string {
+  const health = sessionHealthState(session.id)
+  if (health === 'unknown' && sessionStateLooksError(session.state)) return String(t('header.status.offline'))
+  return sessionHealthLabel(health)
+}
+
+async function probeSessionHealth(session: WorkspacePreviewSession) {
+  const sessionId = String(session.id || '').trim()
+  if (!sessionId) return
+  if (preview.loading) return
+  if (healthInFlight.has(sessionId)) return
+
+  const now = Date.now()
+  const prev = healthBySessionId.value[sessionId]
+  if (prev && now - prev.checkedAt < HEALTH_TTL_MS && (prev.state === 'ok' || prev.state === 'error')) {
+    return
+  }
+
+  const prevController = healthControllers.get(sessionId)
+  if (prevController) {
+    try {
+      prevController.abort()
+    } catch {
+      // ignore
+    }
+  }
+
+  const controller = new AbortController()
+  healthControllers.set(sessionId, controller)
+  healthInFlight.add(sessionId)
+  setSessionHealth(sessionId, { state: 'checking', checkedAt: now })
+
+  const timeoutId = window.setTimeout(() => {
+    try {
+      controller.abort()
+    } catch {
+      // ignore
+    }
+  }, HEALTH_TIMEOUT_MS)
+
+  try {
+    const src = buildPreviewFrameSrc(session.proxyBasePath, now)
+    if (!src) {
+      setSessionHealth(sessionId, { state: 'error', checkedAt: Date.now() })
+      return
+    }
+
+    const resp = await fetch(apiUrl(src), {
+      method: 'GET',
+      credentials: 'include',
+      cache: 'no-store',
+      signal: controller.signal,
+      headers: {
+        accept: 'text/html,application/json;q=0.9,*/*;q=0.8',
+      },
+    })
+    const ok = resp.ok || resp.status === 304
+    setSessionHealth(sessionId, { state: ok ? 'ok' : 'error', checkedAt: Date.now() })
+  } catch {
+    setSessionHealth(sessionId, { state: 'error', checkedAt: Date.now() })
+  } finally {
+    window.clearTimeout(timeoutId)
+    healthInFlight.delete(sessionId)
+    if (healthControllers.get(sessionId) === controller) healthControllers.delete(sessionId)
+  }
+}
+
+const SECTION_PAGE_SIZE = 4
+
+const chatSectionOpen = ref(Boolean(currentChatSessionId.value))
+const chatSectionPage = ref(0)
+const directorySectionOpen = ref(true)
+const directorySectionPage = ref(0)
+const allSectionOpen = ref(false)
+const allSectionPage = ref(0)
+
+function clampPage(page: number, pageCount: number): number {
+  const max = Math.max(0, Math.floor(pageCount || 1) - 1)
+  return Math.max(0, Math.min(max, Math.floor(page || 0)))
+}
+
+const chatSessionsAll = computed(() => {
+  const sid = currentChatSessionId.value
+  if (!sid) return []
+  return preview.sessions.filter((session) => String(session.opencodeSessionId || '').trim() === sid)
+})
+
+const chatSessionsFiltered = computed(() => {
+  const sid = currentChatSessionId.value
+  if (!sid) return []
+  return preview.filteredSessions.filter((session) => String(session.opencodeSessionId || '').trim() === sid)
+})
+
+const directorySessionsAll = computed(() => {
+  const dir = currentDirectoryNorm.value
+  if (!dir) return []
+  return preview.sessions.filter((session) => normalizeDirForCompare(session.directory) === dir)
+})
+
+const directorySessionsFiltered = computed(() => {
+  const dir = currentDirectoryNorm.value
+  if (!dir) return []
+  return preview.filteredSessions.filter((session) => normalizeDirForCompare(session.directory) === dir)
+})
+
+const allSessionsAll = computed(() => preview.sessions)
+const allSessionsFiltered = computed(() => preview.filteredSessions)
+
+const chatCount = computed(() => Math.max(0, chatSessionsFiltered.value.length))
+const directoryCount = computed(() => Math.max(0, directorySessionsFiltered.value.length))
+const allCount = computed(() => Math.max(0, allSessionsFiltered.value.length))
+
+const chatPageCount = computed(() => Math.max(1, Math.ceil(chatCount.value / SECTION_PAGE_SIZE)))
+const directoryPageCount = computed(() => Math.max(1, Math.ceil(directoryCount.value / SECTION_PAGE_SIZE)))
+const allPageCount = computed(() => Math.max(1, Math.ceil(allCount.value / SECTION_PAGE_SIZE)))
+
+const chatPageClamped = computed(() => clampPage(chatSectionPage.value, chatPageCount.value))
+const directoryPageClamped = computed(() => clampPage(directorySectionPage.value, directoryPageCount.value))
+const allPageClamped = computed(() => clampPage(allSectionPage.value, allPageCount.value))
+
+const pagedChatSessions = computed(() => {
+  const start = chatPageClamped.value * SECTION_PAGE_SIZE
+  return chatSessionsFiltered.value.slice(start, start + SECTION_PAGE_SIZE)
+})
+
+const pagedDirectorySessions = computed(() => {
+  const start = directoryPageClamped.value * SECTION_PAGE_SIZE
+  return directorySessionsFiltered.value.slice(start, start + SECTION_PAGE_SIZE)
+})
+
+const pagedAllSessions = computed(() => {
+  const start = allPageClamped.value * SECTION_PAGE_SIZE
+  return allSessionsFiltered.value.slice(start, start + SECTION_PAGE_SIZE)
+})
+
+const visibleSessionsForHealth = computed(() => {
+  const dedupe = new Set<string>()
+  const out: WorkspacePreviewSession[] = []
+
+  function push(session: WorkspacePreviewSession) {
+    if (!session?.id) return
+    if (dedupe.has(session.id)) return
+    dedupe.add(session.id)
+    out.push(session)
+  }
+
+  if (chatSectionOpen.value) {
+    for (const session of pagedChatSessions.value) push(session)
+  }
+  if (directorySectionOpen.value) {
+    for (const session of pagedDirectorySessions.value) push(session)
+  }
+  if (allSectionOpen.value) {
+    for (const session of pagedAllSessions.value) push(session)
+  }
+
+  return out
+})
+
+const visibleSessionIdKey = computed(() => visibleSessionsForHealth.value.map((session) => session.id).join('|'))
+
+function probeVisibleSessions() {
+  if (preview.loading) return
+  for (const session of visibleSessionsForHealth.value) {
+    void probeSessionHealth(session)
+  }
+}
+
+function canEditTargetUrl(session: WorkspacePreviewSession | null | undefined): boolean {
+  return Boolean(String(session?.targetUrl || '').trim())
+}
+
+const rowMenuGroups = computed<OptionMenuGroup[]>(() => {
+  const session = rowMenuSession.value
+  if (!session) return []
+
+  const canEditUrl = canEditTargetUrl(session)
+  return [
+    {
+      id: 'preview-session-actions',
+      items: [
+        {
+          id: 'edit-url',
+          label: String(t('workspaceDock.preview.sidebar.actions.editUrl')),
+          description: canEditUrl
+            ? String(t('workspaceDock.preview.sidebar.actions.editUrlDescription'))
+            : String(t('workspaceDock.preview.sidebar.actions.editUrlUnavailable')),
+          icon: RiPencilLine,
+          disabled: !canEditUrl,
+        },
+        {
+          id: 'delete',
+          label: String(t('common.delete')),
+          description: String(t('workspaceDock.preview.sidebar.actions.deleteDescription')),
+          icon: RiDeleteBinLine,
+          variant: 'destructive',
+          confirmTitle: String(t('workspaceDock.preview.sidebar.actions.deleteConfirmTitle')),
+          confirmDescription: String(t('workspaceDock.preview.sidebar.actions.deleteConfirmDescription')),
+          confirmText: String(t('common.delete')),
+          cancelText: String(t('common.cancel')),
+        },
+      ],
+    },
+  ]
+})
 
 async function refreshSessions(opts?: { forceFrameReload?: boolean }) {
+  clearSessionHealth()
   await preview.refreshSessions()
-  if (opts?.forceFrameReload) {
-    preview.bumpRefreshToken()
+  if (opts?.forceFrameReload) preview.bumpRefreshToken()
+  probeVisibleSessions()
+}
+
+function openCreateDialog() {
+  actionError.value = ''
+  if (!createPreviewIdNorm.value) {
+    createPreviewId.value = suggestPreviewIdFromDirectory(currentDirectory.value)
+  }
+  createDialogOpen.value = true
+}
+
+function suggestPreviewIdFromDirectory(directory: string): string {
+  const trimmed = String(directory || '')
+    .trim()
+    .replace(/[\\/]+$/, '')
+  if (!trimmed) return ''
+  const parts = trimmed.split(/[\\/]/).filter(Boolean)
+  const base = String(parts[parts.length - 1] || '').trim()
+  if (!base) return ''
+  const normalized = base
+    .replace(/\s+/g, '-')
+    .replace(/[^A-Za-z0-9_-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^[-_]+|[-_]+$/g, '')
+  return normalized
+}
+
+async function createManagedSession() {
+  if (!currentDirectory.value.trim()) {
+    actionError.value = String(t('workspaceDock.preview.emptyState.directoryRequired'))
+    return
+  }
+
+  if (!createPreviewIdNorm.value) {
+    actionError.value = String(t('workspaceDock.preview.emptyState.sessionIdRequired'))
+    return
+  }
+  if (!createPreviewIdValid.value) {
+    actionError.value = String(t('workspaceDock.preview.emptyState.sessionIdInvalid'))
+    return
+  }
+
+  const targetUrl = createTargetUrl.value.trim()
+  if (!targetUrl) {
+    actionError.value = String(t('workspaceDock.preview.emptyState.targetUrlRequired'))
+    return
+  }
+
+  actionLoading.value = true
+  actionError.value = ''
+  try {
+    await preview.createSession({
+      id: createPreviewIdNorm.value,
+      directory: currentDirectory.value,
+      targetUrl,
+      select: true,
+    })
+    createPreviewId.value = ''
+    createTargetUrl.value = ''
+    createDialogOpen.value = false
+    clearSessionHealth()
+    probeVisibleSessions()
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err)
+    actionError.value = String(t('workspaceDock.preview.emptyState.createFailed', { detail }))
+  } finally {
+    actionLoading.value = false
   }
 }
 
-function clampViewportScale(value: unknown): number {
-  const raw = typeof value === 'number' ? value : Number(value)
-  if (!Number.isFinite(raw)) return 100
-  return Math.max(MIN_VIEWPORT_SCALE, Math.min(MAX_VIEWPORT_SCALE, Math.round(raw)))
+function openRowMenu(sessionId: string, event: MouseEvent) {
+  rowMenuSessionId.value = sessionId
+  rowMenuAnchorEl.value = event.currentTarget as HTMLElement | null
+  rowMenuOpen.value = true
 }
 
-const viewportScalePct = computed(() => clampViewportScale(preview.viewportScale))
+function setRowMenuOpen(next: boolean) {
+  rowMenuOpen.value = Boolean(next)
+  if (!rowMenuOpen.value) {
+    rowMenuSessionId.value = ''
+    rowMenuAnchorEl.value = null
+  }
+}
 
-const widthDraft = ref(String(preview.viewportWidth || ''))
-const heightDraft = ref(String(preview.viewportHeight || ''))
-const widthFocused = ref(false)
-const heightFocused = ref(false)
+function openEditDialog(sessionId: string) {
+  const session = preview.sessions.find((item) => item.id === sessionId)
+  if (!session) return
+  if (!canEditTargetUrl(session)) return
+
+  editError.value = ''
+  editSessionId.value = session.id
+  editTargetUrl.value = String(session.targetUrl || '').trim()
+  editDialogOpen.value = true
+}
+
+async function saveEditDialog() {
+  const sessionId = String(editSessionId.value || '').trim()
+  const targetUrl = String(editTargetUrl.value || '').trim()
+  if (!sessionId || !targetUrl) return
+
+  editBusy.value = true
+  editError.value = ''
+  try {
+    await preview.updateSession(sessionId, { targetUrl })
+    editDialogOpen.value = false
+    clearSessionHealth(sessionId)
+    probeVisibleSessions()
+  } catch (err) {
+    editError.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    editBusy.value = false
+  }
+}
+
+async function onRowMenuSelect(item: OptionMenuItem) {
+  const session = rowMenuSession.value
+  if (!session) return
+
+  if (item.id === 'edit-url') {
+    setRowMenuOpen(false)
+    openEditDialog(session.id)
+    return
+  }
+
+  if (item.id === 'delete') {
+    setRowMenuOpen(false)
+    await preview.deleteSession(session.id)
+    clearSessionHealth(session.id)
+    probeVisibleSessions()
+  }
+}
 
 watch(
-  () => preview.viewportWidth,
-  (value) => {
-    if (widthFocused.value) return
-    widthDraft.value = String(value || '')
+  () => visibleSessionIdKey.value,
+  () => {
+    probeVisibleSessions()
   },
   { immediate: true },
 )
 
 watch(
-  () => preview.viewportHeight,
-  (value) => {
-    if (heightFocused.value) return
-    heightDraft.value = String(value || '')
+  () => preview.loading,
+  (loading) => {
+    if (!loading) probeVisibleSessions()
   },
   { immediate: true },
 )
 
-function parseDraftInt(value: string): number | null {
-  const trimmed = String(value || '').trim()
-  if (!trimmed) return null
-  const parsed = Number.parseInt(trimmed, 10)
-  if (!Number.isFinite(parsed)) return null
-  return parsed
-}
+watch(
+  chatPageCount,
+  () => {
+    const clamped = chatPageClamped.value
+    if (clamped !== chatSectionPage.value) chatSectionPage.value = clamped
+  },
+  { immediate: true },
+)
 
-function commitWidthDraft() {
-  const parsed = parseDraftInt(widthDraft.value)
-  if (parsed === null) return
-  preview.setViewportSize({ width: parsed })
-  if (!widthFocused.value) widthDraft.value = String(preview.viewportWidth || '')
-}
+watch(
+  directoryPageCount,
+  () => {
+    const clamped = directoryPageClamped.value
+    if (clamped !== directorySectionPage.value) directorySectionPage.value = clamped
+  },
+  { immediate: true },
+)
 
-function commitHeightDraft() {
-  const parsed = parseDraftInt(heightDraft.value)
-  if (parsed === null) return
-  preview.setViewportSize({ height: parsed })
-  if (!heightFocused.value) heightDraft.value = String(preview.viewportHeight || '')
-}
+watch(
+  allPageCount,
+  () => {
+    const clamped = allPageClamped.value
+    if (clamped !== allSectionPage.value) allSectionPage.value = clamped
+  },
+  { immediate: true },
+)
 
-function onWidthBlur() {
-  widthFocused.value = false
-  const parsed = parseDraftInt(widthDraft.value)
-  if (parsed === null) {
-    widthDraft.value = String(preview.viewportWidth || '')
-    return
+watch(
+  sidebarQueryNorm,
+  () => {
+    chatSectionPage.value = 0
+    directorySectionPage.value = 0
+    allSectionPage.value = 0
+  },
+  { immediate: true },
+)
+
+watch(currentChatSessionId, (next, prev) => {
+  if (next === prev) return
+  chatSectionPage.value = 0
+  if (next) chatSectionOpen.value = true
+})
+
+watch(currentDirectoryNorm, (next, prev) => {
+  if (next === prev) return
+  directorySectionPage.value = 0
+})
+
+onMounted(() => {
+  probeVisibleSessions()
+  healthPollTimer = window.setInterval(() => {
+    probeVisibleSessions()
+  }, HEALTH_POLL_MS)
+})
+
+onBeforeUnmount(() => {
+  if (healthPollTimer !== null) {
+    window.clearInterval(healthPollTimer)
+    healthPollTimer = null
   }
-  preview.setViewportSize({ width: parsed })
-  widthDraft.value = String(preview.viewportWidth || '')
-}
-
-function onHeightBlur() {
-  heightFocused.value = false
-  const parsed = parseDraftInt(heightDraft.value)
-  if (parsed === null) {
-    heightDraft.value = String(preview.viewportHeight || '')
-    return
-  }
-  preview.setViewportSize({ height: parsed })
-  heightDraft.value = String(preview.viewportHeight || '')
-}
-
-function bumpViewportWidth(delta: number) {
-  preview.setViewportSize({ width: Number(preview.viewportWidth) + delta })
-  widthDraft.value = String(preview.viewportWidth || '')
-}
-
-function bumpViewportHeight(delta: number) {
-  preview.setViewportSize({ height: Number(preview.viewportHeight) + delta })
-  heightDraft.value = String(preview.viewportHeight || '')
-}
-
-function rotateViewport() {
-  const w = Number(preview.viewportWidth)
-  const h = Number(preview.viewportHeight)
-  if (!Number.isFinite(w) || !Number.isFinite(h)) return
-  preview.setViewportSize({ width: h, height: w })
-  widthDraft.value = String(preview.viewportWidth || '')
-  heightDraft.value = String(preview.viewportHeight || '')
-}
-
-function onWidthKeydown(event: KeyboardEvent) {
-  const step = event.shiftKey ? VIEWPORT_SIZE_FAST_STEP_PX : VIEWPORT_SIZE_STEP_PX
-  if (event.key === 'ArrowUp') {
-    event.preventDefault()
-    bumpViewportWidth(step)
-    return
-  }
-  if (event.key === 'ArrowDown') {
-    event.preventDefault()
-    bumpViewportWidth(-step)
-    return
-  }
-  if (event.key === 'Enter') {
-    event.preventDefault()
-    commitWidthDraft()
-    ;(event.currentTarget as HTMLInputElement | null)?.blur()
-    return
-  }
-  if (event.key === 'Escape') {
-    event.preventDefault()
-    widthDraft.value = String(preview.viewportWidth || '')
-    ;(event.currentTarget as HTMLInputElement | null)?.blur()
-  }
-}
-
-function onHeightKeydown(event: KeyboardEvent) {
-  const step = event.shiftKey ? VIEWPORT_SIZE_FAST_STEP_PX : VIEWPORT_SIZE_STEP_PX
-  if (event.key === 'ArrowUp') {
-    event.preventDefault()
-    bumpViewportHeight(step)
-    return
-  }
-  if (event.key === 'ArrowDown') {
-    event.preventDefault()
-    bumpViewportHeight(-step)
-    return
-  }
-  if (event.key === 'Enter') {
-    event.preventDefault()
-    commitHeightDraft()
-    ;(event.currentTarget as HTMLInputElement | null)?.blur()
-    return
-  }
-  if (event.key === 'Escape') {
-    event.preventDefault()
-    heightDraft.value = String(preview.viewportHeight || '')
-    ;(event.currentTarget as HTMLInputElement | null)?.blur()
-  }
-}
-
-function onWidthWheel(event: WheelEvent) {
-  const dy = Number(event.deltaY)
-  if (!Number.isFinite(dy) || dy === 0) return
-  event.preventDefault()
-  const step = event.shiftKey ? VIEWPORT_SIZE_FAST_STEP_PX : VIEWPORT_SIZE_STEP_PX
-  bumpViewportWidth(dy < 0 ? step : -step)
-}
-
-function onHeightWheel(event: WheelEvent) {
-  const dy = Number(event.deltaY)
-  if (!Number.isFinite(dy) || dy === 0) return
-  event.preventDefault()
-  const step = event.shiftKey ? VIEWPORT_SIZE_FAST_STEP_PX : VIEWPORT_SIZE_STEP_PX
-  bumpViewportHeight(dy < 0 ? step : -step)
-}
-
-function setViewportScale(next: number) {
-  preview.setViewportScale(clampViewportScale(next))
-}
-
-function zoomOut() {
-  setViewportScale(nextZoomOut(viewportScalePct.value))
-}
-
-function zoomIn() {
-  setViewportScale(nextZoomIn(viewportScalePct.value))
-}
-
-function resetZoom() {
-  setViewportScale(100)
-}
-
-function toggleViewportMode() {
-  preview.setViewport(preview.viewport === 'desktop' ? 'mobile' : 'desktop')
-}
-
-function openInNewWindow() {
-  if (!previewSrc.value) return
-  window.open(previewSrc.value, '_blank', 'noopener,noreferrer')
-}
-
-function toggleTouchSimulation() {
-  preview.setTouchSimulation(!preview.touchSimulation)
-}
+  clearSessionHealth()
+})
 
 function selectSession(sessionId: string) {
   preview.selectSession(sessionId)
   if (ui.isMobile) ui.setSessionSwitcherOpen(false)
+  probeVisibleSessions()
 }
 </script>
 
 <template>
-  <section class="oc-vscode-pane" :class="ui.isMobile ? 'border-0 rounded-none' : ''">
-    <div class="oc-vscode-pane-header">
-      <div class="flex min-w-0 items-center gap-2">
-        <div class="oc-vscode-pane-title">{{ t('workspaceDock.preview.tab') }}</div>
-        <span class="oc-vscode-count-badge" :title="String(preview.sessions.length)">{{
-          preview.sessions.length
-        }}</span>
-      </div>
+  <section
+    class="flex h-full min-h-0 flex-col bg-sidebar text-sidebar-foreground"
+    :class="ui.isMobile ? '' : 'border-r border-border'"
+  >
+    <div class="h-9 pt-1 select-none pl-3.5 pr-2 flex-shrink-0">
+      <div class="flex h-full items-center justify-between gap-2">
+        <div class="min-w-0 flex items-center gap-2">
+          <p class="typography-ui-label font-medium text-muted-foreground">
+            {{ t('workspaceDock.preview.sessionsTitle') }}
+            <span class="ml-1 font-mono text-[10px] text-muted-foreground/60"
+              >({{ preview.filteredSessions.length }})</span
+            >
+          </p>
+        </div>
 
-      <div class="oc-vscode-toolbar">
-        <SidebarIconButton
-          :active="preview.viewport === 'mobile'"
-          :tooltip="
-            preview.viewport === 'desktop'
-              ? String(t('workspaceDock.preview.viewportDesktop'))
-              : String(t('workspaceDock.preview.viewportMobile'))
-          "
-          :aria-label="
-            preview.viewport === 'desktop'
-              ? String(t('workspaceDock.preview.viewportDesktop'))
-              : String(t('workspaceDock.preview.viewportMobile'))
-          "
-          :is-mobile-pointer="ui.isMobilePointer"
-          @click="toggleViewportMode"
-        >
-          <RiComputerLine v-if="preview.viewport === 'desktop'" class="h-3.5 w-3.5" />
-          <RiSmartphoneLine v-else class="h-3.5 w-3.5" />
-        </SidebarIconButton>
+        <div class="flex items-center gap-1">
+          <IconButton
+            :tooltip="String(t('workspaceDock.preview.emptyState.addAction'))"
+            :aria-label="String(t('workspaceDock.preview.emptyState.addAction'))"
+            :is-mobile-pointer="ui.isMobilePointer"
+            :disabled="actionLoading"
+            @click="openCreateDialog"
+          >
+            <RiAddLine class="h-4 w-4" />
+          </IconButton>
 
-        <SidebarIconButton
-          v-if="touchSimulationSupported"
-          :active="touchSimulationEnabled"
-          :tooltip="
-            touchSimulationEnabled
-              ? String(t('workspaceDock.preview.touchSimulationOn'))
-              : String(t('workspaceDock.preview.touchSimulationOff'))
-          "
-          :aria-label="
-            touchSimulationEnabled
-              ? String(t('workspaceDock.preview.touchSimulationOn'))
-              : String(t('workspaceDock.preview.touchSimulationOff'))
-          "
-          :is-mobile-pointer="ui.isMobilePointer"
-          @click="toggleTouchSimulation"
-        >
-          <RiHand class="h-3.5 w-3.5" />
-        </SidebarIconButton>
-
-        <SidebarIconButton
-          :tooltip="String(t('workspaceDock.preview.refresh'))"
-          :aria-label="String(t('workspaceDock.preview.refresh'))"
-          :is-mobile-pointer="ui.isMobilePointer"
-          :disabled="preview.loading"
-          @click="refreshSessions({ forceFrameReload: true })"
-        >
-          <RiRefreshLine class="h-3.5 w-3.5" :class="preview.loading ? 'animate-spin' : ''" />
-        </SidebarIconButton>
-
-        <SidebarIconButton
-          :tooltip="String(t('workspaceDock.preview.openInWindow'))"
-          :aria-label="String(t('workspaceDock.preview.openInWindow'))"
-          :is-mobile-pointer="ui.isMobilePointer"
-          :disabled="!canOpenInWindow"
-          @click="openInNewWindow"
-        >
-          <RiExternalLinkLine class="h-3.5 w-3.5" />
-        </SidebarIconButton>
+          <IconButton
+            :tooltip="String(t('workspaceDock.preview.refresh'))"
+            :aria-label="String(t('workspaceDock.preview.refresh'))"
+            :is-mobile-pointer="ui.isMobilePointer"
+            :disabled="preview.loading"
+            @click="refreshSessions({ forceFrameReload: true })"
+          >
+            <RiRefreshLine class="h-4 w-4" :class="preview.loading ? 'animate-spin' : ''" />
+          </IconButton>
+        </div>
       </div>
     </div>
 
-    <div class="oc-vscode-section">
-      <div class="flex flex-wrap items-center justify-between gap-1.5 px-2 py-1">
-        <div class="flex flex-wrap items-center gap-1.5">
-          <input
-            v-model="widthDraft"
-            type="text"
-            inputmode="numeric"
-            pattern="[0-9]*"
-            class="h-5 w-[64px] rounded-sm border border-sidebar-border/70 bg-sidebar-accent/20 px-1.5 text-[11px] font-mono text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            :aria-label="String(t('workspaceDock.preview.viewportWidth'))"
-            :title="String(t('workspaceDock.preview.viewportWidth'))"
-            @focus="widthFocused = true"
-            @blur="onWidthBlur"
-            @input="commitWidthDraft"
-            @keydown="onWidthKeydown"
-            @wheel="onWidthWheel"
-          />
-          <span class="text-[11px] text-muted-foreground">x</span>
-          <input
-            v-model="heightDraft"
-            type="text"
-            inputmode="numeric"
-            pattern="[0-9]*"
-            class="h-5 w-[64px] rounded-sm border border-sidebar-border/70 bg-sidebar-accent/20 px-1.5 text-[11px] font-mono text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            :aria-label="String(t('workspaceDock.preview.viewportHeight'))"
-            :title="String(t('workspaceDock.preview.viewportHeight'))"
-            @focus="heightFocused = true"
-            @blur="onHeightBlur"
-            @input="commitHeightDraft"
-            @keydown="onHeightKeydown"
-            @wheel="onHeightWheel"
-          />
-          <SidebarIconButton
-            size="sm"
-            :tooltip="String(t('workspaceDock.preview.rotateViewport'))"
-            :aria-label="String(t('workspaceDock.preview.rotateViewport'))"
-            :is-mobile-pointer="ui.isMobilePointer"
-            @click="rotateViewport"
-          >
-            <RiAnticlockwiseLine class="h-3.5 w-3.5" />
-          </SidebarIconButton>
-        </div>
+    <div class="px-3 py-2 flex-shrink-0">
+      <SearchInput
+        :model-value="preview.sidebarQuery"
+        @update:model-value="(v) => (preview.sidebarQuery = String(v || ''))"
+        @search="() => {}"
+        @clear="() => {}"
+        :placeholder="String(t('workspaceDock.preview.sidebar.searchPlaceholder'))"
+        class="text-xs"
+        input-class="h-8 text-xs"
+        :input-aria-label="String(t('workspaceDock.preview.sidebar.searchAria'))"
+        :input-title="String(t('workspaceDock.preview.sidebar.searchAria'))"
+        :search-aria-label="String(t('common.search'))"
+        :search-title="String(t('common.search'))"
+        :clear-aria-label="String(t('common.clear'))"
+        :clear-title="String(t('common.clear'))"
+        :is-mobile-pointer="ui.isMobilePointer"
+      />
+    </div>
 
-        <div class="flex items-center gap-0.5">
-          <SidebarIconButton
-            size="sm"
-            :tooltip="String(t('workspaceDock.preview.zoomOut'))"
-            :aria-label="String(t('workspaceDock.preview.zoomOut'))"
-            :is-mobile-pointer="ui.isMobilePointer"
-            :disabled="viewportScalePct <= MIN_VIEWPORT_SCALE"
-            @click="zoomOut"
-          >
-            <RiSubtractLine class="h-3.5 w-3.5" />
-          </SidebarIconButton>
-
+    <div class="flex-1 min-h-0 overflow-x-hidden overflow-y-auto pb-2">
+      <div class="flex-shrink-0 border-t border-sidebar-border/60 bg-sidebar/95">
+        <div
+          :class="[
+            'group h-10 px-3 flex items-center justify-between gap-2 rounded-md transition-colors',
+            chatSectionOpen ? 'bg-secondary/30' : 'hover:bg-secondary/30 focus-within:bg-secondary/30',
+          ]"
+        >
           <button
             type="button"
-            class="h-5 rounded-sm border border-sidebar-border/70 bg-sidebar-accent/35 px-1 text-[10px] font-mono text-muted-foreground transition-colors hover:bg-sidebar-accent/50 hover:text-foreground"
-            :title="String(t('workspaceDock.preview.zoomReset'))"
-            :aria-label="String(t('workspaceDock.preview.zoomReset'))"
-            @click="resetZoom"
+            class="flex-1 h-full min-w-0 flex items-center gap-2 text-left rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+            :aria-expanded="chatSectionOpen"
+            :aria-label="String(t('workspaceDock.preview.sidebar.sections.chat.title'))"
+            @click="chatSectionOpen = !chatSectionOpen"
           >
-            {{ viewportScalePct }}%
+            <component
+              :is="chatSectionOpen ? RiArrowDownSLine : RiArrowRightSLine"
+              class="h-4 w-4 text-muted-foreground"
+            />
+            <span class="typography-ui-label font-medium text-muted-foreground">{{
+              t('workspaceDock.preview.sidebar.sections.chat.title')
+            }}</span>
           </button>
-
-          <SidebarIconButton
-            size="sm"
-            :tooltip="String(t('workspaceDock.preview.zoomIn'))"
-            :aria-label="String(t('workspaceDock.preview.zoomIn'))"
-            :is-mobile-pointer="ui.isMobilePointer"
-            :disabled="viewportScalePct >= MAX_VIEWPORT_SCALE"
-            @click="zoomIn"
-          >
-            <RiAddLine class="h-3.5 w-3.5" />
-          </SidebarIconButton>
-        </div>
-      </div>
-    </div>
-
-    <div class="oc-vscode-section">
-      <div class="flex items-center justify-between gap-2 px-2 py-1.5">
-        <div class="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-          {{ t('workspaceDock.preview.sessionsTitle') }}
-        </div>
-      </div>
-    </div>
-
-    <div class="flex-1 min-h-0 overflow-x-hidden overflow-y-auto px-1.5 py-1">
-      <div v-if="preview.loading && preview.sessions.length === 0" class="px-2 py-6 text-xs text-muted-foreground">
-        {{ t('workspaceDock.loading') }}
-      </div>
-      <div v-else-if="preview.sessions.length === 0" class="px-2 py-6 text-xs text-muted-foreground">
-        {{ t('workspaceDock.preview.states.noSessionsForScope') }}
-      </div>
-
-      <div v-else class="space-y-1 pb-1">
-        <ListItemFrame
-          v-for="session in preview.sessions"
-          :key="session.id"
-          :active="preview.activeSessionId === session.id"
-          density="compact"
-          @click="selectSession(session.id)"
-        >
-          <div class="flex min-w-0 items-center gap-2">
-            <div class="min-w-0 flex-1">
-              <div class="truncate text-[12px] font-medium text-foreground" :title="session.directory || session.id">
-                {{ sessionLabel(session) }}
-              </div>
-              <div class="truncate text-[11px] text-muted-foreground" :title="session.directory || session.id">
-                {{ session.directory || session.id }}
-              </div>
-            </div>
+          <div class="flex items-center gap-2 flex-shrink-0">
+            <span class="text-[11px] font-mono text-muted-foreground/70">{{ chatCount }}</span>
+            <SidebarPager
+              v-if="chatSectionOpen && chatPageCount > 1"
+              :page="chatSectionPage"
+              :page-count="chatPageCount"
+              :disabled="preview.loading"
+              :prev-label="String(t('common.previousPage'))"
+              :next-label="String(t('common.nextPage'))"
+              @update:page="(v) => (chatSectionPage = v)"
+            />
           </div>
+        </div>
 
-          <template #meta>
-            <span
-              class="rounded-full border border-sidebar-border/65 bg-sidebar-accent/35 px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em]"
+        <div v-if="chatSectionOpen" class="px-2 pb-2 animate-in fade-in-0 slide-in-from-top-1 duration-200">
+          <SidebarSectionSkeleton v-if="preview.loading && preview.sessions.length === 0" :rows="3" compact />
+          <div
+            v-else-if="!currentChatSessionId"
+            class="px-2 py-2 text-xs text-muted-foreground animate-in fade-in-0 duration-150"
+          >
+            {{ t('workspaceDock.preview.sidebar.sections.chat.emptyNoSession') }}
+          </div>
+          <div
+            v-else-if="sidebarQueryNorm && chatSessionsAll.length > 0 && chatCount === 0"
+            class="px-2 py-2 text-xs text-muted-foreground animate-in fade-in-0 duration-150"
+          >
+            {{ t('workspaceDock.preview.sidebar.noMatchingSessions') }}
+          </div>
+          <div
+            v-else-if="chatSessionsAll.length === 0"
+            class="px-2 py-2 text-xs text-muted-foreground animate-in fade-in-0 duration-150"
+          >
+            {{ t('workspaceDock.preview.sidebar.sections.chat.empty') }}
+          </div>
+          <div v-else class="space-y-1 pt-1 animate-in fade-in-0 duration-150">
+            <SidebarListItem
+              v-for="session in pagedChatSessions"
+              :key="session.id"
+              :active="preview.activeSessionId === session.id"
+              density="compact"
+              :actions-always-visible="ui.isMobilePointer"
+              @click="selectSession(session.id)"
             >
-              {{ session.state }}
-            </span>
-          </template>
-        </ListItemFrame>
+              <template #icon>
+                <span
+                  class="inline-flex h-1.5 w-1.5 rounded-full flex-shrink-0"
+                  :class="sessionDotClass(session)"
+                  :title="sessionDotLabel(session)"
+                  :aria-label="sessionDotLabel(session)"
+                />
+              </template>
+
+              <div class="flex w-full items-center min-w-0 gap-2">
+                <div class="flex-1 min-w-0 flex flex-col justify-center">
+                  <span class="truncate typography-ui-label w-full text-left" :title="preview.sessionLabel(session)">
+                    {{ preview.sessionLabel(session) }}
+                  </span>
+                  <span
+                    class="truncate typography-micro font-mono text-left text-muted-foreground/60 w-full"
+                    :title="session.directory || session.id"
+                  >
+                    {{ session.directory || session.id }}
+                  </span>
+                </div>
+              </div>
+
+              <template #actions>
+                <template v-if="ui.isMobilePointer">
+                  <ListItemOverflowActionButton
+                    mobile
+                    :label="String(t('common.actions'))"
+                    @trigger="(event) => openRowMenu(session.id, event)"
+                  />
+                </template>
+
+                <template v-else>
+                  <IconButton
+                    size="xs"
+                    class="text-muted-foreground hover:text-foreground hover:dark:bg-accent/40 hover:bg-primary/6"
+                    :tooltip="
+                      canEditTargetUrl(session)
+                        ? String(t('workspaceDock.preview.sidebar.actions.editUrl'))
+                        : String(t('workspaceDock.preview.sidebar.actions.editUrlUnavailable'))
+                    "
+                    :aria-label="String(t('workspaceDock.preview.sidebar.actions.editUrl'))"
+                    :disabled="editBusy || !canEditTargetUrl(session)"
+                    @click.stop="openEditDialog(session.id)"
+                  >
+                    <RiPencilLine class="h-4 w-4" />
+                  </IconButton>
+
+                  <ConfirmPopover
+                    variant="destructive"
+                    :title="String(t('workspaceDock.preview.sidebar.actions.deleteConfirmTitle'))"
+                    :description="String(t('workspaceDock.preview.sidebar.actions.deleteConfirmDescription'))"
+                    :confirm-text="String(t('common.delete'))"
+                    :cancel-text="String(t('common.cancel'))"
+                    @confirm="() => preview.deleteSession(session.id)"
+                  >
+                    <IconButton
+                      size="xs"
+                      class="text-muted-foreground hover:text-destructive hover:dark:bg-accent/40 hover:bg-primary/6"
+                      :title="String(t('common.delete'))"
+                      :aria-label="String(t('common.delete'))"
+                      @click.stop
+                    >
+                      <RiDeleteBinLine class="h-4 w-4" />
+                    </IconButton>
+                  </ConfirmPopover>
+                </template>
+              </template>
+            </SidebarListItem>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex-shrink-0 border-t border-sidebar-border/60 bg-sidebar/95">
+        <div
+          :class="[
+            'group h-10 px-3 flex items-center justify-between gap-2 rounded-md transition-colors',
+            directorySectionOpen ? 'bg-secondary/30' : 'hover:bg-secondary/30 focus-within:bg-secondary/30',
+          ]"
+        >
+          <button
+            type="button"
+            class="flex-1 h-full min-w-0 flex items-center gap-2 text-left rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+            :aria-expanded="directorySectionOpen"
+            :aria-label="String(t('workspaceDock.preview.sidebar.sections.directory.title'))"
+            @click="directorySectionOpen = !directorySectionOpen"
+          >
+            <component
+              :is="directorySectionOpen ? RiArrowDownSLine : RiArrowRightSLine"
+              class="h-4 w-4 text-muted-foreground"
+            />
+            <span class="typography-ui-label font-medium text-muted-foreground">{{
+              t('workspaceDock.preview.sidebar.sections.directory.title')
+            }}</span>
+          </button>
+          <div class="flex items-center gap-2 flex-shrink-0">
+            <span class="text-[11px] font-mono text-muted-foreground/70">{{ directoryCount }}</span>
+            <SidebarPager
+              v-if="directorySectionOpen && directoryPageCount > 1"
+              :page="directorySectionPage"
+              :page-count="directoryPageCount"
+              :disabled="preview.loading"
+              :prev-label="String(t('common.previousPage'))"
+              :next-label="String(t('common.nextPage'))"
+              @update:page="(v) => (directorySectionPage = v)"
+            />
+          </div>
+        </div>
+
+        <div v-if="directorySectionOpen" class="px-2 pb-2 animate-in fade-in-0 slide-in-from-top-1 duration-200">
+          <SidebarSectionSkeleton v-if="preview.loading && preview.sessions.length === 0" :rows="3" compact />
+          <div
+            v-else-if="!currentDirectoryNorm"
+            class="px-2 py-2 text-xs text-muted-foreground animate-in fade-in-0 duration-150"
+          >
+            {{ t('workspaceDock.preview.sidebar.sections.directory.emptyNoDirectory') }}
+          </div>
+          <div
+            v-else-if="sidebarQueryNorm && directorySessionsAll.length > 0 && directoryCount === 0"
+            class="px-2 py-2 text-xs text-muted-foreground animate-in fade-in-0 duration-150"
+          >
+            {{ t('workspaceDock.preview.sidebar.noMatchingSessions') }}
+          </div>
+          <div
+            v-else-if="directorySessionsAll.length === 0"
+            class="px-2 py-2 text-xs text-muted-foreground animate-in fade-in-0 duration-150"
+          >
+            {{ t('workspaceDock.preview.sidebar.sections.directory.empty') }}
+          </div>
+          <div v-else class="space-y-1 pt-1 animate-in fade-in-0 duration-150">
+            <SidebarListItem
+              v-for="session in pagedDirectorySessions"
+              :key="session.id"
+              :active="preview.activeSessionId === session.id"
+              density="compact"
+              :actions-always-visible="ui.isMobilePointer"
+              @click="selectSession(session.id)"
+            >
+              <template #icon>
+                <span
+                  class="inline-flex h-1.5 w-1.5 rounded-full flex-shrink-0"
+                  :class="sessionDotClass(session)"
+                  :title="sessionDotLabel(session)"
+                  :aria-label="sessionDotLabel(session)"
+                />
+              </template>
+
+              <div class="flex w-full items-center min-w-0 gap-2">
+                <div class="flex-1 min-w-0 flex flex-col justify-center">
+                  <span class="truncate typography-ui-label w-full text-left" :title="preview.sessionLabel(session)">
+                    {{ preview.sessionLabel(session) }}
+                  </span>
+                  <span
+                    class="truncate typography-micro font-mono text-left text-muted-foreground/60 w-full"
+                    :title="session.directory || session.id"
+                  >
+                    {{ session.directory || session.id }}
+                  </span>
+                </div>
+              </div>
+
+              <template #actions>
+                <template v-if="ui.isMobilePointer">
+                  <ListItemOverflowActionButton
+                    mobile
+                    :label="String(t('common.actions'))"
+                    @trigger="(event) => openRowMenu(session.id, event)"
+                  />
+                </template>
+
+                <template v-else>
+                  <IconButton
+                    size="xs"
+                    class="text-muted-foreground hover:text-foreground hover:dark:bg-accent/40 hover:bg-primary/6"
+                    :tooltip="
+                      canEditTargetUrl(session)
+                        ? String(t('workspaceDock.preview.sidebar.actions.editUrl'))
+                        : String(t('workspaceDock.preview.sidebar.actions.editUrlUnavailable'))
+                    "
+                    :aria-label="String(t('workspaceDock.preview.sidebar.actions.editUrl'))"
+                    :disabled="editBusy || !canEditTargetUrl(session)"
+                    @click.stop="openEditDialog(session.id)"
+                  >
+                    <RiPencilLine class="h-4 w-4" />
+                  </IconButton>
+
+                  <ConfirmPopover
+                    variant="destructive"
+                    :title="String(t('workspaceDock.preview.sidebar.actions.deleteConfirmTitle'))"
+                    :description="String(t('workspaceDock.preview.sidebar.actions.deleteConfirmDescription'))"
+                    :confirm-text="String(t('common.delete'))"
+                    :cancel-text="String(t('common.cancel'))"
+                    @confirm="() => preview.deleteSession(session.id)"
+                  >
+                    <IconButton
+                      size="xs"
+                      class="text-muted-foreground hover:text-destructive hover:dark:bg-accent/40 hover:bg-primary/6"
+                      :title="String(t('common.delete'))"
+                      :aria-label="String(t('common.delete'))"
+                      @click.stop
+                    >
+                      <RiDeleteBinLine class="h-4 w-4" />
+                    </IconButton>
+                  </ConfirmPopover>
+                </template>
+              </template>
+            </SidebarListItem>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex-shrink-0 border-t border-sidebar-border/60 bg-sidebar/95">
+        <div
+          :class="[
+            'group h-10 px-3 flex items-center justify-between gap-2 rounded-md transition-colors',
+            allSectionOpen ? 'bg-secondary/30' : 'hover:bg-secondary/30 focus-within:bg-secondary/30',
+          ]"
+        >
+          <button
+            type="button"
+            class="flex-1 h-full min-w-0 flex items-center gap-2 text-left rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+            :aria-expanded="allSectionOpen"
+            :aria-label="String(t('workspaceDock.preview.sidebar.sections.all.title'))"
+            @click="allSectionOpen = !allSectionOpen"
+          >
+            <component
+              :is="allSectionOpen ? RiArrowDownSLine : RiArrowRightSLine"
+              class="h-4 w-4 text-muted-foreground"
+            />
+            <span class="typography-ui-label font-medium text-muted-foreground">{{
+              t('workspaceDock.preview.sidebar.sections.all.title')
+            }}</span>
+          </button>
+          <div class="flex items-center gap-2 flex-shrink-0">
+            <span class="text-[11px] font-mono text-muted-foreground/70">{{ allCount }}</span>
+            <SidebarPager
+              v-if="allSectionOpen && allPageCount > 1"
+              :page="allSectionPage"
+              :page-count="allPageCount"
+              :disabled="preview.loading"
+              :prev-label="String(t('common.previousPage'))"
+              :next-label="String(t('common.nextPage'))"
+              @update:page="(v) => (allSectionPage = v)"
+            />
+          </div>
+        </div>
+
+        <div v-if="allSectionOpen" class="px-2 pb-2 animate-in fade-in-0 slide-in-from-top-1 duration-200">
+          <SidebarSectionSkeleton v-if="preview.loading && preview.sessions.length === 0" :rows="3" compact />
+          <div
+            v-else-if="sidebarQueryNorm && allSessionsAll.length > 0 && allCount === 0"
+            class="px-2 py-2 text-xs text-muted-foreground animate-in fade-in-0 duration-150"
+          >
+            {{ t('workspaceDock.preview.sidebar.noMatchingSessions') }}
+          </div>
+          <div
+            v-else-if="allSessionsAll.length === 0"
+            class="px-2 py-2 text-xs text-muted-foreground animate-in fade-in-0 duration-150"
+          >
+            {{ t('workspaceDock.preview.sidebar.sections.all.empty') }}
+          </div>
+          <div v-else class="space-y-1 pt-1 animate-in fade-in-0 duration-150">
+            <SidebarListItem
+              v-for="session in pagedAllSessions"
+              :key="session.id"
+              :active="preview.activeSessionId === session.id"
+              density="compact"
+              :actions-always-visible="ui.isMobilePointer"
+              @click="selectSession(session.id)"
+            >
+              <template #icon>
+                <span
+                  class="inline-flex h-1.5 w-1.5 rounded-full flex-shrink-0"
+                  :class="sessionDotClass(session)"
+                  :title="sessionDotLabel(session)"
+                  :aria-label="sessionDotLabel(session)"
+                />
+              </template>
+
+              <div class="flex w-full items-center min-w-0 gap-2">
+                <div class="flex-1 min-w-0 flex flex-col justify-center">
+                  <span class="truncate typography-ui-label w-full text-left" :title="preview.sessionLabel(session)">
+                    {{ preview.sessionLabel(session) }}
+                  </span>
+                  <span
+                    class="truncate typography-micro font-mono text-left text-muted-foreground/60 w-full"
+                    :title="session.directory || session.id"
+                  >
+                    {{ session.directory || session.id }}
+                  </span>
+                </div>
+              </div>
+
+              <template #actions>
+                <template v-if="ui.isMobilePointer">
+                  <ListItemOverflowActionButton
+                    mobile
+                    :label="String(t('common.actions'))"
+                    @trigger="(event) => openRowMenu(session.id, event)"
+                  />
+                </template>
+
+                <template v-else>
+                  <IconButton
+                    size="xs"
+                    class="text-muted-foreground hover:text-foreground hover:dark:bg-accent/40 hover:bg-primary/6"
+                    :tooltip="
+                      canEditTargetUrl(session)
+                        ? String(t('workspaceDock.preview.sidebar.actions.editUrl'))
+                        : String(t('workspaceDock.preview.sidebar.actions.editUrlUnavailable'))
+                    "
+                    :aria-label="String(t('workspaceDock.preview.sidebar.actions.editUrl'))"
+                    :disabled="editBusy || !canEditTargetUrl(session)"
+                    @click.stop="openEditDialog(session.id)"
+                  >
+                    <RiPencilLine class="h-4 w-4" />
+                  </IconButton>
+
+                  <ConfirmPopover
+                    variant="destructive"
+                    :title="String(t('workspaceDock.preview.sidebar.actions.deleteConfirmTitle'))"
+                    :description="String(t('workspaceDock.preview.sidebar.actions.deleteConfirmDescription'))"
+                    :confirm-text="String(t('common.delete'))"
+                    :cancel-text="String(t('common.cancel'))"
+                    @confirm="() => preview.deleteSession(session.id)"
+                  >
+                    <IconButton
+                      size="xs"
+                      class="text-muted-foreground hover:text-destructive hover:dark:bg-accent/40 hover:bg-primary/6"
+                      :title="String(t('common.delete'))"
+                      :aria-label="String(t('common.delete'))"
+                      @click.stop
+                    >
+                      <RiDeleteBinLine class="h-4 w-4" />
+                    </IconButton>
+                  </ConfirmPopover>
+                </template>
+              </template>
+            </SidebarListItem>
+          </div>
+        </div>
       </div>
     </div>
+
+    <OptionMenu
+      :open="rowMenuOpen"
+      :groups="rowMenuGroups"
+      :title="String(t('common.actions'))"
+      :mobile-title="String(t('common.actions'))"
+      :searchable="false"
+      :is-mobile-pointer="ui.isMobilePointer"
+      desktop-placement="bottom-end"
+      :desktop-anchor-el="rowMenuAnchorEl"
+      @update:open="setRowMenuOpen"
+      @select="onRowMenuSelect"
+    />
+
+    <FormDialog
+      :open="createDialogOpen"
+      :title="String(t('workspaceDock.preview.addDialog.title'))"
+      :description="String(t('workspaceDock.preview.addDialog.description'))"
+      max-width="max-w-md"
+      @close="createDialogOpen = false"
+      @update:open="createDialogOpen = $event"
+    >
+      <div class="space-y-3">
+        <div class="space-y-1">
+          <label
+            class="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground"
+            for="workspace-preview-id-sidebar-dialog"
+          >
+            {{ t('workspaceDock.preview.emptyState.sessionIdLabel') }}
+          </label>
+          <Input
+            id="workspace-preview-id-sidebar-dialog"
+            v-model="createPreviewId"
+            type="text"
+            autocapitalize="off"
+            autocomplete="off"
+            spellcheck="false"
+            :placeholder="String(t('workspaceDock.preview.emptyState.sessionIdPlaceholder'))"
+            :disabled="actionLoading"
+            class="h-8 bg-background/80 text-xs font-mono"
+            @keydown.enter.prevent="createManagedSession"
+          />
+          <p class="text-[11px] text-muted-foreground">
+            {{ t('workspaceDock.preview.emptyState.sessionIdHelp') }}
+          </p>
+        </div>
+
+        <div class="space-y-1">
+          <label
+            class="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground"
+            for="workspace-preview-target-url-sidebar-dialog"
+          >
+            {{ t('workspaceDock.preview.emptyState.targetUrlLabel') }}
+          </label>
+          <Input
+            id="workspace-preview-target-url-sidebar-dialog"
+            v-model="createTargetUrl"
+            type="url"
+            :placeholder="String(t('workspaceDock.preview.emptyState.targetUrlPlaceholder'))"
+            :disabled="actionLoading"
+            class="h-8 bg-background/80 text-xs"
+            @keydown.enter.prevent="createManagedSession"
+          />
+        </div>
+
+        <p class="truncate text-[11px] text-muted-foreground">
+          {{ t('workspaceDock.preview.directoryLabel') }}
+          <span class="font-mono">{{ currentDirectory || t('workspaceDock.preview.emptyState.directoryEmpty') }}</span>
+        </p>
+
+        <p v-if="actionError" class="text-xs text-destructive">{{ actionError }}</p>
+
+        <div class="flex items-center justify-end gap-2 pt-1">
+          <Button size="sm" variant="outline" :disabled="actionLoading" @click="createDialogOpen = false">
+            {{ t('common.cancel') }}
+          </Button>
+          <Button
+            size="sm"
+            :disabled="
+              actionLoading ||
+              !currentDirectory.trim() ||
+              !createPreviewIdNorm.trim() ||
+              !createPreviewIdValid ||
+              !createTargetUrl.trim()
+            "
+            @click="createManagedSession"
+          >
+            {{ t('workspaceDock.preview.emptyState.addAction') }}
+          </Button>
+        </div>
+      </div>
+    </FormDialog>
+
+    <FormDialog
+      :open="editDialogOpen"
+      :title="String(t('workspaceDock.preview.editDialog.title'))"
+      :description="String(t('workspaceDock.preview.editDialog.description'))"
+      max-width="max-w-md"
+      @close="editDialogOpen = false"
+      @update:open="editDialogOpen = $event"
+    >
+      <div class="space-y-3">
+        <div class="space-y-1">
+          <label
+            class="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground"
+            for="workspace-preview-edit-target-url"
+          >
+            {{ t('workspaceDock.preview.emptyState.targetUrlLabel') }}
+          </label>
+          <Input
+            id="workspace-preview-edit-target-url"
+            v-model="editTargetUrl"
+            type="url"
+            :disabled="editBusy"
+            class="h-8 bg-background/80 text-xs"
+            @keydown.enter.prevent="saveEditDialog"
+          />
+        </div>
+
+        <p v-if="editError" class="text-xs text-destructive">{{ editError }}</p>
+
+        <div class="flex items-center justify-end gap-2 pt-1">
+          <Button size="sm" variant="outline" :disabled="editBusy" @click="editDialogOpen = false">
+            {{ t('common.cancel') }}
+          </Button>
+          <Button size="sm" :disabled="editBusy || !editTargetUrl.trim()" @click="saveEditDialog">
+            {{ t('common.save') }}
+          </Button>
+        </div>
+      </div>
+    </FormDialog>
   </section>
 </template>

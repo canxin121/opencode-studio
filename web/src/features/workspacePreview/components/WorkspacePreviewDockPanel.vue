@@ -19,11 +19,11 @@ import Button from '@/components/ui/Button.vue'
 import IconButton from '@/components/ui/IconButton.vue'
 import Input from '@/components/ui/Input.vue'
 import OptionMenu from '@/components/ui/OptionMenu.vue'
+import FormDialog from '@/components/ui/FormDialog.vue'
 import type { OptionMenuGroup, OptionMenuItem } from '@/components/ui/optionMenu.types'
 import { apiUrl } from '@/lib/api'
 import {
   createWorkspacePreviewSession,
-  discoverWorkspacePreviewSession,
   type WorkspacePreviewSession,
 } from '@/features/workspacePreview/api/workspacePreviewApi'
 import { buildPreviewFrameSrc } from '@/features/workspacePreview/model/previewUrl'
@@ -41,18 +41,26 @@ const preview = useWorkspacePreviewStore()
 
 type PreviewViewerMode = 'fill' | 'responsive'
 
+type PreviewControlsVariant = 'full' | 'viewport'
+
 const props = withDefaults(
   defineProps<{
     showControls?: boolean
+    controlsVariant?: PreviewControlsVariant
     viewerMode?: PreviewViewerMode
   }>(),
   {
     showControls: true,
+    controlsVariant: 'full',
     viewerMode: 'fill',
   },
 )
 
 const controlsVisible = computed(() => props.showControls !== false)
+
+const controlsVariant = computed<PreviewControlsVariant>(() =>
+  props.controlsVariant === 'viewport' ? 'viewport' : 'full',
+)
 
 const viewerMode = computed<PreviewViewerMode>(() => (props.viewerMode === 'responsive' ? 'responsive' : 'fill'))
 
@@ -689,8 +697,10 @@ async function keepIframeCenterOnZoom() {
 const frameSrc = shallowRef('')
 const iframeLoading = ref(false)
 const iframeError = ref('')
+const createPreviewId = ref('')
 const createTargetUrl = ref('')
-const actionLoading = ref<'create' | 'discover' | ''>('')
+const createDialogOpen = ref(false)
+const actionLoading = ref<'create' | ''>('')
 const actionError = ref('')
 const sessionMenuOpen = ref(false)
 const sessionMenuQuery = ref('')
@@ -716,11 +726,21 @@ const opencodeSessionId = computed(() => {
   if (path.startsWith('/preview')) return ''
   return String(chat.selectedSessionId || '').trim()
 })
-const canCreateSession = computed(() => Boolean(createTargetUrl.value.trim() && !actionLoading.value))
-const canDiscoverSession = computed(() => Boolean(!actionLoading.value))
+
+const createPreviewIdNorm = computed(() => String(createPreviewId.value || '').trim())
+const createPreviewIdValid = computed(() => /^[A-Za-z0-9_-]+$/.test(createPreviewIdNorm.value))
+
+const canCreateSession = computed(() =>
+  Boolean(
+    currentDirectory.value.trim() &&
+    createPreviewIdNorm.value &&
+    createPreviewIdValid.value &&
+    createTargetUrl.value.trim() &&
+    !actionLoading.value,
+  ),
+)
 const actionLoadingMessage = computed(() => {
   if (actionLoading.value === 'create') return String(t('workspaceDock.preview.emptyState.createLoading'))
-  if (actionLoading.value === 'discover') return String(t('workspaceDock.preview.emptyState.discoverLoading'))
   return ''
 })
 
@@ -776,12 +796,23 @@ const sessionMenuGroups = computed<OptionMenuGroup[]>(() => [
 ])
 
 function sessionLabel(session: WorkspacePreviewSession): string {
-  const directory = String(session.directory || '')
+  return String(session.id || '').trim()
+}
+
+function suggestPreviewIdFromDirectory(directory: string): string {
+  const trimmed = String(directory || '')
     .trim()
     .replace(/[\\/]+$/, '')
-  if (!directory) return session.id
-  const parts = directory.split(/[\\/]/).filter(Boolean)
-  return parts[parts.length - 1] || directory
+  if (!trimmed) return ''
+  const parts = trimmed.split(/[\\/]/).filter(Boolean)
+  const base = String(parts[parts.length - 1] || '').trim()
+  if (!base) return ''
+  const normalized = base
+    .replace(/\s+/g, '-')
+    .replace(/[^A-Za-z0-9_-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^[-_]+|[-_]+$/g, '')
+  return normalized
 }
 
 function extractProxyErrorDetail(raw: string, contentType: string): string {
@@ -891,6 +922,20 @@ async function selectSessionAfterAction(session: WorkspacePreviewSession) {
 }
 
 async function createManagedSession() {
+  if (!currentDirectory.value.trim()) {
+    actionError.value = String(t('workspaceDock.preview.emptyState.directoryRequired'))
+    return
+  }
+
+  if (!createPreviewIdNorm.value) {
+    actionError.value = String(t('workspaceDock.preview.emptyState.sessionIdRequired'))
+    return
+  }
+  if (!createPreviewIdValid.value) {
+    actionError.value = String(t('workspaceDock.preview.emptyState.sessionIdInvalid'))
+    return
+  }
+
   const targetUrl = createTargetUrl.value.trim()
   if (!targetUrl) {
     actionError.value = String(t('workspaceDock.preview.emptyState.targetUrlRequired'))
@@ -900,9 +945,16 @@ async function createManagedSession() {
   actionLoading.value = 'create'
   actionError.value = ''
   try {
-    const session = await createWorkspacePreviewSession(currentDirectory.value, targetUrl, opencodeSessionId.value)
+    const session = await createWorkspacePreviewSession(
+      createPreviewIdNorm.value,
+      currentDirectory.value,
+      targetUrl,
+      opencodeSessionId.value,
+    )
+    createPreviewId.value = ''
     createTargetUrl.value = ''
     await selectSessionAfterAction(session)
+    createDialogOpen.value = false
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err)
     actionError.value = String(t('workspaceDock.preview.emptyState.createFailed', { detail }))
@@ -911,18 +963,12 @@ async function createManagedSession() {
   }
 }
 
-async function discoverManagedSession() {
-  actionLoading.value = 'discover'
+function openCreateDialog() {
   actionError.value = ''
-  try {
-    const session = await discoverWorkspacePreviewSession(currentDirectory.value, opencodeSessionId.value)
-    await selectSessionAfterAction(session)
-  } catch (err) {
-    const detail = err instanceof Error ? err.message : String(err)
-    actionError.value = String(t('workspaceDock.preview.emptyState.discoverFailed', { detail }))
-  } finally {
-    actionLoading.value = ''
+  if (!createPreviewIdNorm.value) {
+    createPreviewId.value = suggestPreviewIdFromDirectory(currentDirectory.value)
   }
+  createDialogOpen.value = true
 }
 
 function setSessionMenuOpen(open: boolean) {
@@ -1033,7 +1079,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="flex h-full min-h-0 flex-col gap-2 p-3">
     <div v-if="controlsVisible" class="rounded-md border border-sidebar-border/70 bg-sidebar-accent/20 p-2">
-      <div class="relative flex items-center gap-1.5">
+      <div v-if="controlsVariant === 'full'" class="relative flex items-center gap-1.5">
         <button
           type="button"
           class="inline-flex h-8 min-w-0 flex-1 items-center justify-between gap-2 rounded-md border-0 bg-transparent px-1.5 text-xs text-foreground transition-colors hover:bg-sidebar-accent/35 disabled:cursor-not-allowed disabled:opacity-60"
@@ -1047,6 +1093,17 @@ onBeforeUnmount(() => {
 
         <div class="flex h-8 items-center gap-0.5">
           <IconButton
+            size="sm"
+            :tooltip="String(t('workspaceDock.preview.emptyState.addAction'))"
+            :aria-label="String(t('workspaceDock.preview.emptyState.addAction'))"
+            :disabled="Boolean(actionLoading)"
+            @click="openCreateDialog"
+          >
+            <RiAddLine class="h-4 w-4" />
+          </IconButton>
+
+          <IconButton
+            v-if="viewerMode !== 'responsive'"
             size="sm"
             class="transition-colors"
             :class="preview.viewport === 'mobile' ? 'bg-sidebar-accent/70 text-foreground shadow-inner' : ''"
@@ -1068,27 +1125,6 @@ onBeforeUnmount(() => {
           </IconButton>
 
           <IconButton
-            v-if="touchSimulationSupported"
-            size="sm"
-            class="transition-colors"
-            :class="touchSimulationEnabled ? 'bg-sidebar-accent/70 text-foreground shadow-inner' : ''"
-            :aria-pressed="touchSimulationEnabled"
-            :tooltip="
-              touchSimulationEnabled
-                ? String(t('workspaceDock.preview.touchSimulationOn'))
-                : String(t('workspaceDock.preview.touchSimulationOff'))
-            "
-            :aria-label="
-              touchSimulationEnabled
-                ? String(t('workspaceDock.preview.touchSimulationOn'))
-                : String(t('workspaceDock.preview.touchSimulationOff'))
-            "
-            @click="toggleTouchSimulation"
-          >
-            <RiHand class="h-4 w-4" />
-          </IconButton>
-
-          <IconButton
             size="sm"
             :tooltip="String(t('workspaceDock.preview.refresh'))"
             :aria-label="String(t('workspaceDock.preview.refresh'))"
@@ -1098,6 +1134,7 @@ onBeforeUnmount(() => {
             <RiRefreshLine class="h-4 w-4" />
           </IconButton>
           <IconButton
+            v-if="viewerMode !== 'responsive'"
             size="sm"
             :tooltip="String(t('workspaceDock.preview.openInWindow'))"
             :aria-label="String(t('workspaceDock.preview.openInWindow'))"
@@ -1127,7 +1164,11 @@ onBeforeUnmount(() => {
         />
       </div>
 
-      <div v-if="viewerMode === 'responsive'" class="mt-1 flex flex-wrap items-center justify-between gap-1.5">
+      <div
+        v-if="viewerMode === 'responsive'"
+        class="flex flex-wrap items-center justify-between gap-1.5"
+        :class="controlsVariant === 'full' ? 'mt-1' : ''"
+      >
         <div class="flex flex-wrap items-center gap-1.5">
           <input
             v-model="widthDraft"
@@ -1171,6 +1212,58 @@ onBeforeUnmount(() => {
         <div class="flex items-center gap-0.5">
           <IconButton
             size="xs"
+            class="transition-colors"
+            :class="preview.viewport === 'mobile' ? 'bg-sidebar-accent/70 text-foreground shadow-inner' : ''"
+            :aria-pressed="preview.viewport === 'mobile'"
+            :tooltip="
+              preview.viewport === 'desktop'
+                ? String(t('workspaceDock.preview.viewportDesktop'))
+                : String(t('workspaceDock.preview.viewportMobile'))
+            "
+            :aria-label="
+              preview.viewport === 'desktop'
+                ? String(t('workspaceDock.preview.viewportDesktop'))
+                : String(t('workspaceDock.preview.viewportMobile'))
+            "
+            @click="preview.setViewport(preview.viewport === 'desktop' ? 'mobile' : 'desktop')"
+          >
+            <RiComputerLine v-if="preview.viewport === 'desktop'" class="h-4 w-4" />
+            <RiSmartphoneLine v-else class="h-4 w-4" />
+          </IconButton>
+
+          <IconButton
+            v-if="touchSimulationSupported"
+            size="xs"
+            class="transition-colors"
+            :class="touchSimulationEnabled ? 'bg-sidebar-accent/70 text-foreground shadow-inner' : ''"
+            :aria-pressed="touchSimulationEnabled"
+            :tooltip="
+              touchSimulationEnabled
+                ? String(t('workspaceDock.preview.touchSimulationOn'))
+                : String(t('workspaceDock.preview.touchSimulationOff'))
+            "
+            :aria-label="
+              touchSimulationEnabled
+                ? String(t('workspaceDock.preview.touchSimulationOn'))
+                : String(t('workspaceDock.preview.touchSimulationOff'))
+            "
+            @click="toggleTouchSimulation"
+          >
+            <RiHand class="h-4 w-4" />
+          </IconButton>
+
+          <IconButton
+            size="xs"
+            :tooltip="String(t('workspaceDock.preview.openInWindow'))"
+            :aria-label="String(t('workspaceDock.preview.openInWindow'))"
+            :disabled="!canOpenInWindow"
+            @click="openInNewWindow"
+          >
+            <RiExternalLinkLine class="h-4 w-4" />
+          </IconButton>
+
+          <IconButton
+            size="xs"
             :tooltip="String(t('workspaceDock.preview.zoomOut'))"
             :aria-label="String(t('workspaceDock.preview.zoomOut'))"
             :disabled="headerViewportScalePct <= MIN_VIEWPORT_SCALE"
@@ -1200,6 +1293,80 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
+    <FormDialog
+      :open="createDialogOpen"
+      :title="String(t('workspaceDock.preview.addDialog.title'))"
+      :description="String(t('workspaceDock.preview.addDialog.description'))"
+      max-width="max-w-md"
+      @close="createDialogOpen = false"
+      @update:open="createDialogOpen = $event"
+    >
+      <div class="space-y-3">
+        <div class="space-y-1">
+          <label
+            class="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground"
+            for="workspace-preview-id-dialog"
+          >
+            {{ t('workspaceDock.preview.emptyState.sessionIdLabel') }}
+          </label>
+          <Input
+            id="workspace-preview-id-dialog"
+            v-model="createPreviewId"
+            type="text"
+            autocapitalize="off"
+            autocomplete="off"
+            spellcheck="false"
+            :placeholder="String(t('workspaceDock.preview.emptyState.sessionIdPlaceholder'))"
+            :disabled="Boolean(actionLoading)"
+            class="h-8 bg-background/80 text-xs font-mono"
+            @keydown.enter.prevent="createManagedSession"
+          />
+          <p class="text-[11px] text-muted-foreground">
+            {{ t('workspaceDock.preview.emptyState.sessionIdHelp') }}
+          </p>
+        </div>
+
+        <div class="space-y-1">
+          <label
+            class="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground"
+            for="workspace-preview-target-url-dialog"
+          >
+            {{ t('workspaceDock.preview.emptyState.targetUrlLabel') }}
+          </label>
+          <Input
+            id="workspace-preview-target-url-dialog"
+            v-model="createTargetUrl"
+            type="url"
+            :placeholder="String(t('workspaceDock.preview.emptyState.targetUrlPlaceholder'))"
+            :disabled="Boolean(actionLoading)"
+            class="h-8 bg-background/80 text-xs"
+            @keydown.enter.prevent="createManagedSession"
+          />
+        </div>
+
+        <p class="truncate text-[11px] text-muted-foreground">
+          {{ t('workspaceDock.preview.directoryLabel') }}
+          <span class="font-mono">{{ currentDirectory || t('workspaceDock.preview.emptyState.directoryEmpty') }}</span>
+        </p>
+
+        <p v-if="actionError" class="text-xs text-destructive">{{ actionError }}</p>
+
+        <div class="flex items-center justify-end gap-2 pt-1">
+          <Button size="sm" variant="outline" :disabled="Boolean(actionLoading)" @click="createDialogOpen = false">
+            {{ t('common.cancel') }}
+          </Button>
+          <Button size="sm" :disabled="!canCreateSession" @click="createManagedSession">
+            {{ t('workspaceDock.preview.emptyState.addAction') }}
+          </Button>
+        </div>
+
+        <p v-if="actionLoadingMessage" class="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+          <RiLoader4Line class="h-3.5 w-3.5 animate-spin" />
+          {{ actionLoadingMessage }}
+        </p>
+      </div>
+    </FormDialog>
+
     <div class="relative min-h-0 flex-1 overflow-hidden rounded-md border border-sidebar-border/65 bg-background/80">
       <div v-if="showEmptyState" class="flex h-full items-center justify-center p-4 text-center">
         <div
@@ -1207,47 +1374,12 @@ onBeforeUnmount(() => {
         >
           <p class="text-sm font-medium">{{ emptyStateTitle }}</p>
           <p class="mt-1 text-xs text-muted-foreground">{{ emptyStateDescription }}</p>
-          <div class="mt-3 space-y-2">
-            <div class="space-y-1">
-              <label
-                class="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground"
-                for="workspace-preview-target-url"
-              >
-                {{ t('workspaceDock.preview.emptyState.targetUrlLabel') }}
-              </label>
-              <Input
-                id="workspace-preview-target-url"
-                v-model="createTargetUrl"
-                type="url"
-                :placeholder="String(t('workspaceDock.preview.emptyState.targetUrlPlaceholder'))"
-                :disabled="Boolean(actionLoading)"
-                class="h-8 bg-background/80 text-xs"
-                @keydown.enter.prevent="createManagedSession"
-              />
-            </div>
-
-            <p class="truncate text-[11px] text-muted-foreground">
-              {{ t('workspaceDock.preview.directoryLabel') }}
-              <span class="font-mono">{{
-                currentDirectory || t('workspaceDock.preview.emptyState.directoryEmpty')
-              }}</span>
-            </p>
-
-            <div class="flex flex-wrap gap-2">
-              <Button size="sm" :disabled="!canCreateSession" @click="createManagedSession">
-                {{ t('workspaceDock.preview.emptyState.addAction') }}
-              </Button>
-              <Button size="sm" variant="outline" :disabled="!canDiscoverSession" @click="discoverManagedSession">
-                {{ t('workspaceDock.preview.emptyState.autoDetectAction') }}
-              </Button>
-            </div>
-
-            <p v-if="actionLoadingMessage" class="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-              <RiLoader4Line class="h-3.5 w-3.5 animate-spin" />
-              {{ actionLoadingMessage }}
-            </p>
-            <p v-else-if="actionError" class="text-xs text-destructive">{{ actionError }}</p>
-          </div>
+          <p class="mt-3 truncate text-[11px] text-muted-foreground">
+            {{ t('workspaceDock.preview.directoryLabel') }}
+            <span class="font-mono">{{
+              currentDirectory || t('workspaceDock.preview.emptyState.directoryEmpty')
+            }}</span>
+          </p>
         </div>
       </div>
 

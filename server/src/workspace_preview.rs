@@ -47,6 +47,7 @@ pub(crate) struct WorkspacePreviewResponse {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct WorkspacePreviewSessionCreateBody {
+    pub(crate) id: String,
     pub(crate) directory: Option<String>,
     pub(crate) opencode_session_id: Option<String>,
     pub(crate) target_url: String,
@@ -55,8 +56,23 @@ pub(crate) struct WorkspacePreviewSessionCreateBody {
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct WorkspacePreviewSessionDiscoverBody {
+    pub(crate) id: String,
     pub(crate) directory: Option<String>,
     pub(crate) opencode_session_id: Option<String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WorkspacePreviewSessionUpdateBody {
+    pub(crate) directory: Option<String>,
+    pub(crate) opencode_session_id: Option<String>,
+    pub(crate) target_url: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WorkspacePreviewSessionDeleteResponse {
+    pub(crate) ok: bool,
 }
 
 pub(crate) async fn workspace_preview_get(
@@ -113,6 +129,7 @@ pub(crate) async fn workspace_preview_sessions_post(
 ) -> ApiResult<Json<PreviewSessionRecord>> {
     let session = create_studio_preview_session(
         &state,
+        body.id,
         body.directory,
         body.opencode_session_id,
         &body.target_url,
@@ -132,9 +149,34 @@ pub(crate) async fn workspace_preview_sessions_discover_post(
     };
     let session = state
         .workspace_preview_registry
-        .create_studio_session(body.directory, body.opencode_session_id, target)
+        .create_studio_session(body.id, body.directory, body.opencode_session_id, target)
         .await?;
     Ok(Json(session))
+}
+
+pub(crate) async fn workspace_preview_sessions_delete(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> ApiResult<Json<WorkspacePreviewSessionDeleteResponse>> {
+    state.workspace_preview_registry.delete_by_id(&id).await?;
+    Ok(Json(WorkspacePreviewSessionDeleteResponse { ok: true }))
+}
+
+pub(crate) async fn workspace_preview_sessions_put(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Json(body): Json<WorkspacePreviewSessionUpdateBody>,
+) -> ApiResult<Json<PreviewSessionRecord>> {
+    let updated = state
+        .workspace_preview_registry
+        .update_by_id(
+            id.trim(),
+            body.directory,
+            body.opencode_session_id,
+            body.target_url,
+        )
+        .await?;
+    Ok(Json(updated))
 }
 
 pub(crate) async fn workspace_preview_session_proxy_root(
@@ -639,6 +681,7 @@ fn filtered_request_headers(from: &HeaderMap) -> HeaderMap {
 
 async fn create_studio_preview_session(
     state: &Arc<AppState>,
+    id: String,
     directory: Option<String>,
     opencode_session_id: Option<String>,
     raw_target_url: &str,
@@ -646,7 +689,7 @@ async fn create_studio_preview_session(
     let target = validate_preview_target_url(raw_target_url)?;
     state
         .workspace_preview_registry
-        .create_studio_session(directory, opencode_session_id, target)
+        .create_studio_session(id, directory, opencode_session_id, target)
         .await
 }
 
@@ -838,6 +881,7 @@ mod tests {
         let err = workspace_preview_sessions_post(
             State(dummy_state()),
             Json(WorkspacePreviewSessionCreateBody {
+                id: "pv_test".to_string(),
                 directory: Some("/repo".to_string()),
                 opencode_session_id: None,
                 target_url: "http://example.com:5173".to_string(),

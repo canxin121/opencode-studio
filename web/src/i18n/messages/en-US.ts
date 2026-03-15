@@ -27,6 +27,7 @@ export default {
     working: 'Working...',
     reloading: 'Reloading...',
     search: 'Search',
+    actions: 'Actions',
     searching: 'Searching...',
     searchOptions: 'Search options',
     all: 'All',
@@ -312,6 +313,43 @@ export default {
       tab: 'Preview',
       refresh: 'Refresh preview',
       openInWindow: 'Open in new window',
+      addDialog: {
+        title: 'Add preview session',
+        description: 'Enter a target URL to create a Studio-managed preview session.',
+      },
+      editDialog: {
+        title: 'Edit preview session',
+        description: 'Update the target URL for this preview session.',
+      },
+      sidebar: {
+        searchPlaceholder: 'Search preview sessions',
+        searchAria: 'Search preview sessions',
+        noMatchingSessions: 'No matching preview sessions.',
+        sections: {
+          chat: {
+            title: 'Current chat',
+            emptyNoSession: 'Select a chat session to see its previews.',
+            empty: 'No previews for this chat session yet.',
+          },
+          directory: {
+            title: 'Current directory',
+            emptyNoDirectory: 'Select a directory to see its previews.',
+            empty: 'No previews for this directory yet.',
+          },
+          all: {
+            title: 'All previews',
+            empty: 'No previews yet.',
+          },
+        },
+        actions: {
+          editUrl: 'Edit target URL',
+          editUrlDescription: 'Update where this session proxies to.',
+          editUrlUnavailable: 'This session has no target URL to edit.',
+          deleteDescription: 'Remove this preview session.',
+          deleteConfirmTitle: 'Delete preview session?',
+          deleteConfirmDescription: 'This will remove the preview session from Studio. This cannot be undone.',
+        },
+      },
       sessionsTitle: 'Sessions',
       directoryLabel: 'Directory:',
       targetLabel: 'Target URL (display only):',
@@ -334,6 +372,9 @@ export default {
       resizeViewport: 'Resize viewport',
       iframeTitle: 'Workspace live preview',
       emptyState: {
+        sessionIdLabel: 'Name',
+        sessionIdPlaceholder: 'vite-main',
+        sessionIdHelp: "Use letters, numbers, '_' or '-'.",
         targetUrlLabel: 'Target URL',
         targetUrlPlaceholder: 'http://127.0.0.1:8000',
         addAction: 'Add',
@@ -342,6 +383,8 @@ export default {
         discoverLoading: 'Detecting local preview...',
         directoryEmpty: 'No current directory selected',
         directoryRequired: 'Select a workspace directory first / 请先选择工作区目录。',
+        sessionIdRequired: 'Enter a name first / 请先输入名称。',
+        sessionIdInvalid: "Invalid name. Use letters, numbers, '_' or '-' / 名称不合法，只能包含字母数字、_、-。",
         targetUrlRequired: 'Enter a target URL first / 请先输入目标 URL。',
         createFailed: 'Failed to create preview session / 创建预览会话失败。Detail: {detail}',
         discoverFailed: 'Failed to auto-detect preview target / 自动发现预览目标失败。Detail: {detail}',
@@ -349,8 +392,7 @@ export default {
       states: {
         loading: 'Loading preview...',
         emptyTitle: 'No preview sessions yet',
-        emptyDescription:
-          'Add a target URL or auto-detect a local dev server to create a Studio-managed preview session.',
+        emptyDescription: 'Use the + button to add a target URL and create a Studio-managed preview session.',
         errorTitle: 'Preview unavailable',
         errorDescription: 'The preview failed to load. Check whether the dev server is reachable.',
         noSessionsForScope: 'No preview sessions in this scope yet.',

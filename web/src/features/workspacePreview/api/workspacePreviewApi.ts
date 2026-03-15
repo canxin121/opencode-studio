@@ -62,10 +62,14 @@ export async function listWorkspacePreviewSessions(): Promise<WorkspacePreviewSe
 }
 
 export async function createWorkspacePreviewSession(
+  id: string,
   directory: string | undefined,
   targetUrl: string,
   opencodeSessionId?: string,
 ): Promise<WorkspacePreviewSession> {
+  const trimmedId = String(id || '').trim()
+  if (!trimmedId) throw new Error('Session id is required')
+
   const trimmedDirectory = String(directory || '').trim()
   const trimmedSessionId = String(opencodeSessionId || '').trim()
   const payload = await apiJson<unknown>('/api/workspace/preview/sessions', {
@@ -74,6 +78,7 @@ export async function createWorkspacePreviewSession(
       'content-type': 'application/json',
     },
     body: JSON.stringify({
+      id: trimmedId,
       ...(trimmedDirectory ? { directory: trimmedDirectory } : {}),
       ...(trimmedSessionId ? { opencodeSessionId: trimmedSessionId } : {}),
       targetUrl: String(targetUrl || '').trim(),
@@ -86,9 +91,13 @@ export async function createWorkspacePreviewSession(
 }
 
 export async function discoverWorkspacePreviewSession(
+  id: string,
   directory: string | undefined,
   opencodeSessionId?: string,
 ): Promise<WorkspacePreviewSession> {
+  const trimmedId = String(id || '').trim()
+  if (!trimmedId) throw new Error('Session id is required')
+
   const trimmedDirectory = String(directory || '').trim()
   const trimmedSessionId = String(opencodeSessionId || '').trim()
   const payload = await apiJson<unknown>('/api/workspace/preview/sessions/discover', {
@@ -97,6 +106,7 @@ export async function discoverWorkspacePreviewSession(
       'content-type': 'application/json',
     },
     body: JSON.stringify({
+      id: trimmedId,
       ...(trimmedDirectory ? { directory: trimmedDirectory } : {}),
       ...(trimmedSessionId ? { opencodeSessionId: trimmedSessionId } : {}),
     }),
@@ -105,4 +115,37 @@ export async function discoverWorkspacePreviewSession(
   const session = normalizeWorkspacePreviewSession(payload)
   if (!session) throw new Error('Invalid preview session response')
   return session
+}
+
+export async function updateWorkspacePreviewSession(
+  sessionId: string,
+  patch: { directory?: string; opencodeSessionId?: string; targetUrl?: string },
+): Promise<WorkspacePreviewSession> {
+  const trimmedId = String(sessionId || '').trim()
+  if (!trimmedId) throw new Error('Session id is required')
+
+  const payload = await apiJson<unknown>(`/api/workspace/preview/sessions/${encodeURIComponent(trimmedId)}`, {
+    method: 'PUT',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      ...(typeof patch.directory === 'string' ? { directory: patch.directory } : {}),
+      ...(typeof patch.opencodeSessionId === 'string' ? { opencodeSessionId: patch.opencodeSessionId } : {}),
+      ...(typeof patch.targetUrl === 'string' ? { targetUrl: patch.targetUrl } : {}),
+    }),
+  })
+
+  const session = normalizeWorkspacePreviewSession(payload)
+  if (!session) throw new Error('Invalid preview session response')
+  return session
+}
+
+export async function deleteWorkspacePreviewSession(sessionId: string): Promise<void> {
+  const trimmedId = String(sessionId || '').trim()
+  if (!trimmedId) throw new Error('Session id is required')
+
+  await apiJson<{ ok: boolean }>(`/api/workspace/preview/sessions/${encodeURIComponent(trimmedId)}`, {
+    method: 'DELETE',
+  })
 }

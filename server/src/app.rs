@@ -10,7 +10,7 @@ use axum::{
     http::{HeaderValue, Method, header},
     middleware,
     response::{Html, IntoResponse},
-    routing::{any, get, post},
+    routing::{any, delete, get, post},
 };
 use axum_extra::extract::cookie::SameSite;
 use futures_util::stream::{self as futures_stream, StreamExt as _};
@@ -1056,6 +1056,11 @@ pub(crate) async fn run(args: crate::Args) {
             "/workspace/preview/sessions",
             get(crate::workspace_preview::workspace_preview_sessions_get)
                 .post(crate::workspace_preview::workspace_preview_sessions_post),
+        )
+        .route(
+            "/workspace/preview/sessions/{id}",
+            delete(crate::workspace_preview::workspace_preview_sessions_delete)
+                .put(crate::workspace_preview::workspace_preview_sessions_put),
         )
         .route(
             "/workspace/preview/sessions/discover",

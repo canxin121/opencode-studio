@@ -16,6 +16,8 @@ export const localStorageKeys = {
     workspaceDockWidth: namespacedKey('ui.workspace-dock.width'),
     workspaceDockHeight: namespacedKey('ui.workspace-dock.height'),
     workspacePreviewActiveSessionId: namespacedKey('ui.workspace-preview.active-session-id'),
+    workspacePreviewSidebarQuery: namespacedKey('ui.workspace-preview.sidebar.query'),
+    workspacePreviewSidebarPage: namespacedKey('ui.workspace-preview.sidebar.page'),
     workspacePreviewViewport: namespacedKey('ui.workspace-preview.viewport'),
     workspacePreviewViewportDesktopWidth: namespacedKey('ui.workspace-preview.viewport.desktop.width'),
     workspacePreviewViewportDesktopHeight: namespacedKey('ui.workspace-preview.viewport.desktop.height'),

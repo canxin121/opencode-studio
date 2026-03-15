@@ -29,7 +29,7 @@ const showPreviewSidebar = computed(() => (ui.isMobile ? ui.isSessionSwitcherOpe
     </aside>
 
     <div class="min-w-0 flex-1 overflow-hidden" v-show="!ui.isMobile || !ui.isSessionSwitcherOpen">
-      <WorkspacePreviewDockPanel :show-controls="false" viewer-mode="responsive" />
+      <WorkspacePreviewDockPanel controls-variant="viewport" viewer-mode="responsive" />
     </div>
   </div>
 </template>

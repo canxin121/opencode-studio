@@ -109,24 +109,47 @@ impl WorkspacePreviewRegistry {
 
     pub(crate) async fn create_studio_session(
         &self,
+        id: String,
         directory: Option<String>,
         opencode_session_id: Option<String>,
         target_url: Url,
     ) -> ApiResult<PreviewSessionRecord> {
+        let trimmed_id = id.trim();
+        if trimmed_id.is_empty() {
+            return Err(AppError::bad_request("id is required"));
+        }
+        if !is_valid_preview_session_id(trimmed_id) {
+            return Err(AppError::bad_request(
+                "invalid preview session id (use ASCII letters, numbers, '_' or '-')",
+            ));
+        }
+
+        let plugin_path = preview_state_path();
         let state_path = studio_preview_state_path();
+
+        let snapshot = load_snapshot_from_paths(&plugin_path, &state_path);
+        if snapshot
+            .sessions
+            .iter()
+            .any(|session| session.id == trimmed_id)
+        {
+            return Err(AppError::bad_request(format!(
+                "preview session already exists: {trimmed_id}"
+            )));
+        }
+
         let mut file = load_state_file_from_path(&state_path)?;
         let updated_at = now_millis();
-        let id = generate_preview_session_id();
 
         let opencode_session_id = opencode_session_id
             .map(|value| value.trim().to_string())
             .filter(|value| !value.is_empty());
         let record = PreviewSessionRecord {
-            id: id.clone(),
+            id: trimmed_id.to_string(),
             directory: directory.unwrap_or_default(),
             opencode_session_id,
             state: "ready".to_string(),
-            proxy_base_path: preview_proxy_base_path(&id),
+            proxy_base_path: preview_proxy_base_path(trimmed_id),
             target_url: Some(target_url.to_string()),
             pid: None,
             port: target_url.port_or_known_default(),
@@ -145,6 +168,75 @@ impl WorkspacePreviewRegistry {
         write_state_file_atomically(&state_path, &file)?;
         self.invalidate().await;
         Ok(record)
+    }
+
+    pub(crate) async fn delete_by_id(&self, id: &str) -> ApiResult<()> {
+        let trimmed = id.trim();
+        if trimmed.is_empty() {
+            return Err(AppError::bad_request("id is required"));
+        }
+
+        let plugin_path = preview_state_path();
+        let studio_path = studio_preview_state_path();
+        let updated_at = now_millis();
+
+        let mut removed_any = false;
+        removed_any |= remove_session_from_path(&plugin_path, trimmed, updated_at)?;
+        removed_any |= remove_session_from_path(&studio_path, trimmed, updated_at)?;
+
+        if !removed_any {
+            return Err(AppError::not_found(format!(
+                "preview session not found: {trimmed}"
+            )));
+        }
+
+        self.invalidate().await;
+        Ok(())
+    }
+
+    pub(crate) async fn update_by_id(
+        &self,
+        id: &str,
+        directory: Option<String>,
+        opencode_session_id: Option<String>,
+        target_url: Option<String>,
+    ) -> ApiResult<PreviewSessionRecord> {
+        let trimmed = id.trim();
+        if trimmed.is_empty() {
+            return Err(AppError::bad_request("id is required"));
+        }
+
+        let updated_at = now_millis();
+        let plugin_path = preview_state_path();
+        let studio_path = studio_preview_state_path();
+
+        if let Some(updated) = update_session_in_path(
+            &studio_path,
+            trimmed,
+            directory.clone(),
+            opencode_session_id.clone(),
+            target_url.clone(),
+            updated_at,
+        )? {
+            self.invalidate().await;
+            return Ok(updated);
+        }
+
+        if let Some(updated) = update_session_in_path(
+            &plugin_path,
+            trimmed,
+            directory,
+            opencode_session_id,
+            target_url,
+            updated_at,
+        )? {
+            self.invalidate().await;
+            return Ok(updated);
+        }
+
+        Err(AppError::not_found(format!(
+            "preview session not found: {trimmed}"
+        )))
     }
 
     async fn snapshot(&self) -> PreviewSessionsResponse {
@@ -173,6 +265,65 @@ impl WorkspacePreviewRegistry {
         *cache = Some(cache_entry);
         snapshot
     }
+}
+
+fn remove_session_from_path(path: &Path, id: &str, updated_at: i64) -> ApiResult<bool> {
+    let mut file = load_state_file_from_path(path)?;
+    let before = file.sessions.len();
+    file.sessions.retain(|session| session.id != id);
+    if file.sessions.len() == before {
+        return Ok(false);
+    }
+    file.version = STATE_VERSION;
+    file.updated_at = updated_at;
+    write_state_file_atomically(path, &file)?;
+    Ok(true)
+}
+
+fn normalize_optional_string(value: Option<String>) -> Option<String> {
+    value
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+}
+
+fn update_session_in_path(
+    path: &Path,
+    id: &str,
+    directory: Option<String>,
+    opencode_session_id: Option<String>,
+    target_url: Option<String>,
+    updated_at: i64,
+) -> ApiResult<Option<PreviewSessionRecord>> {
+    let mut file = load_state_file_from_path(path)?;
+    let Some(index) = file.sessions.iter().position(|session| session.id == id) else {
+        return Ok(None);
+    };
+
+    let mut record = file.sessions[index].clone();
+
+    if let Some(dir) = directory {
+        record.directory = dir.trim().to_string();
+    }
+
+    if let Some(value) = opencode_session_id {
+        // Allow clearing by sending empty string.
+        record.opencode_session_id = normalize_optional_string(Some(value));
+    }
+
+    if let Some(raw_target) = target_url {
+        let target = validate_preview_target_url(&raw_target)?;
+        record.target_url = Some(target.to_string());
+        record.port = target.port_or_known_default();
+    }
+
+    record.updated_at = updated_at;
+    record.proxy_base_path = preview_proxy_base_path(&record.id);
+
+    file.sessions[index] = record.clone();
+    file.version = STATE_VERSION;
+    file.updated_at = updated_at;
+    write_state_file_atomically(path, &file)?;
+    Ok(Some(record))
 }
 
 fn default_state_version() -> u32 {
@@ -352,10 +503,6 @@ fn temp_state_path(path: &Path) -> PathBuf {
     path.with_file_name(format!(".{file_name}.{}.tmp", Uuid::new_v4().simple()))
 }
 
-fn generate_preview_session_id() -> String {
-    format!("pv_{}", Uuid::new_v4().simple())
-}
-
 fn now_millis() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -364,13 +511,14 @@ fn now_millis() -> i64 {
 }
 
 fn is_valid_preview_session_id(id: &str) -> bool {
-    id.strip_prefix("pv_")
-        .filter(|suffix| !suffix.is_empty())
-        .is_some_and(|suffix| {
-            suffix
-                .bytes()
-                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
-        })
+    let trimmed = id.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+    // Keep IDs URL-safe: used in /api/workspace/preview/s/{id}/ proxy paths.
+    trimmed
+        .bytes()
+        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
 }
 
 fn is_valid_proxy_base_path(id: &str, proxy_base_path: &str) -> bool {
@@ -525,10 +673,10 @@ mod tests {
                         "updatedAt": 42
                     },
                     {
-                        "id": "bad",
+                        "id": "bad id",
                         "directory": "/repo/app",
                         "state": "ready",
-                        "proxyBasePath": "/api/workspace/preview/s/bad/",
+                        "proxyBasePath": "/api/workspace/preview/s/bad id/",
                         "updatedAt": 42
                     }
                 ]
