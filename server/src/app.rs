@@ -1066,6 +1066,10 @@ pub(crate) async fn run(args: crate::Args) {
             any(crate::workspace_preview::workspace_preview_session_proxy_root),
         )
         .route(
+            "/workspace/preview/s/{id}/",
+            any(crate::workspace_preview::workspace_preview_session_proxy_root),
+        )
+        .route(
             "/workspace/preview/s/{id}/{*path}",
             any(crate::workspace_preview::workspace_preview_session_proxy_path),
         )
