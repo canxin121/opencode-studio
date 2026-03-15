@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
@@ -13,12 +13,13 @@ import {
 } from '@remixicon/vue'
 
 import ChatSessionChangesDockPanel from '@/components/chat/ChatSessionChangesDockPanel.vue'
-import FilesPage from '@/pages/FilesPage.vue'
-import GitPage from '@/pages/GitPage.vue'
 import { useUiStore } from '@/stores/ui'
 import IconButton from '@/components/ui/IconButton.vue'
 import TerminalDockPanel from '@/features/terminal/components/TerminalDockPanel.vue'
 import WorkspacePreviewDockPanel from '@/features/workspacePreview/components/WorkspacePreviewDockPanel.vue'
+
+const FilesDockPanel = defineAsyncComponent(() => import('@/pages/FilesPage.vue'))
+const GitDockPanel = defineAsyncComponent(() => import('@/pages/GitPage.vue'))
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -181,11 +182,11 @@ function refreshActivePanel() {
         </div>
 
         <div v-else-if="ui.workspaceDockPanel === 'git'" key="git" class="min-h-0 flex-1 overflow-hidden">
-          <GitPage ref="gitDockRef" embedded />
+          <GitDockPanel ref="gitDockRef" embedded />
         </div>
 
         <div v-else-if="ui.workspaceDockPanel === 'files'" key="files" class="min-h-0 flex-1 overflow-hidden">
-          <FilesPage ref="filesDockRef" embedded />
+          <FilesDockPanel ref="filesDockRef" embedded />
         </div>
 
         <div v-else key="terminal" class="min-h-0 flex-1 overflow-hidden">
