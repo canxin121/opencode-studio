@@ -2003,6 +2003,15 @@ export default {
       empty: 'No active LSP runtime sessions.',
     },
 
+    mcpStatus: {
+      toggleAria: 'Toggle MCP server status',
+      panelTitle: 'MCP Server Status',
+      close: 'Close',
+      listTitle: 'Servers',
+      loading: 'Loading MCP server status...',
+      empty: 'No MCP servers configured.',
+    },
+
     attachments: {
       title: 'Attachments',
       attaching: 'Attaching…',

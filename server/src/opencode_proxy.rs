@@ -4382,6 +4382,53 @@ pub(crate) async fn lsp_list(
     Ok(out)
 }
 
+pub(crate) async fn mcp_status(
+    State(state): State<Arc<crate::AppState>>,
+    uri: Uri,
+) -> ApiResult<Response> {
+    let oc = state.opencode.status().await;
+    if oc.restarting || !oc.ready {
+        return Ok(open_code_restarting());
+    }
+    let Some(bridge) = state.opencode.bridge().await else {
+        return Ok(open_code_unavailable());
+    };
+
+    let target = match bridge.build_url("/mcp", Some(&uri)) {
+        Ok(url) => url,
+        Err(_) => return Ok(open_code_unavailable()),
+    };
+
+    let resp = bridge
+        .client
+        .get(target)
+        .send()
+        .await
+        .map_err(|_| AppError::bad_gateway("OpenCode request failed"))?;
+
+    let resp_status = resp.status();
+    let status = StatusCode::from_u16(resp_status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
+    let bytes = resp
+        .bytes()
+        .await
+        .map_err(|_| AppError::bad_gateway("Failed to read OpenCode response"))?;
+
+    if !resp_status.is_success() {
+        return Ok(Response::builder()
+            .status(status)
+            .body(axum::body::Body::from(bytes))
+            .unwrap_or_else(|_| StatusCode::BAD_GATEWAY.into_response()));
+    }
+
+    let mut out = Response::new(axum::body::Body::from(bytes));
+    *out.status_mut() = status;
+    out.headers_mut().insert(
+        axum::http::header::CONTENT_TYPE,
+        "application/json".parse().unwrap(),
+    );
+    Ok(out)
+}
+
 pub(crate) async fn permission_list(
     State(state): State<Arc<crate::AppState>>,
     uri: Uri,

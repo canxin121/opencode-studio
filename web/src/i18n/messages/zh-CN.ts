@@ -1999,6 +1999,15 @@ export default {
       empty: '当前没有活跃的 LSP 运行时会话。',
     },
 
+    mcpStatus: {
+      toggleAria: '切换 MCP 服务状态',
+      panelTitle: 'MCP 服务状态',
+      close: '关闭',
+      listTitle: '服务列表',
+      loading: '正在加载 MCP 服务状态...',
+      empty: '未配置 MCP 服务。',
+    },
+
     attachments: {
       title: '附件',
       attaching: '正在附加…',
