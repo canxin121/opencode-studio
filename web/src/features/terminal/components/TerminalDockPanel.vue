@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { FitAddon } from '@xterm/addon-fit'
 import { Terminal } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
-import { RiAddLine, RiArrowDownSLine, RiRefreshLine } from '@remixicon/vue'
+import { RiAddLine, RiArrowDownSLine, RiPlugLine, RiRefreshLine, RiStopCircleLine } from '@remixicon/vue'
 
 import IconButton from '@/components/ui/IconButton.vue'
 import NameInputPrompt from '@/components/ui/NameInputPrompt.vue'
@@ -13,11 +13,15 @@ import type { OptionMenuGroup, OptionMenuItem } from '@/components/ui/optionMenu
 import { connectSse } from '@/lib/sse'
 import {
   createTerminalSession,
+  getTerminalSessionInfo,
   getTerminalUiState,
   putTerminalUiState,
   resizeTerminal,
   sendTerminalInput,
+  startTerminalSession,
+  stopTerminalSession,
   terminalStreamUrl,
+  type TerminalSessionInfo,
   type TerminalUiState,
 } from '@/features/terminal/api/terminalApi'
 import { useDirectoryStore } from '@/stores/directory'
@@ -43,10 +47,12 @@ const ui = useUiStore()
 const loading = ref(false)
 const refreshing = ref(false)
 const creating = ref(false)
+const togglingConnection = ref(false)
 const error = ref<string | null>(null)
 const status = ref<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected')
 
 const uiState = ref<TerminalUiState | null>(null)
+const activeSessionInfo = ref<TerminalSessionInfo | null>(null)
 
 const el = ref<HTMLDivElement | null>(null)
 const term = shallowRef<Terminal | null>(null)
@@ -65,6 +71,7 @@ let resizeObserver: ResizeObserver | null = null
 let resizeTimer: number | null = null
 let pollTimer: number | null = null
 let lastResizeSignature = ''
+let sessionInfoRequest = 0
 
 const sessionIds = computed(() => uiState.value?.sessionIds || [])
 const activeSessionId = computed(() => {
@@ -102,6 +109,23 @@ const activeSessionLabel = computed(() => {
 })
 
 const sessionPickerLabel = computed(() => String(t('workspaceDock.terminal.sessions')))
+
+const activeSessionRunning = computed(() => activeSessionInfo.value?.running === true)
+
+const connectionToggleMode = computed<'connect' | 'disconnect'>(() =>
+  activeSessionRunning.value ? 'disconnect' : 'connect',
+)
+
+const connectionToggleLabel = computed(() =>
+  connectionToggleMode.value === 'disconnect'
+    ? String(t('terminal.connection.disconnectLabel'))
+    : String(t('terminal.connection.connectLabel')),
+)
+
+const connectionToggleDisabled = computed(() => {
+  if (!activeSessionId.value) return true
+  return loading.value || refreshing.value || creating.value || togglingConnection.value
+})
 
 function normalizeSessionName(input: unknown): string {
   const collapsed = String(input || '')
@@ -168,6 +192,15 @@ function closeStream() {
   streamSessionId.value = ''
 }
 
+function setTerminalStdinEnabled(enabled: boolean) {
+  if (!term.value) return
+  try {
+    term.value.setOption('disableStdin', !enabled)
+  } catch {
+    // ignore
+  }
+}
+
 function ensureTerminalMounted() {
   if (!el.value || term.value) return
 
@@ -192,6 +225,7 @@ function ensureTerminalMounted() {
   t.onData((data) => {
     const sid = activeSessionId.value
     if (!sid) return
+    if (!activeSessionRunning.value) return
     void sendTerminalInput(sid, data).catch((err) => {
       status.value = 'error'
       error.value = err instanceof Error ? err.message : String(err)
@@ -240,6 +274,12 @@ function openStream(id: string) {
     return
   }
 
+  if (!activeSessionRunning.value) {
+    closeStream()
+    status.value = 'disconnected'
+    return
+  }
+
   if (streamSessionId.value === sid && streamClient.value) return
 
   closeStream()
@@ -272,6 +312,15 @@ function openStream(id: string) {
       }
 
       if (event.type === 'exit') {
+        closeStream()
+        if (activeSessionId.value === sid) {
+          activeSessionInfo.value = {
+            sessionId: sid,
+            cwd: activeSessionInfo.value?.cwd || '',
+            running: false,
+          }
+          setTerminalStdinEnabled(false)
+        }
         status.value = 'disconnected'
       }
     },
@@ -299,6 +348,39 @@ function normalizeState(next: TerminalUiState): TerminalUiState {
   }
 }
 
+async function refreshActiveSessionInfo() {
+  const sid = String(activeSessionId.value || '').trim()
+  if (!sid) {
+    activeSessionInfo.value = null
+    setTerminalStdinEnabled(false)
+    closeStream()
+    status.value = 'disconnected'
+    return
+  }
+
+  const requestId = (sessionInfoRequest += 1)
+  try {
+    const info = await getTerminalSessionInfo(sid)
+    if (requestId !== sessionInfoRequest) return
+    if (activeSessionId.value !== sid) return
+
+    activeSessionInfo.value = info
+    const running = info?.running === true
+    setTerminalStdinEnabled(running)
+
+    if (!running) {
+      closeStream()
+      status.value = 'disconnected'
+      return
+    }
+
+    openStream(sid)
+    scheduleResize()
+  } catch {
+    // peek errors should not block the dock panel
+  }
+}
+
 async function refreshState(opts?: { silent?: boolean }) {
   const silent = opts?.silent === true
   if (!silent) {
@@ -313,6 +395,8 @@ async function refreshState(opts?: { silent?: boolean }) {
     uiState.value = normalizeState(next)
     if (!activeSessionId.value) {
       closeStream()
+      activeSessionInfo.value = null
+      setTerminalStdinEnabled(false)
       status.value = 'disconnected'
     }
   } catch (err) {
@@ -332,7 +416,7 @@ async function activateSession(id: string) {
   const sid = String(id || '').trim()
   if (!sid || !uiState.value) return
   if (activeSessionId.value === sid) {
-    openStream(sid)
+    void refreshActiveSessionInfo()
     return
   }
 
@@ -378,6 +462,13 @@ async function createSession(name?: string) {
       folders: base.folders.slice(),
     })
 
+    activeSessionInfo.value = {
+      sessionId: sid,
+      cwd,
+      running: true,
+    }
+    setTerminalStdinEnabled(true)
+
     sessionCreateOpen.value = false
     sessionCreateDraft.value = ''
   } catch (err) {
@@ -385,6 +476,63 @@ async function createSession(name?: string) {
   } finally {
     creating.value = false
   }
+}
+
+async function startActiveSession() {
+  const sid = String(activeSessionId.value || '').trim()
+  if (!sid || togglingConnection.value) return
+
+  togglingConnection.value = true
+  error.value = null
+  try {
+    const info = await startTerminalSession(sid)
+    if (activeSessionId.value !== sid) return
+    activeSessionInfo.value = info
+    setTerminalStdinEnabled(info.running === true)
+    renderSessionOutput(sid)
+    lastResizeSignature = ''
+    openStream(sid)
+    scheduleResize()
+  } catch (err) {
+    const details = err instanceof Error ? err.message : String(err)
+    error.value = `${String(t('terminal.errors.failedToStartSession'))}${details ? `: ${details}` : ''}`
+  } finally {
+    togglingConnection.value = false
+  }
+}
+
+async function stopActiveSession() {
+  const sid = String(activeSessionId.value || '').trim()
+  if (!sid || togglingConnection.value) return
+
+  togglingConnection.value = true
+  error.value = null
+  try {
+    await stopTerminalSession(sid)
+    if (activeSessionId.value !== sid) return
+    closeStream()
+    status.value = 'disconnected'
+    activeSessionInfo.value = {
+      sessionId: sid,
+      cwd: activeSessionInfo.value?.cwd || '',
+      running: false,
+    }
+    setTerminalStdinEnabled(false)
+  } catch (err) {
+    const details = err instanceof Error ? err.message : String(err)
+    error.value = `${String(t('terminal.errors.failedToStopSession'))}${details ? `: ${details}` : ''}`
+  } finally {
+    togglingConnection.value = false
+  }
+}
+
+function toggleConnection() {
+  if (connectionToggleDisabled.value) return
+  if (connectionToggleMode.value === 'disconnect') {
+    void stopActiveSession()
+    return
+  }
+  void startActiveSession()
 }
 
 function startCreateSession() {
@@ -427,6 +575,7 @@ function startPolling() {
   }
   pollTimer = window.setInterval(() => {
     void refreshState({ silent: true })
+    void refreshActiveSessionInfo()
   }, 5000)
 }
 
@@ -438,13 +587,18 @@ defineExpose({
 watch(activeSessionId, (sid) => {
   if (!sid) {
     closeStream()
+    activeSessionInfo.value = null
+    setTerminalStdinEnabled(false)
     return
+  }
+
+  if (streamSessionId.value && streamSessionId.value !== sid) {
+    closeStream()
   }
   ensureTerminalMounted()
   renderSessionOutput(sid)
   lastResizeSignature = ''
-  openStream(sid)
-  scheduleResize()
+  void refreshActiveSessionInfo()
 })
 
 watch(el, () => {
@@ -464,6 +618,7 @@ watch(el, () => {
 onMounted(() => {
   ensureTerminalMounted()
   void refreshState()
+  void refreshActiveSessionInfo()
   startPolling()
 
   window.addEventListener('resize', scheduleResize)
@@ -522,6 +677,16 @@ onBeforeUnmount(() => {
         </button>
 
         <div class="flex h-8 items-center gap-0.5">
+          <IconButton
+            size="sm"
+            :aria-label="connectionToggleLabel"
+            :tooltip="connectionToggleLabel"
+            :disabled="connectionToggleDisabled"
+            @click="toggleConnection"
+          >
+            <RiStopCircleLine v-if="connectionToggleMode === 'disconnect'" class="h-4 w-4" />
+            <RiPlugLine v-else class="h-4 w-4" />
+          </IconButton>
           <IconButton
             size="sm"
             :aria-label="String(t('workspaceDock.refresh'))"
