@@ -623,7 +623,7 @@ onBeforeUnmount(() => {
         :key="activeMountKey"
         class="pointer-events-auto w-full min-w-0"
         :mount="activeMountWithHostMode"
-        :full-width-loading="isComposerPlacement"
+        :full-width-loading="true"
         @reserve-change="(px) => (activeMountKey ? setReserve(activeMountKey, px) : undefined)"
         @request-close="clearActiveMount"
       />
