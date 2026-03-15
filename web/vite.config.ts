@@ -17,7 +17,7 @@ export default defineConfig(({ mode }) => {
       // Monaco workers are intentionally large and lazy-loaded; keep build output noise low.
       chunkSizeWarningLimit: 8192,
       outDir: isRustDebugBuild ? 'dist-rust-debug' : 'dist',
-      minify: isRustDebugBuild ? false : 'esbuild',
+      minify: isRustDebugBuild ? false : 'oxc',
       cssMinify: isRustDebugBuild ? false : undefined,
       sourcemap: isRustDebugBuild ? true : false,
     },
