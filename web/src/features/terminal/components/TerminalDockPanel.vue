@@ -195,7 +195,7 @@ function closeStream() {
 function setTerminalStdinEnabled(enabled: boolean) {
   if (!term.value) return
   try {
-    term.value.setOption('disableStdin', !enabled)
+    term.value.options.disableStdin = !enabled
   } catch {
     // ignore
   }
