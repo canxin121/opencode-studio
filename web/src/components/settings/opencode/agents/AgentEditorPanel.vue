@@ -39,6 +39,12 @@ function isStringArray(value: unknown): value is string[] {
 }
 
 export default defineComponent({
+  props: {
+    embedded: {
+      type: Boolean,
+      default: false,
+    },
+  },
   components: {
     CrudStringListEditor,
     IconButton,
@@ -291,7 +297,9 @@ export default defineComponent({
 </script>
 
 <template>
-  <div class="rounded-md border border-border p-3 lg:p-4 space-y-4 min-h-[360px]">
+  <div
+    :class="embedded ? 'p-3 lg:p-4 space-y-4' : 'rounded-md border border-border p-3 lg:p-4 space-y-4 min-h-[360px]'"
+  >
     <div v-if="!selectedAgentId" class="space-y-2">
       <div class="text-sm text-muted-foreground">
         {{ tt('settings.opencodeConfig.sections.agents.editor.empty') }}

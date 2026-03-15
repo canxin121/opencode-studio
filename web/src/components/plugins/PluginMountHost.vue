@@ -42,9 +42,11 @@ const props = withDefaults(
   defineProps<{
     mount: ChatMount
     fixedHeight?: number
+    fullWidthLoading?: boolean
   }>(),
   {
     fixedHeight: 0,
+    fullWidthLoading: false,
   },
 )
 
@@ -289,7 +291,7 @@ function onIframeError() {
       :aria-label="t('plugins.mountHost.loadingAria')"
     >
       <div class="h-full w-full flex items-center justify-center p-3">
-        <div class="w-full max-w-md">
+        <div :class="fullWidthLoading ? 'w-full' : 'w-full max-w-md'">
           <div class="rounded-xl border border-border/60 bg-muted/10 p-3">
             <div class="flex items-center gap-3">
               <Skeleton class="h-3 w-28" />
