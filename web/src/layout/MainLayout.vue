@@ -141,7 +141,7 @@ const showWorkspaceRightDock = computed(() => !ui.isMobile && ui.isWorkspaceDock
               v-if="showWorkspaceRightDock"
               v-model="ui.workspaceDockWidth"
               :min-width="280"
-              :max-width="620"
+              :max-width="1200"
             >
               <template #left>
                 <router-view />

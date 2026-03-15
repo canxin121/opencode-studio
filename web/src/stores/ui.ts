@@ -76,15 +76,21 @@ export const useUiStore = defineStore('ui', () => {
   const workspaceDockPlacement = ref<WorkspaceDockPlacement>('right')
   watch(workspaceDockPlacement, (v) => setLocalString(STORAGE_WORKSPACE_DOCK_PLACEMENT, v))
 
+  const WORKSPACE_DOCK_WIDTH_MIN_PX = 280
+  const WORKSPACE_DOCK_WIDTH_MAX_PX = 1200
+
   const workspaceDockWidth = ref<number>(
     (() => {
       const raw = getLocalString(STORAGE_WORKSPACE_DOCK_WIDTH)
       const n = raw ? Number(raw) : NaN
-      return Number.isFinite(n) ? Math.min(620, Math.max(280, n)) : 360
+      return Number.isFinite(n) ? Math.min(WORKSPACE_DOCK_WIDTH_MAX_PX, Math.max(WORKSPACE_DOCK_WIDTH_MIN_PX, n)) : 360
     })(),
   )
   watch(workspaceDockWidth, (v) => {
-    setLocalString(STORAGE_WORKSPACE_DOCK_WIDTH, String(Math.min(620, Math.max(280, v))))
+    setLocalString(
+      STORAGE_WORKSPACE_DOCK_WIDTH,
+      String(Math.min(WORKSPACE_DOCK_WIDTH_MAX_PX, Math.max(WORKSPACE_DOCK_WIDTH_MIN_PX, v))),
+    )
   })
 
   const workspaceDockHeight = ref<number>(
