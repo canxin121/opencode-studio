@@ -563,6 +563,14 @@ mod tests {
             last_opened_at: 0,
         };
 
+        let workspace_preview_registry =
+            Arc::new(crate::workspace_preview_registry::WorkspacePreviewRegistry::new());
+        let workspace_preview_runtime = Arc::new(
+            crate::workspace_preview_runtime::WorkspacePreviewRuntime::new(
+                workspace_preview_registry.clone(),
+            ),
+        );
+
         Arc::new(crate::AppState {
             ui_auth: crate::ui_auth::UiAuth::Disabled,
             ui_cookie_same_site: axum_extra::extract::cookie::SameSite::Strict,
@@ -580,9 +588,8 @@ mod tests {
             session_activity: crate::session_activity::SessionActivityManager::new(),
             directory_session_index:
                 crate::directory_session_index::DirectorySessionIndexManager::new(),
-            workspace_preview_registry: Arc::new(
-                crate::workspace_preview_registry::WorkspacePreviewRegistry::new(),
-            ),
+            workspace_preview_registry,
+            workspace_preview_runtime,
             settings_path: std::path::PathBuf::from(
                 "/tmp/opencode-studio-fs-watch-test-settings.json",
             ),

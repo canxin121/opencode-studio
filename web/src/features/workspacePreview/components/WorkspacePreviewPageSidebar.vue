@@ -1,17 +1,22 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   RiAddLine,
   RiArrowDownSLine,
   RiArrowRightSLine,
+  RiCheckLine,
+  RiCloseLine,
   RiDeleteBinLine,
+  RiEditLine,
+  RiLoader4Line,
+  RiPlayLine,
   RiPencilLine,
   RiRefreshLine,
+  RiStopLine,
 } from '@remixicon/vue'
 
 import Button from '@/components/ui/Button.vue'
-import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import FormDialog from '@/components/ui/FormDialog.vue'
 import IconButton from '@/components/ui/IconButton.vue'
 import Input from '@/components/ui/Input.vue'
@@ -28,11 +33,13 @@ import SidebarSectionSkeleton from '@/layout/chatSidebar/components/SidebarSecti
 import { apiUrl } from '@/lib/api'
 import { useChatStore } from '@/stores/chat'
 import { useDirectoryStore } from '@/stores/directory'
+import { useToastsStore } from '@/stores/toasts'
 import { useUiStore } from '@/stores/ui'
 import { useWorkspacePreviewStore } from '@/stores/workspacePreview'
 
 const { t } = useI18n()
 const ui = useUiStore()
+const toasts = useToastsStore()
 const chat = useChatStore()
 const preview = useWorkspacePreviewStore()
 const directoryStore = useDirectoryStore()
@@ -48,6 +55,10 @@ const sidebarQueryNorm = computed(() =>
 
 const createDialogOpen = ref(false)
 const createPreviewId = ref('')
+const createRunDirectory = ref('')
+const createCommand = ref('')
+const createArgsText = ref('')
+const createLogsPath = ref('')
 const createTargetUrl = ref('')
 const actionLoading = ref(false)
 const actionError = ref('')
@@ -61,6 +72,21 @@ const editError = ref('')
 const rowMenuOpen = ref(false)
 const rowMenuSessionId = ref('')
 const rowMenuAnchorEl = ref<HTMLElement | null>(null)
+
+type PreviewSidebarScope = 'chat' | 'directory' | 'all'
+const rowMenuScope = ref<PreviewSidebarScope>('directory')
+
+const renamingSessionId = ref('')
+const renamingScope = ref<PreviewSidebarScope>('directory')
+const renameDialogOpen = ref(false)
+const renameDraft = ref('')
+const renameBusy = ref(false)
+const renameError = ref('')
+const renameInputEl = ref<HTMLInputElement | null>(null)
+
+const renameDraftNorm = computed(() => String(renameDraft.value || '').trim())
+const renameDraftValid = computed(() => /^[A-Za-z0-9_-]+$/.test(renameDraftNorm.value))
+const canSaveRename = computed(() => !renameBusy.value && renameDraftNorm.value.length > 0 && renameDraftValid.value)
 
 const rowMenuSession = computed(() => preview.sessions.find((session) => session.id === rowMenuSessionId.value) || null)
 
@@ -78,6 +104,15 @@ let healthPollTimer: number | null = null
 
 const createPreviewIdNorm = computed(() => String(createPreviewId.value || '').trim())
 const createPreviewIdValid = computed(() => /^[A-Za-z0-9_-]+$/.test(createPreviewIdNorm.value))
+const createRunDirectoryNorm = computed(() => String(createRunDirectory.value || '').trim())
+const createCommandNorm = computed(() => String(createCommand.value || '').trim())
+const createArgsList = computed(() =>
+  String(createArgsText.value || '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean),
+)
+const createLogsPathNorm = computed(() => String(createLogsPath.value || '').trim())
 
 function normalizeSessionState(input: unknown): string {
   return String(input || '')
@@ -140,6 +175,10 @@ function sessionHealthLabel(state: SessionHealthState): string {
 }
 
 function sessionDotClass(session: WorkspacePreviewSession): string {
+  const state = normalizeSessionState(session.state)
+  if (state === 'stopped' || state === 'idle') return 'bg-muted-foreground/50'
+  if (state === 'starting' || state === 'building') return 'bg-muted-foreground/60 animate-pulse'
+
   const health = sessionHealthState(session.id)
   if (health === 'ok') return 'bg-primary'
   if (health === 'error') return 'bg-destructive'
@@ -157,6 +196,8 @@ function sessionDotLabel(session: WorkspacePreviewSession): string {
 async function probeSessionHealth(session: WorkspacePreviewSession) {
   const sessionId = String(session.id || '').trim()
   if (!sessionId) return
+  const state = normalizeSessionState(session.state)
+  if (state === 'stopped' || state === 'idle') return
   if (preview.loading) return
   if (healthInFlight.has(sessionId)) return
 
@@ -320,15 +361,46 @@ function canEditTargetUrl(session: WorkspacePreviewSession | null | undefined): 
   return Boolean(String(session?.targetUrl || '').trim())
 }
 
+function isSessionRunning(session: WorkspacePreviewSession | null | undefined): boolean {
+  if (!session) return false
+  const s = normalizeSessionState(session.state)
+  if (s === 'running') return true
+  return Boolean((session as { pid?: unknown }).pid)
+}
+
 const rowMenuGroups = computed<OptionMenuGroup[]>(() => {
   const session = rowMenuSession.value
   if (!session) return []
 
   const canEditUrl = canEditTargetUrl(session)
+  const running = isSessionRunning(session)
   return [
     {
       id: 'preview-session-actions',
       items: [
+        ...(running
+          ? [
+              {
+                id: 'stop',
+                label: String(t('workspaceDock.preview.sidebar.actions.stop')),
+                description: String(t('workspaceDock.preview.sidebar.actions.stopDescription')),
+                icon: RiStopLine,
+              },
+            ]
+          : [
+              {
+                id: 'start',
+                label: String(t('workspaceDock.preview.sidebar.actions.start')),
+                description: String(t('workspaceDock.preview.sidebar.actions.startDescription')),
+                icon: RiPlayLine,
+              },
+            ]),
+        {
+          id: 'rename',
+          label: String(t('workspaceDock.preview.sidebar.actions.rename')),
+          description: String(t('workspaceDock.preview.sidebar.actions.renameDescription')),
+          icon: RiEditLine,
+        },
         {
           id: 'edit-url',
           label: String(t('workspaceDock.preview.sidebar.actions.editUrl')),
@@ -363,8 +435,15 @@ async function refreshSessions(opts?: { forceFrameReload?: boolean }) {
 
 function openCreateDialog() {
   actionError.value = ''
+  const suggestedId = createPreviewIdNorm.value || suggestPreviewIdFromDirectory(currentDirectory.value)
   if (!createPreviewIdNorm.value) {
-    createPreviewId.value = suggestPreviewIdFromDirectory(currentDirectory.value)
+    createPreviewId.value = suggestedId
+  }
+  if (!createRunDirectoryNorm.value) {
+    createRunDirectory.value = currentDirectory.value
+  }
+  if (!createLogsPathNorm.value) {
+    createLogsPath.value = suggestLogsPath(suggestedId)
   }
   createDialogOpen.value = true
 }
@@ -385,6 +464,11 @@ function suggestPreviewIdFromDirectory(directory: string): string {
   return normalized
 }
 
+function suggestLogsPath(sessionId: string): string {
+  const clean = String(sessionId || '').trim() || 'preview'
+  return `.opencode/preview/${clean}.log`
+}
+
 async function createManagedSession() {
   if (!currentDirectory.value.trim()) {
     actionError.value = String(t('workspaceDock.preview.emptyState.directoryRequired'))
@@ -400,6 +484,26 @@ async function createManagedSession() {
     return
   }
 
+  if (!createRunDirectoryNorm.value) {
+    actionError.value = String(t('workspaceDock.preview.emptyState.runDirectoryRequired'))
+    return
+  }
+
+  if (!createCommandNorm.value) {
+    actionError.value = String(t('workspaceDock.preview.emptyState.commandRequired'))
+    return
+  }
+
+  if (createArgsList.value.length === 0) {
+    actionError.value = String(t('workspaceDock.preview.emptyState.argsRequired'))
+    return
+  }
+
+  if (!createLogsPathNorm.value) {
+    actionError.value = String(t('workspaceDock.preview.emptyState.logsPathRequired'))
+    return
+  }
+
   const targetUrl = createTargetUrl.value.trim()
   if (!targetUrl) {
     actionError.value = String(t('workspaceDock.preview.emptyState.targetUrlRequired'))
@@ -412,10 +516,18 @@ async function createManagedSession() {
     await preview.createSession({
       id: createPreviewIdNorm.value,
       directory: currentDirectory.value,
+      runDirectory: createRunDirectoryNorm.value,
+      command: createCommandNorm.value,
+      args: createArgsList.value,
+      logsPath: createLogsPathNorm.value,
       targetUrl,
       select: true,
     })
     createPreviewId.value = ''
+    createRunDirectory.value = ''
+    createCommand.value = ''
+    createArgsText.value = ''
+    createLogsPath.value = ''
     createTargetUrl.value = ''
     createDialogOpen.value = false
     clearSessionHealth()
@@ -428,8 +540,91 @@ async function createManagedSession() {
   }
 }
 
-function openRowMenu(sessionId: string, event: MouseEvent) {
+function isRenamingSession(session: WorkspacePreviewSession, scope: PreviewSidebarScope): boolean {
+  return renamingSessionId.value === session.id && renamingScope.value === scope
+}
+
+function isInlineRenameSession(session: WorkspacePreviewSession, scope: PreviewSidebarScope): boolean {
+  return !ui.isMobile && isRenamingSession(session, scope)
+}
+
+function startRenameSession(sessionId: string, scope: PreviewSidebarScope) {
+  const session = preview.sessions.find((item) => item.id === sessionId)
+  if (!session) return
+
+  renamingSessionId.value = session.id
+  renamingScope.value = scope
+  renameDraft.value = session.id
+  renameBusy.value = false
+  renameError.value = ''
+
+  if (scope === 'chat') chatSectionOpen.value = true
+  if (scope === 'directory') directorySectionOpen.value = true
+  if (scope === 'all') allSectionOpen.value = true
+
+  if (ui.isMobile) {
+    renameDialogOpen.value = true
+  }
+}
+
+function cancelRenameSession() {
+  renamingSessionId.value = ''
+  renameDraft.value = ''
+  renameBusy.value = false
+  renameError.value = ''
+  renameDialogOpen.value = false
+}
+
+async function saveRenameSession() {
+  const sessionId = String(renamingSessionId.value || '').trim()
+  if (!sessionId) return
+
+  if (!renameDraftNorm.value) {
+    renameError.value = String(t('workspaceDock.preview.emptyState.sessionIdRequired'))
+    return
+  }
+  if (!renameDraftValid.value) {
+    renameError.value = String(t('workspaceDock.preview.emptyState.sessionIdInvalid'))
+    return
+  }
+
+  renameBusy.value = true
+  renameError.value = ''
+  try {
+    const updated = await preview.renameSession(sessionId, renameDraftNorm.value)
+    cancelRenameSession()
+    clearSessionHealth(sessionId)
+    clearSessionHealth(updated.id)
+    probeVisibleSessions()
+  } catch (err) {
+    renameError.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    renameBusy.value = false
+  }
+}
+
+function onRenameDraftInput(event: Event) {
+  const target = event.target as HTMLInputElement | null
+  renameDraft.value = target?.value || ''
+}
+
+watch(
+  () => ({ id: renamingSessionId.value, scope: renamingScope.value, isMobile: ui.isMobile }),
+  (next) => {
+    if (!next.id) return
+    if (next.isMobile) return
+    void nextTick(() => {
+      const el = renameInputEl.value
+      if (!el) return
+      el.focus()
+      el.select()
+    })
+  },
+)
+
+function openRowMenu(sessionId: string, scope: PreviewSidebarScope, event: MouseEvent) {
   rowMenuSessionId.value = sessionId
+  rowMenuScope.value = scope
   rowMenuAnchorEl.value = event.currentTarget as HTMLElement | null
   rowMenuOpen.value = true
 }
@@ -439,6 +634,7 @@ function setRowMenuOpen(next: boolean) {
   if (!rowMenuOpen.value) {
     rowMenuSessionId.value = ''
     rowMenuAnchorEl.value = null
+    rowMenuScope.value = 'directory'
   }
 }
 
@@ -476,6 +672,39 @@ async function onRowMenuSelect(item: OptionMenuItem) {
   const session = rowMenuSession.value
   if (!session) return
 
+  if (item.id === 'start') {
+    setRowMenuOpen(false)
+    try {
+      await preview.startSession(session.id)
+      clearSessionHealth(session.id)
+      probeVisibleSessions()
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err)
+      toasts.push('error', String(t('workspaceDock.preview.sidebar.actions.startFailed', { detail })), 4500)
+    }
+    return
+  }
+
+  if (item.id === 'stop') {
+    setRowMenuOpen(false)
+    try {
+      await preview.stopSession(session.id)
+      clearSessionHealth(session.id)
+      probeVisibleSessions()
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err)
+      toasts.push('error', String(t('workspaceDock.preview.sidebar.actions.stopFailed', { detail })), 4500)
+    }
+    return
+  }
+
+  if (item.id === 'rename') {
+    const scope = rowMenuScope.value
+    setRowMenuOpen(false)
+    startRenameSession(session.id, scope)
+    return
+  }
+
   if (item.id === 'edit-url') {
     setRowMenuOpen(false)
     openEditDialog(session.id)
@@ -484,9 +713,14 @@ async function onRowMenuSelect(item: OptionMenuItem) {
 
   if (item.id === 'delete') {
     setRowMenuOpen(false)
-    await preview.deleteSession(session.id)
-    clearSessionHealth(session.id)
-    probeVisibleSessions()
+    try {
+      await preview.deleteSession(session.id)
+      clearSessionHealth(session.id)
+      probeVisibleSessions()
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err)
+      toasts.push('error', String(t('workspaceDock.preview.sidebar.actions.deleteFailed', { detail })), 4500)
+    }
   }
 }
 
@@ -697,9 +931,10 @@ function selectSession(sessionId: string) {
               v-for="session in pagedChatSessions"
               :key="session.id"
               :active="preview.activeSessionId === session.id"
+              :as="isInlineRenameSession(session, 'chat') ? 'div' : 'button'"
               density="compact"
-              :actions-always-visible="ui.isMobilePointer"
-              @click="selectSession(session.id)"
+              :actions-always-visible="ui.isMobilePointer || isInlineRenameSession(session, 'chat')"
+              @click="!isInlineRenameSession(session, 'chat') && selectSession(session.id)"
             >
               <template #icon>
                 <span
@@ -711,62 +946,67 @@ function selectSession(sessionId: string) {
               </template>
 
               <div class="flex w-full items-center min-w-0 gap-2">
-                <div class="flex-1 min-w-0 flex flex-col justify-center">
-                  <span class="truncate typography-ui-label w-full text-left" :title="preview.sessionLabel(session)">
-                    {{ preview.sessionLabel(session) }}
-                  </span>
-                  <span
-                    class="truncate typography-micro font-mono text-left text-muted-foreground/60 w-full"
-                    :title="session.directory || session.id"
-                  >
-                    {{ session.directory || session.id }}
-                  </span>
-                </div>
-              </div>
-
-              <template #actions>
-                <template v-if="ui.isMobilePointer">
-                  <ListItemOverflowActionButton
-                    mobile
-                    :label="String(t('common.actions'))"
-                    @trigger="(event) => openRowMenu(session.id, event)"
-                  />
+                <template v-if="!isInlineRenameSession(session, 'chat')">
+                  <div class="flex-1 min-w-0 flex flex-col justify-center">
+                    <span class="truncate typography-ui-label w-full text-left" :title="preview.sessionLabel(session)">
+                      {{ preview.sessionLabel(session) }}
+                    </span>
+                    <span
+                      class="truncate typography-micro font-mono text-left text-muted-foreground/60 w-full"
+                      :title="session.directory || session.id"
+                    >
+                      {{ session.directory || session.id }}
+                    </span>
+                  </div>
                 </template>
 
                 <template v-else>
+                  <input
+                    ref="renameInputEl"
+                    type="text"
+                    :value="renameDraft"
+                    class="h-7 min-w-0 flex-1 rounded-md border border-input bg-background/95 px-2 text-xs font-mono text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    :placeholder="String(t('workspaceDock.preview.emptyState.sessionIdPlaceholder'))"
+                    @click.stop
+                    @input="onRenameDraftInput"
+                    @keydown.enter.prevent.stop="saveRenameSession"
+                    @keydown.esc.prevent.stop="cancelRenameSession"
+                  />
+                </template>
+              </div>
+
+              <template #actions>
+                <template v-if="isInlineRenameSession(session, 'chat')">
                   <IconButton
                     size="xs"
-                    class="text-muted-foreground hover:text-foreground hover:dark:bg-accent/40 hover:bg-primary/6"
-                    :tooltip="
-                      canEditTargetUrl(session)
-                        ? String(t('workspaceDock.preview.sidebar.actions.editUrl'))
-                        : String(t('workspaceDock.preview.sidebar.actions.editUrlUnavailable'))
-                    "
-                    :aria-label="String(t('workspaceDock.preview.sidebar.actions.editUrl'))"
-                    :disabled="editBusy || !canEditTargetUrl(session)"
-                    @click.stop="openEditDialog(session.id)"
+                    class="text-muted-foreground hover:text-foreground hover:bg-primary/6"
+                    :title="String(t('common.cancel'))"
+                    :aria-label="String(t('common.cancel'))"
+                    :disabled="renameBusy"
+                    @click.stop="cancelRenameSession"
                   >
-                    <RiPencilLine class="h-4 w-4" />
+                    <RiCloseLine class="h-3.5 w-3.5" />
                   </IconButton>
 
-                  <ConfirmPopover
-                    variant="destructive"
-                    :title="String(t('workspaceDock.preview.sidebar.actions.deleteConfirmTitle'))"
-                    :description="String(t('workspaceDock.preview.sidebar.actions.deleteConfirmDescription'))"
-                    :confirm-text="String(t('common.delete'))"
-                    :cancel-text="String(t('common.cancel'))"
-                    @confirm="() => preview.deleteSession(session.id)"
+                  <IconButton
+                    size="xs"
+                    class="text-primary hover:bg-primary/12"
+                    :title="String(t(renameBusy ? 'common.saving' : 'common.save'))"
+                    :aria-label="String(t(renameBusy ? 'common.saving' : 'common.save'))"
+                    :disabled="!canSaveRename"
+                    @click.stop="saveRenameSession"
                   >
-                    <IconButton
-                      size="xs"
-                      class="text-muted-foreground hover:text-destructive hover:dark:bg-accent/40 hover:bg-primary/6"
-                      :title="String(t('common.delete'))"
-                      :aria-label="String(t('common.delete'))"
-                      @click.stop
-                    >
-                      <RiDeleteBinLine class="h-4 w-4" />
-                    </IconButton>
-                  </ConfirmPopover>
+                    <RiLoader4Line v-if="renameBusy" class="h-3.5 w-3.5 animate-spin" />
+                    <RiCheckLine v-else class="h-3.5 w-3.5" />
+                  </IconButton>
+                </template>
+
+                <template v-else>
+                  <ListItemOverflowActionButton
+                    :mobile="ui.isMobilePointer"
+                    :label="String(t('common.actions'))"
+                    @trigger="(event) => openRowMenu(session.id, 'chat', event)"
+                  />
                 </template>
               </template>
             </SidebarListItem>
@@ -835,9 +1075,10 @@ function selectSession(sessionId: string) {
               v-for="session in pagedDirectorySessions"
               :key="session.id"
               :active="preview.activeSessionId === session.id"
+              :as="isInlineRenameSession(session, 'directory') ? 'div' : 'button'"
               density="compact"
-              :actions-always-visible="ui.isMobilePointer"
-              @click="selectSession(session.id)"
+              :actions-always-visible="ui.isMobilePointer || isInlineRenameSession(session, 'directory')"
+              @click="!isInlineRenameSession(session, 'directory') && selectSession(session.id)"
             >
               <template #icon>
                 <span
@@ -849,62 +1090,67 @@ function selectSession(sessionId: string) {
               </template>
 
               <div class="flex w-full items-center min-w-0 gap-2">
-                <div class="flex-1 min-w-0 flex flex-col justify-center">
-                  <span class="truncate typography-ui-label w-full text-left" :title="preview.sessionLabel(session)">
-                    {{ preview.sessionLabel(session) }}
-                  </span>
-                  <span
-                    class="truncate typography-micro font-mono text-left text-muted-foreground/60 w-full"
-                    :title="session.directory || session.id"
-                  >
-                    {{ session.directory || session.id }}
-                  </span>
-                </div>
-              </div>
-
-              <template #actions>
-                <template v-if="ui.isMobilePointer">
-                  <ListItemOverflowActionButton
-                    mobile
-                    :label="String(t('common.actions'))"
-                    @trigger="(event) => openRowMenu(session.id, event)"
-                  />
+                <template v-if="!isInlineRenameSession(session, 'directory')">
+                  <div class="flex-1 min-w-0 flex flex-col justify-center">
+                    <span class="truncate typography-ui-label w-full text-left" :title="preview.sessionLabel(session)">
+                      {{ preview.sessionLabel(session) }}
+                    </span>
+                    <span
+                      class="truncate typography-micro font-mono text-left text-muted-foreground/60 w-full"
+                      :title="session.directory || session.id"
+                    >
+                      {{ session.directory || session.id }}
+                    </span>
+                  </div>
                 </template>
 
                 <template v-else>
+                  <input
+                    ref="renameInputEl"
+                    type="text"
+                    :value="renameDraft"
+                    class="h-7 min-w-0 flex-1 rounded-md border border-input bg-background/95 px-2 text-xs font-mono text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    :placeholder="String(t('workspaceDock.preview.emptyState.sessionIdPlaceholder'))"
+                    @click.stop
+                    @input="onRenameDraftInput"
+                    @keydown.enter.prevent.stop="saveRenameSession"
+                    @keydown.esc.prevent.stop="cancelRenameSession"
+                  />
+                </template>
+              </div>
+
+              <template #actions>
+                <template v-if="isInlineRenameSession(session, 'directory')">
                   <IconButton
                     size="xs"
-                    class="text-muted-foreground hover:text-foreground hover:dark:bg-accent/40 hover:bg-primary/6"
-                    :tooltip="
-                      canEditTargetUrl(session)
-                        ? String(t('workspaceDock.preview.sidebar.actions.editUrl'))
-                        : String(t('workspaceDock.preview.sidebar.actions.editUrlUnavailable'))
-                    "
-                    :aria-label="String(t('workspaceDock.preview.sidebar.actions.editUrl'))"
-                    :disabled="editBusy || !canEditTargetUrl(session)"
-                    @click.stop="openEditDialog(session.id)"
+                    class="text-muted-foreground hover:text-foreground hover:bg-primary/6"
+                    :title="String(t('common.cancel'))"
+                    :aria-label="String(t('common.cancel'))"
+                    :disabled="renameBusy"
+                    @click.stop="cancelRenameSession"
                   >
-                    <RiPencilLine class="h-4 w-4" />
+                    <RiCloseLine class="h-3.5 w-3.5" />
                   </IconButton>
 
-                  <ConfirmPopover
-                    variant="destructive"
-                    :title="String(t('workspaceDock.preview.sidebar.actions.deleteConfirmTitle'))"
-                    :description="String(t('workspaceDock.preview.sidebar.actions.deleteConfirmDescription'))"
-                    :confirm-text="String(t('common.delete'))"
-                    :cancel-text="String(t('common.cancel'))"
-                    @confirm="() => preview.deleteSession(session.id)"
+                  <IconButton
+                    size="xs"
+                    class="text-primary hover:bg-primary/12"
+                    :title="String(t(renameBusy ? 'common.saving' : 'common.save'))"
+                    :aria-label="String(t(renameBusy ? 'common.saving' : 'common.save'))"
+                    :disabled="!canSaveRename"
+                    @click.stop="saveRenameSession"
                   >
-                    <IconButton
-                      size="xs"
-                      class="text-muted-foreground hover:text-destructive hover:dark:bg-accent/40 hover:bg-primary/6"
-                      :title="String(t('common.delete'))"
-                      :aria-label="String(t('common.delete'))"
-                      @click.stop
-                    >
-                      <RiDeleteBinLine class="h-4 w-4" />
-                    </IconButton>
-                  </ConfirmPopover>
+                    <RiLoader4Line v-if="renameBusy" class="h-3.5 w-3.5 animate-spin" />
+                    <RiCheckLine v-else class="h-3.5 w-3.5" />
+                  </IconButton>
+                </template>
+
+                <template v-else>
+                  <ListItemOverflowActionButton
+                    :mobile="ui.isMobilePointer"
+                    :label="String(t('common.actions'))"
+                    @trigger="(event) => openRowMenu(session.id, 'directory', event)"
+                  />
                 </template>
               </template>
             </SidebarListItem>
@@ -967,9 +1213,10 @@ function selectSession(sessionId: string) {
               v-for="session in pagedAllSessions"
               :key="session.id"
               :active="preview.activeSessionId === session.id"
+              :as="isInlineRenameSession(session, 'all') ? 'div' : 'button'"
               density="compact"
-              :actions-always-visible="ui.isMobilePointer"
-              @click="selectSession(session.id)"
+              :actions-always-visible="ui.isMobilePointer || isInlineRenameSession(session, 'all')"
+              @click="!isInlineRenameSession(session, 'all') && selectSession(session.id)"
             >
               <template #icon>
                 <span
@@ -981,62 +1228,67 @@ function selectSession(sessionId: string) {
               </template>
 
               <div class="flex w-full items-center min-w-0 gap-2">
-                <div class="flex-1 min-w-0 flex flex-col justify-center">
-                  <span class="truncate typography-ui-label w-full text-left" :title="preview.sessionLabel(session)">
-                    {{ preview.sessionLabel(session) }}
-                  </span>
-                  <span
-                    class="truncate typography-micro font-mono text-left text-muted-foreground/60 w-full"
-                    :title="session.directory || session.id"
-                  >
-                    {{ session.directory || session.id }}
-                  </span>
-                </div>
-              </div>
-
-              <template #actions>
-                <template v-if="ui.isMobilePointer">
-                  <ListItemOverflowActionButton
-                    mobile
-                    :label="String(t('common.actions'))"
-                    @trigger="(event) => openRowMenu(session.id, event)"
-                  />
+                <template v-if="!isInlineRenameSession(session, 'all')">
+                  <div class="flex-1 min-w-0 flex flex-col justify-center">
+                    <span class="truncate typography-ui-label w-full text-left" :title="preview.sessionLabel(session)">
+                      {{ preview.sessionLabel(session) }}
+                    </span>
+                    <span
+                      class="truncate typography-micro font-mono text-left text-muted-foreground/60 w-full"
+                      :title="session.directory || session.id"
+                    >
+                      {{ session.directory || session.id }}
+                    </span>
+                  </div>
                 </template>
 
                 <template v-else>
+                  <input
+                    ref="renameInputEl"
+                    type="text"
+                    :value="renameDraft"
+                    class="h-7 min-w-0 flex-1 rounded-md border border-input bg-background/95 px-2 text-xs font-mono text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    :placeholder="String(t('workspaceDock.preview.emptyState.sessionIdPlaceholder'))"
+                    @click.stop
+                    @input="onRenameDraftInput"
+                    @keydown.enter.prevent.stop="saveRenameSession"
+                    @keydown.esc.prevent.stop="cancelRenameSession"
+                  />
+                </template>
+              </div>
+
+              <template #actions>
+                <template v-if="isInlineRenameSession(session, 'all')">
                   <IconButton
                     size="xs"
-                    class="text-muted-foreground hover:text-foreground hover:dark:bg-accent/40 hover:bg-primary/6"
-                    :tooltip="
-                      canEditTargetUrl(session)
-                        ? String(t('workspaceDock.preview.sidebar.actions.editUrl'))
-                        : String(t('workspaceDock.preview.sidebar.actions.editUrlUnavailable'))
-                    "
-                    :aria-label="String(t('workspaceDock.preview.sidebar.actions.editUrl'))"
-                    :disabled="editBusy || !canEditTargetUrl(session)"
-                    @click.stop="openEditDialog(session.id)"
+                    class="text-muted-foreground hover:text-foreground hover:bg-primary/6"
+                    :title="String(t('common.cancel'))"
+                    :aria-label="String(t('common.cancel'))"
+                    :disabled="renameBusy"
+                    @click.stop="cancelRenameSession"
                   >
-                    <RiPencilLine class="h-4 w-4" />
+                    <RiCloseLine class="h-3.5 w-3.5" />
                   </IconButton>
 
-                  <ConfirmPopover
-                    variant="destructive"
-                    :title="String(t('workspaceDock.preview.sidebar.actions.deleteConfirmTitle'))"
-                    :description="String(t('workspaceDock.preview.sidebar.actions.deleteConfirmDescription'))"
-                    :confirm-text="String(t('common.delete'))"
-                    :cancel-text="String(t('common.cancel'))"
-                    @confirm="() => preview.deleteSession(session.id)"
+                  <IconButton
+                    size="xs"
+                    class="text-primary hover:bg-primary/12"
+                    :title="String(t(renameBusy ? 'common.saving' : 'common.save'))"
+                    :aria-label="String(t(renameBusy ? 'common.saving' : 'common.save'))"
+                    :disabled="!canSaveRename"
+                    @click.stop="saveRenameSession"
                   >
-                    <IconButton
-                      size="xs"
-                      class="text-muted-foreground hover:text-destructive hover:dark:bg-accent/40 hover:bg-primary/6"
-                      :title="String(t('common.delete'))"
-                      :aria-label="String(t('common.delete'))"
-                      @click.stop
-                    >
-                      <RiDeleteBinLine class="h-4 w-4" />
-                    </IconButton>
-                  </ConfirmPopover>
+                    <RiLoader4Line v-if="renameBusy" class="h-3.5 w-3.5 animate-spin" />
+                    <RiCheckLine v-else class="h-3.5 w-3.5" />
+                  </IconButton>
+                </template>
+
+                <template v-else>
+                  <ListItemOverflowActionButton
+                    :mobile="ui.isMobilePointer"
+                    :label="String(t('common.actions'))"
+                    @trigger="(event) => openRowMenu(session.id, 'all', event)"
+                  />
                 </template>
               </template>
             </SidebarListItem>
@@ -1094,6 +1346,74 @@ function selectSession(sessionId: string) {
         <div class="space-y-1">
           <label
             class="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground"
+            for="workspace-preview-run-dir-sidebar-dialog"
+          >
+            {{ t('workspaceDock.preview.emptyState.runDirectoryLabel') }}
+          </label>
+          <Input
+            id="workspace-preview-run-dir-sidebar-dialog"
+            v-model="createRunDirectory"
+            type="text"
+            :placeholder="String(t('workspaceDock.preview.emptyState.runDirectoryPlaceholder'))"
+            :disabled="actionLoading"
+            class="h-8 bg-background/80 text-xs font-mono"
+          />
+        </div>
+
+        <div class="space-y-1">
+          <label
+            class="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground"
+            for="workspace-preview-command-sidebar-dialog"
+          >
+            {{ t('workspaceDock.preview.emptyState.commandLabel') }}
+          </label>
+          <Input
+            id="workspace-preview-command-sidebar-dialog"
+            v-model="createCommand"
+            type="text"
+            :placeholder="String(t('workspaceDock.preview.emptyState.commandPlaceholder'))"
+            :disabled="actionLoading"
+            class="h-8 bg-background/80 text-xs font-mono"
+          />
+        </div>
+
+        <div class="space-y-1">
+          <label
+            class="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground"
+            for="workspace-preview-args-sidebar-dialog"
+          >
+            {{ t('workspaceDock.preview.emptyState.argsLabel') }}
+          </label>
+          <Input
+            id="workspace-preview-args-sidebar-dialog"
+            v-model="createArgsText"
+            type="text"
+            :placeholder="String(t('workspaceDock.preview.emptyState.argsPlaceholder'))"
+            :disabled="actionLoading"
+            class="h-8 bg-background/80 text-xs font-mono"
+          />
+        </div>
+
+        <div class="space-y-1">
+          <label
+            class="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground"
+            for="workspace-preview-logs-sidebar-dialog"
+          >
+            {{ t('workspaceDock.preview.emptyState.logsPathLabel') }}
+          </label>
+          <Input
+            id="workspace-preview-logs-sidebar-dialog"
+            v-model="createLogsPath"
+            type="text"
+            :placeholder="String(t('workspaceDock.preview.emptyState.logsPathPlaceholder'))"
+            :disabled="actionLoading"
+            class="h-8 bg-background/80 text-xs font-mono"
+          />
+        </div>
+
+        <div class="space-y-1">
+          <label
+            class="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground"
             for="workspace-preview-target-url-sidebar-dialog"
           >
             {{ t('workspaceDock.preview.emptyState.targetUrlLabel') }}
@@ -1127,6 +1447,10 @@ function selectSession(sessionId: string) {
               !currentDirectory.trim() ||
               !createPreviewIdNorm.trim() ||
               !createPreviewIdValid ||
+              !createRunDirectoryNorm.trim() ||
+              !createCommandNorm.trim() ||
+              createArgsList.length === 0 ||
+              !createLogsPathNorm.trim() ||
               !createTargetUrl.trim()
             "
             @click="createManagedSession"
@@ -1171,6 +1495,57 @@ function selectSession(sessionId: string) {
           </Button>
           <Button size="sm" :disabled="editBusy || !editTargetUrl.trim()" @click="saveEditDialog">
             {{ t('common.save') }}
+          </Button>
+        </div>
+      </div>
+    </FormDialog>
+
+    <FormDialog
+      :open="renameDialogOpen"
+      :title="String(t('workspaceDock.preview.renameDialog.title'))"
+      :description="String(t('workspaceDock.preview.renameDialog.description'))"
+      max-width="max-w-md"
+      @close="cancelRenameSession"
+      @update:open="
+        (v) => {
+          renameDialogOpen = v
+          if (!v) cancelRenameSession()
+        }
+      "
+    >
+      <div class="space-y-3">
+        <div class="space-y-1">
+          <label
+            class="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground"
+            for="workspace-preview-rename-id"
+          >
+            {{ t('workspaceDock.preview.emptyState.sessionIdLabel') }}
+          </label>
+          <Input
+            id="workspace-preview-rename-id"
+            v-model="renameDraft"
+            type="text"
+            autocapitalize="off"
+            autocomplete="off"
+            spellcheck="false"
+            :placeholder="String(t('workspaceDock.preview.emptyState.sessionIdPlaceholder'))"
+            :disabled="renameBusy"
+            class="h-8 bg-background/80 text-xs font-mono"
+            @keydown.enter.prevent="saveRenameSession"
+          />
+          <p class="text-[11px] text-muted-foreground">
+            {{ t('workspaceDock.preview.emptyState.sessionIdHelp') }}
+          </p>
+        </div>
+
+        <p v-if="renameError" class="text-xs text-destructive">{{ renameError }}</p>
+
+        <div class="flex items-center justify-end gap-2 pt-1">
+          <Button size="sm" variant="outline" :disabled="renameBusy" @click="cancelRenameSession">
+            {{ t('common.cancel') }}
+          </Button>
+          <Button size="sm" :disabled="!canSaveRename" @click="saveRenameSession">
+            {{ renameBusy ? t('common.saving') : t('common.save') }}
           </Button>
         </div>
       </div>

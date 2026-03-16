@@ -5,6 +5,9 @@ import {
   createWorkspacePreviewSession,
   deleteWorkspacePreviewSession,
   listWorkspacePreviewSessions,
+  renameWorkspacePreviewSession,
+  startWorkspacePreviewSession,
+  stopWorkspacePreviewSession,
   type WorkspacePreviewSession,
   updateWorkspacePreviewSession,
 } from '@/features/workspacePreview/api/workspacePreviewApi'
@@ -304,17 +307,25 @@ export const useWorkspacePreviewStore = defineStore('workspacePreview', () => {
 
   async function createSession(input: {
     id: string
-    directory?: string
+    directory: string
+    runDirectory: string
+    command: string
+    args: string[]
+    logsPath: string
     targetUrl: string
     opencodeSessionId?: string
     select?: boolean
   }) {
-    const session = await createWorkspacePreviewSession(
-      input.id,
-      input.directory,
-      input.targetUrl,
-      input.opencodeSessionId,
-    )
+    const session = await createWorkspacePreviewSession({
+      id: input.id,
+      directory: input.directory,
+      runDirectory: input.runDirectory,
+      command: input.command,
+      args: input.args,
+      logsPath: input.logsPath,
+      targetUrl: input.targetUrl,
+      ...(input.opencodeSessionId ? { opencodeSessionId: input.opencodeSessionId } : {}),
+    })
     await refreshSessions()
     if (input.select !== false) {
       selectSession(session.id)
@@ -325,7 +336,15 @@ export const useWorkspacePreviewStore = defineStore('workspacePreview', () => {
 
   async function updateSession(
     sessionId: string,
-    patch: { directory?: string; opencodeSessionId?: string; targetUrl?: string },
+    patch: {
+      directory?: string
+      runDirectory?: string
+      opencodeSessionId?: string
+      command?: string
+      args?: string[]
+      logsPath?: string
+      targetUrl?: string
+    },
   ) {
     const session = await updateWorkspacePreviewSession(sessionId, patch)
     await refreshSessions()
@@ -338,6 +357,30 @@ export const useWorkspacePreviewStore = defineStore('workspacePreview', () => {
     if (activeSessionId.value === sessionId) activeSessionId.value = ''
     await refreshSessions()
     bumpRefreshToken()
+  }
+
+  async function renameSession(sessionId: string, newId: string) {
+    const updated = await renameWorkspacePreviewSession(sessionId, newId)
+    if (activeSessionId.value === sessionId) {
+      activeSessionId.value = updated.id
+      bumpRefreshToken()
+    }
+    await refreshSessions()
+    return updated
+  }
+
+  async function startSession(sessionId: string) {
+    const updated = await startWorkspacePreviewSession(sessionId)
+    await refreshSessions()
+    if (activeSessionId.value === updated.id) bumpRefreshToken()
+    return updated
+  }
+
+  async function stopSession(sessionId: string) {
+    const updated = await stopWorkspacePreviewSession(sessionId)
+    await refreshSessions()
+    if (activeSessionId.value === updated.id) bumpRefreshToken()
+    return updated
   }
 
   return {
@@ -362,6 +405,9 @@ export const useWorkspacePreviewStore = defineStore('workspacePreview', () => {
     createSession,
     updateSession,
     deleteSession,
+    renameSession,
+    startSession,
+    stopSession,
     setViewport,
     setViewportSize,
     setViewportScale,

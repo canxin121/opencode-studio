@@ -10,8 +10,10 @@ import {
   RiExternalLinkLine,
   RiHand,
   RiLoader4Line,
+  RiPlayLine,
   RiRefreshLine,
   RiSmartphoneLine,
+  RiStopLine,
   RiSubtractLine,
 } from '@remixicon/vue'
 
@@ -22,10 +24,7 @@ import OptionMenu from '@/components/ui/OptionMenu.vue'
 import FormDialog from '@/components/ui/FormDialog.vue'
 import type { OptionMenuGroup, OptionMenuItem } from '@/components/ui/optionMenu.types'
 import { apiUrl } from '@/lib/api'
-import {
-  createWorkspacePreviewSession,
-  type WorkspacePreviewSession,
-} from '@/features/workspacePreview/api/workspacePreviewApi'
+import type { WorkspacePreviewSession } from '@/features/workspacePreview/api/workspacePreviewApi'
 import { buildPreviewFrameSrc } from '@/features/workspacePreview/model/previewUrl'
 import { useChatStore } from '@/stores/chat'
 import { useDirectoryStore } from '@/stores/directory'
@@ -698,6 +697,10 @@ const frameSrc = shallowRef('')
 const iframeLoading = ref(false)
 const iframeError = ref('')
 const createPreviewId = ref('')
+const createRunDirectory = ref('')
+const createCommand = ref('')
+const createArgsText = ref('')
+const createLogsPath = ref('')
 const createTargetUrl = ref('')
 const createDialogOpen = ref(false)
 const actionLoading = ref<'create' | ''>('')
@@ -719,6 +722,15 @@ const previewSrc = computed(() => buildPreviewFrameSrc(activeProxyBasePath.value
 const canOpenInWindow = computed(() => Boolean(previewSrc.value))
 const currentDirectory = computed(() => String(directoryStore.currentDirectory || '').trim())
 
+const runtimeAction = ref<'start' | 'stop' | ''>('')
+const runtimeBusy = computed(() => Boolean(runtimeAction.value))
+const activeSessionStateNorm = computed(() =>
+  String(activeSession.value?.state || '')
+    .trim()
+    .toLowerCase(),
+)
+const activeSessionIsRunning = computed(() => activeSessionStateNorm.value === 'running')
+
 const opencodeSessionId = computed(() => {
   const path = String(route.path || '')
     .trim()
@@ -730,11 +742,25 @@ const opencodeSessionId = computed(() => {
 const createPreviewIdNorm = computed(() => String(createPreviewId.value || '').trim())
 const createPreviewIdValid = computed(() => /^[A-Za-z0-9_-]+$/.test(createPreviewIdNorm.value))
 
+const createRunDirectoryNorm = computed(() => String(createRunDirectory.value || '').trim())
+const createCommandNorm = computed(() => String(createCommand.value || '').trim())
+const createArgsList = computed(() =>
+  String(createArgsText.value || '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean),
+)
+const createLogsPathNorm = computed(() => String(createLogsPath.value || '').trim())
+
 const canCreateSession = computed(() =>
   Boolean(
     currentDirectory.value.trim() &&
     createPreviewIdNorm.value &&
     createPreviewIdValid.value &&
+    createRunDirectoryNorm.value &&
+    createCommandNorm.value &&
+    createArgsList.value.length > 0 &&
+    createLogsPathNorm.value &&
     createTargetUrl.value.trim() &&
     !actionLoading.value,
   ),
@@ -813,6 +839,11 @@ function suggestPreviewIdFromDirectory(directory: string): string {
     .replace(/-+/g, '-')
     .replace(/^[-_]+|[-_]+$/g, '')
   return normalized
+}
+
+function suggestLogsPath(sessionId: string): string {
+  const clean = String(sessionId || '').trim() || 'preview'
+  return `.opencode/preview/${clean}.log`
 }
 
 function extractProxyErrorDetail(raw: string, contentType: string): string {
@@ -936,6 +967,26 @@ async function createManagedSession() {
     return
   }
 
+  if (!createRunDirectoryNorm.value) {
+    actionError.value = String(t('workspaceDock.preview.emptyState.runDirectoryRequired'))
+    return
+  }
+
+  if (!createCommandNorm.value) {
+    actionError.value = String(t('workspaceDock.preview.emptyState.commandRequired'))
+    return
+  }
+
+  if (createArgsList.value.length === 0) {
+    actionError.value = String(t('workspaceDock.preview.emptyState.argsRequired'))
+    return
+  }
+
+  if (!createLogsPathNorm.value) {
+    actionError.value = String(t('workspaceDock.preview.emptyState.logsPathRequired'))
+    return
+  }
+
   const targetUrl = createTargetUrl.value.trim()
   if (!targetUrl) {
     actionError.value = String(t('workspaceDock.preview.emptyState.targetUrlRequired'))
@@ -945,15 +996,23 @@ async function createManagedSession() {
   actionLoading.value = 'create'
   actionError.value = ''
   try {
-    const session = await createWorkspacePreviewSession(
-      createPreviewIdNorm.value,
-      currentDirectory.value,
+    await preview.createSession({
+      id: createPreviewIdNorm.value,
+      directory: currentDirectory.value,
+      runDirectory: createRunDirectoryNorm.value,
+      command: createCommandNorm.value,
+      args: createArgsList.value,
+      logsPath: createLogsPathNorm.value,
       targetUrl,
-      opencodeSessionId.value,
-    )
+      ...(opencodeSessionId.value ? { opencodeSessionId: opencodeSessionId.value } : {}),
+      select: true,
+    })
     createPreviewId.value = ''
+    createRunDirectory.value = ''
+    createCommand.value = ''
+    createArgsText.value = ''
+    createLogsPath.value = ''
     createTargetUrl.value = ''
-    await selectSessionAfterAction(session)
     createDialogOpen.value = false
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err)
@@ -965,8 +1024,15 @@ async function createManagedSession() {
 
 function openCreateDialog() {
   actionError.value = ''
+  const suggestedId = createPreviewIdNorm.value || suggestPreviewIdFromDirectory(currentDirectory.value)
   if (!createPreviewIdNorm.value) {
-    createPreviewId.value = suggestPreviewIdFromDirectory(currentDirectory.value)
+    createPreviewId.value = suggestedId
+  }
+  if (!createRunDirectoryNorm.value) {
+    createRunDirectory.value = currentDirectory.value
+  }
+  if (!createLogsPathNorm.value) {
+    createLogsPath.value = suggestLogsPath(suggestedId)
   }
   createDialogOpen.value = true
 }
@@ -991,6 +1057,34 @@ function openInNewWindow() {
 
 function toggleTouchSimulation() {
   preview.setTouchSimulation(!preview.touchSimulation)
+}
+
+async function startActiveSession() {
+  const sid = String(activeSession.value?.id || '').trim()
+  if (!sid) return
+  runtimeAction.value = 'start'
+  iframeError.value = ''
+  try {
+    await preview.startSession(sid)
+  } catch (err) {
+    iframeError.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    runtimeAction.value = ''
+  }
+}
+
+async function stopActiveSession() {
+  const sid = String(activeSession.value?.id || '').trim()
+  if (!sid) return
+  runtimeAction.value = 'stop'
+  iframeError.value = ''
+  try {
+    await preview.stopSession(sid)
+  } catch (err) {
+    iframeError.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    runtimeAction.value = ''
+  }
 }
 
 function startAutoRefresh() {
@@ -1132,6 +1226,34 @@ onBeforeUnmount(() => {
             @click="refreshPreview({ forceFrameReload: true })"
           >
             <RiRefreshLine class="h-4 w-4" />
+          </IconButton>
+
+          <IconButton
+            size="sm"
+            :tooltip="
+              String(
+                t(
+                  activeSessionIsRunning
+                    ? 'workspaceDock.preview.sidebar.actions.stop'
+                    : 'workspaceDock.preview.sidebar.actions.start',
+                ),
+              )
+            "
+            :aria-label="
+              String(
+                t(
+                  activeSessionIsRunning
+                    ? 'workspaceDock.preview.sidebar.actions.stop'
+                    : 'workspaceDock.preview.sidebar.actions.start',
+                ),
+              )
+            "
+            :disabled="runtimeBusy || !activeSession"
+            @click="activeSessionIsRunning ? stopActiveSession() : startActiveSession()"
+          >
+            <RiLoader4Line v-if="runtimeBusy" class="h-4 w-4 animate-spin" />
+            <RiStopLine v-else-if="activeSessionIsRunning" class="h-4 w-4" />
+            <RiPlayLine v-else class="h-4 w-4" />
           </IconButton>
           <IconButton
             v-if="viewerMode !== 'responsive'"
@@ -1324,6 +1446,74 @@ onBeforeUnmount(() => {
           <p class="text-[11px] text-muted-foreground">
             {{ t('workspaceDock.preview.emptyState.sessionIdHelp') }}
           </p>
+        </div>
+
+        <div class="space-y-1">
+          <label
+            class="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground"
+            for="workspace-preview-run-dir-dialog"
+          >
+            {{ t('workspaceDock.preview.emptyState.runDirectoryLabel') }}
+          </label>
+          <Input
+            id="workspace-preview-run-dir-dialog"
+            v-model="createRunDirectory"
+            type="text"
+            :placeholder="String(t('workspaceDock.preview.emptyState.runDirectoryPlaceholder'))"
+            :disabled="Boolean(actionLoading)"
+            class="h-8 bg-background/80 text-xs font-mono"
+          />
+        </div>
+
+        <div class="space-y-1">
+          <label
+            class="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground"
+            for="workspace-preview-command-dialog"
+          >
+            {{ t('workspaceDock.preview.emptyState.commandLabel') }}
+          </label>
+          <Input
+            id="workspace-preview-command-dialog"
+            v-model="createCommand"
+            type="text"
+            :placeholder="String(t('workspaceDock.preview.emptyState.commandPlaceholder'))"
+            :disabled="Boolean(actionLoading)"
+            class="h-8 bg-background/80 text-xs font-mono"
+          />
+        </div>
+
+        <div class="space-y-1">
+          <label
+            class="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground"
+            for="workspace-preview-args-dialog"
+          >
+            {{ t('workspaceDock.preview.emptyState.argsLabel') }}
+          </label>
+          <Input
+            id="workspace-preview-args-dialog"
+            v-model="createArgsText"
+            type="text"
+            :placeholder="String(t('workspaceDock.preview.emptyState.argsPlaceholder'))"
+            :disabled="Boolean(actionLoading)"
+            class="h-8 bg-background/80 text-xs font-mono"
+          />
+        </div>
+
+        <div class="space-y-1">
+          <label
+            class="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground"
+            for="workspace-preview-logs-dialog"
+          >
+            {{ t('workspaceDock.preview.emptyState.logsPathLabel') }}
+          </label>
+          <Input
+            id="workspace-preview-logs-dialog"
+            v-model="createLogsPath"
+            type="text"
+            :placeholder="String(t('workspaceDock.preview.emptyState.logsPathPlaceholder'))"
+            :disabled="Boolean(actionLoading)"
+            class="h-8 bg-background/80 text-xs font-mono"
+          />
         </div>
 
         <div class="space-y-1">

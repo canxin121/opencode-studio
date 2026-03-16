@@ -41,6 +41,8 @@ pub(crate) struct AppState {
         crate::directory_session_index::DirectorySessionIndexManager,
     pub(crate) workspace_preview_registry:
         Arc<crate::workspace_preview_registry::WorkspacePreviewRegistry>,
+    pub(crate) workspace_preview_runtime:
+        Arc<crate::workspace_preview_runtime::WorkspacePreviewRuntime>,
     pub(crate) settings_path: PathBuf,
     pub(crate) settings: Arc<RwLock<crate::settings::Settings>>,
 }
@@ -913,6 +915,11 @@ pub(crate) async fn run(args: crate::Args) {
         crate::directory_session_index::DirectorySessionIndexManager::new();
     let workspace_preview_registry =
         Arc::new(crate::workspace_preview_registry::WorkspacePreviewRegistry::new());
+    let workspace_preview_runtime = Arc::new(
+        crate::workspace_preview_runtime::WorkspacePreviewRuntime::new(
+            workspace_preview_registry.clone(),
+        ),
+    );
 
     let state = Arc::new(AppState {
         ui_auth,
@@ -926,6 +933,7 @@ pub(crate) async fn run(args: crate::Args) {
         session_activity: activity,
         directory_session_index,
         workspace_preview_registry,
+        workspace_preview_runtime,
         settings_path,
         settings: Arc::new(RwLock::new(settings_value)),
     });
@@ -1061,6 +1069,18 @@ pub(crate) async fn run(args: crate::Args) {
             "/workspace/preview/sessions/{id}",
             delete(crate::workspace_preview::workspace_preview_sessions_delete)
                 .put(crate::workspace_preview::workspace_preview_sessions_put),
+        )
+        .route(
+            "/workspace/preview/sessions/{id}/rename",
+            post(crate::workspace_preview::workspace_preview_sessions_rename_post),
+        )
+        .route(
+            "/workspace/preview/sessions/{id}/start",
+            post(crate::workspace_preview::workspace_preview_sessions_start_post),
+        )
+        .route(
+            "/workspace/preview/sessions/{id}/stop",
+            post(crate::workspace_preview::workspace_preview_sessions_stop_post),
         )
         .route(
             "/workspace/preview/sessions/discover",

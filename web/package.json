@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "bun run vite",
     "typecheck": "bun ./node_modules/vue-tsc/bin/vue-tsc.js -b",
+    "vue-tsc": "bun ./node_modules/vue-tsc/bin/vue-tsc.js",
     "build": "bun run check:imports && bun run typecheck && bun run vite build",
     "build:rust-debug": "bun run check:imports && bun run typecheck && bun run vite build --mode rust-debug",
     "check:imports": "bun ./scripts/check-import-rules.mjs",

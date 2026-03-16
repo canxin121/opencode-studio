@@ -36,6 +36,7 @@ mod ui_auth;
 mod updates;
 mod workspace_preview;
 mod workspace_preview_registry;
+mod workspace_preview_runtime;
 
 pub(crate) use app::AppState;
 pub(crate) use error::{ApiResult, AppError};

@@ -18,8 +18,9 @@ use tokio_tungstenite::tungstenite::protocol::{
 use url::{Host, Url};
 
 use crate::workspace_preview_registry::{
-    PreviewSessionRecord, PreviewSessionsResponse, build_proxy_target_url,
-    preview_target_from_record, validate_preview_target_url, websocket_target_url,
+    PreviewSessionCreateRequest, PreviewSessionRecord, PreviewSessionUpdatePatch,
+    PreviewSessionsResponse, build_proxy_target_url, preview_target_from_record,
+    validate_preview_target_url, websocket_target_url,
 };
 use crate::{ApiResult, AppError, AppState};
 
@@ -48,8 +49,12 @@ pub(crate) struct WorkspacePreviewResponse {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct WorkspacePreviewSessionCreateBody {
     pub(crate) id: String,
-    pub(crate) directory: Option<String>,
+    pub(crate) directory: String,
+    pub(crate) run_directory: String,
     pub(crate) opencode_session_id: Option<String>,
+    pub(crate) command: String,
+    pub(crate) args: Vec<String>,
+    pub(crate) logs_path: String,
     pub(crate) target_url: String,
 }
 
@@ -57,15 +62,23 @@ pub(crate) struct WorkspacePreviewSessionCreateBody {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct WorkspacePreviewSessionDiscoverBody {
     pub(crate) id: String,
-    pub(crate) directory: Option<String>,
+    pub(crate) directory: String,
+    pub(crate) run_directory: String,
     pub(crate) opencode_session_id: Option<String>,
+    pub(crate) command: String,
+    pub(crate) args: Vec<String>,
+    pub(crate) logs_path: String,
 }
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct WorkspacePreviewSessionUpdateBody {
     pub(crate) directory: Option<String>,
+    pub(crate) run_directory: Option<String>,
     pub(crate) opencode_session_id: Option<String>,
+    pub(crate) command: Option<String>,
+    pub(crate) args: Option<Vec<String>>,
+    pub(crate) logs_path: Option<String>,
     pub(crate) target_url: Option<String>,
 }
 
@@ -73,6 +86,12 @@ pub(crate) struct WorkspacePreviewSessionUpdateBody {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct WorkspacePreviewSessionDeleteResponse {
     pub(crate) ok: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WorkspacePreviewSessionRenameBody {
+    pub(crate) id: String,
 }
 
 pub(crate) async fn workspace_preview_get(
@@ -127,14 +146,7 @@ pub(crate) async fn workspace_preview_sessions_post(
     State(state): State<Arc<AppState>>,
     Json(body): Json<WorkspacePreviewSessionCreateBody>,
 ) -> ApiResult<Json<PreviewSessionRecord>> {
-    let session = create_studio_preview_session(
-        &state,
-        body.id,
-        body.directory,
-        body.opencode_session_id,
-        &body.target_url,
-    )
-    .await?;
+    let session = create_studio_preview_session(&state, body).await?;
     Ok(Json(session))
 }
 
@@ -147,9 +159,27 @@ pub(crate) async fn workspace_preview_sessions_discover_post(
             "No reachable local preview target found",
         ));
     };
+    let WorkspacePreviewSessionDiscoverBody {
+        id,
+        directory,
+        run_directory,
+        opencode_session_id,
+        command,
+        args,
+        logs_path,
+    } = body;
     let session = state
         .workspace_preview_registry
-        .create_studio_session(body.id, body.directory, body.opencode_session_id, target)
+        .create_studio_session(PreviewSessionCreateRequest {
+            id,
+            directory,
+            run_directory,
+            opencode_session_id,
+            command,
+            args,
+            logs_path,
+            target_url: target,
+        })
         .await?;
     Ok(Json(session))
 }
@@ -171,11 +201,45 @@ pub(crate) async fn workspace_preview_sessions_put(
         .workspace_preview_registry
         .update_by_id(
             id.trim(),
-            body.directory,
-            body.opencode_session_id,
-            body.target_url,
+            PreviewSessionUpdatePatch {
+                directory: body.directory,
+                run_directory: body.run_directory,
+                opencode_session_id: body.opencode_session_id,
+                command: body.command,
+                args: body.args,
+                logs_path: body.logs_path,
+                target_url: body.target_url,
+            },
         )
         .await?;
+    Ok(Json(updated))
+}
+
+pub(crate) async fn workspace_preview_sessions_rename_post(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Json(body): Json<WorkspacePreviewSessionRenameBody>,
+) -> ApiResult<Json<PreviewSessionRecord>> {
+    let updated = state
+        .workspace_preview_registry
+        .rename_by_id(id.trim(), body.id.trim())
+        .await?;
+    Ok(Json(updated))
+}
+
+pub(crate) async fn workspace_preview_sessions_start_post(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> ApiResult<Json<PreviewSessionRecord>> {
+    let updated = state.workspace_preview_runtime.start_by_id(&id).await?;
+    Ok(Json(updated))
+}
+
+pub(crate) async fn workspace_preview_sessions_stop_post(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> ApiResult<Json<PreviewSessionRecord>> {
+    let updated = state.workspace_preview_runtime.stop_by_id(&id).await?;
     Ok(Json(updated))
 }
 
@@ -681,15 +745,31 @@ fn filtered_request_headers(from: &HeaderMap) -> HeaderMap {
 
 async fn create_studio_preview_session(
     state: &Arc<AppState>,
-    id: String,
-    directory: Option<String>,
-    opencode_session_id: Option<String>,
-    raw_target_url: &str,
+    body: WorkspacePreviewSessionCreateBody,
 ) -> ApiResult<PreviewSessionRecord> {
-    let target = validate_preview_target_url(raw_target_url)?;
+    let WorkspacePreviewSessionCreateBody {
+        id,
+        directory,
+        run_directory,
+        opencode_session_id,
+        command,
+        args,
+        logs_path,
+        target_url,
+    } = body;
+    let target = validate_preview_target_url(&target_url)?;
     state
         .workspace_preview_registry
-        .create_studio_session(id, directory, opencode_session_id, target)
+        .create_studio_session(PreviewSessionCreateRequest {
+            id,
+            directory,
+            run_directory,
+            opencode_session_id,
+            command,
+            args,
+            logs_path,
+            target_url: target,
+        })
         .await
 }
 
@@ -838,6 +918,13 @@ mod tests {
     use crate::workspace_preview_registry::WorkspacePreviewRegistry;
 
     fn dummy_state() -> Arc<AppState> {
+        let workspace_preview_registry = Arc::new(WorkspacePreviewRegistry::new());
+        let workspace_preview_runtime = Arc::new(
+            crate::workspace_preview_runtime::WorkspacePreviewRuntime::new(
+                workspace_preview_registry.clone(),
+            ),
+        );
+
         Arc::new(AppState {
             ui_auth: crate::ui_auth::UiAuth::Disabled,
             ui_cookie_same_site: axum_extra::extract::cookie::SameSite::Strict,
@@ -855,7 +942,8 @@ mod tests {
             session_activity: crate::session_activity::SessionActivityManager::new(),
             directory_session_index:
                 crate::directory_session_index::DirectorySessionIndexManager::new(),
-            workspace_preview_registry: Arc::new(WorkspacePreviewRegistry::new()),
+            workspace_preview_registry,
+            workspace_preview_runtime,
             settings_path: std::path::PathBuf::from(
                 "/tmp/opencode-studio-workspace-preview-test-settings.json",
             ),
@@ -882,8 +970,12 @@ mod tests {
             State(dummy_state()),
             Json(WorkspacePreviewSessionCreateBody {
                 id: "pv_test".to_string(),
-                directory: Some("/repo".to_string()),
+                directory: "/repo".to_string(),
+                run_directory: "/repo".to_string(),
                 opencode_session_id: None,
+                command: "bun".to_string(),
+                args: vec!["run".to_string(), "dev".to_string()],
+                logs_path: ".opencode/preview/pv_test.log".to_string(),
                 target_url: "http://example.com:5173".to_string(),
             }),
         )
