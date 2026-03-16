@@ -183,7 +183,7 @@ Windows installer notes:
 | Name | Default | Notes |
 | --- | --- | --- |
 | `OPENCODE_STUDIO_UI_PASSWORD` / `--ui-password` | (disabled) | Enables cookie-based UI login |
-| `OPENCODE_STUDIO_DATA_DIR` | `~/.config/opencode-studio` | Stores `settings.json`, terminal registry, etc. |
+| `OPENCODE_STUDIO_DATA_DIR` | `~/.config/opencode-studio` | Stores `opencode-studio.db` (Studio state SQLite database) |
 
 ### Advanced (selected)
 
@@ -199,8 +199,11 @@ Windows installer notes:
   - Service install default: `<install-root>/opencode-studio.toml` (service units pass `--config` explicitly)
   - Manual run fallback: auto-discovered from current executable directory
   - Override with `--config <path>` or `OPENCODE_STUDIO_CONFIG`
-- Studio settings: `~/.config/opencode-studio/settings.json`
+- Studio state database: `~/.config/opencode-studio/opencode-studio.db`
+  - SQLite file used for Studio-managed state (settings + UI state + terminal registry + attachment cache + workspace preview state)
   - Override base dir with `OPENCODE_STUDIO_DATA_DIR`
+  - Legacy DB names `opencode.db` (and early typo `opencode-sutido.db`) are migrated to the new filename when possible
+  - Legacy JSON files are imported on first read when present and then left untouched
 - OpenCode config layers (read/edited in Studio):
   - User: `~/.config/opencode/opencode.json`
   - Project: `opencode.json` / `opencode.jsonc` (or `.opencode/`)

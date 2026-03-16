@@ -28,6 +28,7 @@ mod runtime_config;
 mod session_activity;
 mod settings;
 mod settings_events;
+mod studio_db;
 mod terminal;
 mod terminal_ui_state;
 #[cfg(test)]

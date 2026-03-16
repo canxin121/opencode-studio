@@ -64,7 +64,7 @@ pub async fn config_settings_put(
     }
 
     *guard = next_settings.clone();
-    if let Err(err) = settings::persist_settings(&state.settings_path, &next_settings).await {
+    if let Err(err) = settings::persist_settings(state.studio_db.as_ref(), &next_settings).await {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({"error": err.to_string()})),

@@ -10,7 +10,7 @@ use axum::{
     http::{HeaderValue, Method, header},
     middleware,
     response::{Html, IntoResponse},
-    routing::{any, delete, get, post},
+    routing::{any, get, post},
 };
 use axum_extra::extract::cookie::SameSite;
 use futures_util::stream::{self as futures_stream, StreamExt as _};
@@ -43,7 +43,7 @@ pub(crate) struct AppState {
         Arc<crate::workspace_preview_registry::WorkspacePreviewRegistry>,
     pub(crate) workspace_preview_runtime:
         Arc<crate::workspace_preview_runtime::WorkspacePreviewRuntime>,
-    pub(crate) settings_path: PathBuf,
+    pub(crate) studio_db: Arc<crate::studio_db::StudioDb>,
     pub(crate) settings: Arc<RwLock<crate::settings::Settings>>,
 }
 
@@ -191,10 +191,14 @@ async fn opencode_studio_diagnostics(
                 "normalizedDirectory": normalized_directory.as_ref().map(|p| p.to_string_lossy().into_owned())
             },
             "studio": {
+                "dbPath": diag_entry(crate::persistence_paths::studio_db_path()),
+                "dbCandidates": crate::persistence_paths::studio_db_path_candidates().into_iter().map(diag_entry).collect::<Vec<_>>(),
                 "settingsPath": diag_entry(crate::persistence_paths::studio_settings_path()),
                 "settingsCandidates": crate::persistence_paths::studio_settings_path_candidates().into_iter().map(diag_entry).collect::<Vec<_>>(),
                 "sidebarPreferencesPath": diag_entry(crate::persistence_paths::sidebar_preferences_path()),
                 "sidebarPreferencesCandidates": crate::persistence_paths::sidebar_preferences_path_candidates().into_iter().map(diag_entry).collect::<Vec<_>>(),
+                "terminalUiStatePath": diag_entry(crate::persistence_paths::terminal_ui_state_path()),
+                "terminalUiStateCandidates": crate::persistence_paths::terminal_ui_state_path_candidates().into_iter().map(diag_entry).collect::<Vec<_>>(),
                 "terminalRegistryPath": diag_entry(crate::persistence_paths::terminal_session_registry_path()),
                 "terminalRegistryCandidates": crate::persistence_paths::terminal_session_registry_path_candidates().into_iter().map(diag_entry).collect::<Vec<_>>()
             },
@@ -892,29 +896,44 @@ pub(crate) async fn run(args: crate::Args) {
         tracing::info!("UI password protection enabled");
     }
 
-    let (settings_path, settings_value) = crate::settings::init_settings().await;
+    let studio_db = Arc::new(match crate::studio_db::StudioDb::open().await {
+        Ok(db) => db,
+        Err(err) => {
+            eprintln!("Failed to open opencode-studio database: {err}");
+            std::process::exit(2);
+        }
+    });
+
+    let settings_value = crate::settings::init_settings(studio_db.as_ref()).await;
 
     let configured_opencode_port = args.opencode_port;
     let should_bootstrap_opencode = configured_opencode_port.is_some() || !args.skip_opencode_start;
+
+    let studio_base_url = crate::opencode::format_http_base_url(&args.host, args.port);
     let opencode = Arc::new(crate::opencode::OpenCodeManager::new(
         args.opencode_host.clone(),
         configured_opencode_port,
         args.skip_opencode_start,
         args.opencode_log_level,
+        Some(studio_base_url),
+        ui_auth.clone(),
     ));
 
-    let terminal = Arc::new(crate::terminal::TerminalManager::new());
+    let terminal = Arc::new(crate::terminal::TerminalManager::new(studio_db.clone()).await);
     terminal.clone().spawn_cleanup_task();
 
-    let attachment_cache = Arc::new(crate::attachment_cache::AttachmentCacheManager::new());
+    let attachment_cache = Arc::new(crate::attachment_cache::AttachmentCacheManager::new(
+        studio_db.clone(),
+    ));
 
     let plugin_runtime = Arc::new(crate::plugin_runtime::PluginRuntime::new());
 
     let activity = crate::session_activity::SessionActivityManager::new();
     let directory_session_index =
         crate::directory_session_index::DirectorySessionIndexManager::new();
-    let workspace_preview_registry =
-        Arc::new(crate::workspace_preview_registry::WorkspacePreviewRegistry::new());
+    let workspace_preview_registry = Arc::new(
+        crate::workspace_preview_registry::WorkspacePreviewRegistry::new(studio_db.clone()),
+    );
     let workspace_preview_runtime = Arc::new(
         crate::workspace_preview_runtime::WorkspacePreviewRuntime::new(
             workspace_preview_registry.clone(),
@@ -934,7 +953,7 @@ pub(crate) async fn run(args: crate::Args) {
         directory_session_index,
         workspace_preview_registry,
         workspace_preview_runtime,
-        settings_path,
+        studio_db,
         settings: Arc::new(RwLock::new(settings_value)),
     });
 
@@ -1067,7 +1086,8 @@ pub(crate) async fn run(args: crate::Args) {
         )
         .route(
             "/workspace/preview/sessions/{id}",
-            delete(crate::workspace_preview::workspace_preview_sessions_delete)
+            get(crate::workspace_preview::workspace_preview_sessions_by_id_get)
+                .delete(crate::workspace_preview::workspace_preview_sessions_delete)
                 .put(crate::workspace_preview::workspace_preview_sessions_put),
         )
         .route(

@@ -11,6 +11,12 @@ pub(crate) const LEGACY_TERMINAL_UI_STATE_FILE: &str = "terminal.state.json";
 pub(crate) const TERMINAL_SESSION_REGISTRY_FILE: &str = "session-registry.json";
 pub(crate) const LEGACY_TERMINAL_SESSION_REGISTRY_FILE: &str = "sessions.json";
 
+// OpenCode Studio state is stored in a single SQLite database.
+pub(crate) const STUDIO_DB_FILE: &str = "opencode-studio.db";
+// Typo present in early local drafts.
+pub(crate) const LEGACY_STUDIO_DB_FILE_TYPO: &str = "opencode-sutido.db";
+pub(crate) const LEGACY_STUDIO_DB_FILE: &str = "opencode.db";
+
 pub(crate) const OPENCODE_STORAGE_DIRNAME: &str = "storage";
 pub(crate) const OPENCODE_DB_FILE: &str = "opencode.sqlite";
 pub(crate) const LEGACY_OPENCODE_DB_FILE: &str = "opencode.db";
@@ -121,6 +127,23 @@ pub(crate) fn studio_settings_path_candidates() -> Vec<PathBuf> {
 
 pub(crate) fn studio_settings_path() -> PathBuf {
     select_existing_path(studio_settings_path_candidates())
+}
+
+pub(crate) fn studio_db_path_candidates() -> Vec<PathBuf> {
+    let mut candidates = Vec::<PathBuf>::new();
+    for root in studio_data_dir_candidates() {
+        // Prefer the current DB name.
+        candidates.push(root.join(STUDIO_DB_FILE));
+        // Legacy typo from early local drafts.
+        candidates.push(root.join(LEGACY_STUDIO_DB_FILE_TYPO));
+        // Legacy name from earlier builds.
+        candidates.push(root.join(LEGACY_STUDIO_DB_FILE));
+    }
+    dedupe_paths(candidates)
+}
+
+pub(crate) fn studio_db_path() -> PathBuf {
+    select_existing_path(studio_db_path_candidates())
 }
 
 pub(crate) fn sidebar_preferences_path_candidates() -> Vec<PathBuf> {

@@ -1,13 +1,16 @@
+#[cfg(test)]
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use url::{Host, Url};
-use uuid::Uuid;
 
 use crate::{ApiResult, AppError};
+
+use crate::studio_db;
 
 const STATE_VERSION: u32 = 1;
 const CACHE_TTL: Duration = Duration::from_millis(750);
@@ -73,7 +76,7 @@ pub(crate) struct PreviewSessionsResponse {
     pub(crate) sessions: Vec<PreviewSessionRecord>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct PreviewSessionsFile {
     #[serde(default = "default_state_version")]
@@ -87,26 +90,29 @@ struct PreviewSessionsFile {
 #[derive(Debug, Clone)]
 struct RegistryCache {
     loaded_at: Instant,
-    plugin_state_path: PathBuf,
-    studio_state_path: PathBuf,
+    studio_db_path: PathBuf,
     snapshot: PreviewSessionsResponse,
 }
 
 #[derive(Debug)]
 pub(crate) struct WorkspacePreviewRegistry {
+    db: Arc<studio_db::StudioDb>,
     ttl: Duration,
     cache: RwLock<Option<RegistryCache>>,
+    legacy_import_done: Mutex<bool>,
 }
 
 impl WorkspacePreviewRegistry {
-    pub(crate) fn new() -> Self {
-        Self::with_ttl(CACHE_TTL)
+    pub(crate) fn new(db: Arc<studio_db::StudioDb>) -> Self {
+        Self::with_ttl(db, CACHE_TTL)
     }
 
-    fn with_ttl(ttl: Duration) -> Self {
+    fn with_ttl(db: Arc<studio_db::StudioDb>, ttl: Duration) -> Self {
         Self {
+            db,
             ttl,
             cache: RwLock::new(None),
+            legacy_import_done: Mutex::new(false),
         }
     }
 
@@ -125,6 +131,183 @@ impl WorkspacePreviewRegistry {
     pub(crate) async fn invalidate(&self) {
         let mut cache = self.cache.write().await;
         *cache = None;
+    }
+
+    async fn ensure_legacy_plugin_state_imported(&self) {
+        let mut guard = self.legacy_import_done.lock().await;
+        if *guard {
+            return;
+        }
+        *guard = true;
+        drop(guard);
+
+        let legacy_path = legacy_plugin_preview_state_path();
+        let legacy_file = match load_state_file_from_path(&legacy_path) {
+            Ok(file) => file,
+            Err(error) => {
+                tracing::warn!(
+                    target: "opencode_studio.preview_registry",
+                    path = %legacy_path.to_string_lossy(),
+                    error = %error,
+                    "Failed to load legacy plugin preview sessions"
+                );
+                return;
+            }
+        };
+
+        let legacy_snapshot = parse_preview_sessions(legacy_file);
+        if legacy_snapshot.sessions.is_empty() {
+            return;
+        }
+
+        let mut studio_file = match self.load_studio_state_file().await {
+            Ok(file) => file,
+            Err(error) => {
+                tracing::warn!(
+                    target: "opencode_studio.preview_registry",
+                    error = %error,
+                    "Failed to load studio preview sessions for legacy import"
+                );
+                return;
+            }
+        };
+
+        let mut changed = false;
+        for session in legacy_snapshot.sessions {
+            if let Some(idx) = studio_file
+                .sessions
+                .iter()
+                .position(|existing| existing.id == session.id)
+            {
+                if session.updated_at > studio_file.sessions[idx].updated_at {
+                    studio_file.sessions[idx] = session;
+                    changed = true;
+                }
+                continue;
+            }
+
+            studio_file.sessions.push(session);
+            changed = true;
+        }
+
+        if !changed {
+            return;
+        }
+
+        studio_file.version = STATE_VERSION;
+        studio_file.updated_at = now_millis();
+        if let Err(error) = self.write_studio_state_file(&studio_file).await {
+            tracing::warn!(
+                target: "opencode_studio.preview_registry",
+                error = %error,
+                "Failed to persist legacy plugin preview sessions"
+            );
+            return;
+        }
+
+        self.invalidate().await;
+    }
+
+    async fn load_studio_state_file(&self) -> ApiResult<PreviewSessionsFile> {
+        match self
+            .db
+            .get_json::<PreviewSessionsFile>(studio_db::KV_KEY_WORKSPACE_PREVIEW_STUDIO_STATE)
+            .await
+        {
+            Ok(Some(file)) => Ok(file),
+            Ok(None) => {
+                let legacy_path = legacy_studio_preview_state_path();
+                let file = load_state_file_from_path(&legacy_path)?;
+                self.db
+                    .set_json(studio_db::KV_KEY_WORKSPACE_PREVIEW_STUDIO_STATE, &file)
+                    .await
+                    .map_err(|err| {
+                        AppError::internal(format!(
+                            "failed to persist studio preview registry: {err}"
+                        ))
+                    })?;
+                Ok(file)
+            }
+            Err(err) => Err(AppError::internal(format!(
+                "failed to read studio preview registry from db: {err}"
+            ))),
+        }
+    }
+
+    async fn write_studio_state_file(&self, file: &PreviewSessionsFile) -> ApiResult<()> {
+        self.db
+            .set_json(studio_db::KV_KEY_WORKSPACE_PREVIEW_STUDIO_STATE, file)
+            .await
+            .map_err(|err| {
+                AppError::internal(format!("failed to persist studio preview registry: {err}"))
+            })?;
+        Ok(())
+    }
+
+    async fn remove_session_from_studio_store(&self, id: &str, updated_at: i64) -> ApiResult<bool> {
+        let mut file = self.load_studio_state_file().await?;
+        let removed = remove_session_from_file(&mut file, id, updated_at);
+        if !removed {
+            return Ok(false);
+        }
+        self.write_studio_state_file(&file).await?;
+        Ok(true)
+    }
+
+    async fn update_session_in_studio_store(
+        &self,
+        id: &str,
+        patch: PreviewSessionUpdatePatch,
+        updated_at: i64,
+    ) -> ApiResult<Option<PreviewSessionRecord>> {
+        let mut file = self.load_studio_state_file().await?;
+        let updated = update_session_in_file(&mut file, id, patch, updated_at)?;
+        if updated.is_some() {
+            self.write_studio_state_file(&file).await?;
+        }
+        Ok(updated)
+    }
+
+    async fn rename_session_in_studio_store(
+        &self,
+        id: &str,
+        new_id: &str,
+        updated_at: i64,
+    ) -> ApiResult<Option<PreviewSessionRecord>> {
+        let mut file = self.load_studio_state_file().await?;
+        let updated = rename_session_in_file(&mut file, id, new_id, updated_at)?;
+        if updated.is_some() {
+            self.write_studio_state_file(&file).await?;
+        }
+        Ok(updated)
+    }
+
+    async fn mark_running_in_studio_store(
+        &self,
+        id: &str,
+        pid: u32,
+        updated_at: i64,
+    ) -> ApiResult<Option<PreviewSessionRecord>> {
+        let mut file = self.load_studio_state_file().await?;
+        let updated = mark_running_in_file(&mut file, id, pid, updated_at)?;
+        if updated.is_some() {
+            self.write_studio_state_file(&file).await?;
+        }
+        Ok(updated)
+    }
+
+    async fn mark_stopped_in_studio_store(
+        &self,
+        id: &str,
+        error: Option<String>,
+        updated_at: i64,
+    ) -> ApiResult<Option<PreviewSessionRecord>> {
+        let mut file = self.load_studio_state_file().await?;
+        let updated = mark_stopped_in_file(&mut file, id, error, updated_at)?;
+        if updated.is_some() {
+            self.write_studio_state_file(&file).await?;
+        }
+        Ok(updated)
     }
 
     pub(crate) async fn create_studio_session(
@@ -151,21 +334,15 @@ impl WorkspacePreviewRegistry {
             ));
         }
 
-        let plugin_path = preview_state_path();
-        let state_path = studio_preview_state_path();
+        self.ensure_legacy_plugin_state_imported().await;
 
-        let snapshot = load_snapshot_from_paths(&plugin_path, &state_path);
-        if snapshot
-            .sessions
-            .iter()
-            .any(|session| session.id == trimmed_id)
-        {
+        let mut file = self.load_studio_state_file().await?;
+        if file.sessions.iter().any(|session| session.id == trimmed_id) {
             return Err(AppError::bad_request(format!(
                 "preview session already exists: {trimmed_id}"
             )));
         }
 
-        let mut file = load_state_file_from_path(&state_path)?;
         let updated_at = now_millis();
 
         let trimmed_directory = directory.trim();
@@ -173,17 +350,21 @@ impl WorkspacePreviewRegistry {
             return Err(AppError::bad_request("directory is required"));
         }
         let trimmed_run_directory = run_directory.trim();
-        if trimmed_run_directory.is_empty() {
-            return Err(AppError::bad_request("runDirectory is required"));
-        }
+        let resolved_run_directory = if trimmed_run_directory.is_empty() {
+            trimmed_directory
+        } else {
+            trimmed_run_directory
+        };
         let trimmed_command = command.trim();
         if trimmed_command.is_empty() {
             return Err(AppError::bad_request("command is required"));
         }
         let trimmed_logs_path = logs_path.trim();
-        if trimmed_logs_path.is_empty() {
-            return Err(AppError::bad_request("logsPath is required"));
-        }
+        let resolved_logs_path = if trimmed_logs_path.is_empty() {
+            default_preview_logs_path(self.db.path(), trimmed_id)
+        } else {
+            trimmed_logs_path.to_string()
+        };
 
         let args = args
             .into_iter()
@@ -200,7 +381,7 @@ impl WorkspacePreviewRegistry {
         let record = PreviewSessionRecord {
             id: trimmed_id.to_string(),
             directory: trimmed_directory.to_string(),
-            run_directory: trimmed_run_directory.to_string(),
+            run_directory: resolved_run_directory.to_string(),
             opencode_session_id,
             state: "stopped".to_string(),
             proxy_base_path: preview_proxy_base_path(trimmed_id),
@@ -209,7 +390,7 @@ impl WorkspacePreviewRegistry {
             port: target_url.port_or_known_default(),
             command: trimmed_command.to_string(),
             args,
-            logs_path: trimmed_logs_path.to_string(),
+            logs_path: resolved_logs_path,
             started_at: None,
             updated_at,
             framework_hint: None,
@@ -219,7 +400,7 @@ impl WorkspacePreviewRegistry {
         file.version = STATE_VERSION;
         file.updated_at = updated_at;
         file.sessions.push(record.clone());
-        write_state_file_atomically(&state_path, &file)?;
+        self.write_studio_state_file(&file).await?;
         self.invalidate().await;
         Ok(record)
     }
@@ -230,15 +411,13 @@ impl WorkspacePreviewRegistry {
             return Err(AppError::bad_request("id is required"));
         }
 
-        let plugin_path = preview_state_path();
-        let studio_path = studio_preview_state_path();
+        self.ensure_legacy_plugin_state_imported().await;
         let updated_at = now_millis();
 
-        let mut removed_any = false;
-        removed_any |= remove_session_from_path(&plugin_path, trimmed, updated_at)?;
-        removed_any |= remove_session_from_path(&studio_path, trimmed, updated_at)?;
-
-        if !removed_any {
+        if !self
+            .remove_session_from_studio_store(trimmed, updated_at)
+            .await?
+        {
             return Err(AppError::not_found(format!(
                 "preview session not found: {trimmed}"
             )));
@@ -258,18 +437,13 @@ impl WorkspacePreviewRegistry {
             return Err(AppError::bad_request("id is required"));
         }
 
+        self.ensure_legacy_plugin_state_imported().await;
         let updated_at = now_millis();
-        let plugin_path = preview_state_path();
-        let studio_path = studio_preview_state_path();
 
-        if let Some(updated) =
-            update_session_in_path(&studio_path, trimmed, patch.clone(), updated_at)?
+        if let Some(updated) = self
+            .update_session_in_studio_store(trimmed, patch.clone(), updated_at)
+            .await?
         {
-            self.invalidate().await;
-            return Ok(updated);
-        }
-
-        if let Some(updated) = update_session_in_path(&plugin_path, trimmed, patch, updated_at)? {
             self.invalidate().await;
             return Ok(updated);
         }
@@ -305,11 +479,10 @@ impl WorkspacePreviewRegistry {
             });
         }
 
-        let plugin_path = preview_state_path();
-        let studio_path = studio_preview_state_path();
+        self.ensure_legacy_plugin_state_imported().await;
 
-        let snapshot = load_snapshot_from_paths(&plugin_path, &studio_path);
-        if snapshot
+        let studio_file = self.load_studio_state_file().await?;
+        if studio_file
             .sessions
             .iter()
             .any(|session| session.id == trimmed_new)
@@ -321,13 +494,9 @@ impl WorkspacePreviewRegistry {
 
         let updated_at = now_millis();
 
-        let updated_studio =
-            rename_session_in_path(&studio_path, trimmed, trimmed_new, updated_at)?;
-        let updated_plugin =
-            rename_session_in_path(&plugin_path, trimmed, trimmed_new, updated_at)?;
-
-        let updated = updated_studio
-            .or(updated_plugin)
+        let updated = self
+            .rename_session_in_studio_store(trimmed, trimmed_new, updated_at)
+            .await?
             .ok_or_else(|| AppError::not_found(format!("preview session not found: {trimmed}")))?;
 
         self.invalidate().await;
@@ -344,15 +513,13 @@ impl WorkspacePreviewRegistry {
             return Err(AppError::bad_request("id is required"));
         }
 
+        self.ensure_legacy_plugin_state_imported().await;
         let updated_at = now_millis();
-        let plugin_path = preview_state_path();
-        let studio_path = studio_preview_state_path();
 
-        if let Some(updated) = mark_running_in_path(&studio_path, trimmed, pid, updated_at)? {
-            self.invalidate().await;
-            return Ok(updated);
-        }
-        if let Some(updated) = mark_running_in_path(&plugin_path, trimmed, pid, updated_at)? {
+        if let Some(updated) = self
+            .mark_running_in_studio_store(trimmed, pid, updated_at)
+            .await?
+        {
             self.invalidate().await;
             return Ok(updated);
         }
@@ -372,17 +539,13 @@ impl WorkspacePreviewRegistry {
             return Err(AppError::bad_request("id is required"));
         }
 
+        self.ensure_legacy_plugin_state_imported().await;
         let updated_at = now_millis();
-        let plugin_path = preview_state_path();
-        let studio_path = studio_preview_state_path();
 
-        if let Some(updated) =
-            mark_stopped_in_path(&studio_path, trimmed, error.clone(), updated_at)?
+        if let Some(updated) = self
+            .mark_stopped_in_studio_store(trimmed, error.clone(), updated_at)
+            .await?
         {
-            self.invalidate().await;
-            return Ok(updated);
-        }
-        if let Some(updated) = mark_stopped_in_path(&plugin_path, trimmed, error, updated_at)? {
             self.invalidate().await;
             return Ok(updated);
         }
@@ -393,24 +556,33 @@ impl WorkspacePreviewRegistry {
     }
 
     async fn snapshot(&self) -> PreviewSessionsResponse {
-        let plugin_state_path = preview_state_path();
-        let studio_state_path = studio_preview_state_path();
+        self.ensure_legacy_plugin_state_imported().await;
+        let studio_db_path = self.db.path().to_path_buf();
         {
             let cache = self.cache.read().await;
             if let Some(cache) = cache.as_ref()
-                && cache.plugin_state_path == plugin_state_path
-                && cache.studio_state_path == studio_state_path
+                && cache.studio_db_path == studio_db_path
                 && cache.loaded_at.elapsed() < self.ttl
             {
                 return cache.snapshot.clone();
             }
         }
 
-        let snapshot = load_snapshot_from_paths(&plugin_state_path, &studio_state_path);
+        let studio_snapshot = match self.load_studio_state_file().await {
+            Ok(file) => parse_preview_sessions(file),
+            Err(error) => {
+                tracing::warn!(
+                    target: "opencode_studio.preview_registry",
+                    error = %error,
+                    "Failed to load studio preview registry from db"
+                );
+                empty_snapshot()
+            }
+        };
+        let snapshot = studio_snapshot;
         let cache_entry = RegistryCache {
             loaded_at: Instant::now(),
-            plugin_state_path,
-            studio_state_path,
+            studio_db_path,
             snapshot: snapshot.clone(),
         };
 
@@ -420,32 +592,29 @@ impl WorkspacePreviewRegistry {
     }
 }
 
-fn remove_session_from_path(path: &Path, id: &str, updated_at: i64) -> ApiResult<bool> {
-    let mut file = load_state_file_from_path(path)?;
-    let before = file.sessions.len();
-    file.sessions.retain(|session| session.id != id);
-    if file.sessions.len() == before {
-        return Ok(false);
-    }
-    file.version = STATE_VERSION;
-    file.updated_at = updated_at;
-    write_state_file_atomically(path, &file)?;
-    Ok(true)
-}
-
 fn normalize_optional_string(value: Option<String>) -> Option<String> {
     value
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty())
 }
 
-fn update_session_in_path(
-    path: &Path,
+fn remove_session_from_file(file: &mut PreviewSessionsFile, id: &str, updated_at: i64) -> bool {
+    let before = file.sessions.len();
+    file.sessions.retain(|session| session.id != id);
+    if file.sessions.len() == before {
+        return false;
+    }
+    file.version = STATE_VERSION;
+    file.updated_at = updated_at;
+    true
+}
+
+fn update_session_in_file(
+    file: &mut PreviewSessionsFile,
     id: &str,
     patch: PreviewSessionUpdatePatch,
     updated_at: i64,
 ) -> ApiResult<Option<PreviewSessionRecord>> {
-    let mut file = load_state_file_from_path(path)?;
     let Some(index) = file.sessions.iter().position(|session| session.id == id) else {
         return Ok(None);
     };
@@ -513,17 +682,15 @@ fn update_session_in_path(
     file.sessions[index] = record.clone();
     file.version = STATE_VERSION;
     file.updated_at = updated_at;
-    write_state_file_atomically(path, &file)?;
     Ok(Some(record))
 }
 
-fn mark_running_in_path(
-    path: &Path,
+fn mark_running_in_file(
+    file: &mut PreviewSessionsFile,
     id: &str,
     pid: u32,
     updated_at: i64,
 ) -> ApiResult<Option<PreviewSessionRecord>> {
-    let mut file = load_state_file_from_path(path)?;
     let Some(index) = file.sessions.iter().position(|session| session.id == id) else {
         return Ok(None);
     };
@@ -538,17 +705,15 @@ fn mark_running_in_path(
     file.sessions[index] = record.clone();
     file.version = STATE_VERSION;
     file.updated_at = updated_at;
-    write_state_file_atomically(path, &file)?;
     Ok(Some(record))
 }
 
-fn mark_stopped_in_path(
-    path: &Path,
+fn mark_stopped_in_file(
+    file: &mut PreviewSessionsFile,
     id: &str,
     error: Option<String>,
     updated_at: i64,
 ) -> ApiResult<Option<PreviewSessionRecord>> {
-    let mut file = load_state_file_from_path(path)?;
     let Some(index) = file.sessions.iter().position(|session| session.id == id) else {
         return Ok(None);
     };
@@ -569,18 +734,15 @@ fn mark_stopped_in_path(
     file.sessions[index] = record.clone();
     file.version = STATE_VERSION;
     file.updated_at = updated_at;
-    write_state_file_atomically(path, &file)?;
     Ok(Some(record))
 }
 
-fn rename_session_in_path(
-    path: &Path,
+fn rename_session_in_file(
+    file: &mut PreviewSessionsFile,
     id: &str,
     new_id: &str,
     updated_at: i64,
 ) -> ApiResult<Option<PreviewSessionRecord>> {
-    let mut file = load_state_file_from_path(path)?;
-
     let mut updated: Option<PreviewSessionRecord> = None;
     let mut touched = false;
     for session in file.sessions.iter_mut() {
@@ -602,7 +764,6 @@ fn rename_session_in_path(
 
     file.version = STATE_VERSION;
     file.updated_at = updated_at;
-    write_state_file_atomically(path, &file)?;
     Ok(updated)
 }
 
@@ -610,11 +771,11 @@ fn default_state_version() -> u32 {
     STATE_VERSION
 }
 
-pub(crate) fn preview_state_path() -> PathBuf {
+fn legacy_plugin_preview_state_path() -> PathBuf {
     state_path_from_env_or_default(PREVIEW_STATE_ENV, "preview-sessions.json")
 }
 
-pub(crate) fn studio_preview_state_path() -> PathBuf {
+fn legacy_studio_preview_state_path() -> PathBuf {
     state_path_from_env_or_default(STUDIO_PREVIEW_STATE_ENV, "studio-preview-sessions.json")
 }
 
@@ -643,6 +804,7 @@ fn preview_state_root() -> PathBuf {
     crate::path_utils::data_home_dir()
 }
 
+#[cfg(test)]
 fn load_snapshot_from_path(path: &Path) -> PreviewSessionsResponse {
     match load_state_file_from_path(path) {
         Ok(file) => parse_preview_sessions(file),
@@ -658,6 +820,7 @@ fn load_snapshot_from_path(path: &Path) -> PreviewSessionsResponse {
     }
 }
 
+#[cfg(test)]
 fn load_snapshot_from_paths(plugin_path: &Path, studio_path: &Path) -> PreviewSessionsResponse {
     merge_preview_snapshots(
         load_snapshot_from_path(plugin_path),
@@ -737,6 +900,7 @@ fn parse_preview_sessions(file: PreviewSessionsFile) -> PreviewSessionsResponse 
     }
 }
 
+#[cfg(test)]
 fn merge_preview_snapshots(
     plugin: PreviewSessionsResponse,
     studio: PreviewSessionsResponse,
@@ -767,48 +931,20 @@ fn merge_preview_snapshots(
     }
 }
 
-fn write_state_file_atomically(path: &Path, file: &PreviewSessionsFile) -> ApiResult<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|err| {
-            AppError::internal(format!(
-                "failed to create preview session state directory {}: {err}",
-                parent.to_string_lossy()
-            ))
-        })?;
-    }
-
-    let json = serde_json::to_string_pretty(file).map_err(|err| {
-        AppError::internal(format!("failed to serialize preview sessions: {err}"))
-    })?;
-    let tmp = temp_state_path(path);
-    std::fs::write(&tmp, json).map_err(|err| {
-        AppError::internal(format!(
-            "failed to write preview session state {}: {err}",
-            tmp.to_string_lossy()
-        ))
-    })?;
-    std::fs::rename(&tmp, path).map_err(|err| {
-        AppError::internal(format!(
-            "failed to finalize preview session state {}: {err}",
-            path.to_string_lossy()
-        ))
-    })?;
-    Ok(())
-}
-
-fn temp_state_path(path: &Path) -> PathBuf {
-    let file_name = path
-        .file_name()
-        .and_then(|value| value.to_str())
-        .unwrap_or("preview-sessions.json");
-    path.with_file_name(format!(".{file_name}.{}.tmp", Uuid::new_v4().simple()))
-}
-
 fn now_millis() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|duration| duration.as_millis() as i64)
         .unwrap_or(0)
+}
+
+fn default_preview_logs_path(studio_db_path: &Path, id: &str) -> String {
+    let root = studio_db_path.parent().unwrap_or_else(|| Path::new("."));
+    root.join("workspace-preview")
+        .join("logs")
+        .join(format!("{id}.log"))
+        .to_string_lossy()
+        .into_owned()
 }
 
 fn is_valid_preview_session_id(id: &str) -> bool {
@@ -1012,50 +1148,50 @@ mod tests {
     }
 
     #[test]
-    fn preview_state_path_uses_env_override_before_xdg_default() {
+    fn legacy_plugin_state_path_uses_env_override_before_xdg_default() {
         let _env_lock = ENV_LOCK.lock().unwrap();
         let _override = EnvVarGuard::set(PREVIEW_STATE_ENV, "/tmp/custom-preview.json");
         let _xdg = EnvVarGuard::set(XDG_DATA_HOME_ENV, "/tmp/xdg-data");
 
         assert_eq!(
-            preview_state_path(),
+            legacy_plugin_preview_state_path(),
             PathBuf::from("/tmp/custom-preview.json")
         );
     }
 
     #[test]
-    fn preview_state_path_uses_xdg_data_home_by_default() {
+    fn legacy_plugin_state_path_uses_xdg_data_home_by_default() {
         let _env_lock = ENV_LOCK.lock().unwrap();
         let _override = EnvVarGuard::set(PREVIEW_STATE_ENV, "");
         let _xdg = EnvVarGuard::set(XDG_DATA_HOME_ENV, "/tmp/xdg-data");
 
         assert_eq!(
-            preview_state_path(),
+            legacy_plugin_preview_state_path(),
             PathBuf::from("/tmp/xdg-data/opencode/web-preview/preview-sessions.json")
         );
     }
 
     #[test]
-    fn studio_preview_state_path_uses_env_override_before_xdg_default() {
+    fn legacy_studio_state_path_uses_env_override_before_xdg_default() {
         let _env_lock = ENV_LOCK.lock().unwrap();
         let _override =
             EnvVarGuard::set(STUDIO_PREVIEW_STATE_ENV, "/tmp/custom-studio-preview.json");
         let _xdg = EnvVarGuard::set(XDG_DATA_HOME_ENV, "/tmp/xdg-data");
 
         assert_eq!(
-            studio_preview_state_path(),
+            legacy_studio_preview_state_path(),
             PathBuf::from("/tmp/custom-studio-preview.json")
         );
     }
 
     #[test]
-    fn studio_preview_state_path_uses_xdg_data_home_by_default() {
+    fn legacy_studio_state_path_uses_xdg_data_home_by_default() {
         let _env_lock = ENV_LOCK.lock().unwrap();
         let _override = EnvVarGuard::set(STUDIO_PREVIEW_STATE_ENV, "");
         let _xdg = EnvVarGuard::set(XDG_DATA_HOME_ENV, "/tmp/xdg-data");
 
         assert_eq!(
-            studio_preview_state_path(),
+            legacy_studio_preview_state_path(),
             PathBuf::from("/tmp/xdg-data/opencode/web-preview/studio-preview-sessions.json")
         );
     }

@@ -555,7 +555,7 @@ mod tests {
         ))
     }
 
-    fn test_state_with_project(project_path: &Path) -> Arc<crate::AppState> {
+    async fn test_state_with_project(project_path: &Path) -> Arc<crate::AppState> {
         let project = crate::settings::Project {
             id: "fs-watch-test-project".to_string(),
             path: project_path.to_string_lossy().into_owned(),
@@ -563,13 +563,24 @@ mod tests {
             last_opened_at: 0,
         };
 
-        let workspace_preview_registry =
-            Arc::new(crate::workspace_preview_registry::WorkspacePreviewRegistry::new());
+        let db_dir = unique_tmp_dir("fs-watch-db");
+        std::fs::create_dir_all(&db_dir).expect("mkdir db dir");
+        let studio_db = Arc::new(
+            crate::studio_db::StudioDb::open_at_path(db_dir.join("opencode.db"))
+                .await
+                .expect("open studio db"),
+        );
+
+        let workspace_preview_registry = Arc::new(
+            crate::workspace_preview_registry::WorkspacePreviewRegistry::new(studio_db.clone()),
+        );
         let workspace_preview_runtime = Arc::new(
             crate::workspace_preview_runtime::WorkspacePreviewRuntime::new(
                 workspace_preview_registry.clone(),
             ),
         );
+
+        let terminal = Arc::new(crate::terminal::TerminalManager::new(studio_db.clone()).await);
 
         Arc::new(crate::AppState {
             ui_auth: crate::ui_auth::UiAuth::Disabled,
@@ -581,18 +592,20 @@ mod tests {
                 Some(1),
                 true,
                 None,
+                None,
+                crate::ui_auth::UiAuth::Disabled,
             )),
             plugin_runtime: Arc::new(crate::plugin_runtime::PluginRuntime::new()),
-            terminal: Arc::new(crate::terminal::TerminalManager::new()),
-            attachment_cache: Arc::new(crate::attachment_cache::AttachmentCacheManager::new()),
+            terminal,
+            attachment_cache: Arc::new(crate::attachment_cache::AttachmentCacheManager::new(
+                studio_db.clone(),
+            )),
             session_activity: crate::session_activity::SessionActivityManager::new(),
             directory_session_index:
                 crate::directory_session_index::DirectorySessionIndexManager::new(),
             workspace_preview_registry,
             workspace_preview_runtime,
-            settings_path: std::path::PathBuf::from(
-                "/tmp/opencode-studio-fs-watch-test-settings.json",
-            ),
+            studio_db,
             settings: Arc::new(tokio::sync::RwLock::new(crate::settings::Settings {
                 projects: vec![project],
                 ..Default::default()
@@ -744,7 +757,7 @@ mod tests {
         let expected_root = normalized_path_for_match(&temp_root).expect("normalized temp root");
         let expected_nested =
             normalized_path_for_match(&nested_dir).expect("normalized nested dir");
-        let state = test_state_with_project(&temp_root);
+        let state = test_state_with_project(&temp_root).await;
         let _downstream = crate::global_sse_hub::subscribe_test_downstream();
 
         let roots_without_hint = collect_watch_roots(&state).await;
@@ -816,7 +829,7 @@ mod tests {
             return;
         }
 
-        let state = test_state_with_project(&canonical_root);
+        let state = test_state_with_project(&canonical_root).await;
         let mut downstream = crate::global_sse_hub::subscribe_test_downstream();
         let watcher_task = tokio::spawn(run_fs_watch_loop(state));
 
@@ -903,7 +916,7 @@ mod tests {
             return;
         }
 
-        let state = test_state_with_project(&canonical_root);
+        let state = test_state_with_project(&canonical_root).await;
         let mut downstream = crate::global_sse_hub::subscribe_test_downstream();
         let watcher_task = tokio::spawn(run_fs_watch_loop(state));
 

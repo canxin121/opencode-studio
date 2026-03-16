@@ -10,6 +10,11 @@ use tokio::process::Command;
 use crate::workspace_preview_registry::{PreviewSessionRecord, WorkspacePreviewRegistry};
 use crate::{ApiResult, AppError};
 
+struct ResolvedLogsPaths {
+    stdout: PathBuf,
+    stderr: PathBuf,
+}
+
 fn is_running_state(state: &str) -> bool {
     matches!(state.trim().to_lowercase().as_str(), "running" | "ready")
 }
@@ -29,7 +34,7 @@ fn resolve_run_directory(raw: &str) -> ApiResult<PathBuf> {
     Ok(path)
 }
 
-fn resolve_logs_path(raw: &str, run_dir: &Path) -> ApiResult<PathBuf> {
+fn resolve_logs_paths(raw: &str, run_dir: &Path) -> ApiResult<ResolvedLogsPaths> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         return Err(AppError::bad_request("logsPath is required"));
@@ -41,6 +46,15 @@ fn resolve_logs_path(raw: &str, run_dir: &Path) -> ApiResult<PathBuf> {
     } else {
         run_dir.join(path)
     };
+
+    // Backwards-compatible: legacy plugin wrote logsPath as a directory.
+    // If a directory is provided (and exists), write to stdout.log/stderr.log.
+    if resolved.is_dir() {
+        let stdout = resolved.join("stdout.log");
+        let stderr = resolved.join("stderr.log");
+        return Ok(ResolvedLogsPaths { stdout, stderr });
+    }
+
     if let Some(parent) = resolved.parent() {
         std::fs::create_dir_all(parent).map_err(|err| {
             AppError::internal(format!(
@@ -49,7 +63,11 @@ fn resolve_logs_path(raw: &str, run_dir: &Path) -> ApiResult<PathBuf> {
             ))
         })?;
     }
-    Ok(resolved)
+
+    Ok(ResolvedLogsPaths {
+        stdout: resolved.clone(),
+        stderr: resolved,
+    })
 }
 
 fn resolve_preview_program(program: &str) -> String {
@@ -162,22 +180,36 @@ impl WorkspacePreviewRuntime {
         }
 
         let run_dir = resolve_run_directory(&session.run_directory)?;
-        let logs_path = resolve_logs_path(&session.logs_path, &run_dir)?;
+        let logs = resolve_logs_paths(&session.logs_path, &run_dir)?;
 
         let stdout_file = OpenOptions::new()
             .create(true)
             .write(true)
             .truncate(true)
-            .open(&logs_path)
+            .open(&logs.stdout)
             .map_err(|err| {
                 AppError::internal(format!(
-                    "failed to open logs file {}: {err}",
-                    logs_path.to_string_lossy()
+                    "failed to open stdout logs file {}: {err}",
+                    logs.stdout.to_string_lossy()
                 ))
             })?;
-        let stderr_file = stdout_file.try_clone().map_err(|err| {
-            AppError::internal(format!("failed to clone logs file handle: {err}"))
-        })?;
+        let stderr_file = if logs.stdout == logs.stderr {
+            stdout_file.try_clone().map_err(|err| {
+                AppError::internal(format!("failed to clone logs file handle: {err}"))
+            })?
+        } else {
+            OpenOptions::new()
+                .create(true)
+                .write(true)
+                .truncate(true)
+                .open(&logs.stderr)
+                .map_err(|err| {
+                    AppError::internal(format!(
+                        "failed to open stderr logs file {}: {err}",
+                        logs.stderr.to_string_lossy()
+                    ))
+                })?
+        };
 
         let program = resolve_preview_program(&session.command);
         let mut cmd = Command::new(&program);

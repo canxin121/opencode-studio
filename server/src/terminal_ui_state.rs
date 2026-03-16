@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashSet};
 use std::convert::Infallible;
-use std::fs::OpenOptions;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::sync::LazyLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -9,14 +9,15 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use async_stream::stream;
 use axum::{
     Json,
-    extract::Query,
+    extract::{Query, State},
     http::StatusCode,
     response::{IntoResponse, Response, sse::Event},
 };
-use fs2::FileExt as _;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::sync::{Mutex as AsyncMutex, RwLock, broadcast};
+
+use crate::studio_db;
 
 const DEFAULT_FOLDER_ID: &str = "terminal-default";
 const DEFAULT_FOLDER_NAME: &str = "Default";
@@ -272,73 +273,122 @@ fn sanitize_state(input: TerminalUiState) -> TerminalUiState {
     }
 }
 
-fn terminal_ui_state_path() -> PathBuf {
-    crate::persistence_paths::terminal_ui_state_path()
+async fn file_mtime_ms(path: &Path) -> u64 {
+    let meta = match tokio::fs::metadata(path).await {
+        Ok(meta) => meta,
+        Err(_) => return 0,
+    };
+    let modified = match meta.modified() {
+        Ok(m) => m,
+        Err(_) => return 0,
+    };
+    modified
+        .duration_since(UNIX_EPOCH)
+        .ok()
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
 }
 
-async fn acquire_state_disk_lock() -> Result<std::fs::File, String> {
-    let lock_path = terminal_ui_state_path().with_extension("json.lock");
-    tokio::task::spawn_blocking(move || {
-        if let Some(parent) = lock_path.parent() {
-            std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-        }
-
-        let file = OpenOptions::new()
-            .create(true)
-            .read(true)
-            .write(true)
-            .truncate(false)
-            .open(&lock_path)
-            .map_err(|error| error.to_string())?;
-
-        file.lock_exclusive().map_err(|error| error.to_string())?;
-        Ok(file)
-    })
-    .await
-    .map_err(|error| error.to_string())?
-}
-
-async fn load_state_from_disk() -> TerminalUiState {
-    let path = terminal_ui_state_path();
-    let raw = match tokio::fs::read_to_string(path).await {
-        Ok(raw) => raw,
-        Err(_) => return TerminalUiState::default(),
+async fn discover_tmp_variants_for_file(path: &Path) -> Vec<PathBuf> {
+    let Some(parent) = path.parent() else {
+        return Vec::new();
+    };
+    let Some(base_name) = path.file_name().and_then(|name| name.to_str()) else {
+        return Vec::new();
     };
 
-    let parsed = serde_json::from_str::<TerminalUiState>(&raw).unwrap_or_default();
-    sanitize_state(parsed)
+    let prefix = format!("{base_name}.tmp");
+    let mut out = vec![path.with_extension("json.tmp")];
+    let mut dir = match tokio::fs::read_dir(parent).await {
+        Ok(dir) => dir,
+        Err(_) => return out,
+    };
+    while let Ok(Some(entry)) = dir.next_entry().await {
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else {
+            continue;
+        };
+        if name == prefix || name.starts_with(&format!("{prefix}.")) {
+            out.push(entry.path());
+        }
+    }
+    out
 }
 
-async fn persist_state_to_disk(state: &TerminalUiState) -> Result<(), String> {
-    let path = terminal_ui_state_path();
-    if let Some(parent) = path.parent() {
-        tokio::fs::create_dir_all(parent)
-            .await
-            .map_err(|error| error.to_string())?;
+async fn terminal_ui_state_disk_candidates() -> Vec<PathBuf> {
+    let mut out = Vec::<PathBuf>::new();
+    let mut seen = HashSet::<PathBuf>::new();
+
+    for base in crate::persistence_paths::terminal_ui_state_path_candidates() {
+        let paths = discover_tmp_variants_for_file(base.as_path()).await;
+        for path in std::iter::once(base).chain(paths) {
+            if seen.insert(path.clone()) {
+                out.push(path);
+            }
+        }
     }
 
-    let payload = serde_json::to_string_pretty(state).map_err(|error| error.to_string())?;
-    let tmp_name = format!(
-        "{}.tmp.{}.{}",
-        path.file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or("terminal.state"),
-        std::process::id(),
-        now_millis(),
-    );
-    let tmp = path.with_file_name(tmp_name);
-
-    tokio::fs::write(&tmp, payload)
-        .await
-        .map_err(|error| error.to_string())?;
-    tokio::fs::rename(&tmp, &path)
-        .await
-        .map_err(|error| error.to_string())?;
-
-    Ok(())
+    out
 }
 
-async fn read_cached_state() -> TerminalUiState {
+async fn load_state_from_disk_legacy() -> TerminalUiState {
+    let mut best: Option<((u64, u64, u64), TerminalUiState)> = None;
+
+    for path in terminal_ui_state_disk_candidates().await {
+        let raw = match tokio::fs::read_to_string(&path).await {
+            Ok(raw) => raw,
+            Err(_) => continue,
+        };
+
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        let parsed = match serde_json::from_str::<TerminalUiState>(trimmed) {
+            Ok(parsed) => parsed,
+            Err(_) => continue,
+        };
+
+        let parsed = sanitize_state(parsed);
+        let mtime = file_mtime_ms(&path).await;
+        let score = (parsed.version, parsed.updated_at, mtime);
+
+        if best
+            .as_ref()
+            .is_none_or(|(best_score, _)| score > *best_score)
+        {
+            best = Some((score, parsed));
+        }
+    }
+
+    best.map(|(_, state)| state).unwrap_or_default()
+}
+
+async fn load_state_from_store(db: &studio_db::StudioDb) -> TerminalUiState {
+    if let Ok(Some(state)) = db
+        .get_json::<TerminalUiState>(studio_db::KV_KEY_TERMINAL_UI_STATE)
+        .await
+    {
+        return sanitize_state(state);
+    }
+
+    let migrated = load_state_from_disk_legacy().await;
+    let _ = db
+        .set_json(studio_db::KV_KEY_TERMINAL_UI_STATE, &migrated)
+        .await;
+    migrated
+}
+
+async fn persist_state_to_store(
+    db: &studio_db::StudioDb,
+    state: &TerminalUiState,
+) -> Result<(), String> {
+    db.set_json(studio_db::KV_KEY_TERMINAL_UI_STATE, state)
+        .await
+}
+
+async fn read_cached_state(db: &studio_db::StudioDb) -> TerminalUiState {
     {
         let guard = TERMINAL_UI_STATE_CACHE.read().await;
         if let Some(state) = guard.as_ref() {
@@ -346,7 +396,7 @@ async fn read_cached_state() -> TerminalUiState {
         }
     }
 
-    let loaded = load_state_from_disk().await;
+    let loaded = load_state_from_store(db).await;
     let mut guard = TERMINAL_UI_STATE_CACHE.write().await;
     if let Some(existing) = guard.as_ref() {
         return existing.clone();
@@ -373,32 +423,24 @@ pub(crate) struct TerminalUiStateEventsQuery {
     pub since: Option<String>,
 }
 
-pub(crate) async fn terminal_ui_state_get() -> Response {
-    Json(read_cached_state().await).into_response()
+pub(crate) async fn terminal_ui_state_get(State(state): State<Arc<crate::AppState>>) -> Response {
+    Json(read_cached_state(state.studio_db.as_ref()).await).into_response()
 }
 
-pub(crate) async fn terminal_ui_state_put(Json(body): Json<TerminalUiState>) -> Response {
+pub(crate) async fn terminal_ui_state_put(
+    State(state): State<Arc<crate::AppState>>,
+    Json(body): Json<TerminalUiState>,
+) -> Response {
     let _put_guard = TERMINAL_UI_STATE_PUT_LOCK.lock().await;
 
-    let _disk_lock = match acquire_state_disk_lock().await {
-        Ok(lock) => lock,
-        Err(error) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "error": error })),
-            )
-                .into_response();
-        }
-    };
-
-    let current = load_state_from_disk().await;
+    let current = load_state_from_store(state.studio_db.as_ref()).await;
     write_cached_state(current.clone()).await;
 
     let mut next = sanitize_state(body);
     next.version = current.version.saturating_add(1);
     next.updated_at = now_millis();
 
-    if let Err(error) = persist_state_to_disk(&next).await {
+    if let Err(error) = persist_state_to_store(state.studio_db.as_ref(), &next).await {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({ "error": error })),
@@ -412,11 +454,12 @@ pub(crate) async fn terminal_ui_state_put(Json(body): Json<TerminalUiState>) -> 
 }
 
 pub(crate) async fn terminal_ui_state_events(
+    State(state): State<Arc<crate::AppState>>,
     Query(query): Query<TerminalUiStateEventsQuery>,
 ) -> Response {
     let client_id = TERMINAL_UI_STATE_EVENT_HUB.allocate_client_id();
     let mut rx = TERMINAL_UI_STATE_EVENT_HUB.tx.subscribe();
-    let current_state = read_cached_state().await;
+    let current_state = read_cached_state(state.studio_db.as_ref()).await;
     let current_seq = TERMINAL_UI_STATE_EVENT_HUB.latest_seq();
     let initial = snapshot_payload(&current_state);
 

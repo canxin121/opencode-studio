@@ -11,6 +11,8 @@ use tokio::io::{AsyncWrite, AsyncWriteExt};
 use tokio::process::{Child, Command};
 use tokio::sync::{Mutex, RwLock};
 
+use crate::ui_auth;
+
 #[derive(Debug, Clone, Copy, ValueEnum)]
 #[value(rename_all = "SCREAMING_SNAKE_CASE")]
 pub(crate) enum OpenCodeLogLevel {
@@ -132,6 +134,10 @@ pub struct OpenCodeManager {
     skip_start: bool,
     configured_log_level: Option<OpenCodeLogLevel>,
 
+    // Optional back-reference so OpenCode plugins can call back into Studio.
+    studio_base_url: Option<String>,
+    ui_auth: ui_auth::UiAuth,
+
     // When we start OpenCode ourselves, we keep using the same port.
     managed_port: RwLock<Option<u16>>,
     child: Mutex<Option<Child>>,
@@ -150,12 +156,16 @@ impl OpenCodeManager {
         configured_port: Option<u16>,
         skip_start: bool,
         configured_log_level: Option<OpenCodeLogLevel>,
+        studio_base_url: Option<String>,
+        ui_auth: ui_auth::UiAuth,
     ) -> Self {
         Self {
             hostname,
             configured_port,
             skip_start,
             configured_log_level,
+            studio_base_url,
+            ui_auth,
             managed_port: RwLock::new(None),
             child: Mutex::new(None),
             restarting: RwLock::new(false),
@@ -295,6 +305,13 @@ impl OpenCodeManager {
             .arg(log_level)
             .stdin(Stdio::null());
 
+        if let Some(base_url) = self.studio_base_url.as_deref() {
+            cmd.env("OPENCODE_STUDIO_BASE_URL", base_url);
+        }
+        if let Some(token) = ui_auth::issue_internal_token(&self.ui_auth) {
+            cmd.env("OPENCODE_STUDIO_UI_AUTH_TOKEN", token);
+        }
+
         if cfg!(windows) {
             apply_windows_home_env_defaults(&mut cmd);
         }
@@ -418,7 +435,7 @@ fn normalize_connect_hostname(hostname: &str) -> String {
     }
 }
 
-fn format_http_base_url(hostname: &str, port: u16) -> String {
+pub(crate) fn format_http_base_url(hostname: &str, port: u16) -> String {
     let host = normalize_connect_hostname(hostname);
     if host.starts_with('[') {
         return format!("http://{}:{}", host, port);

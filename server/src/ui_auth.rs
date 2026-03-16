@@ -449,6 +449,22 @@ pub(crate) fn spawn_cleanup_sessions_task_if_enabled(ui_auth: &UiAuth) -> bool {
     }
 }
 
+pub(crate) fn issue_internal_token(ui_auth: &UiAuth) -> Option<String> {
+    match ui_auth {
+        UiAuth::Disabled => None,
+        UiAuth::Enabled(inner) => {
+            let token = crate::issue_token();
+            inner.sessions.insert(
+                token.clone(),
+                SessionRecord {
+                    last_seen: OffsetDateTime::now_utc(),
+                },
+            );
+            Some(token)
+        }
+    }
+}
+
 pub(crate) fn init_ui_auth(ui_password: Option<String>) -> UiAuth {
     let password = normalize_password(ui_password.as_deref());
     if password.is_empty() {

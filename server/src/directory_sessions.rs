@@ -689,7 +689,9 @@ fn start_directory_sessions_poller_if_needed(state: Arc<crate::AppState>) {
             let settings = state.settings.read().await.clone();
             let entries = build_directory_entries(&settings);
 
-            let preferences = crate::chat_sidebar::chat_sidebar_preferences_snapshot().await;
+            let preferences =
+                crate::chat_sidebar::chat_sidebar_preferences_snapshot(state.studio_db.as_ref())
+                    .await;
             let collapsed = preferences
                 .collapsed_directory_ids
                 .iter()

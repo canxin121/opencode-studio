@@ -173,9 +173,8 @@ GET /plugin/preview/session/{sessionId}/ports
 
 ### 8.1.1 v2 Hosted Session + `proxyBasePath` 契约
 
-- 插件不再只上报一个裸端口，而是把预览会话持久化到 JSON 状态文件，Studio 后端从该文件读取 hosted session 列表。
-- 默认状态文件路径：`$XDG_DATA_HOME/opencode/web-preview/preview-sessions.json`；可通过 `OPENCODE_WEB_PREVIEW_STATE_PATH` 覆盖。
-- 状态文件建议结构：`{ version: 1, updatedAt, sessions: PreviewSessionRecord[] }`，字段使用 camelCase。
+- 插件不再只上报一个裸端口，而是通过调用 Studio API 创建/更新 hosted preview session。
+- hosted session 的状态与配置由 Studio 持久化（SQLite），`GET /api/workspace/preview/sessions` 返回 `{ version, updatedAt, sessions }`。
 - `PreviewSessionRecord.id` 统一使用 `pv_...`，只允许 ASCII 字母数字、`_`、`-`，便于路由和日志检索。
 - 每个 record 必须携带 `proxyBasePath`，格式固定为 `/api/workspace/preview/s/{id}/`，Studio iframe 与静态资源、XHR、HMR WebSocket 全部经由该路径进入代理层。
 - `targetUrl` 仅允许 loopback `http/https` 目标（`localhost`、`127.0.0.1`、`[::1]`），Studio 后端在代理前再次校验，避免 SSRF。
@@ -189,7 +188,7 @@ GET /plugin/preview/session/{sessionId}/ports
       "id": "pv_vite-main",
       "directory": "/workspace/app",
       "opencodeSessionId": "ses_123",
-      "state": "ready",
+      "state": "running",
       "proxyBasePath": "/api/workspace/preview/s/pv_vite-main/",
       "targetUrl": "http://127.0.0.1:5173/",
       "pid": 43122,
@@ -211,7 +210,7 @@ Studio v2 读取与代理流程：
 2. UI 选择某条 session 后，直接把 iframe 指向该 session 的 `proxyBasePath`。
 3. 后端根据 `{id}` 从 registry 命中 `targetUrl`，代理全部 HTTP 请求与 WebSocket upgrade。
 4. 代理层剥离 hop-by-hop / `Cookie` / `Authorization` / `Set-Cookie`，并补充只允许 `self` 内嵌的 frame 限制头。
-5. 如果插件重启或切换端口，只需更新状态文件中的 `targetUrl` 与 `updatedAt`，Studio 在 TTL 缓存刷新后即可接管新目标。
+5. 如果插件重启或切换端口，只需通过 Studio API 更新 session 的 `targetUrl`（以及相关字段），Studio 在 TTL 缓存刷新后即可接管新目标。
 
 ### 事件流（Plugin -> Studio）
 

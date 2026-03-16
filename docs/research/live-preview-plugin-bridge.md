@@ -1,61 +1,62 @@
 # Live Preview Plugin Bridge (Draft)
 
-This note explains how OpenCode Studio frontend can consume output from a draft plugin repository: `opencode-web-preview`.
+This note documents the current contract for the OpenCode plugin `opencode-web-preview`.
+
+Key change from early drafts: the plugin does not persist its own state files. OpenCode Studio owns preview session storage + runtime.
 
 ## Goal
 
-- Discover local frontend dev server preview URL.
-- Report runtime state (`running` / `error`).
-- Provide preview session metadata for UI rendering.
+- Let OpenCode (agent) create/update/start/stop Studio workspace preview sessions.
+- Discover a reachable local dev server URL (loopback only).
+- Keep preview session config/state in Studio so the Studio UI reads a single source of truth.
 
 ## Plugin Contract
 
 Tool name: `web_preview_helper`
 
-Request args:
+Request args (selected):
 
-- `action`: `discover | status | session`
-- `url?`: explicit URL (example: `http://127.0.0.1:5173`)
-- `port?`: explicit port (example: `5173`)
-- `sessionName?`: optional display name
+- `action`: `help | discover | host.start | host.stop | host.restart | host.status | sessions.list`
+- `id?`: preview session id (required for host.stop/host.restart/host.status)
+- `port?`: preferred port for host.start/host.restart; also used as a discover hint
+- `command?`: explicit command to run for host.start/host.restart
+- `args?`: explicit argv array for command
+- `url?`: explicit URL to probe for discover
 
 Response shape (JSON string):
 
 ```ts
 type PreviewHelperResponse = {
   ok: boolean
-  action: "discover" | "status" | "session"
-  state?: "idle" | "running" | "error"
-  url?: string
+  action: string
   error?: string
-  checkedUrls?: string[]
+  status?: number
   updatedAt?: number
-  session?: {
-    id: string
-    name: string
-    projectDir?: string
-    state?: "idle" | "running" | "error"
-    url?: string
-    error?: string
-    startedAt?: number
-    updatedAt?: number
-    frameworkHint?: string
-    metadata?: {
-      source: "manual" | "scan"
-      checkedUrls: string[]
-      frameworkHint?: string
-    }
-  }
+
+  // discover
+  url?: string
+  frameworkHint?: string
+  checkedUrls?: string[]
+
+  // host.* + sessions.list
+  studioBaseUrl?: string
+  session?: unknown
+  sessions?: unknown
 }
 ```
 
-## Frontend Consumption Workflow
+## Studio API (Source Of Truth)
 
-1. On session attach or preview panel open, call `discover` once.
-2. If `ok=true` and `state=running`, render URL CTA and framework badge.
-3. Start polling `status` every 3-5 seconds (or on session idle events).
-4. If `status` returns error, switch panel state to degraded and keep retry action available.
-5. On details panel open, call `session` to render metadata (project path, timestamps, checkedUrls).
+Studio persists preview session records and exposes them via:
+
+- `GET /api/workspace/preview/sessions`
+- `GET /api/workspace/preview/sessions/{id}`
+- `POST /api/workspace/preview/sessions`
+- `PUT /api/workspace/preview/sessions/{id}`
+- `POST /api/workspace/preview/sessions/{id}/start`
+- `POST /api/workspace/preview/sessions/{id}/stop`
+
+The OpenCode plugin uses these endpoints; the Studio UI should read from the same endpoints.
 
 ## Suggested UI State Mapping
 
@@ -66,22 +67,10 @@ type PreviewHelperResponse = {
 ## Example Consumer Pseudocode
 
 ```ts
-async function callPreviewHelper(action: "discover" | "status" | "session") {
-  const text = await runOpencodeTool("web_preview_helper", { action })
-  const data = JSON.parse(text) as PreviewHelperResponse
+async function loadPreviewSessions() {
+  const res = await fetch("/api/workspace/preview/sessions")
+  const data = await res.json()
   return data
-}
-
-async function initPreviewPanel() {
-  const discover = await callPreviewHelper("discover")
-  updatePreviewStore(discover)
-
-  if (discover.state === "running") {
-    startInterval(async () => {
-      const status = await callPreviewHelper("status")
-      updatePreviewStore(status)
-    }, 4000)
-  }
 }
 ```
 
@@ -93,9 +82,8 @@ async function initPreviewPanel() {
 
 ## Bridge Evolution Ideas
 
-- Add plugin-side `events.poll` bridge action to avoid interval polling.
-- Persist preview sessions to local state store for restart recovery.
-- Include optional screenshot capability and tunnel metadata.
+- Add a Studio-side "recommended command" endpoint so the plugin can be thinner.
+- Add Studio-side session selection helpers (e.g. by directory/opencodeSessionId).
 
 ## 为何必须 proxy-only
 

@@ -183,7 +183,7 @@ Windows 安装补充说明：
 | 名称 | 默认值 | 说明 |
 | --- | --- | --- |
 | `OPENCODE_STUDIO_UI_PASSWORD` / `--ui-password` | (disabled) | 启用基于 Cookie 的 UI 登录 |
-| `OPENCODE_STUDIO_DATA_DIR` | `~/.config/opencode-studio` | 存放 `settings.json`、终端注册信息等 |
+| `OPENCODE_STUDIO_DATA_DIR` | `~/.config/opencode-studio` | 存放 `opencode-studio.db`（Studio 状态 SQLite 数据库） |
 
 ### 高级参数（节选）
 
@@ -199,8 +199,11 @@ Windows 安装补充说明：
   - 服务安装默认：`<install-root>/opencode-studio.toml`（服务单元会显式传 `--config`）
   - 手动运行回退：从当前可执行文件目录自动发现
   - 可用 `--config <path>` 或 `OPENCODE_STUDIO_CONFIG` 覆盖
-- Studio 设置：`~/.config/opencode-studio/settings.json`
+- Studio 状态数据库：`~/.config/opencode-studio/opencode-studio.db`
+  - Studio 自身状态统一存放的 SQLite 文件（设置 + UI 状态 + 终端注册信息 + 附件缓存 + workspace preview 状态）
   - 可用 `OPENCODE_STUDIO_DATA_DIR` 覆盖基目录
+  - 旧数据库文件名 `opencode.db`（以及早期 typo `opencode-sutido.db`）在条件允许时会迁移为新文件名
+  - 旧版 JSON 文件在首次读取时会被导入，之后不再写入并原样保留
 - OpenCode 配置层（可在 Studio 中读取/编辑）：
   - 用户层：`~/.config/opencode/opencode.json`
   - 项目层：`opencode.json` / `opencode.jsonc`（或 `.opencode/`）

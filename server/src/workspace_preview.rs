@@ -142,6 +142,23 @@ pub(crate) async fn workspace_preview_sessions_get(
     Ok(Json(state.workspace_preview_registry.list_all().await))
 }
 
+pub(crate) async fn workspace_preview_sessions_by_id_get(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> ApiResult<Json<PreviewSessionRecord>> {
+    let trimmed = id.trim();
+    if trimmed.is_empty() {
+        return Err(AppError::bad_request("id is required"));
+    }
+
+    let session = state
+        .workspace_preview_registry
+        .get_by_id(trimmed)
+        .await
+        .ok_or_else(|| AppError::not_found(format!("preview session not found: {trimmed}")))?;
+    Ok(Json(session))
+}
+
 pub(crate) async fn workspace_preview_sessions_post(
     State(state): State<Arc<AppState>>,
     Json(body): Json<WorkspacePreviewSessionCreateBody>,
@@ -917,13 +934,30 @@ mod tests {
     use super::*;
     use crate::workspace_preview_registry::WorkspacePreviewRegistry;
 
-    fn dummy_state() -> Arc<AppState> {
-        let workspace_preview_registry = Arc::new(WorkspacePreviewRegistry::new());
+    async fn dummy_state() -> Arc<AppState> {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let tmp = std::env::temp_dir().join(format!(
+            "opencode-studio-workspace-preview-test-{}-{nanos}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&tmp).expect("create tmp dir");
+        let studio_db = Arc::new(
+            crate::studio_db::StudioDb::open_at_path(tmp.join("opencode.db"))
+                .await
+                .expect("open studio db"),
+        );
+
+        let workspace_preview_registry = Arc::new(WorkspacePreviewRegistry::new(studio_db.clone()));
         let workspace_preview_runtime = Arc::new(
             crate::workspace_preview_runtime::WorkspacePreviewRuntime::new(
                 workspace_preview_registry.clone(),
             ),
         );
+
+        let terminal = Arc::new(crate::terminal::TerminalManager::new(studio_db.clone()).await);
 
         Arc::new(AppState {
             ui_auth: crate::ui_auth::UiAuth::Disabled,
@@ -935,18 +969,20 @@ mod tests {
                 Some(1),
                 true,
                 None,
+                None,
+                crate::ui_auth::UiAuth::Disabled,
             )),
             plugin_runtime: Arc::new(crate::plugin_runtime::PluginRuntime::new()),
-            terminal: Arc::new(crate::terminal::TerminalManager::new()),
-            attachment_cache: Arc::new(crate::attachment_cache::AttachmentCacheManager::new()),
+            terminal,
+            attachment_cache: Arc::new(crate::attachment_cache::AttachmentCacheManager::new(
+                studio_db.clone(),
+            )),
             session_activity: crate::session_activity::SessionActivityManager::new(),
             directory_session_index:
                 crate::directory_session_index::DirectorySessionIndexManager::new(),
             workspace_preview_registry,
             workspace_preview_runtime,
-            settings_path: std::path::PathBuf::from(
-                "/tmp/opencode-studio-workspace-preview-test-settings.json",
-            ),
+            studio_db,
             settings: Arc::new(tokio::sync::RwLock::new(
                 crate::settings::Settings::default(),
             )),
@@ -967,7 +1003,7 @@ mod tests {
     #[tokio::test]
     async fn create_preview_session_endpoint_rejects_non_loopback_target() {
         let err = workspace_preview_sessions_post(
-            State(dummy_state()),
+            State(dummy_state().await),
             Json(WorkspacePreviewSessionCreateBody {
                 id: "pv_test".to_string(),
                 directory: "/repo".to_string(),

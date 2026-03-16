@@ -1,6 +1,5 @@
 use std::collections::{BTreeMap, HashSet, VecDeque};
-use std::fs::OpenOptions;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
 use std::time::{Duration, Instant};
@@ -12,11 +11,12 @@ use axum::{
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
 };
-use fs2::FileExt as _;
 use futures_util::stream::{self, StreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tokio::sync::{Mutex as AsyncMutex, RwLock};
+
+use crate::studio_db;
 
 const BODY_READ_LIMIT: usize = 10 * 1024 * 1024;
 const SIDEBAR_INDEX_CACHE_TTL: Duration = Duration::from_millis(400);
@@ -178,74 +178,127 @@ fn sanitize_sidebar_preferences(input: SessionsSidebarPreferences) -> SessionsSi
     }
 }
 
-fn sidebar_preferences_path() -> PathBuf {
-    crate::persistence_paths::sidebar_preferences_path()
-}
-
-async fn acquire_sidebar_preferences_disk_lock() -> Result<std::fs::File, String> {
-    let lock_path = sidebar_preferences_path().with_extension("json.lock");
-    tokio::task::spawn_blocking(move || {
-        if let Some(parent) = lock_path.parent() {
-            std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-        }
-
-        let file = OpenOptions::new()
-            .create(true)
-            .read(true)
-            .write(true)
-            .truncate(false)
-            .open(&lock_path)
-            .map_err(|error| error.to_string())?;
-
-        file.lock_exclusive().map_err(|error| error.to_string())?;
-        Ok(file)
-    })
-    .await
-    .map_err(|error| error.to_string())?
-}
-
-async fn load_sidebar_preferences_from_disk() -> SessionsSidebarPreferences {
-    let path = sidebar_preferences_path();
-    let raw = match tokio::fs::read_to_string(path).await {
-        Ok(raw) => raw,
-        Err(_) => return SessionsSidebarPreferences::default(),
+async fn file_mtime_ms(path: &Path) -> u64 {
+    let meta = match tokio::fs::metadata(path).await {
+        Ok(meta) => meta,
+        Err(_) => return 0,
     };
-    let parsed = serde_json::from_str::<SessionsSidebarPreferences>(&raw)
-        .unwrap_or_else(|_| SessionsSidebarPreferences::default());
-    sanitize_sidebar_preferences(parsed)
+    let modified = match meta.modified() {
+        Ok(m) => m,
+        Err(_) => return 0,
+    };
+    modified
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
 }
 
-async fn persist_sidebar_preferences_to_disk(
-    preferences: &SessionsSidebarPreferences,
-) -> Result<(), String> {
-    let path = sidebar_preferences_path();
-    if let Some(parent) = path.parent() {
-        tokio::fs::create_dir_all(parent)
-            .await
-            .map_err(|error| error.to_string())?;
+async fn discover_tmp_variants_for_file(path: &Path) -> Vec<PathBuf> {
+    let Some(parent) = path.parent() else {
+        return Vec::new();
+    };
+    let Some(base_name) = path.file_name().and_then(|name| name.to_str()) else {
+        return Vec::new();
+    };
+
+    let prefix = format!("{base_name}.tmp");
+    let mut out = vec![path.with_extension("json.tmp")];
+
+    let mut dir = match tokio::fs::read_dir(parent).await {
+        Ok(dir) => dir,
+        Err(_) => return out,
+    };
+
+    while let Ok(Some(entry)) = dir.next_entry().await {
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else {
+            continue;
+        };
+        if name == prefix || name.starts_with(&format!("{prefix}.")) {
+            out.push(entry.path());
+        }
     }
 
-    let payload = serde_json::to_string_pretty(preferences).map_err(|error| error.to_string())?;
-    let tmp_name = format!(
-        "{}.tmp.{}.{}",
-        path.file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or("prefs"),
-        std::process::id(),
-        now_millis(),
-    );
-    let tmp = path.with_file_name(tmp_name);
-    tokio::fs::write(&tmp, payload)
-        .await
-        .map_err(|error| error.to_string())?;
-    tokio::fs::rename(&tmp, &path)
-        .await
-        .map_err(|error| error.to_string())?;
-
-    Ok(())
+    out
 }
 
-async fn read_sidebar_preferences_cached() -> SessionsSidebarPreferences {
+async fn sidebar_preferences_disk_candidates() -> Vec<PathBuf> {
+    let mut out = Vec::<PathBuf>::new();
+    let mut seen = HashSet::<PathBuf>::new();
+
+    for base in crate::persistence_paths::sidebar_preferences_path_candidates() {
+        let paths = discover_tmp_variants_for_file(base.as_path()).await;
+        for path in std::iter::once(base).chain(paths) {
+            if seen.insert(path.clone()) {
+                out.push(path);
+            }
+        }
+    }
+
+    out
+}
+
+async fn load_sidebar_preferences_from_disk_legacy() -> SessionsSidebarPreferences {
+    let mut best: Option<((u64, u64, u64), SessionsSidebarPreferences)> = None;
+
+    for path in sidebar_preferences_disk_candidates().await {
+        let raw = match tokio::fs::read_to_string(&path).await {
+            Ok(raw) => raw,
+            Err(_) => continue,
+        };
+
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        let parsed = match serde_json::from_str::<SessionsSidebarPreferences>(trimmed) {
+            Ok(parsed) => parsed,
+            Err(_) => continue,
+        };
+
+        let parsed = sanitize_sidebar_preferences(parsed);
+        let mtime = file_mtime_ms(&path).await;
+        let score = (parsed.version, parsed.updated_at, mtime);
+
+        if best
+            .as_ref()
+            .is_none_or(|(best_score, _)| score > *best_score)
+        {
+            best = Some((score, parsed));
+        }
+    }
+
+    best.map(|(_, prefs)| prefs).unwrap_or_default()
+}
+
+async fn load_sidebar_preferences_from_store(
+    db: &studio_db::StudioDb,
+) -> SessionsSidebarPreferences {
+    if let Ok(Some(prefs)) = db
+        .get_json::<SessionsSidebarPreferences>(studio_db::KV_KEY_CHAT_SIDEBAR_PREFERENCES)
+        .await
+    {
+        return sanitize_sidebar_preferences(prefs);
+    }
+
+    let migrated = load_sidebar_preferences_from_disk_legacy().await;
+    let _ = db
+        .set_json(studio_db::KV_KEY_CHAT_SIDEBAR_PREFERENCES, &migrated)
+        .await;
+    migrated
+}
+
+async fn persist_sidebar_preferences_to_store(
+    db: &studio_db::StudioDb,
+    preferences: &SessionsSidebarPreferences,
+) -> Result<(), String> {
+    db.set_json(studio_db::KV_KEY_CHAT_SIDEBAR_PREFERENCES, preferences)
+        .await
+}
+
+async fn read_sidebar_preferences_cached(db: &studio_db::StudioDb) -> SessionsSidebarPreferences {
     {
         let guard = SIDEBAR_PREFS_CACHE.read().await;
         if let Some(preferences) = guard.as_ref() {
@@ -253,7 +306,7 @@ async fn read_sidebar_preferences_cached() -> SessionsSidebarPreferences {
         }
     }
 
-    let loaded = load_sidebar_preferences_from_disk().await;
+    let loaded = load_sidebar_preferences_from_store(db).await;
     let mut guard = SIDEBAR_PREFS_CACHE.write().await;
     if let Some(existing) = guard.as_ref() {
         return existing.clone();
@@ -267,7 +320,10 @@ async fn write_sidebar_preferences_cached(preferences: SessionsSidebarPreference
     *guard = Some(preferences);
 }
 
-fn queue_sidebar_preferences_flush(preferences: SessionsSidebarPreferences) {
+fn queue_sidebar_preferences_flush(
+    db: Arc<studio_db::StudioDb>,
+    preferences: SessionsSidebarPreferences,
+) {
     let mut should_spawn = false;
     if let Ok(mut queue) = SIDEBAR_PREFS_FLUSH_QUEUE.lock() {
         queue.pending = Some(preferences);
@@ -281,7 +337,7 @@ fn queue_sidebar_preferences_flush(preferences: SessionsSidebarPreferences) {
         return;
     }
 
-    tokio::spawn(async {
+    tokio::spawn(async move {
         loop {
             tokio::time::sleep(SIDEBAR_PREFS_FLUSH_DEBOUNCE).await;
 
@@ -302,30 +358,13 @@ fn queue_sidebar_preferences_flush(preferences: SessionsSidebarPreferences) {
                 break;
             };
 
-            let latest = read_sidebar_preferences_cached().await;
+            let latest = read_sidebar_preferences_cached(db.as_ref()).await;
             if candidate.version < latest.version {
                 continue;
             }
 
-            let _disk_lock = match acquire_sidebar_preferences_disk_lock().await {
-                Ok(lock) => lock,
-                Err(error) => {
-                    tracing::warn!(
-                        target: "opencode_studio.chat_sidebar",
-                        error = %error,
-                        "failed to acquire sidebar preferences disk lock; will retry"
-                    );
-                    if let Ok(mut queue) = SIDEBAR_PREFS_FLUSH_QUEUE.lock()
-                        && queue.pending.is_none()
-                    {
-                        queue.pending = Some(candidate);
-                    }
-                    tokio::time::sleep(SIDEBAR_PREFS_FLUSH_RETRY_DELAY).await;
-                    continue;
-                }
-            };
-
-            if let Err(error) = persist_sidebar_preferences_to_disk(&candidate).await {
+            if let Err(error) = persist_sidebar_preferences_to_store(db.as_ref(), &candidate).await
+            {
                 tracing::warn!(
                     target: "opencode_studio.chat_sidebar",
                     error = %error,
@@ -343,8 +382,10 @@ fn queue_sidebar_preferences_flush(preferences: SessionsSidebarPreferences) {
     });
 }
 
-pub(crate) async fn chat_sidebar_preferences_snapshot() -> SessionsSidebarPreferences {
-    read_sidebar_preferences_cached().await
+pub(crate) async fn chat_sidebar_preferences_snapshot(
+    db: &studio_db::StudioDb,
+) -> SessionsSidebarPreferences {
+    read_sidebar_preferences_cached(db).await
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -2472,7 +2513,7 @@ pub(crate) async fn directory_sessions_by_id_get(
         .as_deref()
         .and_then(|value| value.trim().parse::<usize>().ok())
         .unwrap_or(SIDEBAR_STATE_DIRECTORY_SESSIONS_PAGE_SIZE_DEFAULT);
-    let preferences = chat_sidebar_preferences_snapshot().await;
+    let preferences = chat_sidebar_preferences_snapshot(state.studio_db.as_ref()).await;
 
     let cacheable = is_cacheable_directory_sessions_query(&query);
     let delta_seq = chat_sidebar_delta_latest_seq();
@@ -2615,7 +2656,7 @@ pub(crate) async fn chat_sidebar_footer_get(
         let settings = state.settings.read().await;
         configured_directories(&settings)
     };
-    let mut preferences = chat_sidebar_preferences_snapshot().await;
+    let mut preferences = chat_sidebar_preferences_snapshot(state.studio_db.as_ref()).await;
     let page = query.page.unwrap_or(match kind {
         ChatSidebarFooterKind::Pinned => preferences.pinned_sessions_page,
         ChatSidebarFooterKind::Recent => preferences.recent_sessions_page,
@@ -2742,7 +2783,7 @@ pub(crate) async fn chat_sidebar_state(
         return Ok(Json(payload).into_response());
     }
 
-    let preferences = chat_sidebar_preferences_snapshot().await;
+    let preferences = chat_sidebar_preferences_snapshot(state.studio_db.as_ref()).await;
     let seq = crate::directory_sessions::directory_sessions_latest_seq();
     let runtime_by_session_id = state.directory_session_index.runtime_snapshot_json();
 
@@ -3036,17 +3077,18 @@ pub(crate) async fn chat_sidebar_state(
 }
 
 async fn mutate_sidebar_preferences(
+    db: Arc<studio_db::StudioDb>,
     mutator: impl FnOnce(&mut SessionsSidebarPreferences),
 ) -> Result<SessionsSidebarPreferences, Response> {
     let _put_guard = SIDEBAR_PREFS_PUT_LOCK.lock().await;
-    let mut next = read_sidebar_preferences_cached().await;
+    let mut next = read_sidebar_preferences_cached(db.as_ref()).await;
     mutator(&mut next);
 
     let mut preferences = sanitize_sidebar_preferences(next);
     preferences.version = preferences.version.saturating_add(1);
     preferences.updated_at = now_millis();
     write_sidebar_preferences_cached(preferences.clone()).await;
-    queue_sidebar_preferences_flush(preferences.clone());
+    queue_sidebar_preferences_flush(db, preferences.clone());
     Ok(preferences)
 }
 
@@ -3631,7 +3673,7 @@ pub(crate) async fn chat_sidebar_commands_post(
         normalized_kinds.push(normalized);
     }
 
-    let preferences = match mutate_sidebar_preferences(|preferences| {
+    let preferences = match mutate_sidebar_preferences(state.studio_db.clone(), |preferences| {
         for (idx, command) in commands.iter().enumerate() {
             let normalized = normalized_kinds.get(idx).and_then(|value| value.as_deref());
             match command {

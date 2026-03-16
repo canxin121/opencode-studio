@@ -1,25 +1,15 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::Engine as _;
 use sha2::{Digest as _, Sha256};
-use sqlx::SqlitePool;
-use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
-use tokio::sync::Mutex;
 
-const CACHE_SCHEMA_VERSION: i64 = 1;
-const CACHE_BUSY_TIMEOUT_MS: u64 = 5000;
-const CACHE_POOL_MAX_CONNECTIONS: u32 = 4;
-const CACHE_POOL_ACQUIRE_TIMEOUT_MS: u64 = 1500;
-const CACHE_POOL_IDLE_TIMEOUT_SECS: u64 = 120;
+use crate::studio_db;
 
 #[derive(Clone)]
 pub(crate) struct AttachmentCacheManager {
-    root: PathBuf,
-    db_path: PathBuf,
-    pool: Arc<Mutex<Option<SqlitePool>>>,
+    db: Arc<studio_db::StudioDb>,
 }
 
 #[derive(Debug, Clone)]
@@ -30,30 +20,8 @@ struct SourceSnapshot {
 }
 
 impl AttachmentCacheManager {
-    pub(crate) fn new() -> Self {
-        let root = crate::path_utils::opencode_data_dir().join("attachment-cache");
-        let db_path = root.join("index.sqlite3");
-        Self {
-            root,
-            db_path,
-            pool: Arc::new(Mutex::new(None)),
-        }
-    }
-
-    async fn pool(&self) -> Result<SqlitePool, String> {
-        let mut guard = self.pool.lock().await;
-        if let Some(pool) = guard.as_ref() {
-            return Ok(pool.clone());
-        }
-
-        tokio::fs::create_dir_all(&self.root)
-            .await
-            .map_err(|err| err.to_string())?;
-
-        let pool = open_cache_pool(&self.db_path).await?;
-        initialize_cache_store(&pool).await?;
-        *guard = Some(pool.clone());
-        Ok(pool)
+    pub(crate) fn new(db: Arc<studio_db::StudioDb>) -> Self {
+        Self { db }
     }
 
     pub(crate) async fn data_url_for_file(
@@ -119,58 +87,65 @@ impl AttachmentCacheManager {
         source: &SourceSnapshot,
         mime: &str,
     ) -> Result<Option<String>, String> {
-        let pool = self.pool().await?;
-        let root = self.root.clone();
+        let pool = self.db.pool();
         let source = source.clone();
         let mime = mime.to_string();
         let mime_for_data_url = mime.clone();
 
         let found = sqlx::query_scalar::<_, String>(
-            "SELECT blob_rel_path FROM source_index WHERE source_path = ? AND source_mtime_ns = ? AND source_size = ? AND mime = ?",
+            "SELECT digest_sha256 FROM attachment_cache_source_index\n             WHERE source_path = ? AND source_mtime_ns = ? AND source_size = ? AND mime = ?\n             LIMIT 1",
         )
         .bind(&source.source_path)
         .bind(source.source_mtime_ns)
         .bind(source.source_size)
         .bind(&mime)
-        .fetch_optional(&pool)
+        .fetch_optional(pool)
         .await
         .map_err(|err| err.to_string())?;
 
-        let Some(rel_path) = found else {
+        let Some(digest) = found else {
             return Ok(None);
         };
 
-        let blob_path = root.join(&rel_path);
-        let encoded = tokio::fs::read_to_string(&blob_path).await.ok();
+        let encoded = sqlx::query_scalar::<_, String>(
+            "SELECT bytes_b64 FROM attachment_cache_blob_store WHERE digest_sha256 = ? LIMIT 1",
+        )
+        .bind(&digest)
+        .fetch_optional(pool)
+        .await
+        .map_err(|err| err.to_string())?;
+
         let Some(encoded) = encoded else {
             let _ = sqlx::query(
-                "DELETE FROM source_index WHERE source_path = ? AND source_mtime_ns = ? AND source_size = ? AND mime = ?",
+                "DELETE FROM attachment_cache_source_index\n                 WHERE source_path = ? AND source_mtime_ns = ? AND source_size = ? AND mime = ?",
             )
             .bind(&source.source_path)
             .bind(source.source_mtime_ns)
             .bind(source.source_size)
             .bind(&mime)
-            .execute(&pool)
+            .execute(pool)
             .await;
             return Ok(None);
         };
 
         let now = now_unix_ms();
         let _ = sqlx::query(
-            "UPDATE source_index SET last_accessed_at = ?, hit_count = hit_count + 1 WHERE source_path = ? AND source_mtime_ns = ? AND source_size = ? AND mime = ?",
+            "UPDATE attachment_cache_source_index\n             SET last_accessed_at = ?, hit_count = hit_count + 1\n             WHERE source_path = ? AND source_mtime_ns = ? AND source_size = ? AND mime = ?",
         )
         .bind(now)
         .bind(&source.source_path)
         .bind(source.source_mtime_ns)
         .bind(source.source_size)
         .bind(&mime)
-        .execute(&pool)
+        .execute(pool)
         .await;
-        let _ = sqlx::query("UPDATE blob_store SET last_accessed_at = ? WHERE rel_path = ?")
-            .bind(now)
-            .bind(&rel_path)
-            .execute(&pool)
-            .await;
+        let _ = sqlx::query(
+            "UPDATE attachment_cache_blob_store SET last_accessed_at = ? WHERE digest_sha256 = ?",
+        )
+        .bind(now)
+        .bind(&digest)
+        .execute(pool)
+        .await;
 
         Ok(Some(format!(
             "data:{};base64,{}",
@@ -188,32 +163,9 @@ impl AttachmentCacheManager {
         let mut hasher = Sha256::new();
         hasher.update(bytes);
         let digest = format!("{:x}", hasher.finalize());
-        let rel_path = blob_rel_path_for_digest(&digest);
-
-        let blob_abs_path = self.root.join(&rel_path);
-        if let Some(parent) = blob_abs_path.parent() {
-            tokio::fs::create_dir_all(parent)
-                .await
-                .map_err(|err| err.to_string())?;
-        }
-
-        if tokio::fs::metadata(&blob_abs_path).await.is_err() {
-            let tmp_path = blob_abs_path.with_extension("b64.tmp");
-            tokio::fs::write(&tmp_path, encoded)
-                .await
-                .map_err(|err| err.to_string())?;
-            if let Err(err) = tokio::fs::rename(&tmp_path, &blob_abs_path).await {
-                if tokio::fs::metadata(&blob_abs_path).await.is_err() {
-                    return Err(err.to_string());
-                }
-                let _ = tokio::fs::remove_file(&tmp_path).await;
-            }
-        }
-
-        let pool = self.pool().await?;
+        let pool = self.db.pool();
         let source = source.clone();
         let mime = mime.to_string();
-        let rel_path_for_db = rel_path.to_string_lossy().to_string();
         let digest_for_db = digest.clone();
         let bytes_size = i64::try_from(bytes.len()).unwrap_or(i64::MAX);
 
@@ -221,10 +173,10 @@ impl AttachmentCacheManager {
         let now = now_unix_ms();
 
         sqlx::query(
-            "INSERT INTO blob_store (digest_sha256, rel_path, bytes_size, created_at, last_accessed_at)\n             VALUES (?, ?, ?, ?, ?)\n             ON CONFLICT(digest_sha256) DO UPDATE SET\n               rel_path = excluded.rel_path,\n               bytes_size = excluded.bytes_size,\n               last_accessed_at = excluded.last_accessed_at",
+            "INSERT INTO attachment_cache_blob_store\n               (digest_sha256, bytes_b64, bytes_size, created_at, last_accessed_at)\n             VALUES (?, ?, ?, ?, ?)\n             ON CONFLICT(digest_sha256) DO UPDATE SET\n               bytes_b64 = excluded.bytes_b64,\n               bytes_size = excluded.bytes_size,\n               last_accessed_at = excluded.last_accessed_at",
         )
         .bind(&digest_for_db)
-        .bind(&rel_path_for_db)
+        .bind(encoded)
         .bind(bytes_size)
         .bind(now)
         .bind(now)
@@ -233,14 +185,13 @@ impl AttachmentCacheManager {
         .map_err(|err| err.to_string())?;
 
         sqlx::query(
-            "INSERT INTO source_index (source_path, source_mtime_ns, source_size, mime, digest_sha256, blob_rel_path, created_at, last_accessed_at, hit_count)\n             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)\n             ON CONFLICT(source_path, source_mtime_ns, source_size, mime) DO UPDATE SET\n               digest_sha256 = excluded.digest_sha256,\n               blob_rel_path = excluded.blob_rel_path,\n               last_accessed_at = excluded.last_accessed_at",
+            "INSERT INTO attachment_cache_source_index\n               (source_path, source_mtime_ns, source_size, mime, digest_sha256, created_at, last_accessed_at, hit_count)\n             VALUES (?, ?, ?, ?, ?, ?, ?, 0)\n             ON CONFLICT(source_path, source_mtime_ns, source_size, mime) DO UPDATE SET\n               digest_sha256 = excluded.digest_sha256,\n               last_accessed_at = excluded.last_accessed_at",
         )
         .bind(&source.source_path)
         .bind(source.source_mtime_ns)
         .bind(source.source_size)
         .bind(&mime)
         .bind(&digest)
-        .bind(&rel_path_for_db)
         .bind(now)
         .bind(now)
         .execute(&mut *tx)
@@ -270,13 +221,6 @@ fn normalize_mime(mime: &str) -> String {
     trimmed.to_string()
 }
 
-fn blob_rel_path_for_digest(digest: &str) -> PathBuf {
-    let prefix = digest.get(0..2).unwrap_or("00");
-    PathBuf::from("blobs")
-        .join(prefix)
-        .join(format!("{digest}.b64"))
-}
-
 fn now_unix_ms() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -288,72 +232,6 @@ fn system_time_to_ns(time: SystemTime) -> i64 {
     time.duration_since(UNIX_EPOCH)
         .map(|d| d.as_nanos() as i64)
         .unwrap_or(0)
-}
-
-async fn open_cache_pool(path: &Path) -> Result<SqlitePool, String> {
-    let options = SqliteConnectOptions::new()
-        .filename(path)
-        .create_if_missing(true)
-        .busy_timeout(Duration::from_millis(CACHE_BUSY_TIMEOUT_MS))
-        .pragma("journal_mode", "WAL")
-        .pragma("synchronous", "NORMAL")
-        .pragma("temp_store", "MEMORY");
-
-    SqlitePoolOptions::new()
-        .max_connections(CACHE_POOL_MAX_CONNECTIONS)
-        .acquire_timeout(Duration::from_millis(CACHE_POOL_ACQUIRE_TIMEOUT_MS))
-        .idle_timeout(Some(Duration::from_secs(CACHE_POOL_IDLE_TIMEOUT_SECS)))
-        .connect_with(options)
-        .await
-        .map_err(|err| err.to_string())
-}
-
-async fn initialize_cache_store(pool: &SqlitePool) -> Result<(), String> {
-    sqlx::query(&format!("PRAGMA user_version = {CACHE_SCHEMA_VERSION}"))
-        .execute(pool)
-        .await
-        .map_err(|err| err.to_string())?;
-
-    sqlx::query(
-        "CREATE TABLE IF NOT EXISTS source_index (
-           source_path TEXT NOT NULL,
-           source_mtime_ns INTEGER NOT NULL,
-           source_size INTEGER NOT NULL,
-           mime TEXT NOT NULL,
-           digest_sha256 TEXT NOT NULL,
-           blob_rel_path TEXT NOT NULL,
-           created_at INTEGER NOT NULL,
-           last_accessed_at INTEGER NOT NULL,
-           hit_count INTEGER NOT NULL DEFAULT 0,
-           PRIMARY KEY (source_path, source_mtime_ns, source_size, mime)
-         )",
-    )
-    .execute(pool)
-    .await
-    .map_err(|err| err.to_string())?;
-
-    sqlx::query(
-        "CREATE TABLE IF NOT EXISTS blob_store (
-           digest_sha256 TEXT PRIMARY KEY,
-           rel_path TEXT NOT NULL,
-           bytes_size INTEGER NOT NULL,
-           created_at INTEGER NOT NULL,
-           last_accessed_at INTEGER NOT NULL
-         )",
-    )
-    .execute(pool)
-    .await
-    .map_err(|err| err.to_string())?;
-
-    sqlx::query(
-        "CREATE INDEX IF NOT EXISTS idx_source_index_last_accessed
-           ON source_index(last_accessed_at DESC)",
-    )
-    .execute(pool)
-    .await
-    .map_err(|err| err.to_string())?;
-
-    Ok(())
 }
 
 #[cfg(test)]
@@ -404,13 +282,19 @@ mod tests {
         tokio::fs::create_dir_all(&tmp).await.unwrap();
         let _home = EnvVarGuard::set("HOME", tmp.to_string_lossy().to_string());
 
+        let studio_db = Arc::new(
+            crate::studio_db::StudioDb::open()
+                .await
+                .expect("open studio db"),
+        );
+
         let source = tmp.join("workspace").join("hello.txt");
         if let Some(parent) = source.parent() {
             tokio::fs::create_dir_all(parent).await.unwrap();
         }
         tokio::fs::write(&source, b"hello world").await.unwrap();
 
-        let cache = AttachmentCacheManager::new();
+        let cache = AttachmentCacheManager::new(studio_db);
         let first = cache
             .data_url_for_file(&source, "text/plain")
             .await
@@ -431,6 +315,12 @@ mod tests {
         tokio::fs::create_dir_all(&tmp).await.unwrap();
         let _home = EnvVarGuard::set("HOME", tmp.to_string_lossy().to_string());
 
+        let studio_db = Arc::new(
+            crate::studio_db::StudioDb::open()
+                .await
+                .expect("open studio db"),
+        );
+
         let source = tmp.join("workspace").join("upload.bin");
         if let Some(parent) = source.parent() {
             tokio::fs::create_dir_all(parent).await.unwrap();
@@ -438,7 +328,7 @@ mod tests {
         let bytes = b"cached upload bytes";
         tokio::fs::write(&source, bytes).await.unwrap();
 
-        let cache = AttachmentCacheManager::new();
+        let cache = AttachmentCacheManager::new(studio_db);
         cache
             .register_uploaded_file(&source, bytes, "application/octet-stream")
             .await
