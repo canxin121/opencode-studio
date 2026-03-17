@@ -59,12 +59,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if gh release view "${{ env.RELEASE_TAG }}" >/dev/null 2>&1; then
+          if gh release view "${{ env.RELEASE_TAG }}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
             echo "Release ${{ env.RELEASE_TAG }} already exists"
             exit 0
           fi
 
           gh release create "${{ env.RELEASE_TAG }}" \
+            --repo "${{ github.repository }}" \
             --title "${{ env.RELEASE_TAG }}" \
             --generate-notes
 
