@@ -9,7 +9,7 @@ GitHub Actions CI 仍会跑全量检查，并以 CI 结果为准。
 
 - 在仓库根目录执行命令。
 - 任何代码变更在提交前都应满足以下快速检查。
-- 不得通过降低标准绕过检查（例如移除 `--locked`、跳过格式化检查）。
+- 不得通过降低标准绕过检查（例如移除 `--locked`、跳过格式化）。
 
 ## 版本更新
 
@@ -22,9 +22,12 @@ GitHub Actions CI 仍会跑全量检查，并以 CI 结果为准。
 ### 格式化
 
 ```bash
-cargo fmt --all -- --check
-bun run --cwd web fmt:check -- --cache --cache-location .prettier-cache
+cargo fmt --all
+bun run --cwd web fmt -- --cache --cache-location .prettier-cache
 ```
+
+上述命令可能会修改文件。格式化产生的改动应随同 PR/提交一起提交（不要留在未提交状态）。
+如果你只想“验证”格式化而不修改文件，可以使用 `cargo fmt --all -- --check` 和 `bun run --cwd web fmt:check`。
 
 ### 构建 / 健康检查
 

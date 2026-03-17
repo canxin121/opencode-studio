@@ -9,7 +9,7 @@ GitHub Actions CI still runs the full suite and is the source of truth.
 
 - Run commands at the repository root.
 - Any code change should satisfy the quick checks below before commit.
-- Do not bypass checks by lowering standards (for example removing `--locked` or skipping fmt checks).
+- Do not bypass checks by lowering standards (for example removing `--locked` or skipping formatting).
 
 ## Version Updates
 
@@ -22,9 +22,12 @@ GitHub Actions CI still runs the full suite and is the source of truth.
 ### Formatting
 
 ```bash
-cargo fmt --all -- --check
-bun run --cwd web fmt:check -- --cache --cache-location .prettier-cache
+cargo fmt --all
+bun run --cwd web fmt -- --cache --cache-location .prettier-cache
 ```
+
+These commands can modify files. Commit the formatting changes as part of your PR/commit (don’t leave them uncommitted).
+If you only want to *verify* formatting without changing files, use `cargo fmt --all -- --check` and `bun run --cwd web fmt:check`.
 
 ### Build / Sanity
 
