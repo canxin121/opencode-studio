@@ -1,16 +1,15 @@
-# AGENTS 验收门槛（对齐 CI）
+# AGENTS 本地验收门槛（快速）
 
 [English](../../../AGENTS.md) | 简体中文
 
-本文件定义 Agent 在交付变更前必须满足的最低验收门槛。
-基准来源：`.github/workflows/ci.yml`。
-若本文件与 CI 配置不一致，以 CI 为准。
+本文件定义 Agent 在交付变更前**本地**需要满足的验收门槛（快速检查）。
+GitHub Actions CI 仍会跑全量检查，并以 CI 结果为准。
 
 ## 适用规则
 
 - 在仓库根目录执行命令。
-- 任何代码变更在提交前都应满足以下检查。
-- 不得通过降低标准绕过检查（如移除 `--locked`、取消 `-D warnings`）。
+- 任何代码变更在提交前都应满足以下快速检查。
+- 不得通过降低标准绕过检查（例如移除 `--locked`、跳过格式化检查）。
 
 ## 版本更新
 
@@ -18,7 +17,26 @@
 - 命令：`python3 scripts/version_sync.py set <version>`（示例：`python3 scripts/version_sync.py set 0.1.0`）。
 - 版本更新后，本地校验必须包含 `python3 scripts/version_sync.py check`。
 
-## 必过检查
+## 必过检查（本地快速门槛）
+
+### 格式化
+
+```bash
+cargo fmt --all -- --check
+bun run --cwd web fmt:check -- --cache --cache-location .prettier-cache
+```
+
+### 构建 / 健康检查
+
+```bash
+bun install --cwd web --frozen-lockfile
+bun run --cwd web vite build
+cargo check --workspace --all-targets --locked
+```
+
+## CI 全量检查（GitHub Actions）
+
+CI 会在每次 push/PR 上运行这些 job；即使本地快速门槛通过，只要 CI 失败也必须视为阻塞。
 
 ### 版本一致性（对应 CI job: `version`）
 
@@ -38,6 +56,8 @@ bun test --cwd web
 
 ### Rust（对应 CI job: `rust`）
 
+Linux（fmt + clippy + tests + desktop JSON 校验）：
+
 ```bash
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --locked -- -D warnings
@@ -45,6 +65,18 @@ cargo test -q --locked --manifest-path server/Cargo.toml
 python3 -m json.tool desktop/src-tauri/tauri.conf.json >/dev/null
 python3 -m json.tool desktop/src-tauri/tauri.conf.full.json >/dev/null
 python3 -m json.tool desktop/src-tauri/capabilities/default.json >/dev/null
+```
+
+macOS（server/plugin 运行时测试）：
+
+```bash
+cargo test -q --locked --manifest-path server/Cargo.toml
+```
+
+Windows（server/plugin 运行时测试）：
+
+```powershell
+cargo test -q --locked --manifest-path server/Cargo.toml
 ```
 
 ### 服务安装端到端（对应 CI job: `service-installers`）
@@ -75,8 +107,9 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/test-windows-service-flow.
 
 ## 验收判定
 
-- 上述命令全部返回成功（exit code 0）才算通过。
-- 任一命令失败即视为未通过验收。
+- 本地交付：上述“必过检查（本地快速门槛）”命令必须全部返回成功（exit code 0）。
+- CI 为准：合并/发布前 GitHub Actions 必须通过。
+- CI 全量检查不要求在本地重复执行（除非排查 CI 失败）。
 
 ## 版本对齐
 

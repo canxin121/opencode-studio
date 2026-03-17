@@ -1,16 +1,15 @@
-# AGENTS Acceptance Gates (Aligned with CI)
+# AGENTS Local Acceptance Gates (Quick)
 
 English | [简体中文](docs/i18n/zh-CN/AGENTS.md)
 
-This file defines the minimum acceptance gates that agents must satisfy before handing off changes.
-Baseline source: `.github/workflows/ci.yml`.
-If this file and CI config diverge, CI is the source of truth.
+This file defines the **local** acceptance gates agents should satisfy before handing off changes.
+GitHub Actions CI still runs the full suite and is the source of truth.
 
 ## Scope Rules
 
 - Run commands at the repository root.
-- Any code change should satisfy the checks below before commit.
-- Do not bypass checks by lowering standards (for example removing `--locked` or `-D warnings`).
+- Any code change should satisfy the quick checks below before commit.
+- Do not bypass checks by lowering standards (for example removing `--locked` or skipping fmt checks).
 
 ## Version Updates
 
@@ -18,7 +17,26 @@ If this file and CI config diverge, CI is the source of truth.
 - Command: `python3 scripts/version_sync.py set <version>` (example: `python3 scripts/version_sync.py set 0.1.0`).
 - After updating versions, run `python3 scripts/version_sync.py check` as part of local validation.
 
-## Required Checks
+## Required Checks (Local Quick Gates)
+
+### Formatting
+
+```bash
+cargo fmt --all -- --check
+bun run --cwd web fmt:check -- --cache --cache-location .prettier-cache
+```
+
+### Build / Sanity
+
+```bash
+bun install --cwd web --frozen-lockfile
+bun run --cwd web vite build
+cargo check --workspace --all-targets --locked
+```
+
+## CI Checks (GitHub Actions)
+
+CI runs these jobs on every PR/push. If CI fails, treat it as a hard blocker even if the quick gates pass.
 
 ### Version consistency (CI job: `version`)
 
@@ -89,8 +107,9 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/test-windows-service-flow.
 
 ## Acceptance Criteria
 
-- All commands above must exit successfully (`exit code 0`).
-- Any failed command means acceptance is not met.
+- Local handoff: all commands under **Required Checks (Local Quick Gates)** must exit successfully (`exit code 0`).
+- CI is the source of truth: GitHub Actions must pass before merge/release.
+- CI-only checks are not required to be re-run locally unless you are debugging a CI failure.
 
 ## Version Alignment
 
