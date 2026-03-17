@@ -31,7 +31,6 @@ import type { FlatTreeRow } from '@/features/sessions/model/tree'
 import { normalizeDirForCompare } from '@/features/sessions/model/labels'
 import { useSidebarLocate } from '@/layout/chatSidebar/useSidebarLocate'
 import { normalizeSidebarUiPrefsForUi } from '@/features/sessions/model/sidebarUiPrefs'
-import { buildRunningSessionRows } from '@/layout/chatSidebar/runningSessionRows'
 import { apiJson } from '@/lib/api'
 
 const props = defineProps<{ mobileVariant?: boolean }>()
@@ -986,9 +985,9 @@ const pagedRecentSessionRows = computed<ThreadSessionRow[]>(() =>
 const pagedRunningSessionRows = computed<ThreadSessionRow[]>(() =>
   ((runningFooterView.value.rows || []) as ThreadSessionRow[]).map(resolveSidebarRow),
 )
-const runningSessionRows = computed<ThreadSessionRow[]>(
-  () => buildRunningSessionRows(pagedRunningSessionRows.value, expandedParents.value) as ThreadSessionRow[],
-)
+// Running footer rows already encode parent/child state (isParent/isExpanded/depth).
+// Avoid re-deriving it client-side, otherwise parents with collapsed children lose the disclosure toggle.
+const runningSessionRows = computed<ThreadSessionRow[]>(() => pagedRunningSessionRows.value)
 
 watch(
   () => pinnedFooterView.value.page,

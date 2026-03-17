@@ -1091,6 +1091,34 @@ fn session_parent_id(value: &Value) -> Option<String> {
         .filter(|v| !v.is_empty())
 }
 
+fn root_session_id_for_session(state: &Arc<crate::AppState>, session_id: &str) -> Option<String> {
+    let mut cur = session_id.trim().to_string();
+    if cur.is_empty() {
+        return None;
+    }
+
+    let mut seen = HashSet::<String>::new();
+    loop {
+        // If we can't resolve ancestry (or encounter a cycle), safest fallback is to treat current as root.
+        if !seen.insert(cur.clone()) {
+            return Some(cur);
+        }
+
+        let Some(summary) = state.directory_session_index.summary(&cur) else {
+            return Some(cur);
+        };
+        let Some(parent) = session_parent_id(&summary.raw) else {
+            return Some(cur);
+        };
+
+        let parent_trimmed = parent.trim();
+        if parent_trimmed.is_empty() || parent_trimmed == cur {
+            return Some(cur);
+        }
+        cur = parent_trimmed.to_string();
+    }
+}
+
 fn expanded_directory_ids(
     directories: &[DirectoryWire],
     collapsed_directory_ids: &[String],
@@ -2014,15 +2042,46 @@ fn bounded_variant_len(kind: &str) -> usize {
 }
 
 fn build_recent_index_items(state: &Arc<crate::AppState>) -> Vec<RecentIndexItem> {
-    let mut items = Vec::<RecentIndexItem>::new();
+    // The recency cache stores the most recently updated *sessions* (including child sessions).
+    // Sidebar UX expects "Recent" to be thread-oriented: show the root (parent) session, with
+    // children nested behind an expand toggle.
+    let mut by_root = BTreeMap::<String, RecentIndexItem>::new();
+
     for recent in state.directory_session_index.recent_sessions_snapshot() {
-        items.push(RecentIndexItem {
-            session_id: recent.session_id,
-            directory_id: recent.directory_id,
-            directory_path: recent.directory_path,
-            updated_at: recent.updated_at,
-        });
+        let Some(root_id) = root_session_id_for_session(state, &recent.session_id) else {
+            continue;
+        };
+
+        let updated_at = if recent.updated_at.is_finite() {
+            recent.updated_at
+        } else {
+            0.0
+        };
+
+        by_root
+            .entry(root_id.clone())
+            .and_modify(|existing| {
+                if updated_at > existing.updated_at {
+                    existing.updated_at = updated_at;
+                    existing.directory_id = recent.directory_id.clone();
+                    existing.directory_path = recent.directory_path.clone();
+                }
+            })
+            .or_insert(RecentIndexItem {
+                session_id: root_id,
+                directory_id: recent.directory_id,
+                directory_path: recent.directory_path,
+                updated_at,
+            });
     }
+
+    let mut items = by_root.into_values().collect::<Vec<_>>();
+    items.sort_by(|a, b| {
+        b.updated_at
+            .partial_cmp(&a.updated_at)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.session_id.cmp(&b.session_id))
+    });
     items
 }
 
@@ -2031,37 +2090,6 @@ fn build_running_index_items_from_runtime(
     runtime_by_session_id: &Value,
     directory_id_by_normalized_path: &BTreeMap<String, String>,
 ) -> Vec<RunningIndexItem> {
-    fn root_session_id_for_session(
-        state: &Arc<crate::AppState>,
-        session_id: &str,
-    ) -> Option<String> {
-        let mut cur = session_id.trim().to_string();
-        if cur.is_empty() {
-            return None;
-        }
-
-        let mut seen = HashSet::<String>::new();
-        loop {
-            if !seen.insert(cur.clone()) {
-                return Some(cur);
-            }
-
-            let Some(summary) = state.directory_session_index.summary(&cur) else {
-                // If we can't resolve ancestry, safest fallback is to treat current as root.
-                return Some(cur);
-            };
-            let Some(parent) = session_parent_id(&summary.raw) else {
-                return Some(cur);
-            };
-
-            let parent_trimmed = parent.trim();
-            if parent_trimmed.is_empty() || parent_trimmed == cur {
-                return Some(cur);
-            }
-            cur = parent_trimmed.to_string();
-        }
-    }
-
     // Aggregate all active (running/blocked) runtime entries up to their root session.
     // The Running footer lists root sessions, and expansion reveals children.
     let mut by_root = BTreeMap::<String, RunningIndexItem>::new();
