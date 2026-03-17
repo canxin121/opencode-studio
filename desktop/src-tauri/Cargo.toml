@@ -1,6 +1,6 @@
 [package]
 name = "opencode-studio-desktop"
-version = "0.1.10"
+version = "0.1.11"
 description = "OpenCode Studio Desktop (Tauri wrapper)"
 authors = ["OpenCode Studio Contributors"]
 edition = "2024"
