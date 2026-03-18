@@ -54,6 +54,7 @@ See [`docs/i18n/README.md`](docs/i18n/README.md) for the language matrix and cro
 
 - [Language Support](#language-support)
 - [Why OpenCode Studio](#why-opencode-studio)
+- [Recommended Plugin: Managed Web Previews](#recommended-plugin-managed-web-previews)
 - [UI Preview](#ui-preview)
 - [Quick Start (2 minutes)](#quick-start)
 - [Installation Details](#installation-details)
@@ -73,6 +74,33 @@ See [`docs/i18n/README.md`](docs/i18n/README.md) for the language matrix and cro
 - Lazy-loading strategy so heavier content is fetched and rendered on demand.
 - Studio-only plugin UI system: discovers plugins via `opencode.json`, loads `studio.manifest.json`, and exposes actions in UI.
 - Local-first plus ops-friendly deployment: package install for desktop use, or managed service install for always-on usage.
+
+<a id="recommended-plugin-managed-web-previews"></a>
+## Recommended Plugin: Managed Web Previews
+
+If you do frontend work in OpenCode Studio, install [`opencode-web-preview`](https://github.com/canxin121/opencode-web-preview) in OpenCode. This plugin is built specifically for Studio and cannot be used standalone: Studio owns preview session storage, proxy routing, and preview lifecycle, while the plugin lets the agent start, stop, restart, and inspect local dev servers with Studio-compatible preview links.
+
+- npm package: [`opencode-web-preview`](https://www.npmjs.com/package/opencode-web-preview)
+- Plugin repo: [`canxin121/opencode-web-preview`](https://github.com/canxin121/opencode-web-preview)
+
+Add it to your OpenCode config file `opencode.json`:
+
+- Unix/macOS: `~/.config/opencode/opencode.json`
+- Windows: `%USERPROFILE%\\.config\\opencode\\opencode.json` (for example: `C:\\Users\\<your-user>\\.config\\opencode\\opencode.json`)
+
+```jsonc
+{
+  "plugin": ["opencode-web-preview"]
+}
+```
+
+OpenCode installs npm plugins automatically when the session starts.
+
+Example prompt:
+
+```text
+Use web_preview_helper to start a managed preview for this frontend workspace.
+```
 
 <a id="ui-preview"></a>
 ## UI Preview
