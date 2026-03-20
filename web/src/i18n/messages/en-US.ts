@@ -329,6 +329,15 @@ export default {
         searchPlaceholder: 'Search preview sessions',
         searchAria: 'Search preview sessions',
         noMatchingSessions: 'No matching preview sessions.',
+        multiSelect: {
+          on: 'Multi-select: on',
+          off: 'Multi-select: off',
+          selectedCount: '{count} selected',
+        },
+        confirmDeleteSelected: {
+          title: 'Delete selected preview sessions?',
+          description: 'Delete {count} selected preview sessions. This cannot be undone.',
+        },
         sections: {
           chat: {
             title: 'Current chat',
@@ -346,6 +355,9 @@ export default {
           },
         },
         actions: {
+          enterMultiSelect: 'Multi-select',
+          exitMultiSelect: 'Done',
+          deleteSelected: 'Delete selected',
           rename: 'Rename',
           renameDescription: 'Change the name for this preview session.',
           start: 'Start',
@@ -1834,6 +1846,11 @@ export default {
       clearSearch: 'Clear search',
       emptyTitle: 'No matching folders or sessions',
       emptyHint: 'Try a different keyword.',
+      multiSelect: {
+        on: 'Multi-select: on',
+        off: 'Multi-select: off',
+        selectedCount: '{count} selected',
+      },
       expandFolder: 'Expand folder',
       collapseFolder: 'Collapse folder',
       pinned: 'Pinned',
@@ -1880,6 +1897,11 @@ export default {
     actions: {
       title: 'Terminal actions',
       titleWithName: 'Terminal actions: {name}',
+      enterMultiSelect: 'Multi-select',
+      exitMultiSelect: 'Done',
+      deleteSelected: 'Delete selected',
+      deleteSelectedConfirmTitle: 'Delete selected terminal sessions?',
+      deleteSelectedConfirmDescription: 'Delete {count} selected terminal sessions.',
       rename: 'Rename terminal',
       disconnectStream: 'Stop session',
       disconnectConfirmTitle: 'Stop terminal session?',

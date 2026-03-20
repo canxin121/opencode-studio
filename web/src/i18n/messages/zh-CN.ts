@@ -329,6 +329,15 @@ export default {
         searchPlaceholder: '搜索预览会话',
         searchAria: '搜索预览会话',
         noMatchingSessions: '没有匹配的预览会话。',
+        multiSelect: {
+          on: '多选：已开启',
+          off: '多选：未开启',
+          selectedCount: '已选 {count} 项',
+        },
+        confirmDeleteSelected: {
+          title: '删除已选预览会话？',
+          description: '将删除已选的 {count} 个预览会话。此操作不可撤销。',
+        },
         sections: {
           chat: {
             title: '当前聊天',
@@ -346,6 +355,9 @@ export default {
           },
         },
         actions: {
+          enterMultiSelect: '多选',
+          exitMultiSelect: '完成',
+          deleteSelected: '删除已选',
           rename: '重命名',
           renameDescription: '修改该预览会话的名称。',
           start: '启动',
@@ -1831,6 +1843,11 @@ export default {
       clearSearch: '清除搜索',
       emptyTitle: '没有匹配的文件夹或会话',
       emptyHint: '试试其他关键字。',
+      multiSelect: {
+        on: '多选：已开启',
+        off: '多选：未开启',
+        selectedCount: '已选 {count} 项',
+      },
       expandFolder: '展开文件夹',
       collapseFolder: '收起文件夹',
       pinned: '置顶',
@@ -1877,6 +1894,11 @@ export default {
     actions: {
       title: '终端操作',
       titleWithName: '终端操作：{name}',
+      enterMultiSelect: '多选',
+      exitMultiSelect: '完成',
+      deleteSelected: '删除已选',
+      deleteSelectedConfirmTitle: '删除已选终端会话？',
+      deleteSelectedConfirmDescription: '将删除已选的 {count} 个终端会话。',
       rename: '重命名终端',
       disconnectStream: '停止会话',
       disconnectConfirmTitle: '停止终端会话？',

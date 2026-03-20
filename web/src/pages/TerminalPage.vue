@@ -22,6 +22,8 @@ import Button from '@/components/ui/Button.vue'
 import IconButton from '@/components/ui/IconButton.vue'
 import ListItemFrame from '@/components/ui/ListItemFrame.vue'
 import ListItemOverflowActionButton from '@/components/ui/ListItemOverflowActionButton.vue'
+import ListItemSelectionIndicator from '@/components/ui/ListItemSelectionIndicator.vue'
+import MiniActionButton from '@/components/ui/MiniActionButton.vue'
 import MobileSidebarEmptyState from '@/components/ui/MobileSidebarEmptyState.vue'
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import FormDialog from '@/components/ui/FormDialog.vue'
@@ -30,6 +32,7 @@ import OptionMenu from '@/components/ui/OptionMenu.vue'
 import SearchInput from '@/components/ui/SearchInput.vue'
 import type { OptionMenuGroup, OptionMenuItem } from '@/components/ui/optionMenu.types'
 import TerminalKeybar from '@/components/TerminalKeybar.vue'
+import { useUnifiedMultiSelect } from '@/composables/useUnifiedMultiSelect'
 import { consumeTrustedTerminalHandoffPayload, type TerminalHandoffTarget } from '@/lib/terminalHandoff'
 import { getLocalString, removeLocalKey, removeSessionKey, setLocalString } from '@/lib/persist'
 import { localStorageKeys } from '@/lib/persistence/storageKeys'
@@ -819,6 +822,9 @@ const mobileSessionCreateDialogOpen = computed(() => ui.isMobilePointer && sessi
 const mobileSessionRenameDialogOpen = computed(
   () => ui.isMobilePointer && Boolean(normalizeSessionId(sessionRenamingId.value)),
 )
+
+const terminalMultiSelect = useUnifiedMultiSelect()
+const allTerminalSelectableIds = computed(() => sidebarSessions.value.map((item) => item.id))
 
 function sidebarSessionLabel(item: TerminalSidebarSession): string {
   return item.name || DEFAULT_TERMINAL_SESSION_NAME
@@ -1800,6 +1806,35 @@ async function openSessionFromSidebar(id: string) {
   }
 }
 
+function toggleTerminalMultiSelectMode() {
+  const next = !terminalMultiSelect.enabled.value
+  if (next) {
+    cancelSessionRename()
+    mobileSessionActionTargetId.value = null
+    mobileSessionActionOpen.value = false
+    mobileSessionActionQuery.value = ''
+  }
+  terminalMultiSelect.setEnabled(next)
+}
+
+function handleSidebarSessionClick(item: TerminalSidebarSession) {
+  if (isSessionRenaming(item.id)) return
+  if (terminalMultiSelect.enabled.value) {
+    terminalMultiSelect.toggleSelected(item.id)
+    return
+  }
+  void openSessionFromSidebar(item.id)
+}
+
+async function deleteSelectedTerminalSessions() {
+  const targets = [...terminalMultiSelect.selectedList.value]
+  if (targets.length === 0) return
+  for (const sid of targets) {
+    await closeTrackedSession(sid)
+  }
+  terminalMultiSelect.setEnabled(false)
+}
+
 async function closeTrackedSession(id: string) {
   const sid = normalizeSessionId(id)
   if (!sid) return
@@ -1855,6 +1890,14 @@ onMounted(() => {
     }
   }
 })
+
+watch(
+  () => allTerminalSelectableIds.value,
+  (ids) => {
+    terminalMultiSelect.retain(ids)
+  },
+  { immediate: true },
+)
 
 watch(
   () => sessionList.value.join('|'),
@@ -1975,6 +2018,51 @@ watch(el, () => {
         />
       </div>
 
+      <div
+        class="flex items-center justify-between gap-2 px-3 pb-2"
+        :class="visibleSidebarSessions.length > 0 ? 'flex-shrink-0' : 'hidden'"
+      >
+        <div class="text-[11px] text-muted-foreground">
+          {{
+            terminalMultiSelect.enabled ? t('terminal.sidebar.multiSelect.on') : t('terminal.sidebar.multiSelect.off')
+          }}
+          <span v-if="terminalMultiSelect.enabled" class="ml-1"
+            >({{ t('terminal.sidebar.multiSelect.selectedCount', { count: terminalMultiSelect.selectedCount }) }})</span
+          >
+        </div>
+        <div class="flex items-center gap-1">
+          <MiniActionButton size="xs" @click="toggleTerminalMultiSelectMode">
+            {{
+              terminalMultiSelect.enabled
+                ? t('terminal.actions.exitMultiSelect')
+                : t('terminal.actions.enterMultiSelect')
+            }}
+          </MiniActionButton>
+          <ConfirmPopover
+            :title="String(t('terminal.actions.deleteSelectedConfirmTitle'))"
+            :description="
+              String(
+                t('terminal.actions.deleteSelectedConfirmDescription', { count: terminalMultiSelect.selectedCount }),
+              )
+            "
+            :confirm-text="String(t('terminal.actions.deleteSelected'))"
+            :cancel-text="String(t('common.cancel'))"
+            variant="destructive"
+            @confirm="deleteSelectedTerminalSessions"
+          >
+            <MiniActionButton
+              size="xs"
+              variant="destructive"
+              :disabled="!terminalMultiSelect.enabled || terminalMultiSelect.selectedCount === 0"
+              @click.stop
+            >
+              <RiDeleteBinLine class="mr-1 h-3.5 w-3.5" />
+              {{ t('terminal.actions.deleteSelected') }}
+            </MiniActionButton>
+          </ConfirmPopover>
+        </div>
+      </div>
+
       <div v-if="!ui.isMobilePointer && sessionCreateOpen" class="flex-shrink-0 px-3 pb-2">
         <div class="rounded-md border border-sidebar-border/70 bg-sidebar/95 p-2">
           <div class="mt-1 flex items-center gap-1">
@@ -2018,16 +2106,24 @@ watch(el, () => {
 
           <div v-for="item in visibleSidebarSessions" :key="item.id" class="relative">
             <ListItemFrame
-              :active="sessionId === item.id"
+              :active="!terminalMultiSelect.enabled && sessionId === item.id"
               :as="isSessionRenaming(item.id) ? 'div' : 'button'"
-              :action-visibility="ui.isMobilePointer || isSessionRenaming(item.id) ? 'always' : 'hover'"
-              @click="!isSessionRenaming(item.id) && openSessionFromSidebar(item.id)"
+              :action-visibility="
+                terminalMultiSelect.enabled || ui.isMobilePointer || isSessionRenaming(item.id) ? 'always' : 'hover'
+              "
+              @click="handleSidebarSessionClick(item)"
             >
               <template #leading>
-                <span
-                  class="inline-flex h-1.5 w-1.5 flex-shrink-0 rounded-full"
-                  :class="statusDotClassForSession(item.id)"
-                />
+                <div class="flex items-center gap-1.5">
+                  <ListItemSelectionIndicator
+                    v-if="terminalMultiSelect.enabled"
+                    :selected="terminalMultiSelect.isSelected(item.id)"
+                  />
+                  <span
+                    class="inline-flex h-1.5 w-1.5 flex-shrink-0 rounded-full"
+                    :class="statusDotClassForSession(item.id)"
+                  />
+                </div>
               </template>
 
               <template v-if="!ui.isMobilePointer && isSessionRenaming(item.id)">
@@ -2053,7 +2149,7 @@ watch(el, () => {
               </template>
 
               <template #actions>
-                <template v-if="ui.isMobilePointer && !isSessionRenaming(item.id)">
+                <template v-if="!terminalMultiSelect.enabled && ui.isMobilePointer && !isSessionRenaming(item.id)">
                   <ListItemOverflowActionButton
                     mobile
                     :label="String(t('terminal.actions.title'))"
@@ -2095,7 +2191,7 @@ watch(el, () => {
                   </IconButton>
                 </template>
 
-                <template v-else-if="!ui.isMobilePointer">
+                <template v-else-if="!terminalMultiSelect.enabled && !ui.isMobilePointer">
                   <IconButton
                     size="xs"
                     class="text-muted-foreground hover:text-foreground hover:dark:bg-accent/40 hover:bg-primary/6"
