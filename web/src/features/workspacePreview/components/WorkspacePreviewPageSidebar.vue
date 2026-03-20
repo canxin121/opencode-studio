@@ -92,7 +92,9 @@ const renameDraftNorm = computed(() => String(renameDraft.value || '').trim())
 const renameDraftValid = computed(() => /^[A-Za-z0-9_-]+$/.test(renameDraftNorm.value))
 const canSaveRename = computed(() => !renameBusy.value && renameDraftNorm.value.length > 0 && renameDraftValid.value)
 
-const rowMenuSession = computed(() => preview.sessions.find((session) => session.id === rowMenuSessionId.value) || null)
+const rowMenuSession = computed(
+  () => previewSessions.value.find((session) => session.id === rowMenuSessionId.value) || null,
+)
 
 type SessionHealthState = 'unknown' | 'checking' | 'ok' | 'error'
 type SessionHealthEntry = { state: SessionHealthState; checkedAt: number }
@@ -118,10 +120,17 @@ const createArgsList = computed(() =>
 )
 const createLogsPathNorm = computed(() => String(createLogsPath.value || '').trim())
 
+const previewSessions = computed<WorkspacePreviewSession[]>(() =>
+  Array.isArray(preview.sessions) ? preview.sessions : [],
+)
+const previewFilteredSessions = computed<WorkspacePreviewSession[]>(() =>
+  Array.isArray(preview.filteredSessions) ? preview.filteredSessions : [],
+)
+
 const previewMultiSelect = useUnifiedMultiSelect()
 const allPreviewSessionIds = computed(() => {
   const ids = new Set<string>()
-  for (const session of preview.sessions) {
+  for (const session of previewSessions.value) {
     const id = String(session.id || '').trim()
     if (id) ids.add(id)
   }
@@ -130,7 +139,7 @@ const allPreviewSessionIds = computed(() => {
 
 const filteredPreviewSessionIds = computed(() => {
   const ids = new Set<string>()
-  for (const session of preview.filteredSessions) {
+  for (const session of previewFilteredSessions.value) {
     const id = String(session.id || '').trim()
     if (id) ids.add(id)
   }
@@ -296,29 +305,29 @@ function clampPage(page: number, pageCount: number): number {
 const chatSessionsAll = computed(() => {
   const sid = currentChatSessionId.value
   if (!sid) return []
-  return preview.sessions.filter((session) => String(session.opencodeSessionId || '').trim() === sid)
+  return previewSessions.value.filter((session) => String(session.opencodeSessionId || '').trim() === sid)
 })
 
 const chatSessionsFiltered = computed(() => {
   const sid = currentChatSessionId.value
   if (!sid) return []
-  return preview.filteredSessions.filter((session) => String(session.opencodeSessionId || '').trim() === sid)
+  return previewFilteredSessions.value.filter((session) => String(session.opencodeSessionId || '').trim() === sid)
 })
 
 const directorySessionsAll = computed(() => {
   const dir = currentDirectoryNorm.value
   if (!dir) return []
-  return preview.sessions.filter((session) => normalizeDirForCompare(session.directory) === dir)
+  return previewSessions.value.filter((session) => normalizeDirForCompare(session.directory) === dir)
 })
 
 const directorySessionsFiltered = computed(() => {
   const dir = currentDirectoryNorm.value
   if (!dir) return []
-  return preview.filteredSessions.filter((session) => normalizeDirForCompare(session.directory) === dir)
+  return previewFilteredSessions.value.filter((session) => normalizeDirForCompare(session.directory) === dir)
 })
 
-const allSessionsAll = computed(() => preview.sessions)
-const allSessionsFiltered = computed(() => preview.filteredSessions)
+const allSessionsAll = computed(() => previewSessions.value)
+const allSessionsFiltered = computed(() => previewFilteredSessions.value)
 
 const chatCount = computed(() => Math.max(0, chatSessionsFiltered.value.length))
 const directoryCount = computed(() => Math.max(0, directorySessionsFiltered.value.length))
@@ -572,7 +581,7 @@ function isInlineRenameSession(session: WorkspacePreviewSession, scope: PreviewS
 }
 
 function startRenameSession(sessionId: string, scope: PreviewSidebarScope) {
-  const session = preview.sessions.find((item) => item.id === sessionId)
+  const session = previewSessions.value.find((item) => item.id === sessionId)
   if (!session) return
 
   renamingSessionId.value = session.id
@@ -662,7 +671,7 @@ function setRowMenuOpen(next: boolean) {
 }
 
 function openEditDialog(sessionId: string) {
-  const session = preview.sessions.find((item) => item.id === sessionId)
+  const session = previewSessions.value.find((item) => item.id === sessionId)
   if (!session) return
   if (!canEditTargetUrl(session)) return
 
@@ -901,7 +910,7 @@ function selectSession(sessionId: string) {
           <p class="typography-ui-label font-medium text-muted-foreground">
             {{ t('workspaceDock.preview.sessionsTitle') }}
             <span class="ml-1 font-mono text-[10px] text-muted-foreground/60"
-              >({{ preview.filteredSessions.length }})</span
+              >({{ previewFilteredSessions.length }})</span
             >
           </p>
         </div>
@@ -951,7 +960,7 @@ function selectSession(sessionId: string) {
 
     <div
       class="flex items-center justify-between gap-2 px-3 pb-2"
-      :class="preview.filteredSessions.length > 0 ? 'flex-shrink-0' : 'hidden'"
+      :class="previewFilteredSessions.length > 0 ? 'flex-shrink-0' : 'hidden'"
     >
       <div class="text-[11px] text-muted-foreground">
         {{
@@ -1058,7 +1067,7 @@ function selectSession(sessionId: string) {
         </div>
 
         <div v-if="chatSectionOpen" class="px-2 pb-2 animate-in fade-in-0 slide-in-from-top-1 duration-200">
-          <SidebarSectionSkeleton v-if="preview.loading && preview.sessions.length === 0" :rows="3" compact />
+          <SidebarSectionSkeleton v-if="preview.loading && previewSessions.length === 0" :rows="3" compact />
           <div
             v-else-if="!currentChatSessionId"
             class="px-2 py-2 text-xs text-muted-foreground animate-in fade-in-0 duration-150"
@@ -1210,7 +1219,7 @@ function selectSession(sessionId: string) {
         </div>
 
         <div v-if="directorySectionOpen" class="px-2 pb-2 animate-in fade-in-0 slide-in-from-top-1 duration-200">
-          <SidebarSectionSkeleton v-if="preview.loading && preview.sessions.length === 0" :rows="3" compact />
+          <SidebarSectionSkeleton v-if="preview.loading && previewSessions.length === 0" :rows="3" compact />
           <div
             v-else-if="!currentDirectoryNorm"
             class="px-2 py-2 text-xs text-muted-foreground animate-in fade-in-0 duration-150"
@@ -1362,7 +1371,7 @@ function selectSession(sessionId: string) {
         </div>
 
         <div v-if="allSectionOpen" class="px-2 pb-2 animate-in fade-in-0 slide-in-from-top-1 duration-200">
-          <SidebarSectionSkeleton v-if="preview.loading && preview.sessions.length === 0" :rows="3" compact />
+          <SidebarSectionSkeleton v-if="preview.loading && previewSessions.length === 0" :rows="3" compact />
           <div
             v-else-if="sidebarQueryNorm && allSessionsAll.length > 0 && allCount === 0"
             class="px-2 py-2 text-xs text-muted-foreground animate-in fade-in-0 duration-150"

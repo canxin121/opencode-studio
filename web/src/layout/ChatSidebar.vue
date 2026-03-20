@@ -222,7 +222,9 @@ const expandCommandPendingIds = ref<Set<string>>(new Set())
 
 // Directory entry type lives in '@/features/sessions/model/types'.
 
-const directories = computed<DirectoryEntry[]>(() => directorySessions.visibleDirectories)
+const directories = computed<DirectoryEntry[]>(() =>
+  Array.isArray(directorySessions.visibleDirectories) ? directorySessions.visibleDirectories : [],
+)
 
 // Paging (sidebar can contain many directories/sessions).
 const DIRECTORIES_PAGE_SIZE = 15
@@ -1056,12 +1058,14 @@ const runningSessionRows = computed<ThreadSessionRow[]>(() => pagedRunningSessio
 
 const chatSelectableIds = computed(() => {
   const ids = new Set<string>()
-  for (const directory of directories.value) {
+  const visibleDirectories = Array.isArray(directories.value) ? directories.value : []
+  for (const directory of visibleDirectories) {
     const directoryId = String(directory?.id || '').trim()
     if (directoryId) ids.add(chatDirectorySelectionId(directoryId))
   }
 
-  for (const session of chat.sessions) {
+  const sidebarSessions = Array.isArray(chat.sessions) ? chat.sessions : []
+  for (const session of sidebarSessions) {
     const sid = String(session?.id || '').trim()
     if (sid) ids.add(chatSessionSelectionId(sid))
   }
