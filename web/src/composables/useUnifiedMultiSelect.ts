@@ -10,14 +10,20 @@ function normalizeId(value: string): string {
   return String(value || '').trim()
 }
 
-function normalizeUniqueIds(ids: Iterable<string>): string[] {
+function normalizeUniqueIds(ids: Iterable<unknown> | null | undefined): string[] {
   const seen = new Set<string>()
   const out: string[] = []
-  for (const raw of ids) {
-    const id = normalizeId(raw)
-    if (!id || seen.has(id)) continue
-    seen.add(id)
-    out.push(id)
+  if (!ids) return out
+
+  try {
+    for (const raw of ids) {
+      const id = normalizeId(String(raw || ''))
+      if (!id || seen.has(id)) continue
+      seen.add(id)
+      out.push(id)
+    }
+  } catch {
+    // Ignore non-iterable/invalid scopes to avoid blowing up render paths.
   }
   return out
 }
@@ -34,7 +40,7 @@ export function useUnifiedMultiSelect() {
     anchorId.value = normalizeId(nextId)
   }
 
-  function replaceSelected(ids: Iterable<string>) {
+  function replaceSelected(ids: Iterable<unknown> | null | undefined) {
     const normalized = normalizeUniqueIds(ids)
     selectedIds.value = new Set(normalized)
     setAnchor(normalized[normalized.length - 1] || '')
@@ -73,11 +79,11 @@ export function useUnifiedMultiSelect() {
     setAnchor(normalized)
   }
 
-  function selectAll(ids: Iterable<string>) {
+  function selectAll(ids: Iterable<unknown> | null | undefined) {
     replaceSelected(ids)
   }
 
-  function invertSelection(ids: Iterable<string>) {
+  function invertSelection(ids: Iterable<unknown> | null | undefined) {
     const scope = normalizeUniqueIds(ids)
     if (!scope.length) return
 
@@ -96,7 +102,11 @@ export function useUnifiedMultiSelect() {
     setAnchor(scope[scope.length - 1] || '')
   }
 
-  function selectRange(targetId: string, orderedIds: Iterable<string>, opts?: { additive?: boolean }) {
+  function selectRange(
+    targetId: string,
+    orderedIds: Iterable<unknown> | null | undefined,
+    opts?: { additive?: boolean },
+  ) {
     const target = normalizeId(targetId)
     if (!target) return
 
@@ -134,7 +144,7 @@ export function useUnifiedMultiSelect() {
 
   function selectByInteraction(
     id: string,
-    orderedIds: Iterable<string>,
+    orderedIds: Iterable<unknown> | null | undefined,
     modifiers?: MultiSelectInteractionModifiers | null,
   ) {
     const target = normalizeId(id)
@@ -150,7 +160,7 @@ export function useUnifiedMultiSelect() {
     toggleSelected(target)
   }
 
-  function retain(ids: Iterable<string>) {
+  function retain(ids: Iterable<unknown> | null | undefined) {
     const allow = new Set(normalizeUniqueIds(ids))
     const next = new Set<string>()
     for (const id of selectedIds.value) {

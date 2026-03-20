@@ -684,8 +684,11 @@ const sourceControlView = ref<SourceControlView>('changes')
 
 const gitMultiSelect = useUnifiedMultiSelect()
 const allGitSelectablePaths = computed(() => {
+  const staged = Array.isArray(stagedList.value) ? stagedList.value : []
+  const changed = Array.isArray(changesList.value) ? changesList.value : []
+  const untracked = Array.isArray(untrackedList.value) ? untrackedList.value : []
   const paths = new Set<string>()
-  for (const entry of [...stagedList.value, ...changesList.value, ...untrackedList.value]) {
+  for (const entry of [...staged, ...changed, ...untracked]) {
     const path = String(entry?.path || '').trim()
     if (path) paths.add(path)
   }
