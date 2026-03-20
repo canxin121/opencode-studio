@@ -4,6 +4,7 @@ import { RiFileTextLine } from '@remixicon/vue'
 import { useI18n } from 'vue-i18n'
 import ListItemFrame from '@/components/ui/ListItemFrame.vue'
 import ListItemOverflowActionButton from '@/components/ui/ListItemOverflowActionButton.vue'
+import ListItemSelectionIndicator from '@/components/ui/ListItemSelectionIndicator.vue'
 import OptionMenu from '@/components/ui/OptionMenu.vue'
 import type { OptionMenuGroup, OptionMenuItem } from '@/components/ui/optionMenu.types'
 
@@ -18,6 +19,8 @@ const props = withDefaults(
     isMobilePointer?: boolean
     mobileActionItems?: OptionMenuItem[]
     mobileActionTitle?: string
+    showSelection?: boolean
+    selected?: boolean
   }>(),
   {
     active: false,
@@ -28,6 +31,8 @@ const props = withDefaults(
     isMobilePointer: false,
     mobileActionItems: () => [],
     mobileActionTitle: '',
+    showSelection: false,
+    selected: false,
   },
 )
 
@@ -90,7 +95,10 @@ function handleMobileActionTrigger() {
     @click="emit('select')"
   >
     <template #leading>
-      <RiFileTextLine class="h-3.5 w-3.5" />
+      <div class="flex items-center gap-1.5">
+        <ListItemSelectionIndicator v-if="showSelection" :selected="selected" />
+        <RiFileTextLine class="h-3.5 w-3.5" />
+      </div>
     </template>
 
     <div class="flex w-full items-center gap-1.5 min-w-0">

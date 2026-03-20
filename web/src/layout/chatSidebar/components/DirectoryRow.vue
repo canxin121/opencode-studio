@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import IconButton from '@/components/ui/IconButton.vue'
+import ListItemSelectionIndicator from '@/components/ui/ListItemSelectionIndicator.vue'
 import ListItemOverflowActionButton from '@/components/ui/ListItemOverflowActionButton.vue'
 import SidebarListItem from '@/components/ui/SidebarListItem.vue'
 import { directoryEntryLabel } from '@/features/sessions/model/labels'
@@ -16,6 +17,8 @@ const props = withDefaults(
     uiIsMobile: boolean
     collapsed?: boolean
     focused?: boolean
+    multiSelectEnabled?: boolean
+    multiSelected?: boolean
     activityState?: 'running' | 'blocked' | 'mixed' | null
     loading?: boolean
     creatingSession?: boolean
@@ -23,6 +26,8 @@ const props = withDefaults(
   {
     collapsed: false,
     focused: false,
+    multiSelectEnabled: false,
+    multiSelected: false,
     activityState: null,
     loading: false,
     creatingSession: false,
@@ -31,6 +36,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   (e: 'toggle-collapse'): void
+  (e: 'row-click'): void
   (e: 'open-actions'): void
   (e: 'refresh'): void
   (e: 'new-session'): void
@@ -40,6 +46,7 @@ const emit = defineEmits<{
 const { t } = useI18n()
 
 const actionsAlwaysVisible = computed(() => props.uiIsMobile)
+const rowActive = computed(() => (props.multiSelectEnabled ? props.multiSelected : props.focused))
 
 const activityTitle = computed(() => {
   if (props.activityState === 'running') {
@@ -74,12 +81,13 @@ function handleMobileOpenActionsClick() {
 
 <template>
   <SidebarListItem
-    :active="focused"
+    :active="rowActive"
     :actions-always-visible="actionsAlwaysVisible"
     class="relative gap-1.5"
-    @click="emit('toggle-collapse')"
+    @click="emit('row-click')"
   >
     <template #icon>
+      <ListItemSelectionIndicator v-if="multiSelectEnabled" :selected="multiSelected" />
       <span
         role="button"
         class="h-3.5 w-3.5 flex-shrink-0 inline-flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:dark:bg-accent/40 hover:bg-primary/6 cursor-pointer active:scale-95 transition"
@@ -119,7 +127,8 @@ function handleMobileOpenActionsClick() {
     </div>
 
     <template #actions>
-      <template v-if="uiIsMobile">
+      <template v-if="multiSelectEnabled" />
+      <template v-else-if="uiIsMobile">
         <ListItemOverflowActionButton
           mobile
           :label="String(t('chat.sidebar.directoriesList.directoryActions'))"

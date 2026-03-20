@@ -329,6 +329,15 @@ export default {
         searchPlaceholder: '搜索预览会话',
         searchAria: '搜索预览会话',
         noMatchingSessions: '没有匹配的预览会话。',
+        multiSelect: {
+          on: '多选：已开启',
+          off: '多选：未开启',
+          selectedCount: '已选 {count} 项',
+        },
+        confirmDeleteSelected: {
+          title: '删除已选预览会话？',
+          description: '将删除已选的 {count} 个预览会话。此操作不可撤销。',
+        },
         sections: {
           chat: {
             title: '当前聊天',
@@ -346,6 +355,9 @@ export default {
           },
         },
         actions: {
+          enterMultiSelect: '多选',
+          exitMultiSelect: '完成',
+          deleteSelected: '删除已选',
           rename: '重命名',
           renameDescription: '修改该预览会话的名称。',
           start: '启动',
@@ -1831,6 +1843,11 @@ export default {
       clearSearch: '清除搜索',
       emptyTitle: '没有匹配的文件夹或会话',
       emptyHint: '试试其他关键字。',
+      multiSelect: {
+        on: '多选：已开启',
+        off: '多选：未开启',
+        selectedCount: '已选 {count} 项',
+      },
       expandFolder: '展开文件夹',
       collapseFolder: '收起文件夹',
       pinned: '置顶',
@@ -1877,6 +1894,11 @@ export default {
     actions: {
       title: '终端操作',
       titleWithName: '终端操作：{name}',
+      enterMultiSelect: '多选',
+      exitMultiSelect: '完成',
+      deleteSelected: '删除已选',
+      deleteSelectedConfirmTitle: '删除已选终端会话？',
+      deleteSelectedConfirmDescription: '将删除已选的 {count} 个终端会话。',
       rename: '重命名终端',
       disconnectStream: '停止会话',
       disconnectConfirmTitle: '停止终端会话？',
@@ -2389,6 +2411,22 @@ export default {
           prevPage: '上一页运行中会话',
           nextPage: '下一页运行中会话',
           empty: '没有运行中会话。',
+        },
+      },
+      multiSelect: {
+        on: '已开启多选',
+        off: '未开启多选',
+        selectedCount: '已选 {count} 项',
+        sessionCount: '{count} 个会话',
+        directoryCount: '{count} 个目录',
+        actions: {
+          enterMultiSelect: '多选模式',
+          exitMultiSelect: '完成',
+          deleteSelected: '删除已选',
+        },
+        confirmDelete: {
+          title: '删除已选项？',
+          description: '确认删除 {sessions} 个会话和 {directories} 个目录？此操作无法撤销。',
         },
       },
       sessionRow: {
@@ -2966,14 +3004,26 @@ export default {
           stage: '暂存',
           unstageAll: '全部取消暂存',
           unstage: '取消暂存',
+          enterMultiSelect: '多选模式',
+          exitMultiSelect: '完成',
           history: '历史',
           ignore: '忽略',
           discardChanges: '丢弃更改',
           deleteFile: '删除文件',
+          deleteSelected: '删除已选',
+        },
+        multiSelect: {
+          on: '已开启多选',
+          off: '未开启多选',
+          selectedCount: '已选 {count} 项',
         },
         confirmDiscard: {
           title: '丢弃更改？',
           description: '此操作无法撤销。',
+        },
+        confirmDeleteSelected: {
+          title: '删除已选文件？',
+          description: '确认删除已选的 {count} 个文件？此操作无法撤销。',
         },
         confirmDeleteTracked: {
           title: '删除文件？',
@@ -3694,6 +3744,10 @@ export default {
       },
       selection: {
         selectedCount: '已选 {count} 项',
+        multiSelectOn: '已开启多选',
+        multiSelectOff: '未开启多选',
+        enterMultiSelect: '多选模式',
+        exitMultiSelect: '完成',
         longPressHint: '长按条目可加入/取消多选',
         clearSelection: '清除选择',
         bulkMove: '移动已选',

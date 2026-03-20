@@ -20,11 +20,15 @@ import Button from '@/components/ui/Button.vue'
 import FormDialog from '@/components/ui/FormDialog.vue'
 import IconButton from '@/components/ui/IconButton.vue'
 import Input from '@/components/ui/Input.vue'
+import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import ListItemOverflowActionButton from '@/components/ui/ListItemOverflowActionButton.vue'
+import ListItemSelectionIndicator from '@/components/ui/ListItemSelectionIndicator.vue'
+import MiniActionButton from '@/components/ui/MiniActionButton.vue'
 import OptionMenu from '@/components/ui/OptionMenu.vue'
 import type { OptionMenuGroup, OptionMenuItem } from '@/components/ui/optionMenu.types'
 import SearchInput from '@/components/ui/SearchInput.vue'
 import SidebarListItem from '@/components/ui/SidebarListItem.vue'
+import { useUnifiedMultiSelect } from '@/composables/useUnifiedMultiSelect'
 import type { WorkspacePreviewSession } from '@/features/workspacePreview/api/workspacePreviewApi'
 import { buildPreviewFrameSrc } from '@/features/workspacePreview/model/previewUrl'
 import { normalizeDirForCompare } from '@/features/sessions/model/labels'
@@ -113,6 +117,16 @@ const createArgsList = computed(() =>
     .filter(Boolean),
 )
 const createLogsPathNorm = computed(() => String(createLogsPath.value || '').trim())
+
+const previewMultiSelect = useUnifiedMultiSelect()
+const allPreviewSessionIds = computed(() => {
+  const ids = new Set<string>()
+  for (const session of preview.sessions) {
+    const id = String(session.id || '').trim()
+    if (id) ids.add(id)
+  }
+  return Array.from(ids)
+})
 
 function normalizeSessionState(input: unknown): string {
   return String(input || '')
@@ -713,16 +727,59 @@ async function onRowMenuSelect(item: OptionMenuItem) {
 
   if (item.id === 'delete') {
     setRowMenuOpen(false)
-    try {
-      await preview.deleteSession(session.id)
-      clearSessionHealth(session.id)
-      probeVisibleSessions()
-    } catch (err) {
-      const detail = err instanceof Error ? err.message : String(err)
-      toasts.push('error', String(t('workspaceDock.preview.sidebar.actions.deleteFailed', { detail })), 4500)
-    }
+    await deletePreviewSessionById(session.id)
   }
 }
+
+function togglePreviewMultiSelectMode() {
+  const next = !previewMultiSelect.enabled.value
+  if (next) {
+    cancelRenameSession()
+    setRowMenuOpen(false)
+  }
+  previewMultiSelect.setEnabled(next)
+}
+
+function handlePreviewSessionRowClick(session: WorkspacePreviewSession, scope: PreviewSidebarScope) {
+  if (isInlineRenameSession(session, scope)) return
+  if (previewMultiSelect.enabled.value) {
+    previewMultiSelect.toggleSelected(session.id)
+    return
+  }
+  selectSession(session.id)
+}
+
+async function deletePreviewSessionById(sessionId: string): Promise<boolean> {
+  const id = String(sessionId || '').trim()
+  if (!id) return false
+  try {
+    await preview.deleteSession(id)
+    clearSessionHealth(id)
+    probeVisibleSessions()
+    return true
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err)
+    toasts.push('error', String(t('workspaceDock.preview.sidebar.actions.deleteFailed', { detail })), 4500)
+    return false
+  }
+}
+
+async function deleteSelectedPreviewSessions() {
+  const targets = [...previewMultiSelect.selectedList.value]
+  if (targets.length === 0) return
+  for (const sessionId of targets) {
+    await deletePreviewSessionById(sessionId)
+  }
+  previewMultiSelect.setEnabled(false)
+}
+
+watch(
+  () => allPreviewSessionIds.value,
+  (ids) => {
+    previewMultiSelect.retain(ids)
+  },
+  { immediate: true },
+)
 
 watch(
   () => visibleSessionIdKey.value,
@@ -869,6 +926,58 @@ function selectSession(sessionId: string) {
       />
     </div>
 
+    <div
+      class="flex items-center justify-between gap-2 px-3 pb-2"
+      :class="preview.filteredSessions.length > 0 ? 'flex-shrink-0' : 'hidden'"
+    >
+      <div class="text-[11px] text-muted-foreground">
+        {{
+          previewMultiSelect.enabled
+            ? t('workspaceDock.preview.sidebar.multiSelect.on')
+            : t('workspaceDock.preview.sidebar.multiSelect.off')
+        }}
+        <span v-if="previewMultiSelect.enabled" class="ml-1">
+          ({{
+            t('workspaceDock.preview.sidebar.multiSelect.selectedCount', { count: previewMultiSelect.selectedCount })
+          }})
+        </span>
+      </div>
+
+      <div class="flex items-center gap-1">
+        <MiniActionButton size="xs" @click="togglePreviewMultiSelectMode">
+          {{
+            previewMultiSelect.enabled
+              ? t('workspaceDock.preview.sidebar.actions.exitMultiSelect')
+              : t('workspaceDock.preview.sidebar.actions.enterMultiSelect')
+          }}
+        </MiniActionButton>
+        <ConfirmPopover
+          :title="String(t('workspaceDock.preview.sidebar.confirmDeleteSelected.title'))"
+          :description="
+            String(
+              t('workspaceDock.preview.sidebar.confirmDeleteSelected.description', {
+                count: previewMultiSelect.selectedCount,
+              }),
+            )
+          "
+          :confirm-text="String(t('workspaceDock.preview.sidebar.actions.deleteSelected'))"
+          :cancel-text="String(t('common.cancel'))"
+          variant="destructive"
+          @confirm="deleteSelectedPreviewSessions"
+        >
+          <MiniActionButton
+            size="xs"
+            variant="destructive"
+            :disabled="!previewMultiSelect.enabled || previewMultiSelect.selectedCount === 0"
+            @click.stop
+          >
+            <RiDeleteBinLine class="mr-1 h-3.5 w-3.5" />
+            {{ t('workspaceDock.preview.sidebar.actions.deleteSelected') }}
+          </MiniActionButton>
+        </ConfirmPopover>
+      </div>
+    </div>
+
     <div class="flex-1 min-h-0 overflow-x-hidden overflow-y-auto pb-2">
       <div class="flex-shrink-0 border-t border-sidebar-border/60 bg-sidebar/95">
         <div
@@ -930,19 +1039,27 @@ function selectSession(sessionId: string) {
             <SidebarListItem
               v-for="session in pagedChatSessions"
               :key="session.id"
-              :active="preview.activeSessionId === session.id"
+              :active="!previewMultiSelect.enabled && preview.activeSessionId === session.id"
               :as="isInlineRenameSession(session, 'chat') ? 'div' : 'button'"
               density="compact"
-              :actions-always-visible="ui.isMobilePointer || isInlineRenameSession(session, 'chat')"
-              @click="!isInlineRenameSession(session, 'chat') && selectSession(session.id)"
+              :actions-always-visible="
+                !previewMultiSelect.enabled && (ui.isMobilePointer || isInlineRenameSession(session, 'chat'))
+              "
+              @click="handlePreviewSessionRowClick(session, 'chat')"
             >
               <template #icon>
-                <span
-                  class="inline-flex h-1.5 w-1.5 rounded-full flex-shrink-0"
-                  :class="sessionDotClass(session)"
-                  :title="sessionDotLabel(session)"
-                  :aria-label="sessionDotLabel(session)"
-                />
+                <div class="flex items-center gap-1.5">
+                  <ListItemSelectionIndicator
+                    v-if="previewMultiSelect.enabled"
+                    :selected="previewMultiSelect.isSelected(session.id)"
+                  />
+                  <span
+                    class="inline-flex h-1.5 w-1.5 rounded-full flex-shrink-0"
+                    :class="sessionDotClass(session)"
+                    :title="sessionDotLabel(session)"
+                    :aria-label="sessionDotLabel(session)"
+                  />
+                </div>
               </template>
 
               <div class="flex w-full items-center min-w-0 gap-2">
@@ -1001,7 +1118,7 @@ function selectSession(sessionId: string) {
                   </IconButton>
                 </template>
 
-                <template v-else>
+                <template v-else-if="!previewMultiSelect.enabled">
                   <ListItemOverflowActionButton
                     :mobile="ui.isMobilePointer"
                     :label="String(t('common.actions'))"
@@ -1074,19 +1191,27 @@ function selectSession(sessionId: string) {
             <SidebarListItem
               v-for="session in pagedDirectorySessions"
               :key="session.id"
-              :active="preview.activeSessionId === session.id"
+              :active="!previewMultiSelect.enabled && preview.activeSessionId === session.id"
               :as="isInlineRenameSession(session, 'directory') ? 'div' : 'button'"
               density="compact"
-              :actions-always-visible="ui.isMobilePointer || isInlineRenameSession(session, 'directory')"
-              @click="!isInlineRenameSession(session, 'directory') && selectSession(session.id)"
+              :actions-always-visible="
+                !previewMultiSelect.enabled && (ui.isMobilePointer || isInlineRenameSession(session, 'directory'))
+              "
+              @click="handlePreviewSessionRowClick(session, 'directory')"
             >
               <template #icon>
-                <span
-                  class="inline-flex h-1.5 w-1.5 rounded-full flex-shrink-0"
-                  :class="sessionDotClass(session)"
-                  :title="sessionDotLabel(session)"
-                  :aria-label="sessionDotLabel(session)"
-                />
+                <div class="flex items-center gap-1.5">
+                  <ListItemSelectionIndicator
+                    v-if="previewMultiSelect.enabled"
+                    :selected="previewMultiSelect.isSelected(session.id)"
+                  />
+                  <span
+                    class="inline-flex h-1.5 w-1.5 rounded-full flex-shrink-0"
+                    :class="sessionDotClass(session)"
+                    :title="sessionDotLabel(session)"
+                    :aria-label="sessionDotLabel(session)"
+                  />
+                </div>
               </template>
 
               <div class="flex w-full items-center min-w-0 gap-2">
@@ -1145,7 +1270,7 @@ function selectSession(sessionId: string) {
                   </IconButton>
                 </template>
 
-                <template v-else>
+                <template v-else-if="!previewMultiSelect.enabled">
                   <ListItemOverflowActionButton
                     :mobile="ui.isMobilePointer"
                     :label="String(t('common.actions'))"
@@ -1212,19 +1337,27 @@ function selectSession(sessionId: string) {
             <SidebarListItem
               v-for="session in pagedAllSessions"
               :key="session.id"
-              :active="preview.activeSessionId === session.id"
+              :active="!previewMultiSelect.enabled && preview.activeSessionId === session.id"
               :as="isInlineRenameSession(session, 'all') ? 'div' : 'button'"
               density="compact"
-              :actions-always-visible="ui.isMobilePointer || isInlineRenameSession(session, 'all')"
-              @click="!isInlineRenameSession(session, 'all') && selectSession(session.id)"
+              :actions-always-visible="
+                !previewMultiSelect.enabled && (ui.isMobilePointer || isInlineRenameSession(session, 'all'))
+              "
+              @click="handlePreviewSessionRowClick(session, 'all')"
             >
               <template #icon>
-                <span
-                  class="inline-flex h-1.5 w-1.5 rounded-full flex-shrink-0"
-                  :class="sessionDotClass(session)"
-                  :title="sessionDotLabel(session)"
-                  :aria-label="sessionDotLabel(session)"
-                />
+                <div class="flex items-center gap-1.5">
+                  <ListItemSelectionIndicator
+                    v-if="previewMultiSelect.enabled"
+                    :selected="previewMultiSelect.isSelected(session.id)"
+                  />
+                  <span
+                    class="inline-flex h-1.5 w-1.5 rounded-full flex-shrink-0"
+                    :class="sessionDotClass(session)"
+                    :title="sessionDotLabel(session)"
+                    :aria-label="sessionDotLabel(session)"
+                  />
+                </div>
               </template>
 
               <div class="flex w-full items-center min-w-0 gap-2">
@@ -1283,7 +1416,7 @@ function selectSession(sessionId: string) {
                   </IconButton>
                 </template>
 
-                <template v-else>
+                <template v-else-if="!previewMultiSelect.enabled">
                   <ListItemOverflowActionButton
                     :mobile="ui.isMobilePointer"
                     :label="String(t('common.actions'))"

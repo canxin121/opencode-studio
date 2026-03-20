@@ -6,6 +6,7 @@ import {
   RiArrowLeftSLine,
   RiArrowRightSLine,
   RiCloseLine,
+  RiDeleteBinLine,
   RiGitBranchLine,
   RiClipboardLine,
   RiMore2Line,
@@ -22,6 +23,7 @@ import type { OptionMenuGroup, OptionMenuItem } from '@/components/ui/optionMenu
 import ScrollArea from '@/components/ui/ScrollArea.vue'
 import SearchInput from '@/components/ui/SearchInput.vue'
 import SidebarIconButton from '@/components/ui/SidebarIconButton.vue'
+import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import GitCommitBox from '@/components/git/GitCommitBox.vue'
 import GitDiffPane from '@/components/git/GitDiffPane.vue'
 import GitMergeChangesSection from '@/components/git/GitMergeChangesSection.vue'
@@ -46,6 +48,7 @@ import GitRenameDialog from '@/components/git/GitRenameDialog.vue'
 import GitStashPanel from '@/components/git/GitStashPanel.vue'
 import GitStashViewDialog from '@/components/git/GitStashViewDialog.vue'
 import { useDesktopSidebarResize } from '@/composables/useDesktopSidebarResize'
+import { useUnifiedMultiSelect } from '@/composables/useUnifiedMultiSelect'
 
 import GitAuthDialogs from './components/GitAuthDialogs.vue'
 import GitRemoteTargetDialogs from './components/GitRemoteTargetDialogs.vue'
@@ -679,6 +682,16 @@ type SourceControlView = 'changes' | 'history' | 'historyCommit'
 
 const sourceControlView = ref<SourceControlView>('changes')
 
+const gitMultiSelect = useUnifiedMultiSelect()
+const allGitSelectablePaths = computed(() => {
+  const paths = new Set<string>()
+  for (const entry of [...stagedList.value, ...changesList.value, ...untrackedList.value]) {
+    const path = String(entry?.path || '').trim()
+    if (path) paths.add(path)
+  }
+  return Array.from(paths)
+})
+
 const isHistoryListView = computed(() => sourceControlView.value === 'history')
 const isHistoryCommitView = computed(() => sourceControlView.value === 'historyCommit')
 const isHistoryView = computed(() => isHistoryListView.value || isHistoryCommitView.value)
@@ -754,6 +767,24 @@ function openChangesView() {
   if (props.embedded && embeddedView.value === 'diff' && !selectedFile.value) {
     embeddedView.value = 'list'
   }
+}
+
+function toggleGitMultiSelectMode() {
+  gitMultiSelect.toggleEnabled()
+}
+
+function onToggleGitPathSelection(path: string) {
+  if (!gitMultiSelect.enabled.value) return
+  gitMultiSelect.toggleSelected(path)
+}
+
+async function deleteSelectedGitPaths() {
+  const targets = [...gitMultiSelect.selectedList.value]
+  if (targets.length === 0) return
+  for (const path of targets) {
+    await deletePath(path, false)
+  }
+  gitMultiSelect.setEnabled(false)
 }
 
 function openHistoryWithRefs() {
@@ -1110,6 +1141,9 @@ watch(
 watch(
   () => sourceControlView.value,
   (view) => {
+    if (view !== 'changes') {
+      gitMultiSelect.setEnabled(false)
+    }
     if (!props.embedded) return
     if (view === 'changes') {
       embeddedView.value = selectedFile.value ? 'diff' : 'list'
@@ -1123,12 +1157,24 @@ watch(
   },
 )
 
+watch(
+  () => allGitSelectablePaths.value,
+  (paths) => {
+    gitMultiSelect.retain(paths)
+  },
+  { immediate: true },
+)
+
 function showEmbeddedList() {
   if (!props.embedded) return
   embeddedView.value = 'list'
 }
 
 function selectFileFromSidebar(path: string, source: 'working' | 'staged') {
+  if (gitMultiSelect.enabled.value) {
+    gitMultiSelect.toggleSelected(path)
+    return
+  }
   selectFile(path, source)
   if (!props.embedded) return
   embeddedView.value = 'diff'
@@ -1385,6 +1431,53 @@ void diffPaneRef
 
       <ScrollArea class="flex-1 min-h-0">
         <div v-if="sourceControlView === 'changes'" class="space-y-2 p-1.5">
+          <div
+            v-if="gitReady"
+            class="flex items-center justify-between gap-2 rounded-sm border border-sidebar-border/60 bg-sidebar-accent/10 px-2 py-1.5"
+          >
+            <div class="text-[11px] text-muted-foreground">
+              {{
+                gitMultiSelect.enabled
+                  ? t('git.ui.workingTree.multiSelect.on')
+                  : t('git.ui.workingTree.multiSelect.off')
+              }}
+              <span v-if="gitMultiSelect.enabled" class="ml-1"
+                >({{
+                  t('git.ui.workingTree.multiSelect.selectedCount', { count: gitMultiSelect.selectedCount })
+                }})</span
+              >
+            </div>
+            <div class="flex items-center gap-1">
+              <MiniActionButton size="xs" @click="toggleGitMultiSelectMode">
+                {{
+                  gitMultiSelect.enabled
+                    ? t('git.ui.workingTree.actions.exitMultiSelect')
+                    : t('git.ui.workingTree.actions.enterMultiSelect')
+                }}
+              </MiniActionButton>
+              <ConfirmPopover
+                :title="t('git.ui.workingTree.confirmDeleteSelected.title')"
+                :description="
+                  t('git.ui.workingTree.confirmDeleteSelected.description', { count: gitMultiSelect.selectedCount })
+                "
+                :confirm-text="t('git.ui.workingTree.actions.deleteSelected')"
+                :cancel-text="t('common.cancel')"
+                variant="destructive"
+                @confirm="deleteSelectedGitPaths"
+              >
+                <MiniActionButton
+                  size="xs"
+                  variant="destructive"
+                  :disabled="!gitMultiSelect.enabled || gitMultiSelect.selectedCount === 0"
+                  @click.stop
+                >
+                  <RiDeleteBinLine class="h-3.5 w-3.5 mr-1" />
+                  {{ t('git.ui.workingTree.actions.deleteSelected') }}
+                </MiniActionButton>
+              </ConfirmPopover>
+            </div>
+          </div>
+
           <!-- Commit Section -->
           <div v-if="gitReady" class="space-y-2">
             <div
@@ -1653,7 +1746,10 @@ void diffPaneRef
               :loading="stagedListLoading"
               :can-operate="!!root"
               :is-mobile-pointer="ui.isMobilePointer"
+              :multi-select-mode="gitMultiSelect.enabled"
+              :selected-paths="gitMultiSelect.selectedList"
               @select="(p: string) => selectFileFromSidebar(p, 'staged')"
+              @toggleSelect="onToggleGitPathSelection"
               @unstageAll="unstageAll"
               @unstage="(p: string) => unstagePaths([p])"
               @rename="openRenameDialog"
@@ -1674,7 +1770,10 @@ void diffPaneRef
               :loading="changesListLoading"
               :can-operate="!!root"
               :is-mobile-pointer="ui.isMobilePointer"
+              :multi-select-mode="gitMultiSelect.enabled"
+              :selected-paths="gitMultiSelect.selectedList"
               @select="(p: string) => selectFileFromSidebar(p, 'working')"
+              @toggleSelect="onToggleGitPathSelection"
               @stageAll="stageAllTracked"
               @discardAll="discardAllTracked"
               @stage="(p: string) => stagePaths([p])"
@@ -1696,7 +1795,10 @@ void diffPaneRef
               :loading="untrackedListLoading"
               :can-operate="!!root"
               :is-mobile-pointer="ui.isMobilePointer"
+              :multi-select-mode="gitMultiSelect.enabled"
+              :selected-paths="gitMultiSelect.selectedList"
               @select="(p: string) => selectFileFromSidebar(p, 'working')"
+              @toggleSelect="onToggleGitPathSelection"
               @stageAll="stageAllUntracked"
               @discardAll="() => cleanUntracked(false)"
               @stage="(p: string) => stagePaths([p])"

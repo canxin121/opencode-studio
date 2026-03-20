@@ -14,20 +14,29 @@ const { t } = useI18n()
 
 type DiffSource = 'working' | 'staged'
 
-const props = defineProps<{
-  expanded: boolean
-  count: number
-  files: GitStatusFile[]
-  selectedFile: string | null
-  diffSource: DiffSource
-  hasMore: boolean
-  loading: boolean
-  isMobilePointer: boolean
-}>()
+const props = withDefaults(
+  defineProps<{
+    expanded: boolean
+    count: number
+    files: GitStatusFile[]
+    selectedFile: string | null
+    diffSource: DiffSource
+    hasMore: boolean
+    loading: boolean
+    isMobilePointer: boolean
+    multiSelectMode?: boolean
+    selectedPaths?: string[]
+  }>(),
+  {
+    multiSelectMode: false,
+    selectedPaths: () => [],
+  },
+)
 
 const emit = defineEmits<{
   (e: 'update:expanded', value: boolean): void
   (e: 'select', path: string): void
+  (e: 'toggleSelect', path: string): void
   (e: 'stageAll'): void
   (e: 'discardAll'): void
   (e: 'stage', path: string): void
@@ -39,6 +48,18 @@ const emit = defineEmits<{
 
 function toggle() {
   emit('update:expanded', !props.expanded)
+}
+
+function isPathSelected(path: string) {
+  return props.selectedPaths.includes(path)
+}
+
+function onFileSelect(path: string) {
+  if (props.multiSelectMode) {
+    emit('toggleSelect', path)
+    return
+  }
+  emit('select', path)
 }
 
 function mobileActionsForFile(path: string): OptionMenuItem[] {
@@ -148,14 +169,16 @@ function runMobileAction(path: string, actionId: string) {
           v-for="f in files"
           :key="f.path"
           :path="f.path"
-          :active="selectedFile === f.path && diffSource === 'working'"
+          :active="!multiSelectMode && selectedFile === f.path && diffSource === 'working'"
           status-label="??"
           status-class="oc-vscode-status-untracked"
           :insertions="f.insertions ?? 0"
+          :show-selection="multiSelectMode"
+          :selected="isPathSelected(f.path)"
           :is-mobile-pointer="isMobilePointer"
           :mobile-action-items="mobileActionsForFile(f.path)"
           :mobile-action-title="t('git.ui.workingTree.fileActionsTitle')"
-          @select="$emit('select', f.path)"
+          @select="onFileSelect(f.path)"
           @mobileAction="(id) => runMobileAction(f.path, id)"
         >
           <template #actions>

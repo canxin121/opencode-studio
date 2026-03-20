@@ -479,9 +479,7 @@ impl OpenCodeManager {
 
         let state = {
             let mut guard = self.child.lock().await;
-            let Some(child) = guard.as_mut() else {
-                return None;
-            };
+            let child = guard.as_mut()?;
 
             match child.try_wait() {
                 Ok(Some(status)) => {

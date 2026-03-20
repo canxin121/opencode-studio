@@ -92,6 +92,7 @@ import {
 } from '@/features/files/api/filesApi'
 import type { FsContentSearchFileResult, FsContentSearchMatch } from '@/features/files/api/filesApi'
 import { useDesktopSidebarResize } from '@/composables/useDesktopSidebarResize'
+import { useUnifiedMultiSelect } from '@/composables/useUnifiedMultiSelect'
 import { localStorageKeys } from '@/lib/persistence/storageKeys'
 import { useChatStore } from '@/stores/chat'
 import { useSettingsStore } from '@/stores/settings'
@@ -135,6 +136,7 @@ const route = useRoute()
 const router = useRouter()
 const { startDesktopSidebarResize } = useDesktopSidebarResize()
 const { t } = useI18n()
+const filesMultiSelect = useUnifiedMultiSelect()
 
 const projectRoot = computed(() => directoryStore.currentDirectory || '')
 const root = computed(() => trimTrailingSlashes(normalizePath((projectRoot.value || '').trim())))
@@ -637,6 +639,13 @@ watch(
     embeddedView.value = path ? 'viewer' : 'list'
   },
   { immediate: true },
+)
+
+watch(
+  () => filesMultiSelect.enabled.value,
+  (enabled) => {
+    if (!enabled) clearSelectedPaths()
+  },
 )
 
 let rootRestoreSeq = 0
@@ -2573,6 +2582,30 @@ async function handleNodeClick(node: FileNode, options: ExplorerNodeClickOptions
   const path = normalizePath(String(node.path || '').trim())
   if (!path) return
 
+  if (filesMultiSelect.enabled.value) {
+    if (options.range) {
+      const anchor =
+        normalizePath(String(selectionAnchorPath.value || '').trim()) ||
+        normalizePath(String(selectedDirectoryPath.value || '').trim()) ||
+        normalizePath(String(selectedFile.value?.path || '').trim()) ||
+        path
+      const range = rangeSelectionPaths(anchor, path)
+      selectedPaths.value = new Set(range.length ? range : [path])
+      selectionAnchorPath.value = path
+      return
+    }
+
+    const next = new Set(selectedPaths.value)
+    if (next.has(path)) {
+      next.delete(path)
+    } else {
+      next.add(path)
+    }
+    selectedPaths.value = next
+    selectionAnchorPath.value = path
+    return
+  }
+
   if (options.range) {
     const anchor =
       normalizePath(String(selectionAnchorPath.value || '').trim()) ||
@@ -2611,6 +2644,7 @@ async function handleNodeClick(node: FileNode, options: ExplorerNodeClickOptions
 }
 
 async function handleNodeLongPress(node: FileNode) {
+  if (!filesMultiSelect.enabled.value) return
   const path = normalizePath(String(node.path || '').trim())
   if (!path) return
   const next = new Set(selectedPaths.value)
@@ -3544,7 +3578,9 @@ onMounted(async () => {
                 :flattened-tree="flattenedTree"
                 :deleting-paths="deletingPaths"
                 :selected-paths="selectedPaths"
+                :multi-select-enabled="filesMultiSelect.enabled"
                 :uploading="uploading"
+                :toggle-multi-select-mode="filesMultiSelect.toggleEnabled"
                 :handle-node-click="handleNodeClick"
                 :handle-node-long-press="handleNodeLongPress"
                 :refresh-root="refreshRoot"

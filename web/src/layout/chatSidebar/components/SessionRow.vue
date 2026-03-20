@@ -14,6 +14,7 @@ import { useI18n } from 'vue-i18n'
 
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import IconButton from '@/components/ui/IconButton.vue'
+import ListItemSelectionIndicator from '@/components/ui/ListItemSelectionIndicator.vue'
 import ListItemOverflowActionButton from '@/components/ui/ListItemOverflowActionButton.vue'
 import { directoryEntryLabel, formatTime, sessionLabel } from '@/features/sessions/model/labels'
 import type { DirectoryEntry } from '@/features/sessions/model/types'
@@ -43,6 +44,8 @@ const props = withDefaults(
 
     showDirectory?: boolean
     showTime?: boolean
+    multiSelectEnabled?: boolean
+    multiSelected?: boolean
 
     indentPx?: number
     isParent?: boolean
@@ -75,6 +78,8 @@ const props = withDefaults(
     highlighted: false,
     showDirectory: false,
     showTime: true,
+    multiSelectEnabled: false,
+    multiSelected: false,
     indentPx: 8,
     isParent: false,
     isExpanded: false,
@@ -99,6 +104,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   (e: 'open'): void
+  (e: 'toggle-select'): void
   (e: 'toggle-thread'): void
   (e: 'open-actions'): void
   (e: 'open-action-menu', event: MouseEvent | PointerEvent): void
@@ -128,6 +134,7 @@ const renameDraftText = computed(() => String(props.renameDraft || ''))
 const canSaveRename = computed(() => !props.renameBusy && renameDraftText.value.trim().length > 0)
 
 const shouldRenderSessionActionMenu = computed(() => {
+  if (props.multiSelectEnabled) return false
   if (isInlineRename.value) return false
   if (!props.sessionActionMenuOpen || !hasSessionContext.value) return false
   const anchor = props.sessionActionMenuAnchorEl
@@ -188,6 +195,15 @@ function handleMobileOpenActionsClick() {
 function handleDesktopOpenActionMenu(event: MouseEvent) {
   emit('open-action-menu', event)
 }
+
+function handleRowClick() {
+  if (isInlineRename.value) return
+  if (props.multiSelectEnabled) {
+    emit('toggle-select')
+    return
+  }
+  emit('open')
+}
 </script>
 
 <template>
@@ -199,10 +215,11 @@ function handleDesktopOpenActionMenu(event: MouseEvent) {
       :actions-always-visible="actionsAlwaysVisible"
       class="gap-2 relative"
       :class="highlighted ? 'ring-2 ring-primary/40 ring-inset' : ''"
-      @click="!isInlineRename && emit('open')"
+      @click="handleRowClick"
     >
       <template #icon>
         <div class="flex items-center gap-1.5 min-w-0">
+          <ListItemSelectionIndicator v-if="multiSelectEnabled" :selected="multiSelected" />
           <span
             v-if="isParent"
             role="button"

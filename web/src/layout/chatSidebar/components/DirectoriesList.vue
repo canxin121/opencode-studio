@@ -65,6 +65,11 @@ const props = defineProps<{
   chatSelectedSessionId: string | null
 
   creatingSession: boolean
+  multiSelectEnabled: boolean
+  isDirectorySelected: (directoryId: string) => boolean
+  isSessionSelected: (sessionId: string) => boolean
+  toggleDirectorySelected: (directoryId: string) => void
+  toggleSessionSelected: (sessionId: string) => void
 
   directoryPageLoading: boolean
   isDirectoryExpandLoading: (directoryId: string) => boolean
@@ -201,6 +206,13 @@ function statusMeta(sessionId: string) {
                 :activity-state="props.directoryActivityState(directory)"
                 :loading="props.directoryPageLoading"
                 :creating-session="props.creatingSession"
+                :multi-select-enabled="props.multiSelectEnabled"
+                :multi-selected="props.isDirectorySelected(directory.id)"
+                @row-click="
+                  props.multiSelectEnabled
+                    ? props.toggleDirectorySelected(directory.id)
+                    : props.toggleDirectoryCollapse(directory.id, directory.path)
+                "
                 @toggle-collapse="props.toggleDirectoryCollapse(directory.id, directory.path)"
                 @open-actions="props.openDirectoryActions(directory)"
                 @refresh="props.refreshDirectoryInline(directory)"
@@ -276,11 +288,13 @@ function statusMeta(sessionId: string) {
                         :is-parent="row.isParent"
                         :is-expanded="row.isExpanded"
                         :show-thread-placeholder="true"
+                        :multi-select-enabled="props.multiSelectEnabled"
+                        :multi-selected="props.isSessionSelected(row.id)"
                         :status-label="statusMeta(row.id).label"
                         :status-dot-class="statusMeta(row.id).dotClass"
                         :attention="props.hasAttention(row.id)"
                         :pinned="props.pinnedSessionIds.includes(row.id)"
-                        :actions-enabled="Boolean(row.session && row.directory)"
+                        :actions-enabled="!props.multiSelectEnabled && Boolean(row.session && row.directory)"
                         :session-action-menu-open="sessionActionMenuTarget?.session?.id === row.id"
                         :session-action-menu-anchor-el="sessionActionMenuAnchorEl"
                         :session-action-menu-query="sessionActionMenuQuery"
@@ -296,6 +310,7 @@ function statusMeta(sessionId: string) {
                             await props.selectSession(row.id)
                           }
                         "
+                        @toggle-select="props.toggleSessionSelected(row.id)"
                         @toggle-thread="props.toggleExpandedParent(row.id)"
                         @open-actions="
                           row.session && row.directory
@@ -350,10 +365,13 @@ function statusMeta(sessionId: string) {
                         :is-parent="row.isParent"
                         :is-expanded="row.isExpanded"
                         :show-thread-placeholder="true"
+                        :multi-select-enabled="props.multiSelectEnabled"
+                        :multi-selected="props.isSessionSelected(row.id)"
                         :status-label="statusMeta(row.id).label"
                         :status-dot-class="statusMeta(row.id).dotClass"
                         :attention="props.hasAttention(row.id)"
                         :pinned="props.pinnedSessionIds.includes(row.id)"
+                        :actions-enabled="!props.multiSelectEnabled"
                         :session-action-menu-open="sessionActionMenuTarget?.session?.id === row.session.id"
                         :session-action-menu-anchor-el="sessionActionMenuAnchorEl"
                         :session-action-menu-query="sessionActionMenuQuery"
@@ -369,6 +387,7 @@ function statusMeta(sessionId: string) {
                             await props.selectSession(row.id)
                           }
                         "
+                        @toggle-select="props.toggleSessionSelected(row.id)"
                         @toggle-thread="props.toggleExpandedParent(row.id)"
                         @open-actions="props.openSessionActions(directory, row.session)"
                         @open-action-menu="(event) => props.openSessionActionMenu(directory, row.session, event)"
