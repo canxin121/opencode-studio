@@ -2416,6 +2416,22 @@ export default {
           empty: 'No running sessions.',
         },
       },
+      multiSelect: {
+        on: 'Multi-select on',
+        off: 'Multi-select off',
+        selectedCount: '{count} selected',
+        sessionCount: '{count} sessions',
+        directoryCount: '{count} directories',
+        actions: {
+          enterMultiSelect: 'Multi-select',
+          exitMultiSelect: 'Done',
+          deleteSelected: 'Delete selected',
+        },
+        confirmDelete: {
+          title: 'Delete selected items?',
+          description: 'Delete {sessions} sessions and {directories} directories? This cannot be undone.',
+        },
+      },
       sessionRow: {
         status: {
           idle: 'Idle',
@@ -3734,6 +3750,10 @@ export default {
       },
       selection: {
         selectedCount: '{count} selected',
+        multiSelectOn: 'Multi-select on',
+        multiSelectOff: 'Multi-select off',
+        enterMultiSelect: 'Multi-select',
+        exitMultiSelect: 'Done',
         longPressHint: 'Long press item to add/remove selection',
         clearSelection: 'Clear selection',
         bulkMove: 'Move selected',

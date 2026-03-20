@@ -29,6 +29,7 @@ import OptionMenu from '@/components/ui/OptionMenu.vue'
 import type { OptionMenuGroup, OptionMenuItem } from '@/components/ui/optionMenu.types'
 import SegmentedButton from '@/components/ui/SegmentedButton.vue'
 import SegmentedControl from '@/components/ui/SegmentedControl.vue'
+import ListItemSelectionIndicator from '@/components/ui/ListItemSelectionIndicator.vue'
 import SidebarIconButton from '@/components/ui/SidebarIconButton.vue'
 import SidebarListItem from '@/components/ui/SidebarListItem.vue'
 import Skeleton from '@/components/ui/Skeleton.vue'
@@ -58,7 +59,9 @@ const props = defineProps<{
   flattenedTree: FlatRow[]
   deletingPaths: Set<string>
   selectedPaths: Set<string>
+  multiSelectEnabled: boolean
   uploading: boolean
+  toggleMultiSelectMode: () => void
   handleNodeClick: (node: FileNode, modifiers: NodeClickModifiers) => void | Promise<void>
   handleNodeLongPress: (node: FileNode) => void | Promise<void>
   refreshRoot: () => void | Promise<void>
@@ -1042,23 +1045,49 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <div v-if="selectedCount > 0" class="border-b border-sidebar-border/60 px-1.5 py-1">
+    <div class="border-b border-sidebar-border/60 px-1.5 py-1">
       <div class="flex items-center gap-1">
         <span
           class="rounded-sm border border-sidebar-border/70 bg-sidebar-accent/50 px-1.5 py-[1px] text-[10px] font-medium"
         >
+          {{
+            multiSelectEnabled
+              ? t('files.explorer.selection.multiSelectOn')
+              : t('files.explorer.selection.multiSelectOff')
+          }}
+        </span>
+        <span v-if="multiSelectEnabled" class="text-[10px] text-muted-foreground">
           {{ t('files.explorer.selection.selectedCount', { count: selectedCount }) }}
         </span>
-        <span class="text-[10px] text-muted-foreground">{{ t('files.explorer.selection.longPressHint') }}</span>
         <SidebarIconButton
+          size="sm"
+          :title="
+            multiSelectEnabled
+              ? t('files.explorer.selection.exitMultiSelect')
+              : t('files.explorer.selection.enterMultiSelect')
+          "
+          :aria-label="
+            multiSelectEnabled
+              ? t('files.explorer.selection.exitMultiSelect')
+              : t('files.explorer.selection.enterMultiSelect')
+          "
+          @click="toggleMultiSelectMode"
+        >
+          <RiCheckLine v-if="multiSelectEnabled" class="h-3 w-3" />
+          <RiMore2Line v-else class="h-3 w-3" />
+        </SidebarIconButton>
+        <SidebarIconButton
+          v-if="multiSelectEnabled"
           size="sm"
           :title="t('files.explorer.selection.bulkMove')"
           :aria-label="t('files.explorer.selection.bulkMove')"
+          :disabled="selectedCount === 0"
           @click="openMoveSelectedDialog(Array.from(selectedPaths))"
         >
           <RiFolderOpenFill class="h-3 w-3" />
         </SidebarIconButton>
         <ConfirmPopover
+          v-if="multiSelectEnabled"
           :title="t('files.explorer.selection.bulkDeleteTitle')"
           :description="t('files.explorer.selection.bulkDeleteDescription', { count: selectedCount })"
           :confirm-text="t('files.explorer.selection.bulkDelete')"
@@ -1070,7 +1099,7 @@ onBeforeUnmount(() => {
             size="sm"
             destructive
             :title="t('files.explorer.selection.bulkDelete')"
-            :disabled="hasDeletingSelected"
+            :disabled="hasDeletingSelected || selectedCount === 0"
             @click.stop
           >
             <RiLoader4Line v-if="hasDeletingSelected" class="h-3 w-3 animate-spin" />
@@ -1078,9 +1107,11 @@ onBeforeUnmount(() => {
           </SidebarIconButton>
         </ConfirmPopover>
         <SidebarIconButton
+          v-if="multiSelectEnabled"
           size="sm"
           :title="t('files.explorer.selection.clearSelection')"
           :aria-label="t('files.explorer.selection.clearSelection')"
+          :disabled="selectedCount === 0"
           @click="clearSelectedPaths"
         >
           <RiCloseLine class="h-3 w-3" />
@@ -1152,6 +1183,10 @@ onBeforeUnmount(() => {
                   ]"
                 >
                   <template #icon>
+                    <ListItemSelectionIndicator
+                      v-if="multiSelectEnabled"
+                      :selected="isNodeSelected(entry.row.node.path)"
+                    />
                     <template v-if="entry.row.node.type === 'directory'">
                       <RiLoader4Line v-if="entry.row.isLoading" class="h-3.5 w-3.5 shrink-0 animate-spin" />
                       <RiFolderOpenFill v-else-if="entry.row.isExpanded" class="h-3.5 w-3.5 shrink-0 text-primary/75" />

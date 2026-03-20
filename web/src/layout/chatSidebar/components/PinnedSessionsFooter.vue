@@ -45,6 +45,9 @@ const props = defineProps<{
   selectedSessionId: string | null
 
   uiIsMobile: boolean
+  multiSelectEnabled: boolean
+  isSessionSelected: (sessionId: string) => boolean
+  toggleSessionSelected: (sessionId: string) => void
   pinnedSessionIds: string[]
   hasAttention: (sessionId: string) => 'permission' | 'question' | null
   statusLabelForSessionId: (sessionId: string) => { label: string; dotClass: string }
@@ -135,7 +138,9 @@ function statusMeta(sessionId: string) {
           :session="item.session"
           :directory="item.directory"
           :ui-is-mobile="uiIsMobile"
-          :selected="selectedSessionId === item.id"
+          :selected="multiSelectEnabled ? isSessionSelected(item.id) : selectedSessionId === item.id"
+          :multi-select-enabled="multiSelectEnabled"
+          :multi-selected="isSessionSelected(item.id)"
           :indent-px="2 + item.depth * 10"
           :is-parent="item.isParent"
           :is-expanded="item.isExpanded"
@@ -145,7 +150,7 @@ function statusMeta(sessionId: string) {
           :status-dot-class="statusMeta(item.id).dotClass"
           :attention="hasAttention(item.id)"
           :pinned="isPinned(item.id)"
-          :actions-enabled="Boolean(item.session && item.directory)"
+          :actions-enabled="!multiSelectEnabled && Boolean(item.session && item.directory)"
           :session-action-menu-open="sessionActionMenuTarget?.session?.id === item.id"
           :session-action-menu-anchor-el="sessionActionMenuAnchorEl"
           :session-action-menu-query="sessionActionMenuQuery"
@@ -157,6 +162,7 @@ function statusMeta(sessionId: string) {
           :rename-busy="renameBusy"
           menu-placement="top-end"
           @open="emit('open-session', item.id)"
+          @toggle-select="toggleSessionSelected(item.id)"
           @toggle-thread="emit('toggle-thread', item.id)"
           @open-actions="item.session && item.directory ? openSessionActions(item.directory, item.session) : undefined"
           @open-action-menu="
