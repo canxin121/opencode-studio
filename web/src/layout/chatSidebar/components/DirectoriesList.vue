@@ -80,6 +80,7 @@ const props = defineProps<{
   removeDirectoryInline: (directory: DirectoryEntry) => Promise<void>
 
   sessionCountForDirectory: (directoryId: string, directoryPath: string) => number
+  hasDirectorySidebarSection: (directoryId: string) => boolean
   selectDirectory: (directoryId: string, directoryPath: string) => Promise<void>
   selectSession: (sessionId: string) => Promise<void>
 
@@ -130,7 +131,7 @@ function statusMeta(sessionId: string) {
 </script>
 
 <template>
-  <div class="min-h-0 overflow-x-hidden" :class="uiIsMobile ? 'overflow-visible' : 'flex-1 overflow-y-auto'">
+  <div class="min-h-0 overflow-x-hidden overflow-visible">
     <div class="space-y-0.5 pb-0.5 pl-2 pr-1">
       <div v-if="directories.length === 0" class="px-2 py-6 text-center text-muted-foreground">
         <div class="typography-ui-label font-semibold">{{ t('chat.sidebar.directoriesList.empty.title') }}</div>
@@ -240,6 +241,10 @@ function statusMeta(sessionId: string) {
                   class="px-1.5 py-1.5"
                 >
                   <SidebarSectionSkeleton :rows="4" compact />
+                </div>
+
+                <div v-else-if="!props.hasDirectorySidebarSection(directory.id)" class="px-1.5 py-1.5">
+                  <SidebarSectionSkeleton :rows="3" :with-header="false" compact />
                 </div>
 
                 <div

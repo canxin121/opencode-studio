@@ -201,6 +201,17 @@ const visibleAuthError = computed(() => {
   return auth.lastError
 })
 
+const visibleOpenCodeError = computed(() => {
+  if (!showBackendLoadingNotice.value) return null
+  const detail = String(health.data?.lastOpenCodeError || '').trim()
+  if (!detail) return null
+  return `${String(t('login.opencodeNotReady'))}: ${detail}`
+})
+
+const visiblePageError = computed(() => {
+  return formError.value || visibleOpenCodeError.value || visibleAuthError.value
+})
+
 async function refreshBackendStatusOnce() {
   if (backendProbeBusy.value) return
   backendProbeBusy.value = true
@@ -514,11 +525,11 @@ async function submit() {
         </Button>
       </div>
 
-      <div v-if="formError || visibleAuthError" class="animate-in fade-in slide-in-from-top-2">
+      <div v-if="visiblePageError" class="animate-in fade-in slide-in-from-top-2">
         <div
           class="rounded-lg bg-destructive/10 p-3 text-center text-sm font-medium text-destructive ring-1 ring-inset ring-destructive/20"
         >
-          {{ formError || visibleAuthError }}
+          {{ visiblePageError }}
         </div>
       </div>
     </div>

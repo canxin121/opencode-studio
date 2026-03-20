@@ -763,6 +763,17 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
 
   let persistedStateQuery: PersistedSidebarStateQuery = {}
 
+  function syncPersistedPagingQueryFromPrefs(prefsRaw: Partial<ChatSidebarUiPrefs> | null | undefined) {
+    const prefs = normalizeUiPrefs(prefsRaw)
+    persistedStateQuery = {
+      ...persistedStateQuery,
+      directoriesPage: Math.max(0, Math.floor(Number(prefs.directoriesPage || 0))),
+      pinnedPage: Math.max(0, Math.floor(Number(prefs.pinnedSessionsPage || 0))),
+      recentPage: Math.max(0, Math.floor(Number(prefs.recentSessionsPage || 0))),
+      runningPage: Math.max(0, Math.floor(Number(prefs.runningSessionsPage || 0))),
+    }
+  }
+
   let sidebarStateSyncTimer: number | null = null
   let sidebarStateSyncInFlight = false
   let sidebarStateSyncQueued = false
@@ -1113,6 +1124,7 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
       return false
     }
     const next = normalizeUiPrefs(incomingRaw)
+    syncPersistedPagingQueryFromPrefs(next)
     if (jsonValueEquivalent(uiPrefs.value as JsonValue, next as JsonValue)) {
       return false
     }
@@ -1207,6 +1219,7 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     }
 
     const next = normalizeUiPrefs(patchChatSidebarUiPrefs(uiPrefs.value, nextPatch))
+    syncPersistedPagingQueryFromPrefs(next)
     if (jsonValueEquivalent(uiPrefs.value as JsonValue, next as JsonValue)) {
       return false
     }
@@ -1256,6 +1269,10 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
 
   async function commandSetDirectoriesPage(page: number, opts?: { silent?: boolean }): Promise<boolean> {
     const target = Math.max(0, Math.floor(Number(page || 0)))
+    persistedStateQuery = {
+      ...persistedStateQuery,
+      directoriesPage: target,
+    }
     return executeSidebarCommand({ type: 'setDirectoriesPage', page: target }, opts)
   }
 
@@ -1315,6 +1332,14 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     opts?: { silent?: boolean },
   ): Promise<boolean> {
     const target = Math.max(0, Math.floor(Number(page || 0)))
+    persistedStateQuery = {
+      ...persistedStateQuery,
+      ...(kind === 'pinned'
+        ? { pinnedPage: target }
+        : kind === 'recent'
+          ? { recentPage: target }
+          : { runningPage: target }),
+    }
     return executeSidebarCommand({ type: 'setFooterPage', kind, page: target }, opts)
   }
 
@@ -1691,8 +1716,15 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
       }
     }
 
-    const targetedFetchCount =
-      (invalidateDirectoriesPage ? 1 : 0) + directoryIds.size + footerKinds.size + (invalidatePreferences ? 1 : 0)
+    if (invalidateDirectoriesPage) {
+      await revalidateFromStateApi({ directoriesPage: uiPrefs.value.directoriesPage })
+      if (typeof deltaSeq === 'number' && Number.isFinite(deltaSeq) && deltaSeq > lastAppliedDeltaSeq) {
+        lastAppliedDeltaSeq = Math.floor(deltaSeq)
+      }
+      return true
+    }
+
+    const targetedFetchCount = directoryIds.size + footerKinds.size + (invalidatePreferences ? 1 : 0)
 
     if (invalidatePreferences || targetedFetchCount > 8) {
       await revalidateFromStateApi()
@@ -1703,14 +1735,6 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     }
 
     let needFullFallback = false
-    if (invalidateDirectoriesPage) {
-      const ok = await revalidateDirectoriesPageFromApi({
-        page: uiPrefs.value.directoriesPage,
-        query: persistedStateQuery.directoryQuery,
-        silent: true,
-      })
-      if (!ok) needFullFallback = true
-    }
 
     if (!needFullFallback && directoryIds.size > 0) {
       const directoryTasks = [...directoryIds].map((directoryId) =>

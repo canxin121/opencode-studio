@@ -34,9 +34,13 @@ const TERMINAL_HEARTBEAT: Duration = Duration::from_secs(15);
 const TERMINAL_SESSION_FILE_VERSION: u64 = 1;
 const TMUX_SESSION_PREFIX: &str = "opencode-studio-";
 
-// Replay a small scrollback on connect so the client doesn't show a blank
-// (black) terminal until the next keystroke.
+// Keep a bounded recent scrollback for resumable streams.
 const TERMINAL_HISTORY_MAX_BYTES: usize = 512 * 1024;
+
+// For a fresh stream connection (no `since` cursor), only paint a compact
+// tail snapshot to avoid replaying long historical output that visibly races
+// upward before settling at the current prompt/screen.
+const TERMINAL_INITIAL_SNAPSHOT_MAX_BYTES: usize = 32 * 1024;
 
 #[derive(Debug, Error)]
 pub enum TerminalError {
@@ -1015,6 +1019,60 @@ fn parse_last_event_id(headers: &HeaderMap) -> Option<u64> {
         .and_then(parse_seq)
 }
 
+fn tail_slice_at_char_boundary(chunk: &str, keep_last_bytes: usize) -> &str {
+    if chunk.len() <= keep_last_bytes {
+        return chunk;
+    }
+
+    let mut start = chunk.len().saturating_sub(keep_last_bytes);
+    while start < chunk.len() && !chunk.is_char_boundary(start) {
+        start += 1;
+    }
+    &chunk[start..]
+}
+
+fn build_initial_tail_snapshot(
+    chunks: &[(u64, String)],
+    max_bytes: usize,
+) -> Option<(u64, String)> {
+    if max_bytes == 0 {
+        return None;
+    }
+
+    let last_seq = chunks.last().map(|(seq, _)| *seq)?;
+    let mut remaining = max_bytes;
+    let mut parts: Vec<&str> = Vec::new();
+
+    for (_, chunk) in chunks.iter().rev() {
+        if remaining == 0 {
+            break;
+        }
+        if chunk.is_empty() {
+            continue;
+        }
+
+        if chunk.len() <= remaining {
+            parts.push(chunk.as_str());
+            remaining -= chunk.len();
+        } else {
+            parts.push(tail_slice_at_char_boundary(chunk, remaining));
+            remaining = 0;
+        }
+    }
+
+    if parts.is_empty() {
+        return None;
+    }
+
+    parts.reverse();
+    let mut merged = String::with_capacity(max_bytes.saturating_sub(remaining));
+    for part in parts {
+        merged.push_str(part);
+    }
+
+    Some((last_seq, merged))
+}
+
 fn sse_json(payload: serde_json::Value, id: Option<u64>) -> Bytes {
     let mut out = String::new();
     if let Some(id) = id {
@@ -1133,6 +1191,13 @@ pub async fn terminal_stream(
         .as_deref()
         .and_then(parse_seq)
         .or_else(|| parse_last_event_id(&headers));
+
+    let initial_tail_snapshot = if resume_since.is_none() {
+        build_initial_tail_snapshot(&snapshot_chunks, TERMINAL_INITIAL_SNAPSHOT_MAX_BYTES)
+    } else {
+        None
+    };
+
     let replay_from_seq = match (resume_since, snapshot_first_seq) {
         (Some(since), Some(first_seq)) => {
             let wanted = since.saturating_add(1);
@@ -1145,7 +1210,7 @@ pub async fn terminal_stream(
             }
         }
         (Some(_), None) => snapshot_last_seq.saturating_add(1),
-        (None, Some(first_seq)) => first_seq,
+        (None, Some(_)) => snapshot_last_seq.saturating_add(1),
         (None, None) => snapshot_last_seq.saturating_add(1),
     };
     let needs_resync_notice = match (resume_since, snapshot_first_seq) {
@@ -1182,7 +1247,16 @@ pub async fn terminal_stream(
             yield Ok(sse_json(payload, None));
         }
 
-        // Replay recent output so the client immediately shows the prompt/screen.
+        // For a fresh stream, send a compact tail snapshot in one event so the
+        // terminal paints immediately without replaying long historical chunks.
+        if let Some((seq, data)) = initial_tail_snapshot.as_ref()
+            && !data.is_empty()
+        {
+            let payload = serde_json::json!({"type": "data", "seq": seq, "data": data});
+            yield Ok(sse_json(payload, Some(*seq)));
+        }
+
+        // Replay missed output for resumable streams.
         for (seq, chunk) in snapshot_chunks.iter() {
             if *seq < replay_from_seq {
                 continue;

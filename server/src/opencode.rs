@@ -1,5 +1,6 @@
+use std::collections::VecDeque;
 use std::net::TcpListener;
-use std::process::Stdio;
+use std::process::{ExitStatus, Stdio};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -51,6 +52,9 @@ fn forward_logs_enabled() -> bool {
             .as_deref(),
     )
 }
+
+const OPENCODE_STARTUP_STDERR_MAX_LINES: usize = 64;
+const OPENCODE_STARTUP_STDERR_MAX_CHARS: usize = 2000;
 
 fn normalize_directory_for_upstream_query(value: &str) -> String {
     crate::path_utils::normalize_directory_for_match(value).unwrap_or_else(|| {
@@ -145,6 +149,7 @@ pub struct OpenCodeManager {
     restarting: RwLock<bool>,
     ready: RwLock<bool>,
     last_error: RwLock<Option<String>>,
+    startup_stderr: RwLock<VecDeque<String>>,
 
     // Small in-memory cache of the bridge instance by port.
     bridge_cache: DashMap<u16, OpenCodeBridge>,
@@ -171,6 +176,7 @@ impl OpenCodeManager {
             restarting: RwLock::new(false),
             ready: RwLock::new(false),
             last_error: RwLock::new(None),
+            startup_stderr: RwLock::new(VecDeque::new()),
             bridge_cache: DashMap::new(),
         }
     }
@@ -272,7 +278,7 @@ impl OpenCodeManager {
         self.wait_for_ready(timeout).await
     }
 
-    async fn start_managed(&self) -> Result<(), String> {
+    async fn start_managed(self: &Arc<Self>) -> Result<(), String> {
         let port = {
             let mut guard = self.managed_port.write().await;
             if let Some(p) = *guard {
@@ -317,10 +323,13 @@ impl OpenCodeManager {
         }
 
         if forward_logs {
-            cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+            cmd.stdout(Stdio::piped());
         } else {
-            cmd.stdout(Stdio::null()).stderr(Stdio::null());
+            cmd.stdout(Stdio::null());
         }
+        cmd.stderr(Stdio::piped());
+
+        self.startup_stderr.write().await.clear();
 
         let mut child = match cmd.spawn() {
             Ok(child) => child,
@@ -333,13 +342,14 @@ impl OpenCodeManager {
             }
         };
 
-        if forward_logs {
-            if let Some(stdout) = child.stdout.take() {
-                tokio::spawn(forward_child_output("opencode", stdout));
-            }
-            if let Some(stderr) = child.stderr.take() {
-                tokio::spawn(forward_child_output("opencode", stderr));
-            }
+        if forward_logs && let Some(stdout) = child.stdout.take() {
+            tokio::spawn(forward_child_output("opencode", stdout));
+        }
+        if let Some(stderr) = child.stderr.take() {
+            let manager = Arc::clone(self);
+            tokio::spawn(async move {
+                collect_child_stderr_output(manager, "opencode", stderr, forward_logs).await;
+            });
         }
 
         *self.child.lock().await = Some(child);
@@ -383,8 +393,16 @@ impl OpenCodeManager {
             .map_err(|e| e.to_string())?;
 
         loop {
+            if let Some(msg) = self.check_managed_process_before_ready().await {
+                return Err(msg);
+            }
+
             if tokio::time::Instant::now() >= deadline {
-                let msg = "Timed out waiting for OpenCode to become ready".to_string();
+                let msg = self
+                    .with_recent_stderr_context(
+                        "Timed out waiting for OpenCode to become ready".to_string(),
+                    )
+                    .await;
                 *self.last_error.write().await = Some(msg.clone());
                 *self.ready.write().await = false;
                 return Err(msg);
@@ -414,6 +432,86 @@ impl OpenCodeManager {
             }
 
             tokio::time::sleep(Duration::from_millis(400)).await;
+        }
+    }
+
+    async fn record_startup_stderr_line(&self, line: String) {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            return;
+        }
+        let mut stderr_tail = self.startup_stderr.write().await;
+        stderr_tail.push_back(trimmed.to_string());
+        while stderr_tail.len() > OPENCODE_STARTUP_STDERR_MAX_LINES {
+            stderr_tail.pop_front();
+        }
+    }
+
+    async fn recent_startup_stderr_excerpt(&self) -> Option<String> {
+        let stderr_tail = self.startup_stderr.read().await;
+        if stderr_tail.is_empty() {
+            return None;
+        }
+        let joined = stderr_tail.iter().cloned().collect::<Vec<_>>().join(" | ");
+        Some(truncate_error_detail(
+            joined.trim(),
+            OPENCODE_STARTUP_STDERR_MAX_CHARS,
+        ))
+    }
+
+    async fn with_recent_stderr_context(&self, msg: String) -> String {
+        let Some(stderr) = self.recent_startup_stderr_excerpt().await else {
+            return msg;
+        };
+        format!("{msg}. Recent OpenCode stderr: {stderr}")
+    }
+
+    async fn check_managed_process_before_ready(&self) -> Option<String> {
+        if self.configured_port.is_some() {
+            return None;
+        }
+
+        enum ManagedProcessState {
+            Running,
+            Exited(ExitStatus),
+            ProbeFailed(String),
+        }
+
+        let state = {
+            let mut guard = self.child.lock().await;
+            let Some(child) = guard.as_mut() else {
+                return None;
+            };
+
+            match child.try_wait() {
+                Ok(Some(status)) => {
+                    guard.take();
+                    ManagedProcessState::Exited(status)
+                }
+                Ok(None) => ManagedProcessState::Running,
+                Err(err) => ManagedProcessState::ProbeFailed(format!(
+                    "Failed to inspect OpenCode process status: {err}"
+                )),
+            }
+        };
+
+        match state {
+            ManagedProcessState::Running => None,
+            ManagedProcessState::ProbeFailed(msg) => {
+                *self.ready.write().await = false;
+                *self.last_error.write().await = Some(msg.clone());
+                Some(msg)
+            }
+            ManagedProcessState::Exited(status) => {
+                *self.ready.write().await = false;
+                *self.managed_port.write().await = None;
+
+                let msg = self
+                    .with_recent_stderr_context(format_exit_status_message(status))
+                    .await;
+                *self.last_error.write().await = Some(msg.clone());
+                Some(msg)
+            }
         }
     }
 }
@@ -484,6 +582,71 @@ fn windows_home_env_defaults() -> Option<String> {
                 Some(joined)
             }
         })
+}
+
+async fn collect_child_stderr_output(
+    manager: Arc<OpenCodeManager>,
+    label: &'static str,
+    stream: impl tokio::io::AsyncRead + Unpin,
+    forward_logs: bool,
+) {
+    let mut lines = BufReader::new(stream).lines();
+    while let Ok(Some(line)) = lines.next_line().await {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        manager
+            .record_startup_stderr_line(trimmed.to_string())
+            .await;
+
+        if !forward_logs {
+            continue;
+        }
+
+        // Write directly to stderr to avoid tracing filters.
+        let msg = format!("{label}: {trimmed}\n");
+        let mut stderr = tokio::io::stderr();
+        if stderr.write_all(msg.as_bytes()).await.is_err() {
+            break;
+        }
+        let _ = stderr.flush().await;
+    }
+}
+
+fn truncate_error_detail(input: &str, max_chars: usize) -> String {
+    if max_chars == 0 {
+        return String::new();
+    }
+
+    let total = input.chars().count();
+    if total <= max_chars {
+        return input.to_string();
+    }
+
+    let mut out = input
+        .chars()
+        .take(max_chars.saturating_sub(1))
+        .collect::<String>();
+    out.push('…');
+    out
+}
+
+fn format_exit_status_message(status: ExitStatus) -> String {
+    if let Some(code) = status.code() {
+        return format!("OpenCode exited before becoming ready (exit code {code})");
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        if let Some(signal) = status.signal() {
+            return format!("OpenCode exited before becoming ready (signal {signal})");
+        }
+    }
+
+    "OpenCode exited before becoming ready".to_string()
 }
 
 async fn forward_child_output(label: &'static str, stream: impl tokio::io::AsyncRead + Unpin) {
@@ -706,6 +869,32 @@ mod tests {
                 "-sTCP:LISTEN".to_string(),
             ]
         );
+    }
+
+    #[test]
+    fn truncate_error_detail_appends_ellipsis_when_too_long() {
+        assert_eq!(truncate_error_detail("abcdef", 10), "abcdef");
+        assert_eq!(truncate_error_detail("abcdef", 4), "abc…");
+        assert_eq!(truncate_error_detail("abcdef", 1), "…");
+        assert_eq!(truncate_error_detail("abcdef", 0), "");
+    }
+
+    #[test]
+    fn format_exit_status_message_includes_exit_code() {
+        #[cfg(unix)]
+        let status = {
+            use std::os::unix::process::ExitStatusExt;
+            ExitStatus::from_raw(7 << 8)
+        };
+
+        #[cfg(windows)]
+        let status = {
+            use std::os::windows::process::ExitStatusExt;
+            ExitStatus::from_raw(7)
+        };
+
+        let msg = format_exit_status_message(status);
+        assert!(msg.contains("exit code 7"), "{msg}");
     }
 
     #[cfg(unix)]
