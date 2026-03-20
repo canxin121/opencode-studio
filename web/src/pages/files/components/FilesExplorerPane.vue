@@ -62,6 +62,8 @@ const props = defineProps<{
   multiSelectEnabled: boolean
   uploading: boolean
   toggleMultiSelectMode: () => void
+  selectAllVisibleNodes: () => void | Promise<void>
+  invertVisibleNodeSelection: () => void | Promise<void>
   handleNodeClick: (node: FileNode, modifiers: NodeClickModifiers) => void | Promise<void>
   handleNodeLongPress: (node: FileNode) => void | Promise<void>
   refreshRoot: () => void | Promise<void>
@@ -191,6 +193,7 @@ const selectedDirectoryNode = computed<FileNode | null>(() => {
 })
 
 const selectedCount = computed(() => props.selectedPaths.size)
+const selectableRowCount = computed(() => props.flattenedTree.length)
 const hasDeletingSelected = computed(() =>
   Array.from(props.selectedPaths).some((path) => props.deletingPaths.has(path)),
 )
@@ -1079,6 +1082,26 @@ onBeforeUnmount(() => {
         <SidebarIconButton
           v-if="multiSelectEnabled"
           size="sm"
+          :title="t('common.selectAll')"
+          :aria-label="t('common.selectAll')"
+          :disabled="selectableRowCount === 0 || selectedCount === selectableRowCount"
+          @click="selectAllVisibleNodes"
+        >
+          <RiCheckLine class="h-3 w-3" />
+        </SidebarIconButton>
+        <SidebarIconButton
+          v-if="multiSelectEnabled"
+          size="sm"
+          :title="t('common.invertSelection')"
+          :aria-label="t('common.invertSelection')"
+          :disabled="selectableRowCount === 0"
+          @click="invertVisibleNodeSelection"
+        >
+          <RiRefreshLine class="h-3 w-3" />
+        </SidebarIconButton>
+        <SidebarIconButton
+          v-if="multiSelectEnabled"
+          size="sm"
           :title="t('files.explorer.selection.bulkMove')"
           :aria-label="t('files.explorer.selection.bulkMove')"
           :disabled="selectedCount === 0"
@@ -1264,6 +1287,10 @@ onBeforeUnmount(() => {
                   @drop="onRowDrop($event, entry.row)"
                 >
                   <template #icon>
+                    <ListItemSelectionIndicator
+                      v-if="multiSelectEnabled"
+                      :selected="isNodeSelected(entry.row.node.path)"
+                    />
                     <template v-if="entry.row.node.type === 'directory'">
                       <RiLoader4Line v-if="entry.row.isLoading" class="h-3.5 w-3.5 shrink-0 animate-spin" />
                       <RiFolderOpenFill v-else-if="entry.row.isExpanded" class="h-3.5 w-3.5 shrink-0 text-primary/75" />

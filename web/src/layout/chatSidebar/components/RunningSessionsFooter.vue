@@ -33,6 +33,10 @@ type RunningSessionRow = {
 
 type SessionMenuTarget = { directory: DirectoryEntry; session: SessionLike }
 type MenuRefEl = Element | ComponentPublicInstance | null
+type SessionToggleSelectionOptions = {
+  event?: MouseEvent
+  orderedSessionIds?: string[]
+}
 
 const props = defineProps<{
   open: boolean
@@ -48,7 +52,7 @@ const props = defineProps<{
   uiIsMobile: boolean
   multiSelectEnabled: boolean
   isSessionSelected: (sessionId: string) => boolean
-  toggleSessionSelected: (sessionId: string) => void
+  toggleSessionSelected: (sessionId: string, opts?: SessionToggleSelectionOptions) => void
   pinnedSessionIds: string[]
   hasAttention: (sessionId: string) => 'permission' | 'question' | null
 
@@ -162,7 +166,13 @@ function statusMeta(sessionId: string) {
           :rename-busy="renameBusy"
           menu-placement="top-end"
           @open="emit('open-session', item.id)"
-          @toggle-select="toggleSessionSelected(item.id)"
+          @toggle-select="
+            (event) =>
+              toggleSessionSelected(item.id, {
+                event,
+                orderedSessionIds: runningSessionRows.map((row) => row.id),
+              })
+          "
           @toggle-thread="emit('toggle-thread', item.id)"
           @open-actions="item.session && item.directory ? openSessionActions(item.directory, item.session) : undefined"
           @open-action-menu="

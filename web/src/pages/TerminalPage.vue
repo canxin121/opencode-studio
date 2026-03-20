@@ -865,6 +865,8 @@ const visibleSidebarSessions = computed<TerminalSidebarSession[]>(() => {
   return filtered.sort(compareSidebarSessionOrder)
 })
 
+const visibleTerminalSelectableIds = computed(() => visibleSidebarSessions.value.map((item) => item.id))
+
 function startSessionCreate() {
   cancelSessionRename()
   sessionCreateOpen.value = true
@@ -1817,13 +1819,23 @@ function toggleTerminalMultiSelectMode() {
   terminalMultiSelect.setEnabled(next)
 }
 
-function handleSidebarSessionClick(item: TerminalSidebarSession) {
+function handleSidebarSessionClick(item: TerminalSidebarSession, event?: MouseEvent) {
   if (isSessionRenaming(item.id)) return
   if (terminalMultiSelect.enabled.value) {
-    terminalMultiSelect.toggleSelected(item.id)
+    terminalMultiSelect.selectByInteraction(item.id, visibleTerminalSelectableIds.value, event)
     return
   }
   void openSessionFromSidebar(item.id)
+}
+
+function selectAllTerminalSessions() {
+  if (!terminalMultiSelect.enabled.value) return
+  terminalMultiSelect.selectAll(visibleTerminalSelectableIds.value)
+}
+
+function invertTerminalSessionsSelection() {
+  if (!terminalMultiSelect.enabled.value) return
+  terminalMultiSelect.invertSelection(visibleTerminalSelectableIds.value)
 }
 
 async function deleteSelectedTerminalSessions() {
@@ -2038,6 +2050,25 @@ watch(el, () => {
                 : t('terminal.actions.enterMultiSelect')
             }}
           </MiniActionButton>
+          <MiniActionButton
+            v-if="terminalMultiSelect.enabled"
+            size="xs"
+            :disabled="
+              visibleTerminalSelectableIds.length === 0 ||
+              terminalMultiSelect.selectedCount === visibleTerminalSelectableIds.length
+            "
+            @click="selectAllTerminalSessions"
+          >
+            {{ t('common.selectAll') }}
+          </MiniActionButton>
+          <MiniActionButton
+            v-if="terminalMultiSelect.enabled"
+            size="xs"
+            :disabled="visibleTerminalSelectableIds.length === 0"
+            @click="invertTerminalSessionsSelection"
+          >
+            {{ t('common.invertSelection') }}
+          </MiniActionButton>
           <ConfirmPopover
             :title="String(t('terminal.actions.deleteSelectedConfirmTitle'))"
             :description="
@@ -2111,7 +2142,7 @@ watch(el, () => {
               :action-visibility="
                 terminalMultiSelect.enabled || ui.isMobilePointer || isSessionRenaming(item.id) ? 'always' : 'hover'
               "
-              @click="handleSidebarSessionClick(item)"
+              @click="handleSidebarSessionClick(item, $event)"
             >
               <template #leading>
                 <div class="flex items-center gap-1.5">

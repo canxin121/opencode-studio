@@ -32,6 +32,7 @@ export default {
     searchOptions: 'Search options',
     all: 'All',
     selectAll: 'Select all',
+    invertSelection: 'Invert selection',
     replace: 'Replace',
     discard: 'Discard',
     undo: 'Undo',

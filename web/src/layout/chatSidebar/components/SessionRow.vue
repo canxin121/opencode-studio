@@ -104,7 +104,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   (e: 'open'): void
-  (e: 'toggle-select'): void
+  (e: 'toggle-select', event: MouseEvent): void
   (e: 'toggle-thread'): void
   (e: 'open-actions'): void
   (e: 'open-action-menu', event: MouseEvent | PointerEvent): void
@@ -196,10 +196,10 @@ function handleDesktopOpenActionMenu(event: MouseEvent) {
   emit('open-action-menu', event)
 }
 
-function handleRowClick() {
+function handleRowClick(event: MouseEvent) {
   if (isInlineRename.value) return
   if (props.multiSelectEnabled) {
-    emit('toggle-select')
+    emit('toggle-select', event)
     return
   }
   emit('open')
@@ -215,7 +215,7 @@ function handleRowClick() {
       :actions-always-visible="actionsAlwaysVisible"
       class="gap-2 relative"
       :class="highlighted ? 'ring-2 ring-primary/40 ring-inset' : ''"
-      @click="handleRowClick"
+      @click="handleRowClick($event)"
     >
       <template #icon>
         <div class="flex items-center gap-1.5 min-w-0">

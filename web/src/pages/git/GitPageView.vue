@@ -773,9 +773,19 @@ function toggleGitMultiSelectMode() {
   gitMultiSelect.toggleEnabled()
 }
 
-function onToggleGitPathSelection(path: string) {
+function onToggleGitPathSelection(path: string, event?: MouseEvent) {
   if (!gitMultiSelect.enabled.value) return
-  gitMultiSelect.toggleSelected(path)
+  gitMultiSelect.selectByInteraction(path, allGitSelectablePaths.value, event)
+}
+
+function selectAllGitPaths() {
+  if (!gitMultiSelect.enabled.value) return
+  gitMultiSelect.selectAll(allGitSelectablePaths.value)
+}
+
+function invertGitPathSelection() {
+  if (!gitMultiSelect.enabled.value) return
+  gitMultiSelect.invertSelection(allGitSelectablePaths.value)
 }
 
 async function deleteSelectedGitPaths() {
@@ -1172,7 +1182,7 @@ function showEmbeddedList() {
 
 function selectFileFromSidebar(path: string, source: 'working' | 'staged') {
   if (gitMultiSelect.enabled.value) {
-    gitMultiSelect.toggleSelected(path)
+    onToggleGitPathSelection(path)
     return
   }
   selectFile(path, source)
@@ -1454,6 +1464,24 @@ void diffPaneRef
                     ? t('git.ui.workingTree.actions.exitMultiSelect')
                     : t('git.ui.workingTree.actions.enterMultiSelect')
                 }}
+              </MiniActionButton>
+              <MiniActionButton
+                v-if="gitMultiSelect.enabled"
+                size="xs"
+                :disabled="
+                  allGitSelectablePaths.length === 0 || gitMultiSelect.selectedCount === allGitSelectablePaths.length
+                "
+                @click="selectAllGitPaths"
+              >
+                {{ t('common.selectAll') }}
+              </MiniActionButton>
+              <MiniActionButton
+                v-if="gitMultiSelect.enabled"
+                size="xs"
+                :disabled="allGitSelectablePaths.length === 0"
+                @click="invertGitPathSelection"
+              >
+                {{ t('common.invertSelection') }}
               </MiniActionButton>
               <ConfirmPopover
                 :title="t('git.ui.workingTree.confirmDeleteSelected.title')"
