@@ -2966,14 +2966,26 @@ export default {
           stage: '暂存',
           unstageAll: '全部取消暂存',
           unstage: '取消暂存',
+          enterMultiSelect: '多选模式',
+          exitMultiSelect: '完成',
           history: '历史',
           ignore: '忽略',
           discardChanges: '丢弃更改',
           deleteFile: '删除文件',
+          deleteSelected: '删除已选',
+        },
+        multiSelect: {
+          on: '已开启多选',
+          off: '未开启多选',
+          selectedCount: '已选 {count} 项',
         },
         confirmDiscard: {
           title: '丢弃更改？',
           description: '此操作无法撤销。',
+        },
+        confirmDeleteSelected: {
+          title: '删除已选文件？',
+          description: '确认删除已选的 {count} 个文件？此操作无法撤销。',
         },
         confirmDeleteTracked: {
           title: '删除文件？',

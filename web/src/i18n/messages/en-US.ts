@@ -2971,14 +2971,26 @@ export default {
           stage: 'Stage',
           unstageAll: 'Unstage all',
           unstage: 'Unstage',
+          enterMultiSelect: 'Multi-select',
+          exitMultiSelect: 'Done',
           history: 'History',
           ignore: 'Ignore',
           discardChanges: 'Discard changes',
           deleteFile: 'Delete file',
+          deleteSelected: 'Delete selected',
+        },
+        multiSelect: {
+          on: 'Multi-select on',
+          off: 'Multi-select off',
+          selectedCount: '{count} selected',
         },
         confirmDiscard: {
           title: 'Discard changes?',
           description: 'This cannot be undone.',
+        },
+        confirmDeleteSelected: {
+          title: 'Delete selected files?',
+          description: 'Delete {count} selected files? This cannot be undone.',
         },
         confirmDeleteTracked: {
           title: 'Delete file?',
