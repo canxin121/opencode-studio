@@ -2391,6 +2391,22 @@ export default {
           empty: '没有运行中会话。',
         },
       },
+      multiSelect: {
+        on: '已开启多选',
+        off: '未开启多选',
+        selectedCount: '已选 {count} 项',
+        sessionCount: '{count} 个会话',
+        directoryCount: '{count} 个目录',
+        actions: {
+          enterMultiSelect: '多选模式',
+          exitMultiSelect: '完成',
+          deleteSelected: '删除已选',
+        },
+        confirmDelete: {
+          title: '删除已选项？',
+          description: '确认删除 {sessions} 个会话和 {directories} 个目录？此操作无法撤销。',
+        },
+      },
       sessionRow: {
         status: {
           idle: '空闲',
@@ -3706,6 +3722,10 @@ export default {
       },
       selection: {
         selectedCount: '已选 {count} 项',
+        multiSelectOn: '已开启多选',
+        multiSelectOff: '未开启多选',
+        enterMultiSelect: '多选模式',
+        exitMultiSelect: '完成',
         longPressHint: '长按条目可加入/取消多选',
         clearSelection: '清除选择',
         bulkMove: '移动已选',
