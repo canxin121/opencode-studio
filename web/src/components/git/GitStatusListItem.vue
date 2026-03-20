@@ -39,7 +39,7 @@ const props = withDefaults(
 const { t } = useI18n()
 
 const emit = defineEmits<{
-  (e: 'select'): void
+  (e: 'select', event: MouseEvent): void
   (e: 'mobileAction', id: string): void
 }>()
 
@@ -92,7 +92,7 @@ function handleMobileActionTrigger() {
     :active="active"
     :action-visibility="hasMobileActions ? 'always' : 'hover'"
     class="select-none"
-    @click="emit('select')"
+    @click="emit('select', $event)"
   >
     <template #leading>
       <div class="flex items-center gap-1.5">

@@ -36,7 +36,7 @@ const props = withDefaults(
 const emit = defineEmits<{
   (e: 'update:expanded', value: boolean): void
   (e: 'select', path: string): void
-  (e: 'toggleSelect', path: string): void
+  (e: 'toggleSelect', path: string, event: MouseEvent): void
   (e: 'stageAll'): void
   (e: 'discardAll'): void
   (e: 'stage', path: string): void
@@ -55,9 +55,9 @@ function isPathSelected(path: string) {
   return props.selectedPaths.includes(path)
 }
 
-function onFileSelect(path: string) {
+function onFileSelect(path: string, event: MouseEvent) {
   if (props.multiSelectMode) {
-    emit('toggleSelect', path)
+    emit('toggleSelect', path, event)
     return
   }
   emit('select', path)
@@ -205,7 +205,7 @@ function runMobileAction(path: string, actionId: string) {
           :is-mobile-pointer="isMobilePointer"
           :mobile-action-items="mobileActionsForFile(f.path)"
           :mobile-action-title="t('git.ui.workingTree.fileActionsTitle')"
-          @select="onFileSelect(f.path)"
+          @select="(event) => onFileSelect(f.path, event)"
           @mobileAction="(id) => runMobileAction(f.path, id)"
         >
           <template #actions>

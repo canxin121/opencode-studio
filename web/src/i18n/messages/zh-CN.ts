@@ -32,6 +32,7 @@ export default {
     searchOptions: '搜索选项',
     all: '全部',
     selectAll: '全选',
+    invertSelection: '反选',
     replace: '替换',
     discard: '丢弃',
     undo: '撤销',

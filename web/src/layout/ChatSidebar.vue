@@ -58,6 +58,16 @@ function chatSessionSelectionId(sessionId: string): string {
   return `session:${String(sessionId || '').trim()}`
 }
 
+type ChatDirectoryToggleSelectionOptions = {
+  event?: MouseEvent
+  orderedDirectoryIds?: string[]
+}
+
+type ChatSessionToggleSelectionOptions = {
+  event?: MouseEvent
+  orderedSessionIds?: string[]
+}
+
 function isDirectoryMultiSelected(directoryId: string): boolean {
   return chatMultiSelect.isSelected(chatDirectorySelectionId(directoryId))
 }
@@ -66,18 +76,32 @@ function isSessionMultiSelected(sessionId: string): boolean {
   return chatMultiSelect.isSelected(chatSessionSelectionId(sessionId))
 }
 
-function toggleDirectoryMultiSelected(directoryId: string) {
+function toggleDirectoryMultiSelected(directoryId: string, opts?: ChatDirectoryToggleSelectionOptions) {
   if (!chatMultiSelect.enabled.value) return
-  chatMultiSelect.toggleSelected(chatDirectorySelectionId(directoryId))
+  const target = chatDirectorySelectionId(directoryId)
+  const ordered = (opts?.orderedDirectoryIds || []).map((id) => chatDirectorySelectionId(id)).filter(Boolean)
+  chatMultiSelect.selectByInteraction(target, ordered.length ? ordered : [target], opts?.event)
 }
 
-function toggleSessionMultiSelected(sessionId: string) {
+function toggleSessionMultiSelected(sessionId: string, opts?: ChatSessionToggleSelectionOptions) {
   if (!chatMultiSelect.enabled.value) return
-  chatMultiSelect.toggleSelected(chatSessionSelectionId(sessionId))
+  const target = chatSessionSelectionId(sessionId)
+  const ordered = (opts?.orderedSessionIds || []).map((id) => chatSessionSelectionId(id)).filter(Boolean)
+  chatMultiSelect.selectByInteraction(target, ordered.length ? ordered : [target], opts?.event)
 }
 
 function toggleChatMultiSelectMode() {
   chatMultiSelect.toggleEnabled()
+}
+
+function selectAllChatMultiSelected() {
+  if (!chatMultiSelect.enabled.value) return
+  chatMultiSelect.selectAll(chatSelectableIds.value)
+}
+
+function invertChatMultiSelected() {
+  if (!chatMultiSelect.enabled.value) return
+  chatMultiSelect.invertSelection(chatSelectableIds.value)
 }
 
 const lastSidebarErrorToastByKey = new Map<string, { at: number; message: string }>()
@@ -1032,18 +1056,16 @@ const runningSessionRows = computed<ThreadSessionRow[]>(() => pagedRunningSessio
 
 const chatSelectableIds = computed(() => {
   const ids = new Set<string>()
-  for (const directory of pagedDirectories.value) {
+  for (const directory of directories.value) {
     const directoryId = String(directory?.id || '').trim()
     if (directoryId) ids.add(chatDirectorySelectionId(directoryId))
   }
-  for (const directory of pagedDirectories.value) {
-    const directoryId = String(directory?.id || '').trim()
-    if (!directoryId) continue
-    for (const row of [...pinnedRowsForDirectory(directoryId), ...pagedRowsForDirectory(directoryId)]) {
-      const sid = String(row?.id || '').trim()
-      if (sid) ids.add(chatSessionSelectionId(sid))
-    }
+
+  for (const session of chat.sessions) {
+    const sid = String(session?.id || '').trim()
+    if (sid) ids.add(chatSessionSelectionId(sid))
   }
+
   for (const row of [
     ...pagedPinnedSessionRows.value,
     ...pagedRecentSessionRows.value,
@@ -1052,6 +1074,14 @@ const chatSelectableIds = computed(() => {
     const sid = String(row?.id || '').trim()
     if (sid) ids.add(chatSessionSelectionId(sid))
   }
+
+  for (const directoryId of Object.keys(directorySidebarById.value)) {
+    for (const row of [...pinnedRowsForDirectory(directoryId), ...pagedRowsForDirectory(directoryId)]) {
+      const sid = String(row?.id || '').trim()
+      if (sid) ids.add(chatSessionSelectionId(sid))
+    }
+  }
+
   return Array.from(ids)
 })
 
@@ -1834,6 +1864,22 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
                 ? t('chat.sidebar.multiSelect.actions.exitMultiSelect')
                 : t('chat.sidebar.multiSelect.actions.enterMultiSelect')
             }}
+          </MiniActionButton>
+          <MiniActionButton
+            v-if="chatMultiSelect.enabled"
+            size="xs"
+            :disabled="chatSelectableIds.length === 0 || chatMultiSelect.selectedCount === chatSelectableIds.length"
+            @click="selectAllChatMultiSelected"
+          >
+            {{ t('common.selectAll') }}
+          </MiniActionButton>
+          <MiniActionButton
+            v-if="chatMultiSelect.enabled"
+            size="xs"
+            :disabled="chatSelectableIds.length === 0"
+            @click="invertChatMultiSelected"
+          >
+            {{ t('common.invertSelection') }}
           </MiniActionButton>
           <ConfirmPopover
             :title="t('chat.sidebar.multiSelect.confirmDelete.title')"

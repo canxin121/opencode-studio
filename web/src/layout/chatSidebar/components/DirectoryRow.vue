@@ -36,7 +36,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   (e: 'toggle-collapse'): void
-  (e: 'row-click'): void
+  (e: 'row-click', event: MouseEvent): void
   (e: 'open-actions'): void
   (e: 'refresh'): void
   (e: 'new-session'): void
@@ -84,7 +84,7 @@ function handleMobileOpenActionsClick() {
     :active="rowActive"
     :actions-always-visible="actionsAlwaysVisible"
     class="relative gap-1.5"
-    @click="emit('row-click')"
+    @click="emit('row-click', $event)"
   >
     <template #icon>
       <ListItemSelectionIndicator v-if="multiSelectEnabled" :selected="multiSelected" />

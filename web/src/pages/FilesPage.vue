@@ -862,9 +862,51 @@ function visibleTreePaths(): string[] {
   return flattenedTree.value.map((row) => row.node.path)
 }
 
+const knownTreePaths = computed(() => {
+  const known = new Set<string>()
+  const rootPath = normalizePath(String(root.value || '').trim())
+  if (rootPath) known.add(rootPath)
+
+  for (const [dirPath, entries] of Object.entries(entriesByDir.value)) {
+    const normalizedDirPath = normalizePath(String(dirPath || '').trim())
+    if (normalizedDirPath) known.add(normalizedDirPath)
+
+    for (const entry of entries || []) {
+      const entryPath = normalizePath(String(entry.path || '').trim())
+      if (entryPath) known.add(entryPath)
+    }
+  }
+
+  return Array.from(known)
+})
+
 function clearSelectedPaths() {
   selectedPaths.value = new Set()
   selectionAnchorPath.value = ''
+}
+
+function selectAllVisibleNodes() {
+  if (!filesMultiSelect.enabled.value) return
+  const visible = visibleTreePaths()
+  selectedPaths.value = new Set(visible)
+  selectionAnchorPath.value = visible[visible.length - 1] || ''
+}
+
+function invertVisibleNodeSelection() {
+  if (!filesMultiSelect.enabled.value) return
+  const visible = visibleTreePaths()
+  if (!visible.length) return
+
+  const scope = new Set(visible)
+  const next = new Set<string>()
+  for (const path of selectedPaths.value) {
+    if (!scope.has(path)) next.add(path)
+  }
+  for (const path of visible) {
+    if (!selectedPaths.value.has(path)) next.add(path)
+  }
+  selectedPaths.value = next
+  selectionAnchorPath.value = visible[visible.length - 1] || ''
 }
 
 function normalizeSelectedTargets(paths: string[]): string[] {
@@ -2590,35 +2632,20 @@ async function handleNodeClick(node: FileNode, options: ExplorerNodeClickOptions
         normalizePath(String(selectedFile.value?.path || '').trim()) ||
         path
       const range = rangeSelectionPaths(anchor, path)
-      selectedPaths.value = new Set(range.length ? range : [path])
+      const targets = range.length ? range : [path]
+      if (options.toggle) {
+        const next = new Set(selectedPaths.value)
+        for (const target of targets) {
+          next.add(target)
+        }
+        selectedPaths.value = next
+      } else {
+        selectedPaths.value = new Set(targets)
+      }
       selectionAnchorPath.value = path
       return
     }
 
-    const next = new Set(selectedPaths.value)
-    if (next.has(path)) {
-      next.delete(path)
-    } else {
-      next.add(path)
-    }
-    selectedPaths.value = next
-    selectionAnchorPath.value = path
-    return
-  }
-
-  if (options.range) {
-    const anchor =
-      normalizePath(String(selectionAnchorPath.value || '').trim()) ||
-      normalizePath(String(selectedDirectoryPath.value || '').trim()) ||
-      normalizePath(String(selectedFile.value?.path || '').trim()) ||
-      path
-    const range = rangeSelectionPaths(anchor, path)
-    selectedPaths.value = new Set(range.length ? range : [path])
-    selectionAnchorPath.value = path
-    return
-  }
-
-  if (options.toggle) {
     const next = new Set(selectedPaths.value)
     if (next.has(path)) {
       next.delete(path)
@@ -3388,14 +3415,14 @@ watch([showHidden, respectGitignore], () => {
 })
 
 watch(
-  () => flattenedTree.value,
-  (rows) => {
-    const visible = new Set(rows.map((row) => row.node.path))
-    const next = Array.from(selectedPaths.value).filter((path) => visible.has(path))
+  () => knownTreePaths.value,
+  (paths) => {
+    const known = new Set(paths)
+    const next = Array.from(selectedPaths.value).filter((path) => known.has(path))
     if (next.length !== selectedPaths.value.size) {
       selectedPaths.value = new Set(next)
     }
-    if (selectionAnchorPath.value && !visible.has(selectionAnchorPath.value)) {
+    if (selectionAnchorPath.value && !known.has(selectionAnchorPath.value)) {
       selectionAnchorPath.value = next[next.length - 1] || ''
     }
   },
@@ -3581,6 +3608,8 @@ onMounted(async () => {
                 :multi-select-enabled="filesMultiSelect.enabled"
                 :uploading="uploading"
                 :toggle-multi-select-mode="filesMultiSelect.toggleEnabled"
+                :select-all-visible-nodes="selectAllVisibleNodes"
+                :invert-visible-node-selection="invertVisibleNodeSelection"
                 :handle-node-click="handleNodeClick"
                 :handle-node-long-press="handleNodeLongPress"
                 :refresh-root="refreshRoot"

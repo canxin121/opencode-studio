@@ -47,6 +47,14 @@ type DirectoryActivityState = 'running' | 'blocked' | 'mixed' | null
 
 type SessionMenuTarget = { directory: DirectoryEntry; session: SessionLike }
 type MenuRefEl = Element | ComponentPublicInstance | null
+type DirectoryToggleSelectionOptions = {
+  event?: MouseEvent
+  orderedDirectoryIds?: string[]
+}
+type SessionToggleSelectionOptions = {
+  event?: MouseEvent
+  orderedSessionIds?: string[]
+}
 
 const props = defineProps<{
   uiIsMobile: boolean
@@ -68,8 +76,8 @@ const props = defineProps<{
   multiSelectEnabled: boolean
   isDirectorySelected: (directoryId: string) => boolean
   isSessionSelected: (sessionId: string) => boolean
-  toggleDirectorySelected: (directoryId: string) => void
-  toggleSessionSelected: (sessionId: string) => void
+  toggleDirectorySelected: (directoryId: string, opts?: DirectoryToggleSelectionOptions) => void
+  toggleSessionSelected: (sessionId: string, opts?: SessionToggleSelectionOptions) => void
 
   directoryPageLoading: boolean
   isDirectoryExpandLoading: (directoryId: string) => boolean
@@ -209,9 +217,13 @@ function statusMeta(sessionId: string) {
                 :multi-select-enabled="props.multiSelectEnabled"
                 :multi-selected="props.isDirectorySelected(directory.id)"
                 @row-click="
-                  props.multiSelectEnabled
-                    ? props.toggleDirectorySelected(directory.id)
-                    : props.toggleDirectoryCollapse(directory.id, directory.path)
+                  (event) =>
+                    props.multiSelectEnabled
+                      ? props.toggleDirectorySelected(directory.id, {
+                          event,
+                          orderedDirectoryIds: props.directories.map((entry) => entry.id),
+                        })
+                      : props.toggleDirectoryCollapse(directory.id, directory.path)
                 "
                 @toggle-collapse="props.toggleDirectoryCollapse(directory.id, directory.path)"
                 @open-actions="props.openDirectoryActions(directory)"
@@ -310,7 +322,13 @@ function statusMeta(sessionId: string) {
                             await props.selectSession(row.id)
                           }
                         "
-                        @toggle-select="props.toggleSessionSelected(row.id)"
+                        @toggle-select="
+                          (event) =>
+                            props.toggleSessionSelected(row.id, {
+                              event,
+                              orderedSessionIds: pinnedRows(directory.id).map((item) => item.id),
+                            })
+                        "
                         @toggle-thread="props.toggleExpandedParent(row.id)"
                         @open-actions="
                           row.session && row.directory
@@ -387,7 +405,13 @@ function statusMeta(sessionId: string) {
                             await props.selectSession(row.id)
                           }
                         "
-                        @toggle-select="props.toggleSessionSelected(row.id)"
+                        @toggle-select="
+                          (event) =>
+                            props.toggleSessionSelected(row.id, {
+                              event,
+                              orderedSessionIds: props.pagedRowsForDirectory(directory.id).map((item) => item.id),
+                            })
+                        "
                         @toggle-thread="props.toggleExpandedParent(row.id)"
                         @open-actions="props.openSessionActions(directory, row.session)"
                         @open-action-menu="(event) => props.openSessionActionMenu(directory, row.session, event)"

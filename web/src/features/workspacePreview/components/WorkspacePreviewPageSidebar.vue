@@ -128,6 +128,15 @@ const allPreviewSessionIds = computed(() => {
   return Array.from(ids)
 })
 
+const filteredPreviewSessionIds = computed(() => {
+  const ids = new Set<string>()
+  for (const session of preview.filteredSessions) {
+    const id = String(session.id || '').trim()
+    if (id) ids.add(id)
+  }
+  return Array.from(ids)
+})
+
 function normalizeSessionState(input: unknown): string {
   return String(input || '')
     .trim()
@@ -740,13 +749,27 @@ function togglePreviewMultiSelectMode() {
   previewMultiSelect.setEnabled(next)
 }
 
-function handlePreviewSessionRowClick(session: WorkspacePreviewSession, scope: PreviewSidebarScope) {
+function handlePreviewSessionRowClick(
+  session: WorkspacePreviewSession,
+  scope: PreviewSidebarScope,
+  event?: MouseEvent,
+) {
   if (isInlineRenameSession(session, scope)) return
   if (previewMultiSelect.enabled.value) {
-    previewMultiSelect.toggleSelected(session.id)
+    previewMultiSelect.selectByInteraction(session.id, filteredPreviewSessionIds.value, event)
     return
   }
   selectSession(session.id)
+}
+
+function selectAllPreviewSessions() {
+  if (!previewMultiSelect.enabled.value) return
+  previewMultiSelect.selectAll(filteredPreviewSessionIds.value)
+}
+
+function invertPreviewSessionsSelection() {
+  if (!previewMultiSelect.enabled.value) return
+  previewMultiSelect.invertSelection(filteredPreviewSessionIds.value)
 }
 
 async function deletePreviewSessionById(sessionId: string): Promise<boolean> {
@@ -951,6 +974,25 @@ function selectSession(sessionId: string) {
               : t('workspaceDock.preview.sidebar.actions.enterMultiSelect')
           }}
         </MiniActionButton>
+        <MiniActionButton
+          v-if="previewMultiSelect.enabled"
+          size="xs"
+          :disabled="
+            filteredPreviewSessionIds.length === 0 ||
+            previewMultiSelect.selectedCount === filteredPreviewSessionIds.length
+          "
+          @click="selectAllPreviewSessions"
+        >
+          {{ t('common.selectAll') }}
+        </MiniActionButton>
+        <MiniActionButton
+          v-if="previewMultiSelect.enabled"
+          size="xs"
+          :disabled="filteredPreviewSessionIds.length === 0"
+          @click="invertPreviewSessionsSelection"
+        >
+          {{ t('common.invertSelection') }}
+        </MiniActionButton>
         <ConfirmPopover
           :title="String(t('workspaceDock.preview.sidebar.confirmDeleteSelected.title'))"
           :description="
@@ -1045,7 +1087,7 @@ function selectSession(sessionId: string) {
               :actions-always-visible="
                 !previewMultiSelect.enabled && (ui.isMobilePointer || isInlineRenameSession(session, 'chat'))
               "
-              @click="handlePreviewSessionRowClick(session, 'chat')"
+              @click="handlePreviewSessionRowClick(session, 'chat', $event)"
             >
               <template #icon>
                 <div class="flex items-center gap-1.5">
@@ -1197,7 +1239,7 @@ function selectSession(sessionId: string) {
               :actions-always-visible="
                 !previewMultiSelect.enabled && (ui.isMobilePointer || isInlineRenameSession(session, 'directory'))
               "
-              @click="handlePreviewSessionRowClick(session, 'directory')"
+              @click="handlePreviewSessionRowClick(session, 'directory', $event)"
             >
               <template #icon>
                 <div class="flex items-center gap-1.5">
@@ -1343,7 +1385,7 @@ function selectSession(sessionId: string) {
               :actions-always-visible="
                 !previewMultiSelect.enabled && (ui.isMobilePointer || isInlineRenameSession(session, 'all'))
               "
-              @click="handlePreviewSessionRowClick(session, 'all')"
+              @click="handlePreviewSessionRowClick(session, 'all', $event)"
             >
               <template #icon>
                 <div class="flex items-center gap-1.5">
