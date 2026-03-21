@@ -515,7 +515,8 @@ const historyBranchOptions = computed(() => {
 })
 
 const historyTagOptions = computed(() => {
-  const list = (tags.tagsList.value || []).map((t) => (t?.name || '').trim()).filter(Boolean)
+  const tagList = Array.isArray(tags.tagsList.value) ? tags.tagsList.value : []
+  const list = tagList.map((t) => (t?.name || '').trim()).filter(Boolean)
   list.sort((a, b) => a.localeCompare(b))
   return list
 })

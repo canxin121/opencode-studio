@@ -274,7 +274,8 @@ function restoreExplorerState(rootPath: string): boolean {
 
   if (sameUi) {
     const nextExpanded = new Set<string>()
-    for (const d of uiState.expandedDirs || []) {
+    const expanded = Array.isArray(uiState.expandedDirs) ? uiState.expandedDirs : []
+    for (const d of expanded) {
       const dir = normalizePath(String(d || '').trim())
       if (dir) nextExpanded.add(dir)
     }
@@ -311,7 +312,8 @@ function restoreExplorerState(rootPath: string): boolean {
   const nextChildren: Record<string, FileNode[]> = {}
   const nextLoaded = new Set<string>()
 
-  for (const dir of cacheState.loadedDirs || []) {
+  const loadedDirsRaw = Array.isArray(cacheState.loadedDirs) ? cacheState.loadedDirs : []
+  for (const dir of loadedDirsRaw) {
     const d = normalizePath(String(dir || '').trim())
     if (!d) continue
     const rawEntries = cacheState.entriesByDir[d]
@@ -832,7 +834,8 @@ const flattenedTree = computed<FlatRow[]>(() => {
 
   const rows: FlatRow[] = []
   const walk = (dirPath: string, depth: number) => {
-    const list = childrenByDir.value[dirPath] || []
+    const listRaw = childrenByDir.value[dirPath]
+    const list = Array.isArray(listRaw) ? listRaw : []
     for (const node of list) {
       const isDir = node.type === 'directory'
       const isExpanded = isDir && expandedDirs.value.has(node.path)
@@ -871,7 +874,8 @@ const knownTreePaths = computed(() => {
     const normalizedDirPath = normalizePath(String(dirPath || '').trim())
     if (normalizedDirPath) known.add(normalizedDirPath)
 
-    for (const entry of entries || []) {
+    const safeEntries = Array.isArray(entries) ? entries : []
+    for (const entry of safeEntries) {
       const entryPath = normalizePath(String(entry.path || '').trim())
       if (entryPath) known.add(entryPath)
     }
@@ -1638,7 +1642,11 @@ async function loadDirectory(dirPath: string, opts?: { force?: boolean }) {
 
   try {
     let offset = 0
-    let entries: ListEntry[] = opts?.force ? [] : entriesByDir.value[normalized] || []
+    let entries: ListEntry[] = opts?.force
+      ? []
+      : Array.isArray(entriesByDir.value[normalized])
+        ? entriesByDir.value[normalized]
+        : []
     let hasMore = true
 
     while (hasMore) {
@@ -1649,7 +1657,8 @@ async function loadDirectory(dirPath: string, opts?: { force?: boolean }) {
         limit: DIRECTORY_PAGE_SIZE,
       })) as ListResponse
       if (root.value !== workspaceRoot) return
-      const page = Array.isArray(resp.entries) ? resp.entries : []
+      const page = Array.isArray(resp.entries) ? resp.entries : null
+      if (!page) break
 
       if (offset === 0) entries = page
       else if (page.length) entries = [...entries, ...page]
@@ -1683,8 +1692,14 @@ async function loadDirectory(dirPath: string, opts?: { force?: boolean }) {
     loadedDirs.value.add(normalized)
   } catch {
     if (root.value !== workspaceRoot) return
-    entriesByDir.value = { ...entriesByDir.value, [normalized]: entriesByDir.value[normalized] || [] }
-    childrenByDir.value = { ...childrenByDir.value, [normalized]: childrenByDir.value[normalized] || [] }
+    entriesByDir.value = {
+      ...entriesByDir.value,
+      [normalized]: Array.isArray(entriesByDir.value[normalized]) ? entriesByDir.value[normalized] : [],
+    }
+    childrenByDir.value = {
+      ...childrenByDir.value,
+      [normalized]: Array.isArray(childrenByDir.value[normalized]) ? childrenByDir.value[normalized] : [],
+    }
   } finally {
     inFlightDirs.value = new Set(inFlightDirs.value)
     inFlightDirs.value.delete(normalized)
@@ -1996,7 +2011,8 @@ async function runSearch() {
 
     const includeHidden = showHidden.value
     const includeGitignored = showGitignored.value
-    const filtered = (resp.files || []).filter((f) => includeHidden || !isHiddenName(f.name))
+    const files = Array.isArray(resp.files) ? resp.files : []
+    const filtered = files.filter((f) => includeHidden || !isHiddenName(f.name))
     const pruned = includeGitignored ? filtered : filtered.filter((f) => !shouldIgnorePath(f.path))
     const visible = pruned.filter((f) => !isPathHiddenInFiles(f.path))
 
@@ -3605,7 +3621,7 @@ onMounted(async () => {
                 :flattened-tree="flattenedTree"
                 :deleting-paths="deletingPaths"
                 :selected-paths="selectedPaths"
-                :multi-select-enabled="filesMultiSelect.enabled"
+                :multi-select-enabled="filesMultiSelect.enabled.value"
                 :uploading="uploading"
                 :toggle-multi-select-mode="filesMultiSelect.toggleEnabled"
                 :select-all-visible-nodes="selectAllVisibleNodes"

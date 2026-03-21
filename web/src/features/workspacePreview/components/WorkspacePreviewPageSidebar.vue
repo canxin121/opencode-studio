@@ -964,13 +964,15 @@ function selectSession(sessionId: string) {
     >
       <div class="text-[11px] text-muted-foreground">
         {{
-          previewMultiSelect.enabled
+          previewMultiSelect.enabled.value
             ? t('workspaceDock.preview.sidebar.multiSelect.on')
             : t('workspaceDock.preview.sidebar.multiSelect.off')
         }}
-        <span v-if="previewMultiSelect.enabled" class="ml-1">
+        <span v-if="previewMultiSelect.enabled.value" class="ml-1">
           ({{
-            t('workspaceDock.preview.sidebar.multiSelect.selectedCount', { count: previewMultiSelect.selectedCount })
+            t('workspaceDock.preview.sidebar.multiSelect.selectedCount', {
+              count: previewMultiSelect.selectedCount.value,
+            })
           }})
         </span>
       </div>
@@ -978,24 +980,24 @@ function selectSession(sessionId: string) {
       <div class="flex items-center gap-1">
         <MiniActionButton size="xs" @click="togglePreviewMultiSelectMode">
           {{
-            previewMultiSelect.enabled
+            previewMultiSelect.enabled.value
               ? t('workspaceDock.preview.sidebar.actions.exitMultiSelect')
               : t('workspaceDock.preview.sidebar.actions.enterMultiSelect')
           }}
         </MiniActionButton>
         <MiniActionButton
-          v-if="previewMultiSelect.enabled"
+          v-if="previewMultiSelect.enabled.value"
           size="xs"
           :disabled="
             filteredPreviewSessionIds.length === 0 ||
-            previewMultiSelect.selectedCount === filteredPreviewSessionIds.length
+            previewMultiSelect.selectedCount.value === filteredPreviewSessionIds.length
           "
           @click="selectAllPreviewSessions"
         >
           {{ t('common.selectAll') }}
         </MiniActionButton>
         <MiniActionButton
-          v-if="previewMultiSelect.enabled"
+          v-if="previewMultiSelect.enabled.value"
           size="xs"
           :disabled="filteredPreviewSessionIds.length === 0"
           @click="invertPreviewSessionsSelection"
@@ -1007,7 +1009,7 @@ function selectSession(sessionId: string) {
           :description="
             String(
               t('workspaceDock.preview.sidebar.confirmDeleteSelected.description', {
-                count: previewMultiSelect.selectedCount,
+                count: previewMultiSelect.selectedCount.value,
               }),
             )
           "
@@ -1019,7 +1021,7 @@ function selectSession(sessionId: string) {
           <MiniActionButton
             size="xs"
             variant="destructive"
-            :disabled="!previewMultiSelect.enabled || previewMultiSelect.selectedCount === 0"
+            :disabled="!previewMultiSelect.enabled.value || previewMultiSelect.selectedCount.value === 0"
             @click.stop
           >
             <RiDeleteBinLine class="mr-1 h-3.5 w-3.5" />
@@ -1090,18 +1092,18 @@ function selectSession(sessionId: string) {
             <SidebarListItem
               v-for="session in pagedChatSessions"
               :key="session.id"
-              :active="!previewMultiSelect.enabled && preview.activeSessionId === session.id"
+              :active="!previewMultiSelect.enabled.value && preview.activeSessionId === session.id"
               :as="isInlineRenameSession(session, 'chat') ? 'div' : 'button'"
               density="compact"
               :actions-always-visible="
-                !previewMultiSelect.enabled && (ui.isMobilePointer || isInlineRenameSession(session, 'chat'))
+                !previewMultiSelect.enabled.value && (ui.isMobilePointer || isInlineRenameSession(session, 'chat'))
               "
               @click="handlePreviewSessionRowClick(session, 'chat', $event)"
             >
               <template #icon>
                 <div class="flex items-center gap-1.5">
                   <ListItemSelectionIndicator
-                    v-if="previewMultiSelect.enabled"
+                    v-if="previewMultiSelect.enabled.value"
                     :selected="previewMultiSelect.isSelected(session.id)"
                   />
                   <span
@@ -1169,7 +1171,7 @@ function selectSession(sessionId: string) {
                   </IconButton>
                 </template>
 
-                <template v-else-if="!previewMultiSelect.enabled">
+                <template v-else-if="!previewMultiSelect.enabled.value">
                   <ListItemOverflowActionButton
                     :mobile="ui.isMobilePointer"
                     :label="String(t('common.actions'))"
@@ -1242,18 +1244,18 @@ function selectSession(sessionId: string) {
             <SidebarListItem
               v-for="session in pagedDirectorySessions"
               :key="session.id"
-              :active="!previewMultiSelect.enabled && preview.activeSessionId === session.id"
+              :active="!previewMultiSelect.enabled.value && preview.activeSessionId === session.id"
               :as="isInlineRenameSession(session, 'directory') ? 'div' : 'button'"
               density="compact"
               :actions-always-visible="
-                !previewMultiSelect.enabled && (ui.isMobilePointer || isInlineRenameSession(session, 'directory'))
+                !previewMultiSelect.enabled.value && (ui.isMobilePointer || isInlineRenameSession(session, 'directory'))
               "
               @click="handlePreviewSessionRowClick(session, 'directory', $event)"
             >
               <template #icon>
                 <div class="flex items-center gap-1.5">
                   <ListItemSelectionIndicator
-                    v-if="previewMultiSelect.enabled"
+                    v-if="previewMultiSelect.enabled.value"
                     :selected="previewMultiSelect.isSelected(session.id)"
                   />
                   <span
@@ -1321,7 +1323,7 @@ function selectSession(sessionId: string) {
                   </IconButton>
                 </template>
 
-                <template v-else-if="!previewMultiSelect.enabled">
+                <template v-else-if="!previewMultiSelect.enabled.value">
                   <ListItemOverflowActionButton
                     :mobile="ui.isMobilePointer"
                     :label="String(t('common.actions'))"
@@ -1388,18 +1390,18 @@ function selectSession(sessionId: string) {
             <SidebarListItem
               v-for="session in pagedAllSessions"
               :key="session.id"
-              :active="!previewMultiSelect.enabled && preview.activeSessionId === session.id"
+              :active="!previewMultiSelect.enabled.value && preview.activeSessionId === session.id"
               :as="isInlineRenameSession(session, 'all') ? 'div' : 'button'"
               density="compact"
               :actions-always-visible="
-                !previewMultiSelect.enabled && (ui.isMobilePointer || isInlineRenameSession(session, 'all'))
+                !previewMultiSelect.enabled.value && (ui.isMobilePointer || isInlineRenameSession(session, 'all'))
               "
               @click="handlePreviewSessionRowClick(session, 'all', $event)"
             >
               <template #icon>
                 <div class="flex items-center gap-1.5">
                   <ListItemSelectionIndicator
-                    v-if="previewMultiSelect.enabled"
+                    v-if="previewMultiSelect.enabled.value"
                     :selected="previewMultiSelect.isSelected(session.id)"
                   />
                   <span
@@ -1467,7 +1469,7 @@ function selectSession(sessionId: string) {
                   </IconButton>
                 </template>
 
-                <template v-else-if="!previewMultiSelect.enabled">
+                <template v-else-if="!previewMultiSelect.enabled.value">
                   <ListItemOverflowActionButton
                     :mobile="ui.isMobilePointer"
                     :label="String(t('common.actions'))"

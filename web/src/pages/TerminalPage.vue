@@ -2036,33 +2036,37 @@ watch(el, () => {
       >
         <div class="text-[11px] text-muted-foreground">
           {{
-            terminalMultiSelect.enabled ? t('terminal.sidebar.multiSelect.on') : t('terminal.sidebar.multiSelect.off')
+            terminalMultiSelect.enabled.value
+              ? t('terminal.sidebar.multiSelect.on')
+              : t('terminal.sidebar.multiSelect.off')
           }}
-          <span v-if="terminalMultiSelect.enabled" class="ml-1"
-            >({{ t('terminal.sidebar.multiSelect.selectedCount', { count: terminalMultiSelect.selectedCount }) }})</span
+          <span v-if="terminalMultiSelect.enabled.value" class="ml-1"
+            >({{
+              t('terminal.sidebar.multiSelect.selectedCount', { count: terminalMultiSelect.selectedCount.value })
+            }})</span
           >
         </div>
         <div class="flex items-center gap-1">
           <MiniActionButton size="xs" @click="toggleTerminalMultiSelectMode">
             {{
-              terminalMultiSelect.enabled
+              terminalMultiSelect.enabled.value
                 ? t('terminal.actions.exitMultiSelect')
                 : t('terminal.actions.enterMultiSelect')
             }}
           </MiniActionButton>
           <MiniActionButton
-            v-if="terminalMultiSelect.enabled"
+            v-if="terminalMultiSelect.enabled.value"
             size="xs"
             :disabled="
               visibleTerminalSelectableIds.length === 0 ||
-              terminalMultiSelect.selectedCount === visibleTerminalSelectableIds.length
+              terminalMultiSelect.selectedCount.value === visibleTerminalSelectableIds.length
             "
             @click="selectAllTerminalSessions"
           >
             {{ t('common.selectAll') }}
           </MiniActionButton>
           <MiniActionButton
-            v-if="terminalMultiSelect.enabled"
+            v-if="terminalMultiSelect.enabled.value"
             size="xs"
             :disabled="visibleTerminalSelectableIds.length === 0"
             @click="invertTerminalSessionsSelection"
@@ -2073,7 +2077,9 @@ watch(el, () => {
             :title="String(t('terminal.actions.deleteSelectedConfirmTitle'))"
             :description="
               String(
-                t('terminal.actions.deleteSelectedConfirmDescription', { count: terminalMultiSelect.selectedCount }),
+                t('terminal.actions.deleteSelectedConfirmDescription', {
+                  count: terminalMultiSelect.selectedCount.value,
+                }),
               )
             "
             :confirm-text="String(t('terminal.actions.deleteSelected'))"
@@ -2084,7 +2090,7 @@ watch(el, () => {
             <MiniActionButton
               size="xs"
               variant="destructive"
-              :disabled="!terminalMultiSelect.enabled || terminalMultiSelect.selectedCount === 0"
+              :disabled="!terminalMultiSelect.enabled.value || terminalMultiSelect.selectedCount.value === 0"
               @click.stop
             >
               <RiDeleteBinLine class="mr-1 h-3.5 w-3.5" />
@@ -2137,17 +2143,19 @@ watch(el, () => {
 
           <div v-for="item in visibleSidebarSessions" :key="item.id" class="relative">
             <ListItemFrame
-              :active="!terminalMultiSelect.enabled && sessionId === item.id"
+              :active="!terminalMultiSelect.enabled.value && sessionId === item.id"
               :as="isSessionRenaming(item.id) ? 'div' : 'button'"
               :action-visibility="
-                terminalMultiSelect.enabled || ui.isMobilePointer || isSessionRenaming(item.id) ? 'always' : 'hover'
+                terminalMultiSelect.enabled.value || ui.isMobilePointer || isSessionRenaming(item.id)
+                  ? 'always'
+                  : 'hover'
               "
               @click="handleSidebarSessionClick(item, $event)"
             >
               <template #leading>
                 <div class="flex items-center gap-1.5">
                   <ListItemSelectionIndicator
-                    v-if="terminalMultiSelect.enabled"
+                    v-if="terminalMultiSelect.enabled.value"
                     :selected="terminalMultiSelect.isSelected(item.id)"
                   />
                   <span
@@ -2180,7 +2188,9 @@ watch(el, () => {
               </template>
 
               <template #actions>
-                <template v-if="!terminalMultiSelect.enabled && ui.isMobilePointer && !isSessionRenaming(item.id)">
+                <template
+                  v-if="!terminalMultiSelect.enabled.value && ui.isMobilePointer && !isSessionRenaming(item.id)"
+                >
                   <ListItemOverflowActionButton
                     mobile
                     :label="String(t('terminal.actions.title'))"
@@ -2222,7 +2232,7 @@ watch(el, () => {
                   </IconButton>
                 </template>
 
-                <template v-else-if="!terminalMultiSelect.enabled && !ui.isMobilePointer">
+                <template v-else-if="!terminalMultiSelect.enabled.value && !ui.isMobilePointer">
                   <IconButton
                     size="xs"
                     class="text-muted-foreground hover:text-foreground hover:dark:bg-accent/40 hover:bg-primary/6"

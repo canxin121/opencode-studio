@@ -937,18 +937,17 @@ const repoMenuAnchorEl = ref<HTMLElement | null>(null)
 
 const repoMenuGroups = computed<OptionMenuGroup[]>(() => {
   const selected = String(selectedRepoRelative.value || '.').trim() || '.'
-  const repoItems: OptionMenuItem[] = (repoPickerRepos.value || []).map(
-    (repo: { relative?: string; root?: string }) => {
-      const relative = String(repo.relative || '.').trim() || '.'
-      return {
-        id: `repo:${relative}`,
-        label: relative,
-        description: repo.root,
-        checked: relative === selected,
-        monospace: true,
-      }
-    },
-  )
+  const repoList = Array.isArray(repoPickerRepos.value) ? repoPickerRepos.value : []
+  const repoItems: OptionMenuItem[] = repoList.map((repo: { relative?: string; root?: string }) => {
+    const relative = String(repo.relative || '.').trim() || '.'
+    return {
+      id: `repo:${relative}`,
+      label: relative,
+      description: repo.root,
+      checked: relative === selected,
+      monospace: true,
+    }
+  })
 
   const groups: OptionMenuGroup[] = [
     {
@@ -962,7 +961,8 @@ const repoMenuGroups = computed<OptionMenuGroup[]>(() => {
     },
   ]
 
-  const parentItems: OptionMenuItem[] = (parentRepos.value || []).map((rootPath: string) => ({
+  const parentRepoList = Array.isArray(parentRepos.value) ? parentRepos.value : []
+  const parentItems: OptionMenuItem[] = parentRepoList.map((rootPath: string) => ({
     id: `parent:${rootPath}`,
     label: rootPath,
     monospace: true,
@@ -1450,36 +1450,37 @@ void diffPaneRef
           >
             <div class="text-[11px] text-muted-foreground">
               {{
-                gitMultiSelect.enabled
+                gitMultiSelect.enabled.value
                   ? t('git.ui.workingTree.multiSelect.on')
                   : t('git.ui.workingTree.multiSelect.off')
               }}
-              <span v-if="gitMultiSelect.enabled" class="ml-1"
+              <span v-if="gitMultiSelect.enabled.value" class="ml-1"
                 >({{
-                  t('git.ui.workingTree.multiSelect.selectedCount', { count: gitMultiSelect.selectedCount })
+                  t('git.ui.workingTree.multiSelect.selectedCount', { count: gitMultiSelect.selectedCount.value })
                 }})</span
               >
             </div>
             <div class="flex items-center gap-1">
               <MiniActionButton size="xs" @click="toggleGitMultiSelectMode">
                 {{
-                  gitMultiSelect.enabled
+                  gitMultiSelect.enabled.value
                     ? t('git.ui.workingTree.actions.exitMultiSelect')
                     : t('git.ui.workingTree.actions.enterMultiSelect')
                 }}
               </MiniActionButton>
               <MiniActionButton
-                v-if="gitMultiSelect.enabled"
+                v-if="gitMultiSelect.enabled.value"
                 size="xs"
                 :disabled="
-                  allGitSelectablePaths.length === 0 || gitMultiSelect.selectedCount === allGitSelectablePaths.length
+                  allGitSelectablePaths.length === 0 ||
+                  gitMultiSelect.selectedCount.value === allGitSelectablePaths.length
                 "
                 @click="selectAllGitPaths"
               >
                 {{ t('common.selectAll') }}
               </MiniActionButton>
               <MiniActionButton
-                v-if="gitMultiSelect.enabled"
+                v-if="gitMultiSelect.enabled.value"
                 size="xs"
                 :disabled="allGitSelectablePaths.length === 0"
                 @click="invertGitPathSelection"
@@ -1489,7 +1490,9 @@ void diffPaneRef
               <ConfirmPopover
                 :title="t('git.ui.workingTree.confirmDeleteSelected.title')"
                 :description="
-                  t('git.ui.workingTree.confirmDeleteSelected.description', { count: gitMultiSelect.selectedCount })
+                  t('git.ui.workingTree.confirmDeleteSelected.description', {
+                    count: gitMultiSelect.selectedCount.value,
+                  })
                 "
                 :confirm-text="t('git.ui.workingTree.actions.deleteSelected')"
                 :cancel-text="t('common.cancel')"
@@ -1499,7 +1502,7 @@ void diffPaneRef
                 <MiniActionButton
                   size="xs"
                   variant="destructive"
-                  :disabled="!gitMultiSelect.enabled || gitMultiSelect.selectedCount === 0"
+                  :disabled="!gitMultiSelect.enabled.value || gitMultiSelect.selectedCount.value === 0"
                   @click.stop
                 >
                   <RiDeleteBinLine class="h-3.5 w-3.5 mr-1" />
@@ -1777,8 +1780,8 @@ void diffPaneRef
               :loading="stagedListLoading"
               :can-operate="!!root"
               :is-mobile-pointer="ui.isMobilePointer"
-              :multi-select-mode="gitMultiSelect.enabled"
-              :selected-paths="gitMultiSelect.selectedList"
+              :multi-select-mode="gitMultiSelect.enabled.value"
+              :selected-paths="gitMultiSelect.selectedList.value"
               @select="(p: string) => selectFileFromSidebar(p, 'staged')"
               @toggleSelect="onToggleGitPathSelection"
               @unstageAll="unstageAll"
@@ -1801,8 +1804,8 @@ void diffPaneRef
               :loading="changesListLoading"
               :can-operate="!!root"
               :is-mobile-pointer="ui.isMobilePointer"
-              :multi-select-mode="gitMultiSelect.enabled"
-              :selected-paths="gitMultiSelect.selectedList"
+              :multi-select-mode="gitMultiSelect.enabled.value"
+              :selected-paths="gitMultiSelect.selectedList.value"
               @select="(p: string) => selectFileFromSidebar(p, 'working')"
               @toggleSelect="onToggleGitPathSelection"
               @stageAll="stageAllTracked"
@@ -1826,8 +1829,8 @@ void diffPaneRef
               :loading="untrackedListLoading"
               :can-operate="!!root"
               :is-mobile-pointer="ui.isMobilePointer"
-              :multi-select-mode="gitMultiSelect.enabled"
-              :selected-paths="gitMultiSelect.selectedList"
+              :multi-select-mode="gitMultiSelect.enabled.value"
+              :selected-paths="gitMultiSelect.selectedList.value"
               @select="(p: string) => selectFileFromSidebar(p, 'working')"
               @toggleSelect="onToggleGitPathSelection"
               @stageAll="stageAllUntracked"

@@ -79,14 +79,16 @@ function isSessionMultiSelected(sessionId: string): boolean {
 function toggleDirectoryMultiSelected(directoryId: string, opts?: ChatDirectoryToggleSelectionOptions) {
   if (!chatMultiSelect.enabled.value) return
   const target = chatDirectorySelectionId(directoryId)
-  const ordered = (opts?.orderedDirectoryIds || []).map((id) => chatDirectorySelectionId(id)).filter(Boolean)
+  const orderedDirectoryIds = Array.isArray(opts?.orderedDirectoryIds) ? opts?.orderedDirectoryIds : []
+  const ordered = orderedDirectoryIds.map((id) => chatDirectorySelectionId(id)).filter(Boolean)
   chatMultiSelect.selectByInteraction(target, ordered.length ? ordered : [target], opts?.event)
 }
 
 function toggleSessionMultiSelected(sessionId: string, opts?: ChatSessionToggleSelectionOptions) {
   if (!chatMultiSelect.enabled.value) return
   const target = chatSessionSelectionId(sessionId)
-  const ordered = (opts?.orderedSessionIds || []).map((id) => chatSessionSelectionId(id)).filter(Boolean)
+  const orderedSessionIds = Array.isArray(opts?.orderedSessionIds) ? opts?.orderedSessionIds : []
+  const ordered = orderedSessionIds.map((id) => chatSessionSelectionId(id)).filter(Boolean)
   chatMultiSelect.selectByInteraction(target, ordered.length ? ordered : [target], opts?.event)
 }
 
@@ -308,7 +310,12 @@ function isAbortError(err: SessionValue): boolean {
 // Common string/label helpers extracted to '@/features/sessions/model/labels'.
 
 const pagedDirectories = computed<DirectoryEntry[]>(() => {
-  return directorySessions.directoryPageRows || []
+  const rows = Array.isArray(directorySessions.directoryPageRows) ? directorySessions.directoryPageRows : []
+  return rows.filter((entry): entry is DirectoryEntry => {
+    const id = String(entry?.id || '').trim()
+    const path = String(entry?.path || '').trim()
+    return Boolean(id && path)
+  })
 })
 
 const directoryPageTotal = computed<number>(() => {
@@ -450,7 +457,7 @@ watch(
 )
 
 watch(
-  () => directories.value.map((entry) => `${entry.id}:${entry.path}`).join('|'),
+  () => directories.value.map((entry) => `${entry?.id || ''}:${entry?.path || ''}`).join('|'),
   () => {
     if (directoryPaging.value) return
     scheduleSidebarStateFetch(0)
@@ -935,6 +942,31 @@ const directorySidebarById = computed<Record<string, DirectorySidebarView>>(() =
   return (directorySessions.directorySidebarById as Record<string, DirectorySidebarView>) || {}
 })
 
+function normalizeFooterView(value: unknown): {
+  total: number
+  page: number
+  pageCount: number
+  rows: ThreadSessionRow[]
+} {
+  const raw = (value || {}) as {
+    total?: unknown
+    page?: unknown
+    pageCount?: unknown
+    rows?: unknown
+  }
+
+  const totalRaw = Number(raw.total)
+  const pageRaw = Number(raw.page)
+  const pageCountRaw = Number(raw.pageCount)
+
+  return {
+    total: Number.isFinite(totalRaw) ? Math.max(0, Math.floor(totalRaw)) : 0,
+    page: Number.isFinite(pageRaw) ? Math.max(0, Math.floor(pageRaw)) : 0,
+    pageCount: Number.isFinite(pageCountRaw) ? Math.max(1, Math.floor(pageCountRaw)) : 1,
+    rows: Array.isArray(raw.rows) ? (raw.rows as ThreadSessionRow[]) : [],
+  }
+}
+
 watch(
   () => Object.keys(directorySidebarById.value).join('|'),
   () => {
@@ -947,15 +979,9 @@ watch(
   },
 )
 
-const pinnedFooterView = computed(
-  () => directorySessions.pinnedFooterView || { total: 0, page: 0, pageCount: 1, rows: [] },
-)
-const recentFooterView = computed(
-  () => directorySessions.recentFooterView || { total: 0, page: 0, pageCount: 1, rows: [] },
-)
-const runningFooterView = computed(
-  () => directorySessions.runningFooterView || { total: 0, page: 0, pageCount: 1, rows: [] },
-)
+const pinnedFooterView = computed(() => normalizeFooterView(directorySessions.pinnedFooterView))
+const recentFooterView = computed(() => normalizeFooterView(directorySessions.recentFooterView))
+const runningFooterView = computed(() => normalizeFooterView(directorySessions.runningFooterView))
 
 const pinnedSessionsPageCount = computed(() => Math.max(1, Number(pinnedFooterView.value.pageCount || 1)))
 const recentSessionsPageCount = computed(() => Math.max(1, Number(recentFooterView.value.pageCount || 1)))
@@ -1732,7 +1758,7 @@ async function ensureDirectorySidebarSectionLoaded(directoryId: string) {
 
 watch(
   [
-    () => pagedDirectories.value.map((entry) => entry.id).join('|'),
+    () => pagedDirectories.value.map((entry) => String(entry?.id || '').trim()).join('|'),
     () => [...collapsedDirectories.value].sort().join('|'),
     () => Object.keys(directorySidebarById.value).sort().join('|'),
   ],
@@ -1752,7 +1778,7 @@ function pagedRowsForDirectory(directoryId: string): FlatTreeRow[] {
   const pid = (directoryId || '').trim()
   const tree = flattenedTreeForDirectory(pid)
   if (!tree) return []
-  return tree.rows || []
+  return Array.isArray(tree.rows) ? tree.rows : []
 }
 
 const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, setSessionEl } = useSidebarLocate({
@@ -1855,30 +1881,32 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
           <span
             class="rounded-sm border border-sidebar-border/70 bg-sidebar-accent/50 px-1.5 py-[1px] text-[10px] font-medium"
           >
-            {{ chatMultiSelect.enabled ? t('chat.sidebar.multiSelect.on') : t('chat.sidebar.multiSelect.off') }}
+            {{ chatMultiSelect.enabled.value ? t('chat.sidebar.multiSelect.on') : t('chat.sidebar.multiSelect.off') }}
           </span>
-          <span v-if="chatMultiSelect.enabled" class="text-[10px] text-muted-foreground"
-            >{{ t('chat.sidebar.multiSelect.selectedCount', { count: chatMultiSelect.selectedCount }) }} ·
+          <span v-if="chatMultiSelect.enabled.value" class="text-[10px] text-muted-foreground"
+            >{{ t('chat.sidebar.multiSelect.selectedCount', { count: chatMultiSelect.selectedCount.value }) }} ·
             {{ t('chat.sidebar.multiSelect.sessionCount', { count: chatSelectedSessionCount }) }} ·
             {{ t('chat.sidebar.multiSelect.directoryCount', { count: chatSelectedDirectoryCount }) }}</span
           >
           <MiniActionButton size="xs" @click="toggleChatMultiSelectMode">
             {{
-              chatMultiSelect.enabled
+              chatMultiSelect.enabled.value
                 ? t('chat.sidebar.multiSelect.actions.exitMultiSelect')
                 : t('chat.sidebar.multiSelect.actions.enterMultiSelect')
             }}
           </MiniActionButton>
           <MiniActionButton
-            v-if="chatMultiSelect.enabled"
+            v-if="chatMultiSelect.enabled.value"
             size="xs"
-            :disabled="chatSelectableIds.length === 0 || chatMultiSelect.selectedCount === chatSelectableIds.length"
+            :disabled="
+              chatSelectableIds.length === 0 || chatMultiSelect.selectedCount.value === chatSelectableIds.length
+            "
             @click="selectAllChatMultiSelected"
           >
             {{ t('common.selectAll') }}
           </MiniActionButton>
           <MiniActionButton
-            v-if="chatMultiSelect.enabled"
+            v-if="chatMultiSelect.enabled.value"
             size="xs"
             :disabled="chatSelectableIds.length === 0"
             @click="invertChatMultiSelected"
@@ -1891,7 +1919,7 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
               t('chat.sidebar.multiSelect.confirmDelete.description', {
                 sessions: chatSelectedSessionCount,
                 directories: chatSelectedDirectoryCount,
-                count: chatMultiSelect.selectedCount,
+                count: chatMultiSelect.selectedCount.value,
               })
             "
             :confirm-text="t('chat.sidebar.multiSelect.actions.deleteSelected')"
@@ -1902,7 +1930,7 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
             <MiniActionButton
               size="xs"
               variant="destructive"
-              :disabled="!chatMultiSelect.enabled || chatMultiSelect.selectedCount === 0"
+              :disabled="!chatMultiSelect.enabled.value || chatMultiSelect.selectedCount.value === 0"
               @click.stop
             >
               {{ t('chat.sidebar.multiSelect.actions.deleteSelected') }}
@@ -1927,7 +1955,7 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
             :pinnedSessionIds="pinnedSessionIds"
             :chatSelectedSessionId="chat.selectedSessionId"
             :creatingSession="creatingSession"
-            :multiSelectEnabled="chatMultiSelect.enabled"
+            :multiSelectEnabled="chatMultiSelect.enabled.value"
             :isDirectorySelected="isDirectoryMultiSelected"
             :isSessionSelected="isSessionMultiSelected"
             :toggleDirectorySelected="toggleDirectoryMultiSelected"
@@ -1989,7 +2017,7 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
               :pinnedSessionsPageCount="pinnedSessionsPageCount"
               :selectedSessionId="chat.selectedSessionId"
               :uiIsMobile="ui.isMobile"
-              :multiSelectEnabled="chatMultiSelect.enabled"
+              :multiSelectEnabled="chatMultiSelect.enabled.value"
               :isSessionSelected="isSessionMultiSelected"
               :toggleSessionSelected="toggleSessionMultiSelected"
               :pinnedSessionIds="pinnedSessionIds"
@@ -2028,7 +2056,7 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
               :recentSessionsPageCount="recentSessionsPageCount"
               :selectedSessionId="chat.selectedSessionId"
               :uiIsMobile="ui.isMobile"
-              :multiSelectEnabled="chatMultiSelect.enabled"
+              :multiSelectEnabled="chatMultiSelect.enabled.value"
               :isSessionSelected="isSessionMultiSelected"
               :toggleSessionSelected="toggleSessionMultiSelected"
               :pinnedSessionIds="pinnedSessionIds"
@@ -2067,7 +2095,7 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
               :runningSessionsPageCount="runningSessionsPageCount"
               :selectedSessionId="chat.selectedSessionId"
               :statusLabelForSessionId="statusLabelForSessionId"
-              :multiSelectEnabled="chatMultiSelect.enabled"
+              :multiSelectEnabled="chatMultiSelect.enabled.value"
               :isSessionSelected="isSessionMultiSelected"
               :toggleSessionSelected="toggleSessionMultiSelected"
               @open-session="openRunningSession"

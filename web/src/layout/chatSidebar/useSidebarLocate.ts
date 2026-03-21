@@ -112,7 +112,8 @@ export function useSidebarLocate(opts: {
           try {
             const out: SessionSearchHit[] = []
             const list = await opts.searchSessionHits(q, 60, controller.signal)
-            for (const hit of list || []) {
+            const hits = Array.isArray(list) ? list : []
+            for (const hit of hits) {
               if (!hit?.session?.id || !hit?.directory?.id || !hit?.directory?.path) continue
               out.push(hit)
               if (out.length >= 60) break

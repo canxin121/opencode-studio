@@ -135,7 +135,18 @@ const emit = defineEmits<{
 const { t } = useI18n()
 
 function pinnedRows(directoryId: string) {
-  return props.pinnedRowsForDirectory(directoryId)
+  const rows = props.pinnedRowsForDirectory(directoryId)
+  return Array.isArray(rows) ? rows : []
+}
+
+function pagedRows(directoryId: string) {
+  const rows = props.pagedRowsForDirectory(directoryId)
+  return Array.isArray(rows) ? rows : []
+}
+
+function orderedDirectoryIds(): string[] {
+  if (!Array.isArray(props.directories)) return []
+  return props.directories.map((entry) => String(entry?.id || '').trim()).filter(Boolean)
 }
 
 function statusMeta(sessionId: string) {
@@ -221,7 +232,7 @@ function statusMeta(sessionId: string) {
                     props.multiSelectEnabled
                       ? props.toggleDirectorySelected(directory.id, {
                           event,
-                          orderedDirectoryIds: props.directories.map((entry) => entry.id),
+                          orderedDirectoryIds: orderedDirectoryIds(),
                         })
                       : props.toggleDirectoryCollapse(directory.id, directory.path)
                 "
@@ -239,7 +250,7 @@ function statusMeta(sessionId: string) {
                   v-if="
                     props.isDirectoryExpandLoading(directory.id) &&
                     pinnedRows(directory.id).length === 0 &&
-                    props.pagedRowsForDirectory(directory.id).length === 0
+                    pagedRows(directory.id).length === 0
                   "
                   class="px-1.5 py-1.5"
                 >
@@ -260,7 +271,7 @@ function statusMeta(sessionId: string) {
                     props.directoryPageLoading &&
                     props.sessionCountForDirectory(directory.id, directory.path) > 0 &&
                     pinnedRows(directory.id).length === 0 &&
-                    props.pagedRowsForDirectory(directory.id).length === 0
+                    pagedRows(directory.id).length === 0
                   "
                   class="px-1.5 py-1.5"
                 >
@@ -368,7 +379,7 @@ function statusMeta(sessionId: string) {
                     </div>
 
                     <div
-                      v-for="row in props.pagedRowsForDirectory(directory.id)"
+                      v-for="row in pagedRows(directory.id)"
                       :key="row.id"
                       :ref="(el) => props.setSessionEl(row.id, el)"
                     >
@@ -389,8 +400,8 @@ function statusMeta(sessionId: string) {
                         :status-dot-class="statusMeta(row.id).dotClass"
                         :attention="props.hasAttention(row.id)"
                         :pinned="props.pinnedSessionIds.includes(row.id)"
-                        :actions-enabled="!props.multiSelectEnabled"
-                        :session-action-menu-open="sessionActionMenuTarget?.session?.id === row.session.id"
+                        :actions-enabled="!props.multiSelectEnabled && Boolean(row.session)"
+                        :session-action-menu-open="sessionActionMenuTarget?.session?.id === (row.session?.id || row.id)"
                         :session-action-menu-anchor-el="sessionActionMenuAnchorEl"
                         :session-action-menu-query="sessionActionMenuQuery"
                         :filtered-session-action-items="filteredSessionActionItems"
@@ -409,12 +420,15 @@ function statusMeta(sessionId: string) {
                           (event) =>
                             props.toggleSessionSelected(row.id, {
                               event,
-                              orderedSessionIds: props.pagedRowsForDirectory(directory.id).map((item) => item.id),
+                              orderedSessionIds: pagedRows(directory.id).map((item) => item.id),
                             })
                         "
                         @toggle-thread="props.toggleExpandedParent(row.id)"
-                        @open-actions="props.openSessionActions(directory, row.session)"
-                        @open-action-menu="(event) => props.openSessionActionMenu(directory, row.session, event)"
+                        @open-actions="row.session ? props.openSessionActions(directory, row.session) : undefined"
+                        @open-action-menu="
+                          (event) =>
+                            row.session ? props.openSessionActionMenu(directory, row.session, event) : undefined
+                        "
                         @toggle-pin="props.togglePin(row.id)"
                         @delete="props.deleteSession(row.id)"
                         @update:renameDraft="props.updateRenameDraft"
