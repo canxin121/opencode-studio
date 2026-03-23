@@ -45,7 +45,16 @@ import { normalizeSidebarUiPrefsForUi } from '@/features/sessions/model/sidebarU
 import { apiJson } from '@/lib/api'
 import { useUnifiedMultiSelect } from '@/composables/useUnifiedMultiSelect'
 
-const props = defineProps<{ mobileVariant?: boolean }>()
+const props = withDefaults(
+  defineProps<{
+    mobileVariant?: boolean
+    navigateToChat?: boolean
+  }>(),
+  {
+    mobileVariant: false,
+    navigateToChat: true,
+  },
+)
 
 const route = useRoute()
 const router = useRouter()
@@ -1601,19 +1610,23 @@ async function createSessionInDirectory(directoryId: string, directoryPath: stri
   creatingSession.value = true
   try {
     await focusDirectoryContext(directoryId, directoryPath)
-    ui.setActiveMainTab('chat')
+    if (props.navigateToChat) {
+      ui.setActiveMainTab('chat')
+    }
     const created = await chat.createSession()
     if (created?.id) {
       // Ensure the sidebar list reflects the new session without a manual refresh.
       void revalidateSidebarState(undefined, { silent: true })
 
-      ui.enableSessionQuery()
-      const nextQuery = patchSessionIdInQuery(route.query, created.id)
-      // If the user creates a session from Settings/other pages, take them to Chat.
-      if ((route.path || '').startsWith('/chat')) {
-        await router.replace({ query: nextQuery })
-      } else {
-        await router.push({ path: '/chat', query: nextQuery })
+      if (props.navigateToChat) {
+        ui.enableSessionQuery()
+        const nextQuery = patchSessionIdInQuery(route.query, created.id)
+        // If the user creates a session from Settings/other pages, take them to Chat.
+        if ((route.path || '').startsWith('/chat')) {
+          await router.replace({ query: nextQuery })
+        } else {
+          await router.push({ path: '/chat', query: nextQuery })
+        }
       }
 
       // Mobile UX: switch focus to the main chat pane after creating.
@@ -1627,14 +1640,16 @@ async function createSessionInDirectory(directoryId: string, directoryPath: stri
 }
 
 async function selectSession(sessionId: string) {
-  ui.enableSessionQuery()
-  // Selecting a session should always take the user to the Chat view.
-  ui.setActiveMainTab('chat')
-  const nextQuery = patchSessionIdInQuery(route.query, sessionId)
-  if ((route.path || '').startsWith('/chat')) {
-    await router.replace({ query: nextQuery })
-  } else {
-    await router.push({ path: '/chat', query: nextQuery })
+  if (props.navigateToChat) {
+    ui.enableSessionQuery()
+    // Default behavior: selecting a session navigates to Chat.
+    ui.setActiveMainTab('chat')
+    const nextQuery = patchSessionIdInQuery(route.query, sessionId)
+    if ((route.path || '').startsWith('/chat')) {
+      await router.replace({ query: nextQuery })
+    } else {
+      await router.push({ path: '/chat', query: nextQuery })
+    }
   }
   await chat.selectSession(sessionId)
 

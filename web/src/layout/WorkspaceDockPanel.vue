@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
+  RiChat4Line,
   RiCloseLine,
   RiFileList2Line,
   RiFileTextLine,
@@ -12,6 +13,8 @@ import {
   RiGlobalLine,
 } from '@remixicon/vue'
 
+import { MAIN_TABS, type MainTabId } from '@/app/navigation/mainTabs'
+import ChatDockPanel from '@/components/chat/ChatDockPanel.vue'
 import ChatSessionChangesDockPanel from '@/components/chat/ChatSessionChangesDockPanel.vue'
 import { useUiStore } from '@/stores/ui'
 import IconButton from '@/components/ui/IconButton.vue'
@@ -30,31 +33,35 @@ if (ui.workspaceDockPlacement !== 'right') {
 }
 
 const changesDockRef = ref<{ refresh: () => Promise<void> | void } | null>(null)
+const chatDockRef = ref<{ refresh: () => Promise<void> | void } | null>(null)
 const filesDockRef = ref<{ refresh: () => Promise<void> | void } | null>(null)
 const gitDockRef = ref<{ refresh: () => Promise<void> | void } | null>(null)
 const terminalDockRef = ref<{ refresh: () => Promise<void> | void } | null>(null)
 const previewDockRef = ref<{ refresh: () => Promise<void> | void } | null>(null)
 
-const showChatChangesPanel = computed(() =>
-  String(route.path || '')
+const currentMainRouteTab = computed<MainTabId | null>(() => {
+  const path = String(route.path || '')
     .trim()
     .toLowerCase()
-    .startsWith('/chat'),
-)
+  for (const tab of MAIN_TABS) {
+    if (path.startsWith(tab.path)) return tab.id
+  }
+  return null
+})
 
-watch(
-  showChatChangesPanel,
-  (enabled) => {
-    if (!enabled && ui.workspaceDockPanel === 'changes') {
-      ui.setWorkspaceDockPanel('git')
-    }
-  },
-  { immediate: true },
-)
+const showDockChatTab = computed(() => currentMainRouteTab.value !== 'chat')
+const showDockPreviewTab = computed(() => currentMainRouteTab.value !== 'preview')
+const showDockGitTab = computed(() => currentMainRouteTab.value !== 'git')
+const showDockFilesTab = computed(() => currentMainRouteTab.value !== 'files')
+const showDockTerminalTab = computed(() => currentMainRouteTab.value !== 'terminal')
 
 function refreshActivePanel() {
   if (ui.workspaceDockPanel === 'changes') {
     void changesDockRef.value?.refresh()
+    return
+  }
+  if (ui.workspaceDockPanel === 'chat') {
+    void chatDockRef.value?.refresh()
     return
   }
   if (ui.workspaceDockPanel === 'preview') {
@@ -80,7 +87,6 @@ function refreshActivePanel() {
         <div class="flex items-center justify-between gap-2">
           <div class="flex flex-wrap items-center gap-1 rounded-md bg-background/70 p-1">
             <button
-              v-if="showChatChangesPanel"
               type="button"
               class="inline-flex items-center gap-1 rounded-sm px-2 py-1 text-xs font-medium transition-colors"
               :class="
@@ -94,6 +100,21 @@ function refreshActivePanel() {
               {{ t('workspaceDock.changes.tab') }}
             </button>
             <button
+              v-if="showDockChatTab"
+              type="button"
+              class="inline-flex items-center gap-1 rounded-sm px-2 py-1 text-xs font-medium transition-colors"
+              :class="
+                ui.workspaceDockPanel === 'chat'
+                  ? 'bg-secondary text-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              "
+              @click="ui.setWorkspaceDockPanel('chat')"
+            >
+              <RiChat4Line class="h-3.5 w-3.5" />
+              {{ t('nav.chat') }}
+            </button>
+            <button
+              v-if="showDockPreviewTab"
               type="button"
               class="inline-flex items-center gap-1 rounded-sm px-2 py-1 text-xs font-medium transition-colors"
               :class="
@@ -107,6 +128,7 @@ function refreshActivePanel() {
               {{ t('workspaceDock.preview.tab') }}
             </button>
             <button
+              v-if="showDockGitTab"
               type="button"
               class="inline-flex items-center gap-1 rounded-sm px-2 py-1 text-xs font-medium transition-colors"
               :class="
@@ -120,6 +142,7 @@ function refreshActivePanel() {
               {{ t('workspaceDock.git.tab') }}
             </button>
             <button
+              v-if="showDockFilesTab"
               type="button"
               class="inline-flex items-center gap-1 rounded-sm px-2 py-1 text-xs font-medium transition-colors"
               :class="
@@ -133,6 +156,7 @@ function refreshActivePanel() {
               {{ t('workspaceDock.files.tab') }}
             </button>
             <button
+              v-if="showDockTerminalTab"
               type="button"
               class="inline-flex items-center gap-1 rounded-sm px-2 py-1 text-xs font-medium transition-colors"
               :class="
@@ -169,12 +193,12 @@ function refreshActivePanel() {
       </div>
 
       <Transition name="fade" mode="out-in">
-        <div
-          v-if="showChatChangesPanel && ui.workspaceDockPanel === 'changes'"
-          key="changes"
-          class="min-h-0 flex-1 overflow-hidden"
-        >
+        <div v-if="ui.workspaceDockPanel === 'changes'" key="changes" class="min-h-0 flex-1 overflow-hidden">
           <ChatSessionChangesDockPanel ref="changesDockRef" />
+        </div>
+
+        <div v-else-if="ui.workspaceDockPanel === 'chat'" key="chat" class="min-h-0 flex-1 overflow-hidden">
+          <ChatDockPanel ref="chatDockRef" />
         </div>
 
         <div v-else-if="ui.workspaceDockPanel === 'preview'" key="preview" class="min-h-0 flex-1 overflow-hidden">
