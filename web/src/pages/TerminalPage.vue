@@ -9,6 +9,7 @@ import {
   RiPlugLine,
   RiAddLine,
   RiCheckLine,
+  RiListCheck3,
   RiStopCircleLine,
   RiRefreshLine,
   RiDeleteBinLine,
@@ -23,7 +24,6 @@ import IconButton from '@/components/ui/IconButton.vue'
 import ListItemFrame from '@/components/ui/ListItemFrame.vue'
 import ListItemOverflowActionButton from '@/components/ui/ListItemOverflowActionButton.vue'
 import ListItemSelectionIndicator from '@/components/ui/ListItemSelectionIndicator.vue'
-import MiniActionButton from '@/components/ui/MiniActionButton.vue'
 import MobileSidebarEmptyState from '@/components/ui/MobileSidebarEmptyState.vue'
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import FormDialog from '@/components/ui/FormDialog.vue'
@@ -2011,6 +2011,39 @@ watch(el, () => {
             >
               <RiRefreshLine class="h-4 w-4" :class="sessionListRefreshing ? 'animate-spin' : ''" />
             </IconButton>
+
+            <IconButton
+              variant="ghost"
+              size="md"
+              class="h-8 w-8"
+              :class="terminalMultiSelect.enabled.value ? 'bg-primary/10 text-primary hover:bg-primary/15' : ''"
+              :tooltip="
+                String(
+                  terminalMultiSelect.enabled.value
+                    ? t('terminal.actions.exitMultiSelect')
+                    : t('terminal.actions.enterMultiSelect'),
+                )
+              "
+              :is-mobile-pointer="ui.isMobilePointer"
+              :title="
+                String(
+                  terminalMultiSelect.enabled.value
+                    ? t('terminal.actions.exitMultiSelect')
+                    : t('terminal.actions.enterMultiSelect'),
+                )
+              "
+              :aria-label="
+                String(
+                  terminalMultiSelect.enabled.value
+                    ? t('terminal.actions.exitMultiSelect')
+                    : t('terminal.actions.enterMultiSelect'),
+                )
+              "
+              @click="toggleTerminalMultiSelectMode"
+            >
+              <RiCloseLine v-if="terminalMultiSelect.enabled.value" class="h-4 w-4" />
+              <RiListCheck3 v-else class="h-4 w-4" />
+            </IconButton>
           </div>
         </div>
       </div>
@@ -2031,72 +2064,95 @@ watch(el, () => {
       </div>
 
       <div
-        class="flex items-center justify-between gap-2 px-3 pb-2"
-        :class="visibleSidebarSessions.length > 0 ? 'flex-shrink-0' : 'hidden'"
+        v-if="terminalMultiSelect.enabled.value"
+        class="flex-shrink-0 border-b border-sidebar-border/60 px-2.5 py-1.5"
       >
-        <div class="text-[11px] text-muted-foreground">
-          {{
-            terminalMultiSelect.enabled.value
-              ? t('terminal.sidebar.multiSelect.on')
-              : t('terminal.sidebar.multiSelect.off')
-          }}
-          <span v-if="terminalMultiSelect.enabled.value" class="ml-1"
-            >({{
-              t('terminal.sidebar.multiSelect.selectedCount', { count: terminalMultiSelect.selectedCount.value })
-            }})</span
-          >
-        </div>
-        <div class="flex items-center gap-1">
-          <MiniActionButton size="xs" @click="toggleTerminalMultiSelectMode">
-            {{
-              terminalMultiSelect.enabled.value
-                ? t('terminal.actions.exitMultiSelect')
-                : t('terminal.actions.enterMultiSelect')
-            }}
-          </MiniActionButton>
-          <MiniActionButton
-            v-if="terminalMultiSelect.enabled.value"
-            size="xs"
-            :disabled="
-              visibleTerminalSelectableIds.length === 0 ||
-              terminalMultiSelect.selectedCount.value === visibleTerminalSelectableIds.length
-            "
-            @click="selectAllTerminalSessions"
-          >
-            {{ t('common.selectAll') }}
-          </MiniActionButton>
-          <MiniActionButton
-            v-if="terminalMultiSelect.enabled.value"
-            size="xs"
-            :disabled="visibleTerminalSelectableIds.length === 0"
-            @click="invertTerminalSessionsSelection"
-          >
-            {{ t('common.invertSelection') }}
-          </MiniActionButton>
-          <ConfirmPopover
-            :title="String(t('terminal.actions.deleteSelectedConfirmTitle'))"
-            :description="
-              String(
-                t('terminal.actions.deleteSelectedConfirmDescription', {
-                  count: terminalMultiSelect.selectedCount.value,
-                }),
-              )
-            "
-            :confirm-text="String(t('terminal.actions.deleteSelected'))"
-            :cancel-text="String(t('common.cancel'))"
-            variant="destructive"
-            @confirm="deleteSelectedTerminalSessions"
-          >
-            <MiniActionButton
-              size="xs"
-              variant="destructive"
-              :disabled="!terminalMultiSelect.enabled.value || terminalMultiSelect.selectedCount.value === 0"
-              @click.stop
+        <div class="flex flex-wrap items-center justify-between gap-1.5">
+          <div class="flex min-w-0 items-center">
+            <span
+              class="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-muted px-1 text-[10px] font-medium text-foreground/80"
+              :title="
+                String(
+                  t('terminal.sidebar.multiSelect.selectedCount', { count: terminalMultiSelect.selectedCount.value }),
+                )
+              "
+              :aria-label="
+                String(
+                  t('terminal.sidebar.multiSelect.selectedCount', { count: terminalMultiSelect.selectedCount.value }),
+                )
+              "
             >
-              <RiDeleteBinLine class="mr-1 h-3.5 w-3.5" />
-              {{ t('terminal.actions.deleteSelected') }}
-            </MiniActionButton>
-          </ConfirmPopover>
+              {{ terminalMultiSelect.selectedCount.value }}
+            </span>
+          </div>
+
+          <div class="flex items-center gap-1">
+            <IconButton
+              size="xs"
+              :tooltip="String(t('common.selectAll'))"
+              :title="String(t('common.selectAll'))"
+              :aria-label="String(t('common.selectAll'))"
+              :is-mobile-pointer="ui.isMobilePointer"
+              :disabled="
+                visibleTerminalSelectableIds.length === 0 ||
+                terminalMultiSelect.selectedCount.value === visibleTerminalSelectableIds.length
+              "
+              @click="selectAllTerminalSessions"
+            >
+              <RiListCheck3 class="h-3.5 w-3.5" />
+            </IconButton>
+
+            <IconButton
+              size="xs"
+              :tooltip="String(t('common.invertSelection'))"
+              :title="String(t('common.invertSelection'))"
+              :aria-label="String(t('common.invertSelection'))"
+              :is-mobile-pointer="ui.isMobilePointer"
+              :disabled="visibleTerminalSelectableIds.length === 0"
+              @click="invertTerminalSessionsSelection"
+            >
+              <RiRefreshLine class="h-3.5 w-3.5" />
+            </IconButton>
+
+            <ConfirmPopover
+              :title="String(t('terminal.actions.deleteSelectedConfirmTitle'))"
+              :description="
+                String(
+                  t('terminal.actions.deleteSelectedConfirmDescription', {
+                    count: terminalMultiSelect.selectedCount.value,
+                  }),
+                )
+              "
+              :confirm-text="String(t('terminal.actions.deleteSelected'))"
+              :cancel-text="String(t('common.cancel'))"
+              variant="destructive"
+              @confirm="deleteSelectedTerminalSessions"
+            >
+              <IconButton
+                size="xs"
+                variant="ghost-destructive"
+                :tooltip="String(t('terminal.actions.deleteSelected'))"
+                :title="String(t('terminal.actions.deleteSelected'))"
+                :aria-label="String(t('terminal.actions.deleteSelected'))"
+                :is-mobile-pointer="ui.isMobilePointer"
+                :disabled="terminalMultiSelect.selectedCount.value === 0"
+                @click.stop
+              >
+                <RiDeleteBinLine class="h-3.5 w-3.5" />
+              </IconButton>
+            </ConfirmPopover>
+
+            <IconButton
+              size="xs"
+              :tooltip="String(t('terminal.actions.exitMultiSelect'))"
+              :title="String(t('terminal.actions.exitMultiSelect'))"
+              :aria-label="String(t('terminal.actions.exitMultiSelect'))"
+              :is-mobile-pointer="ui.isMobilePointer"
+              @click="toggleTerminalMultiSelectMode"
+            >
+              <RiCloseLine class="h-3.5 w-3.5" />
+            </IconButton>
+          </div>
         </div>
       </div>
 

@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import type { ComponentPublicInstance } from 'vue'
+import { RiCloseLine, RiDeleteBinLine, RiFileList2Line, RiListCheck3, RiRefreshLine } from '@remixicon/vue'
 import { useI18n } from 'vue-i18n'
 
+import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
+import IconButton from '@/components/ui/IconButton.vue'
 import SidebarTextButton from '@/components/ui/SidebarTextButton.vue'
 import Skeleton from '@/components/ui/Skeleton.vue'
 import { directoryEntryLabel, sessionLabel } from '@/features/sessions/model/labels'
@@ -73,8 +76,15 @@ const props = defineProps<{
   chatSelectedSessionId: string | null
 
   creatingSession: boolean
-  multiSelectEnabled: boolean
+  directoryMultiSelectEnabled: boolean
   isDirectorySelected: (directoryId: string) => boolean
+  isSessionMultiSelectEnabledForDirectory: (directoryId: string) => boolean
+  toggleDirectorySessionMultiSelect: (directoryId: string) => void
+  selectedSessionCountForDirectory: (directoryId: string) => number
+  sessionSelectableCountForDirectory: (directoryId: string) => number
+  selectAllSessionsForDirectory: (directoryId: string) => void
+  invertSessionsForDirectory: (directoryId: string) => void
+  deleteSelectedSessionsForDirectory: (directoryId: string) => Promise<void>
   isSessionSelected: (sessionId: string) => boolean
   toggleDirectorySelected: (directoryId: string, opts?: DirectoryToggleSelectionOptions) => void
   toggleSessionSelected: (sessionId: string, opts?: SessionToggleSelectionOptions) => void
@@ -152,6 +162,14 @@ function orderedDirectoryIds(): string[] {
 function statusMeta(sessionId: string) {
   return props.statusLabelForSessionId(sessionId)
 }
+
+function selectedSessionCount(directoryId: string): number {
+  return Math.max(0, Math.floor(props.selectedSessionCountForDirectory(directoryId) || 0))
+}
+
+function sessionSelectableCount(directoryId: string): number {
+  return Math.max(0, Math.floor(props.sessionSelectableCountForDirectory(directoryId) || 0))
+}
 </script>
 
 <template>
@@ -225,11 +243,12 @@ function statusMeta(sessionId: string) {
                 :activity-state="props.directoryActivityState(directory)"
                 :loading="props.directoryPageLoading"
                 :creating-session="props.creatingSession"
-                :multi-select-enabled="props.multiSelectEnabled"
+                :multi-select-enabled="props.directoryMultiSelectEnabled"
                 :multi-selected="props.isDirectorySelected(directory.id)"
+                :session-multi-select-enabled="props.isSessionMultiSelectEnabledForDirectory(directory.id)"
                 @row-click="
                   (event) =>
-                    props.multiSelectEnabled
+                    props.directoryMultiSelectEnabled
                       ? props.toggleDirectorySelected(directory.id, {
                           event,
                           orderedDirectoryIds: orderedDirectoryIds(),
@@ -237,6 +256,7 @@ function statusMeta(sessionId: string) {
                       : props.toggleDirectoryCollapse(directory.id, directory.path)
                 "
                 @toggle-collapse="props.toggleDirectoryCollapse(directory.id, directory.path)"
+                @toggle-session-multi-select="props.toggleDirectorySessionMultiSelect(directory.id)"
                 @open-actions="props.openDirectoryActions(directory)"
                 @refresh="props.refreshDirectoryInline(directory)"
                 @new-session="props.newSessionInline(directory)"
@@ -246,6 +266,118 @@ function statusMeta(sessionId: string) {
 
             <div v-if="!props.isDirectoryCollapsed(directory.id)" class="py-0.5 pl-1">
               <div class="space-y-0.5">
+                <div
+                  v-if="props.isSessionMultiSelectEnabledForDirectory(directory.id)"
+                  class="mx-1.5 mb-1 mt-0.5 rounded-md border border-sidebar-border/50 bg-muted/20 px-1.5 py-1"
+                >
+                  <div class="flex flex-wrap items-center justify-between gap-1.5">
+                    <div class="flex min-w-0 items-center gap-1.5">
+                      <span
+                        class="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-muted px-1 text-[10px] font-medium text-foreground/80"
+                        :title="
+                          String(
+                            t('chat.sidebar.multiSelect.selectedCount', {
+                              count: selectedSessionCount(directory.id),
+                            }),
+                          )
+                        "
+                        :aria-label="
+                          String(
+                            t('chat.sidebar.multiSelect.selectedCount', {
+                              count: selectedSessionCount(directory.id),
+                            }),
+                          )
+                        "
+                      >
+                        {{ selectedSessionCount(directory.id) }}
+                      </span>
+
+                      <span
+                        class="inline-flex h-4 items-center gap-1 rounded-full bg-muted px-1 text-[10px] text-foreground/80"
+                        :title="
+                          String(
+                            t('chat.sidebar.multiSelect.sessionCount', { count: selectedSessionCount(directory.id) }),
+                          )
+                        "
+                        :aria-label="
+                          String(
+                            t('chat.sidebar.multiSelect.sessionCount', { count: selectedSessionCount(directory.id) }),
+                          )
+                        "
+                      >
+                        <RiFileList2Line class="h-3 w-3" />
+                        {{ selectedSessionCount(directory.id) }}
+                      </span>
+                    </div>
+
+                    <div class="flex items-center gap-1">
+                      <IconButton
+                        size="xs"
+                        :tooltip="String(t('common.selectAll'))"
+                        :title="String(t('common.selectAll'))"
+                        :aria-label="String(t('common.selectAll'))"
+                        :is-mobile-pointer="props.uiIsMobile"
+                        :disabled="
+                          sessionSelectableCount(directory.id) === 0 ||
+                          selectedSessionCount(directory.id) === sessionSelectableCount(directory.id)
+                        "
+                        @click="props.selectAllSessionsForDirectory(directory.id)"
+                      >
+                        <RiListCheck3 class="h-3.5 w-3.5" />
+                      </IconButton>
+
+                      <IconButton
+                        size="xs"
+                        :tooltip="String(t('common.invertSelection'))"
+                        :title="String(t('common.invertSelection'))"
+                        :aria-label="String(t('common.invertSelection'))"
+                        :is-mobile-pointer="props.uiIsMobile"
+                        :disabled="sessionSelectableCount(directory.id) === 0"
+                        @click="props.invertSessionsForDirectory(directory.id)"
+                      >
+                        <RiRefreshLine class="h-3.5 w-3.5" />
+                      </IconButton>
+
+                      <ConfirmPopover
+                        :title="t('chat.sidebar.multiSelect.confirmDelete.title')"
+                        :description="
+                          t('chat.sidebar.multiSelect.confirmDelete.sessionsDescription', {
+                            sessions: selectedSessionCount(directory.id),
+                          })
+                        "
+                        :confirm-text="t('chat.sidebar.multiSelect.actions.deleteSelected')"
+                        :cancel-text="t('common.cancel')"
+                        variant="destructive"
+                        @confirm="props.deleteSelectedSessionsForDirectory(directory.id)"
+                      >
+                        <IconButton
+                          size="xs"
+                          variant="ghost-destructive"
+                          :tooltip="String(t('chat.sidebar.multiSelect.actions.deleteSelected'))"
+                          :title="String(t('chat.sidebar.multiSelect.actions.deleteSelected'))"
+                          :aria-label="String(t('chat.sidebar.multiSelect.actions.deleteSelected'))"
+                          :is-mobile-pointer="props.uiIsMobile"
+                          :disabled="selectedSessionCount(directory.id) === 0"
+                          @click.stop
+                        >
+                          <RiDeleteBinLine class="h-3.5 w-3.5" />
+                        </IconButton>
+                      </ConfirmPopover>
+
+                      <IconButton
+                        size="xs"
+                        :tooltip="String(t('chat.sidebar.multiSelect.actions.exitSessionMultiSelect'))"
+                        :title="String(t('chat.sidebar.multiSelect.actions.exitSessionMultiSelect'))"
+                        :aria-label="String(t('chat.sidebar.multiSelect.actions.exitSessionMultiSelect'))"
+                        :is-mobile-pointer="props.uiIsMobile"
+                        @click="props.toggleDirectorySessionMultiSelect(directory.id)"
+                      >
+                        <RiCloseLine class="h-3.5 w-3.5" />
+                      </IconButton>
+                    </div>
+                  </div>
+                </div>
+
                 <div
                   v-if="
                     props.isDirectoryExpandLoading(directory.id) &&
@@ -305,19 +437,26 @@ function statusMeta(sessionId: string) {
                         :session="row.session"
                         :directory="row.directory || directory"
                         :ui-is-mobile="uiIsMobile"
-                        :selected="chatSelectedSessionId === row.id"
+                        :selected="
+                          props.isSessionMultiSelectEnabledForDirectory(directory.id)
+                            ? props.isSessionSelected(row.id)
+                            : chatSelectedSessionId === row.id
+                        "
                         :highlighted="locatedSessionId === row.id"
                         :indent-px="2 + row.depth * 10"
                         :is-parent="row.isParent"
                         :is-expanded="row.isExpanded"
                         :show-thread-placeholder="true"
-                        :multi-select-enabled="props.multiSelectEnabled"
+                        :multi-select-enabled="props.isSessionMultiSelectEnabledForDirectory(directory.id)"
                         :multi-selected="props.isSessionSelected(row.id)"
                         :status-label="statusMeta(row.id).label"
                         :status-dot-class="statusMeta(row.id).dotClass"
                         :attention="props.hasAttention(row.id)"
                         :pinned="props.pinnedSessionIds.includes(row.id)"
-                        :actions-enabled="!props.multiSelectEnabled && Boolean(row.session && row.directory)"
+                        :actions-enabled="
+                          !props.isSessionMultiSelectEnabledForDirectory(directory.id) &&
+                          Boolean(row.session && row.directory)
+                        "
                         :session-action-menu-open="sessionActionMenuTarget?.session?.id === row.id"
                         :session-action-menu-anchor-el="sessionActionMenuAnchorEl"
                         :session-action-menu-query="sessionActionMenuQuery"
@@ -388,19 +527,25 @@ function statusMeta(sessionId: string) {
                         :session="row.session"
                         :directory="directory"
                         :ui-is-mobile="uiIsMobile"
-                        :selected="chatSelectedSessionId === row.id"
+                        :selected="
+                          props.isSessionMultiSelectEnabledForDirectory(directory.id)
+                            ? props.isSessionSelected(row.id)
+                            : chatSelectedSessionId === row.id
+                        "
                         :highlighted="locatedSessionId === row.id"
                         :indent-px="2 + row.depth * 10"
                         :is-parent="row.isParent"
                         :is-expanded="row.isExpanded"
                         :show-thread-placeholder="true"
-                        :multi-select-enabled="props.multiSelectEnabled"
+                        :multi-select-enabled="props.isSessionMultiSelectEnabledForDirectory(directory.id)"
                         :multi-selected="props.isSessionSelected(row.id)"
                         :status-label="statusMeta(row.id).label"
                         :status-dot-class="statusMeta(row.id).dotClass"
                         :attention="props.hasAttention(row.id)"
                         :pinned="props.pinnedSessionIds.includes(row.id)"
-                        :actions-enabled="!props.multiSelectEnabled && Boolean(row.session)"
+                        :actions-enabled="
+                          !props.isSessionMultiSelectEnabledForDirectory(directory.id) && Boolean(row.session)
+                        "
                         :session-action-menu-open="sessionActionMenuTarget?.session?.id === (row.session?.id || row.id)"
                         :session-action-menu-anchor-el="sessionActionMenuAnchorEl"
                         :session-action-menu-query="sessionActionMenuQuery"

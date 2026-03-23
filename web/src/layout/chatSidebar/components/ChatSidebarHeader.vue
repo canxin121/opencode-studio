@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { RiAddLine, RiRefreshLine } from '@remixicon/vue'
+import { RiAddLine, RiCloseLine, RiListCheck3, RiRefreshLine } from '@remixicon/vue'
 import { useI18n } from 'vue-i18n'
 
 import IconButton from '@/components/ui/IconButton.vue'
@@ -15,6 +15,7 @@ const props = defineProps<{
   sessionsLoading: boolean
   query: string
   isMobilePointer?: boolean
+  multiSelectEnabled?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -23,6 +24,7 @@ const emit = defineEmits<{
   (e: 'update:directoryPage', v: number): void
   (e: 'add-directory'): void
   (e: 'refresh'): void
+  (e: 'toggle-multi-select'): void
 }>()
 </script>
 
@@ -64,6 +66,36 @@ const emit = defineEmits<{
           @click="emit('refresh')"
         >
           <RiRefreshLine class="h-4 w-4" />
+        </IconButton>
+
+        <IconButton
+          :tooltip="
+            String(
+              props.multiSelectEnabled
+                ? t('chat.sidebar.multiSelect.actions.exitMultiSelect')
+                : t('chat.sidebar.multiSelect.actions.enterMultiSelect'),
+            )
+          "
+          :is-mobile-pointer="Boolean(props.isMobilePointer)"
+          :title="
+            String(
+              props.multiSelectEnabled
+                ? t('chat.sidebar.multiSelect.actions.exitMultiSelect')
+                : t('chat.sidebar.multiSelect.actions.enterMultiSelect'),
+            )
+          "
+          :aria-label="
+            String(
+              props.multiSelectEnabled
+                ? t('chat.sidebar.multiSelect.actions.exitMultiSelect')
+                : t('chat.sidebar.multiSelect.actions.enterMultiSelect'),
+            )
+          "
+          :class="props.multiSelectEnabled ? 'bg-primary/10 text-primary hover:bg-primary/15' : ''"
+          @click="emit('toggle-multi-select')"
+        >
+          <RiCloseLine v-if="props.multiSelectEnabled" class="h-4 w-4" />
+          <RiListCheck3 v-else class="h-4 w-4" />
         </IconButton>
       </div>
     </div>

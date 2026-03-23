@@ -18,6 +18,7 @@ import {
   RiFolderAddLine,
   RiFolderOpenFill,
   RiGitBranchLine,
+  RiListCheck3,
   RiLoader4Line,
   RiMore2Line,
   RiRefreshLine,
@@ -1018,6 +1019,24 @@ onBeforeUnmount(() => {
           <RiRefreshLine class="h-3.5 w-3.5" />
         </SidebarIconButton>
 
+        <SidebarIconButton
+          :active="multiSelectEnabled"
+          :title="
+            multiSelectEnabled
+              ? t('files.explorer.selection.exitMultiSelect')
+              : t('files.explorer.selection.enterMultiSelect')
+          "
+          :aria-label="
+            multiSelectEnabled
+              ? t('files.explorer.selection.exitMultiSelect')
+              : t('files.explorer.selection.enterMultiSelect')
+          "
+          @click="toggleMultiSelectMode"
+        >
+          <RiCloseLine v-if="multiSelectEnabled" class="h-3.5 w-3.5" />
+          <RiListCheck3 v-else class="h-3.5 w-3.5" />
+        </SidebarIconButton>
+
         <div class="relative">
           <SidebarIconButton
             :active="actionMenuOpen"
@@ -1048,97 +1067,83 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <div class="border-b border-sidebar-border/60 px-1.5 py-1">
-      <div class="flex items-center gap-1">
-        <span
-          class="rounded-sm border border-sidebar-border/70 bg-sidebar-accent/50 px-1.5 py-[1px] text-[10px] font-medium"
-        >
-          {{
-            multiSelectEnabled
-              ? t('files.explorer.selection.multiSelectOn')
-              : t('files.explorer.selection.multiSelectOff')
-          }}
-        </span>
-        <span v-if="multiSelectEnabled" class="text-[10px] text-muted-foreground">
-          {{ t('files.explorer.selection.selectedCount', { count: selectedCount }) }}
-        </span>
-        <SidebarIconButton
-          size="sm"
-          :title="
-            multiSelectEnabled
-              ? t('files.explorer.selection.exitMultiSelect')
-              : t('files.explorer.selection.enterMultiSelect')
-          "
-          :aria-label="
-            multiSelectEnabled
-              ? t('files.explorer.selection.exitMultiSelect')
-              : t('files.explorer.selection.enterMultiSelect')
-          "
-          @click="toggleMultiSelectMode"
-        >
-          <RiCheckLine v-if="multiSelectEnabled" class="h-3 w-3" />
-          <RiMore2Line v-else class="h-3 w-3" />
-        </SidebarIconButton>
-        <SidebarIconButton
-          v-if="multiSelectEnabled"
-          size="sm"
-          :title="t('common.selectAll')"
-          :aria-label="t('common.selectAll')"
-          :disabled="selectableRowCount === 0 || selectedCount === selectableRowCount"
-          @click="selectAllVisibleNodes"
-        >
-          <RiCheckLine class="h-3 w-3" />
-        </SidebarIconButton>
-        <SidebarIconButton
-          v-if="multiSelectEnabled"
-          size="sm"
-          :title="t('common.invertSelection')"
-          :aria-label="t('common.invertSelection')"
-          :disabled="selectableRowCount === 0"
-          @click="invertVisibleNodeSelection"
-        >
-          <RiRefreshLine class="h-3 w-3" />
-        </SidebarIconButton>
-        <SidebarIconButton
-          v-if="multiSelectEnabled"
-          size="sm"
-          :title="t('files.explorer.selection.bulkMove')"
-          :aria-label="t('files.explorer.selection.bulkMove')"
-          :disabled="selectedCount === 0"
-          @click="openMoveSelectedDialog(Array.from(selectedPaths))"
-        >
-          <RiFolderOpenFill class="h-3 w-3" />
-        </SidebarIconButton>
-        <ConfirmPopover
-          v-if="multiSelectEnabled"
-          :title="t('files.explorer.selection.bulkDeleteTitle')"
-          :description="t('files.explorer.selection.bulkDeleteDescription', { count: selectedCount })"
-          :confirm-text="t('files.explorer.selection.bulkDelete')"
-          :cancel-text="t('common.cancel')"
-          variant="destructive"
-          @confirm="runDeleteSelected"
-        >
+    <div v-if="multiSelectEnabled" class="border-b border-sidebar-border/60 px-2 py-1.5">
+      <div class="flex flex-wrap items-center justify-between gap-1.5">
+        <div class="flex min-w-0 items-center">
+          <span
+            class="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-muted px-1 text-[10px] font-medium text-foreground/80"
+            :title="String(t('files.explorer.selection.selectedCount', { count: selectedCount }))"
+            :aria-label="String(t('files.explorer.selection.selectedCount', { count: selectedCount }))"
+          >
+            {{ selectedCount }}
+          </span>
+        </div>
+
+        <div class="flex items-center gap-1">
           <SidebarIconButton
             size="sm"
-            destructive
-            :title="t('files.explorer.selection.bulkDelete')"
-            :disabled="hasDeletingSelected || selectedCount === 0"
-            @click.stop
+            :title="t('common.selectAll')"
+            :aria-label="t('common.selectAll')"
+            :disabled="selectableRowCount === 0 || selectedCount === selectableRowCount"
+            @click="selectAllVisibleNodes"
           >
-            <RiLoader4Line v-if="hasDeletingSelected" class="h-3 w-3 animate-spin" />
-            <RiDeleteBinLine v-else class="h-3 w-3" />
+            <RiListCheck3 class="h-3 w-3" />
           </SidebarIconButton>
-        </ConfirmPopover>
-        <SidebarIconButton
-          v-if="multiSelectEnabled"
-          size="sm"
-          :title="t('files.explorer.selection.clearSelection')"
-          :aria-label="t('files.explorer.selection.clearSelection')"
-          :disabled="selectedCount === 0"
-          @click="clearSelectedPaths"
-        >
-          <RiCloseLine class="h-3 w-3" />
-        </SidebarIconButton>
+          <SidebarIconButton
+            size="sm"
+            :title="t('common.invertSelection')"
+            :aria-label="t('common.invertSelection')"
+            :disabled="selectableRowCount === 0"
+            @click="invertVisibleNodeSelection"
+          >
+            <RiRefreshLine class="h-3 w-3" />
+          </SidebarIconButton>
+          <SidebarIconButton
+            size="sm"
+            :title="t('files.explorer.selection.bulkMove')"
+            :aria-label="t('files.explorer.selection.bulkMove')"
+            :disabled="selectedCount === 0"
+            @click="openMoveSelectedDialog(Array.from(selectedPaths))"
+          >
+            <RiFolderOpenFill class="h-3 w-3" />
+          </SidebarIconButton>
+          <ConfirmPopover
+            :title="t('files.explorer.selection.bulkDeleteTitle')"
+            :description="t('files.explorer.selection.bulkDeleteDescription', { count: selectedCount })"
+            :confirm-text="t('files.explorer.selection.bulkDelete')"
+            :cancel-text="t('common.cancel')"
+            variant="destructive"
+            @confirm="runDeleteSelected"
+          >
+            <SidebarIconButton
+              size="sm"
+              destructive
+              :title="t('files.explorer.selection.bulkDelete')"
+              :disabled="hasDeletingSelected || selectedCount === 0"
+              @click.stop
+            >
+              <RiLoader4Line v-if="hasDeletingSelected" class="h-3 w-3 animate-spin" />
+              <RiDeleteBinLine v-else class="h-3 w-3" />
+            </SidebarIconButton>
+          </ConfirmPopover>
+          <SidebarIconButton
+            size="sm"
+            :title="t('files.explorer.selection.clearSelection')"
+            :aria-label="t('files.explorer.selection.clearSelection')"
+            :disabled="selectedCount === 0"
+            @click="clearSelectedPaths"
+          >
+            <RiCloseLine class="h-3 w-3" />
+          </SidebarIconButton>
+          <SidebarIconButton
+            size="sm"
+            :title="t('files.explorer.selection.exitMultiSelect')"
+            :aria-label="t('files.explorer.selection.exitMultiSelect')"
+            @click="toggleMultiSelectMode"
+          >
+            <RiCheckLine class="h-3 w-3" />
+          </SidebarIconButton>
+        </div>
       </div>
     </div>
 

@@ -2423,11 +2423,17 @@ export default {
         actions: {
           enterMultiSelect: '多选模式',
           exitMultiSelect: '完成',
+          enterSessionMultiSelect: '选择会话',
+          exitSessionMultiSelect: '完成会话选择',
+          enterSessionMultiSelectDescription: '在此目录内选择多个会话',
+          exitSessionMultiSelectDescription: '退出该目录的会话选择',
           deleteSelected: '删除已选',
         },
         confirmDelete: {
           title: '删除已选项？',
           description: '确认删除 {sessions} 个会话和 {directories} 个目录？此操作无法撤销。',
+          directoriesDescription: '确认删除 {directories} 个已选目录？此操作无法撤销。',
+          sessionsDescription: '确认删除 {sessions} 个已选会话？此操作无法撤销。',
         },
       },
       sessionRow: {

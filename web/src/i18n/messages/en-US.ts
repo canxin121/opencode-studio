@@ -2426,11 +2426,17 @@ export default {
         actions: {
           enterMultiSelect: 'Multi-select',
           exitMultiSelect: 'Done',
+          enterSessionMultiSelect: 'Select sessions',
+          exitSessionMultiSelect: 'Done selecting sessions',
+          enterSessionMultiSelectDescription: 'Select multiple sessions in this directory',
+          exitSessionMultiSelectDescription: 'Exit session selection for this directory',
           deleteSelected: 'Delete selected',
         },
         confirmDelete: {
           title: 'Delete selected items?',
           description: 'Delete {sessions} sessions and {directories} directories? This cannot be undone.',
+          directoriesDescription: 'Delete {directories} selected directories? This cannot be undone.',
+          sessionsDescription: 'Delete {sessions} selected sessions? This cannot be undone.',
         },
       },
       sessionRow: {

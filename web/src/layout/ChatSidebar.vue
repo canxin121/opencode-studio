@@ -2,7 +2,16 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { RiAddLine, RiDeleteBinLine, RiRefreshLine, RiStarFill, RiStarLine } from '@remixicon/vue'
+import {
+  RiAddLine,
+  RiCloseLine,
+  RiDeleteBinLine,
+  RiFolder6Line,
+  RiListCheck3,
+  RiRefreshLine,
+  RiStarFill,
+  RiStarLine,
+} from '@remixicon/vue'
 
 import RenameSessionDialog from '@/components/chat/RenameSessionDialog.vue'
 import { patchSessionIdInQuery } from '@/app/navigation/sessionQuery'
@@ -21,7 +30,7 @@ import RecentSessionsFooter from '@/layout/chatSidebar/components/RecentSessions
 import RunningSessionsFooter from '@/layout/chatSidebar/components/RunningSessionsFooter.vue'
 import OptionMenu from '@/components/ui/OptionMenu.vue'
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
-import MiniActionButton from '@/components/ui/MiniActionButton.vue'
+import IconButton from '@/components/ui/IconButton.vue'
 import type { OptionMenuGroup, OptionMenuItem } from '@/components/ui/optionMenu.types'
 import {
   buildSessionActionItemsForSessionI18n,
@@ -48,7 +57,9 @@ const toasts = useToastsStore()
 const directoryStore = useDirectoryStore()
 const directorySessions = useDirectorySessionStore()
 const { t } = useI18n()
-const chatMultiSelect = useUnifiedMultiSelect()
+const chatDirectoryMultiSelect = useUnifiedMultiSelect()
+const chatSessionMultiSelect = useUnifiedMultiSelect()
+const activeSessionMultiSelectDirectoryId = ref('')
 
 function chatDirectorySelectionId(directoryId: string): string {
   return `directory:${String(directoryId || '').trim()}`
@@ -68,42 +79,81 @@ type ChatSessionToggleSelectionOptions = {
   orderedSessionIds?: string[]
 }
 
+function clearSessionMultiSelectForDirectory() {
+  activeSessionMultiSelectDirectoryId.value = ''
+  chatSessionMultiSelect.setEnabled(false)
+}
+
 function isDirectoryMultiSelected(directoryId: string): boolean {
-  return chatMultiSelect.isSelected(chatDirectorySelectionId(directoryId))
+  return chatDirectoryMultiSelect.isSelected(chatDirectorySelectionId(directoryId))
 }
 
 function isSessionMultiSelected(sessionId: string): boolean {
-  return chatMultiSelect.isSelected(chatSessionSelectionId(sessionId))
+  return chatSessionMultiSelect.isSelected(chatSessionSelectionId(sessionId))
+}
+
+function isSessionMultiSelectEnabledForDirectory(directoryId: string): boolean {
+  const pid = String(directoryId || '').trim()
+  if (!pid) return false
+  if (!chatSessionMultiSelect.enabled.value) return false
+  return activeSessionMultiSelectDirectoryId.value === pid
+}
+
+function toggleDirectorySessionMultiSelect(directoryId: string) {
+  const pid = String(directoryId || '').trim()
+  if (!pid) return
+
+  if (isSessionMultiSelectEnabledForDirectory(pid)) {
+    clearSessionMultiSelectForDirectory()
+    return
+  }
+
+  chatDirectoryMultiSelect.setEnabled(false)
+  activeSessionMultiSelectDirectoryId.value = pid
+  chatSessionMultiSelect.setEnabled(true)
+  chatSessionMultiSelect.clearSelection()
 }
 
 function toggleDirectoryMultiSelected(directoryId: string, opts?: ChatDirectoryToggleSelectionOptions) {
-  if (!chatMultiSelect.enabled.value) return
+  if (!chatDirectoryMultiSelect.enabled.value) return
   const target = chatDirectorySelectionId(directoryId)
   const orderedDirectoryIds = Array.isArray(opts?.orderedDirectoryIds) ? opts?.orderedDirectoryIds : []
   const ordered = orderedDirectoryIds.map((id) => chatDirectorySelectionId(id)).filter(Boolean)
-  chatMultiSelect.selectByInteraction(target, ordered.length ? ordered : [target], opts?.event)
+  chatDirectoryMultiSelect.selectByInteraction(target, ordered.length ? ordered : [target], opts?.event)
 }
 
 function toggleSessionMultiSelected(sessionId: string, opts?: ChatSessionToggleSelectionOptions) {
-  if (!chatMultiSelect.enabled.value) return
+  if (!chatSessionMultiSelect.enabled.value) return
+  const activeDirectoryId = activeSessionMultiSelectDirectoryId.value
+  if (!activeDirectoryId) return
+
+  const selectable = sessionSelectionIdsForDirectory(activeDirectoryId)
+  const selectableSet = new Set(selectable)
   const target = chatSessionSelectionId(sessionId)
+  if (!selectableSet.has(target)) return
+
   const orderedSessionIds = Array.isArray(opts?.orderedSessionIds) ? opts?.orderedSessionIds : []
-  const ordered = orderedSessionIds.map((id) => chatSessionSelectionId(id)).filter(Boolean)
-  chatMultiSelect.selectByInteraction(target, ordered.length ? ordered : [target], opts?.event)
+  const ordered = orderedSessionIds.map((id) => chatSessionSelectionId(id)).filter((id) => id && selectableSet.has(id))
+  const scope = ordered.length ? ordered : selectable.length ? selectable : [target]
+  chatSessionMultiSelect.selectByInteraction(target, scope, opts?.event)
 }
 
 function toggleChatMultiSelectMode() {
-  chatMultiSelect.toggleEnabled()
+  const nextEnabled = !chatDirectoryMultiSelect.enabled.value
+  if (nextEnabled) {
+    clearSessionMultiSelectForDirectory()
+  }
+  chatDirectoryMultiSelect.setEnabled(nextEnabled)
 }
 
 function selectAllChatMultiSelected() {
-  if (!chatMultiSelect.enabled.value) return
-  chatMultiSelect.selectAll(chatSelectableIds.value)
+  if (!chatDirectoryMultiSelect.enabled.value) return
+  chatDirectoryMultiSelect.selectAll(chatDirectorySelectableIds.value)
 }
 
 function invertChatMultiSelected() {
-  if (!chatMultiSelect.enabled.value) return
-  chatMultiSelect.invertSelection(chatSelectableIds.value)
+  if (!chatDirectoryMultiSelect.enabled.value) return
+  chatDirectoryMultiSelect.invertSelection(chatDirectorySelectableIds.value)
 }
 
 const lastSidebarErrorToastByKey = new Map<string, { at: number; message: string }>()
@@ -490,12 +540,34 @@ const directoryActionsOpen = ref(false)
 const directoryActionsTarget = ref<DirectoryEntry | null>(null)
 const directoryActionsDialogQuery = ref('')
 const directoryActionsDialogItems = computed<DirectoryDialogActionItem[]>(() => {
+  const targetDirectoryId = String(directoryActionsTarget.value?.id || '').trim()
+  const sessionMultiSelectActive = targetDirectoryId
+    ? isSessionMultiSelectEnabledForDirectory(targetDirectoryId)
+    : false
   const base: DirectoryDialogActionItem[] = [
     {
       id: 'refresh',
       label: String(t('chat.sidebar.directoryActions.refresh.label')),
       description: String(t('chat.sidebar.directoryActions.refresh.description')),
       icon: RiRefreshLine,
+    },
+    {
+      id: 'toggle-session-multi-select',
+      label: String(
+        t(
+          sessionMultiSelectActive
+            ? 'chat.sidebar.multiSelect.actions.exitSessionMultiSelect'
+            : 'chat.sidebar.multiSelect.actions.enterSessionMultiSelect',
+        ),
+      ),
+      description: String(
+        t(
+          sessionMultiSelectActive
+            ? 'chat.sidebar.multiSelect.actions.exitSessionMultiSelectDescription'
+            : 'chat.sidebar.multiSelect.actions.enterSessionMultiSelectDescription',
+        ),
+      ),
+      icon: sessionMultiSelectActive ? RiCloseLine : RiListCheck3,
     },
     {
       id: 'new-session',
@@ -693,6 +765,13 @@ async function directoryActionRemove() {
   directoryActionsOpen.value = false
 }
 
+function directoryActionToggleSessionMultiSelect() {
+  const p = directoryActionsTarget.value
+  if (!p) return
+  toggleDirectorySessionMultiSelect(p.id)
+  directoryActionsOpen.value = false
+}
+
 async function runDirectoryDialogAction(item: DirectoryDialogActionItem) {
   if (item.disabled) return
   if (item.id === 'refresh') {
@@ -701,6 +780,10 @@ async function runDirectoryDialogAction(item: DirectoryDialogActionItem) {
   }
   if (item.id === 'new-session') {
     await directoryActionNewSession()
+    return
+  }
+  if (item.id === 'toggle-session-multi-select') {
+    directoryActionToggleSessionMultiSelect()
     return
   }
   if (item.id === 'remove') {
@@ -859,6 +942,9 @@ async function toggleDirectoryCollapse(directoryId: string, _directoryPath: stri
   if (collapseCommandPendingIds.value.has(pid)) return
 
   const nextCollapsed = !collapsedDirectories.value.has(pid)
+  if (nextCollapsed && isSessionMultiSelectEnabledForDirectory(pid)) {
+    clearSessionMultiSelectForDirectory()
+  }
   if (nextCollapsed) {
     const nextLocalCollapsed = new Set(collapsedDirectories.value)
     nextLocalCollapsed.add(pid)
@@ -1082,56 +1168,81 @@ const pagedRunningSessionRows = computed<ThreadSessionRow[]>(() =>
 // Avoid re-deriving it client-side, otherwise parents with collapsed children lose the disclosure toggle.
 const runningSessionRows = computed<ThreadSessionRow[]>(() => pagedRunningSessionRows.value)
 
-const chatSelectableIds = computed(() => {
+const chatDirectorySelectableIds = computed(() => {
   const ids = new Set<string>()
   const visibleDirectories = Array.isArray(directories.value) ? directories.value : []
   for (const directory of visibleDirectories) {
     const directoryId = String(directory?.id || '').trim()
     if (directoryId) ids.add(chatDirectorySelectionId(directoryId))
   }
-
-  const sidebarSessions = Array.isArray(chat.sessions) ? chat.sessions : []
-  for (const session of sidebarSessions) {
-    const sid = String(session?.id || '').trim()
-    if (sid) ids.add(chatSessionSelectionId(sid))
-  }
-
-  for (const row of [
-    ...pagedPinnedSessionRows.value,
-    ...pagedRecentSessionRows.value,
-    ...pagedRunningSessionRows.value,
-  ]) {
-    const sid = String(row?.id || '').trim()
-    if (sid) ids.add(chatSessionSelectionId(sid))
-  }
-
-  for (const directoryId of Object.keys(directorySidebarById.value)) {
-    for (const row of [...pinnedRowsForDirectory(directoryId), ...pagedRowsForDirectory(directoryId)]) {
-      const sid = String(row?.id || '').trim()
-      if (sid) ids.add(chatSessionSelectionId(sid))
-    }
-  }
-
   return Array.from(ids)
 })
 
 watch(
-  () => chatSelectableIds.value,
+  () => chatDirectorySelectableIds.value,
   (ids) => {
-    chatMultiSelect.retain(ids)
+    chatDirectoryMultiSelect.retain(ids)
   },
   { immediate: true },
 )
 
+const activeDirectorySessionSelectableIds = computed(() => {
+  const activeDirectoryId = activeSessionMultiSelectDirectoryId.value.trim()
+  if (!activeDirectoryId || !chatSessionMultiSelect.enabled.value) return []
+  return sessionSelectionIdsForDirectory(activeDirectoryId)
+})
+
+watch(
+  () => activeDirectorySessionSelectableIds.value,
+  (ids) => {
+    chatSessionMultiSelect.retain(ids)
+  },
+  { immediate: true },
+)
+
+watch(
+  () =>
+    directories.value
+      .map((entry) => String(entry?.id || '').trim())
+      .filter(Boolean)
+      .join('|'),
+  () => {
+    const activeDirectoryId = activeSessionMultiSelectDirectoryId.value.trim()
+    if (!activeDirectoryId) return
+    const exists = directories.value.some((entry) => String(entry?.id || '').trim() === activeDirectoryId)
+    if (!exists) {
+      clearSessionMultiSelectForDirectory()
+    }
+  },
+)
+
+watch(
+  () =>
+    pagedDirectories.value
+      .map((entry) => String(entry?.id || '').trim())
+      .filter(Boolean)
+      .join('|'),
+  () => {
+    const activeDirectoryId = activeSessionMultiSelectDirectoryId.value.trim()
+    if (!activeDirectoryId) return
+    const stillVisibleOnPage = pagedDirectories.value.some(
+      (entry) => String(entry?.id || '').trim() === activeDirectoryId,
+    )
+    if (!stillVisibleOnPage) {
+      clearSessionMultiSelectForDirectory()
+    }
+  },
+)
+
 const chatSelectedDirectoryIds = computed(() =>
-  chatMultiSelect.selectedList.value
+  chatDirectoryMultiSelect.selectedList.value
     .filter((id) => id.startsWith('directory:'))
     .map((id) => id.slice('directory:'.length))
     .filter(Boolean),
 )
 
 const chatSelectedSessionIds = computed(() =>
-  chatMultiSelect.selectedList.value
+  chatSessionMultiSelect.selectedList.value
     .filter((id) => id.startsWith('session:'))
     .map((id) => id.slice('session:'.length))
     .filter(Boolean),
@@ -1140,18 +1251,42 @@ const chatSelectedSessionIds = computed(() =>
 const chatSelectedDirectoryCount = computed(() => chatSelectedDirectoryIds.value.length)
 const chatSelectedSessionCount = computed(() => chatSelectedSessionIds.value.length)
 
-async function deleteChatMultiSelected() {
-  const sessionIds = chatSelectedSessionIds.value
-  const directoryIds = chatSelectedDirectoryIds.value
-  if (sessionIds.length === 0 && directoryIds.length === 0) return
+function selectedSessionCountForDirectory(directoryId: string): number {
+  return isSessionMultiSelectEnabledForDirectory(directoryId) ? chatSelectedSessionCount.value : 0
+}
 
+function sessionSelectableCountForDirectory(directoryId: string): number {
+  return sessionSelectionIdsForDirectory(directoryId).length
+}
+
+function selectAllSessionsForDirectory(directoryId: string) {
+  if (!isSessionMultiSelectEnabledForDirectory(directoryId)) return
+  chatSessionMultiSelect.selectAll(sessionSelectionIdsForDirectory(directoryId))
+}
+
+function invertSessionsForDirectory(directoryId: string) {
+  if (!isSessionMultiSelectEnabledForDirectory(directoryId)) return
+  chatSessionMultiSelect.invertSelection(sessionSelectionIdsForDirectory(directoryId))
+}
+
+async function deleteSelectedSessionsForDirectory(directoryId: string) {
+  if (!isSessionMultiSelectEnabledForDirectory(directoryId)) return
+  const sessionIds = chatSelectedSessionIds.value
+  if (sessionIds.length === 0) return
   for (const sessionId of sessionIds) {
     await deleteSession(sessionId)
   }
+  clearSessionMultiSelectForDirectory()
+}
+
+async function deleteChatMultiSelected() {
+  const directoryIds = chatSelectedDirectoryIds.value
+  if (directoryIds.length === 0) return
+
   for (const directoryId of directoryIds) {
     await removeDirectoryEntry(directoryId)
   }
-  chatMultiSelect.setEnabled(false)
+  chatDirectoryMultiSelect.setEnabled(false)
 }
 
 watch(
@@ -1700,6 +1835,18 @@ function pinnedRowsForDirectory(directoryId: string): ThreadSessionRow[] {
   return []
 }
 
+function sessionSelectionIdsForDirectory(directoryId: string): string[] {
+  const pid = String(directoryId || '').trim()
+  if (!pid) return []
+  const ids = new Set<string>()
+  for (const row of [...pinnedRowsForDirectory(pid), ...pagedRowsForDirectory(pid)]) {
+    const sid = String(row?.id || '').trim()
+    if (!sid) continue
+    ids.add(chatSessionSelectionId(sid))
+  }
+  return Array.from(ids)
+}
+
 function sessionRootPage(directoryId: string): number {
   const pid = (directoryId || '').trim()
   const section = directorySidebarById.value[pid]
@@ -1864,6 +2011,7 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
         :sessionsLoading="sessionsLoading"
         :query="sidebarQueryDraft"
         :is-mobile-pointer="ui.isMobilePointer"
+        :multi-select-enabled="chatDirectoryMultiSelect.enabled.value"
         @update:query="(v) => (sidebarQueryDraft = v)"
         @submit-query="submitSidebarQuery"
         @update:directoryPage="
@@ -1874,68 +2022,103 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
         "
         @add-directory="() => (isAddDirectoryOpen = true)"
         @refresh="handleSidebarRefresh"
+        @toggle-multi-select="toggleChatMultiSelectMode"
       />
 
-      <div class="border-b border-sidebar-border/60 px-1.5 py-1">
-        <div class="flex items-center gap-1">
-          <span
-            class="rounded-sm border border-sidebar-border/70 bg-sidebar-accent/50 px-1.5 py-[1px] text-[10px] font-medium"
-          >
-            {{ chatMultiSelect.enabled.value ? t('chat.sidebar.multiSelect.on') : t('chat.sidebar.multiSelect.off') }}
-          </span>
-          <span v-if="chatMultiSelect.enabled.value" class="text-[10px] text-muted-foreground"
-            >{{ t('chat.sidebar.multiSelect.selectedCount', { count: chatMultiSelect.selectedCount.value }) }} ·
-            {{ t('chat.sidebar.multiSelect.sessionCount', { count: chatSelectedSessionCount }) }} ·
-            {{ t('chat.sidebar.multiSelect.directoryCount', { count: chatSelectedDirectoryCount }) }}</span
-          >
-          <MiniActionButton size="xs" @click="toggleChatMultiSelectMode">
-            {{
-              chatMultiSelect.enabled.value
-                ? t('chat.sidebar.multiSelect.actions.exitMultiSelect')
-                : t('chat.sidebar.multiSelect.actions.enterMultiSelect')
-            }}
-          </MiniActionButton>
-          <MiniActionButton
-            v-if="chatMultiSelect.enabled.value"
-            size="xs"
-            :disabled="
-              chatSelectableIds.length === 0 || chatMultiSelect.selectedCount.value === chatSelectableIds.length
-            "
-            @click="selectAllChatMultiSelected"
-          >
-            {{ t('common.selectAll') }}
-          </MiniActionButton>
-          <MiniActionButton
-            v-if="chatMultiSelect.enabled.value"
-            size="xs"
-            :disabled="chatSelectableIds.length === 0"
-            @click="invertChatMultiSelected"
-          >
-            {{ t('common.invertSelection') }}
-          </MiniActionButton>
-          <ConfirmPopover
-            :title="t('chat.sidebar.multiSelect.confirmDelete.title')"
-            :description="
-              t('chat.sidebar.multiSelect.confirmDelete.description', {
-                sessions: chatSelectedSessionCount,
-                directories: chatSelectedDirectoryCount,
-                count: chatMultiSelect.selectedCount.value,
-              })
-            "
-            :confirm-text="t('chat.sidebar.multiSelect.actions.deleteSelected')"
-            :cancel-text="t('common.cancel')"
-            variant="destructive"
-            @confirm="deleteChatMultiSelected"
-          >
-            <MiniActionButton
-              size="xs"
-              variant="destructive"
-              :disabled="!chatMultiSelect.enabled.value || chatMultiSelect.selectedCount.value === 0"
-              @click.stop
+      <div v-if="chatDirectoryMultiSelect.enabled.value" class="border-b border-sidebar-border/60 px-2 py-1.5">
+        <div class="flex flex-wrap items-center justify-between gap-1.5">
+          <div class="flex min-w-0 items-center gap-1.5">
+            <span
+              class="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-muted px-1 text-[10px] font-medium text-foreground/80"
+              :title="
+                String(
+                  t('chat.sidebar.multiSelect.selectedCount', { count: chatDirectoryMultiSelect.selectedCount.value }),
+                )
+              "
+              :aria-label="
+                String(
+                  t('chat.sidebar.multiSelect.selectedCount', { count: chatDirectoryMultiSelect.selectedCount.value }),
+                )
+              "
             >
-              {{ t('chat.sidebar.multiSelect.actions.deleteSelected') }}
-            </MiniActionButton>
-          </ConfirmPopover>
+              {{ chatDirectoryMultiSelect.selectedCount.value }}
+            </span>
+
+            <span
+              class="inline-flex h-4 items-center gap-1 rounded-full bg-muted px-1 text-[10px] text-foreground/80"
+              :title="String(t('chat.sidebar.multiSelect.directoryCount', { count: chatSelectedDirectoryCount }))"
+              :aria-label="String(t('chat.sidebar.multiSelect.directoryCount', { count: chatSelectedDirectoryCount }))"
+            >
+              <RiFolder6Line class="h-3 w-3" />
+              {{ chatSelectedDirectoryCount }}
+            </span>
+          </div>
+
+          <div class="flex items-center gap-1">
+            <IconButton
+              size="xs"
+              :tooltip="String(t('common.selectAll'))"
+              :title="String(t('common.selectAll'))"
+              :aria-label="String(t('common.selectAll'))"
+              :is-mobile-pointer="ui.isMobilePointer"
+              :disabled="
+                chatDirectorySelectableIds.length === 0 ||
+                chatDirectoryMultiSelect.selectedCount.value === chatDirectorySelectableIds.length
+              "
+              @click="selectAllChatMultiSelected"
+            >
+              <RiListCheck3 class="h-3.5 w-3.5" />
+            </IconButton>
+
+            <IconButton
+              size="xs"
+              :tooltip="String(t('common.invertSelection'))"
+              :title="String(t('common.invertSelection'))"
+              :aria-label="String(t('common.invertSelection'))"
+              :is-mobile-pointer="ui.isMobilePointer"
+              :disabled="chatDirectorySelectableIds.length === 0"
+              @click="invertChatMultiSelected"
+            >
+              <RiRefreshLine class="h-3.5 w-3.5" />
+            </IconButton>
+
+            <ConfirmPopover
+              :title="t('chat.sidebar.multiSelect.confirmDelete.title')"
+              :description="
+                t('chat.sidebar.multiSelect.confirmDelete.directoriesDescription', {
+                  directories: chatSelectedDirectoryCount,
+                })
+              "
+              :confirm-text="t('chat.sidebar.multiSelect.actions.deleteSelected')"
+              :cancel-text="t('common.cancel')"
+              variant="destructive"
+              @confirm="deleteChatMultiSelected"
+            >
+              <IconButton
+                size="xs"
+                variant="ghost-destructive"
+                :tooltip="String(t('chat.sidebar.multiSelect.actions.deleteSelected'))"
+                :title="String(t('chat.sidebar.multiSelect.actions.deleteSelected'))"
+                :aria-label="String(t('chat.sidebar.multiSelect.actions.deleteSelected'))"
+                :is-mobile-pointer="ui.isMobilePointer"
+                :disabled="chatSelectedDirectoryCount === 0"
+                @click.stop
+              >
+                <RiDeleteBinLine class="h-3.5 w-3.5" />
+              </IconButton>
+            </ConfirmPopover>
+
+            <IconButton
+              size="xs"
+              :tooltip="String(t('chat.sidebar.multiSelect.actions.exitMultiSelect'))"
+              :title="String(t('chat.sidebar.multiSelect.actions.exitMultiSelect'))"
+              :aria-label="String(t('chat.sidebar.multiSelect.actions.exitMultiSelect'))"
+              :is-mobile-pointer="ui.isMobilePointer"
+              @click="toggleChatMultiSelectMode"
+            >
+              <RiCloseLine class="h-3.5 w-3.5" />
+            </IconButton>
+          </div>
         </div>
       </div>
 
@@ -1955,8 +2138,15 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
             :pinnedSessionIds="pinnedSessionIds"
             :chatSelectedSessionId="chat.selectedSessionId"
             :creatingSession="creatingSession"
-            :multiSelectEnabled="chatMultiSelect.enabled.value"
+            :directoryMultiSelectEnabled="chatDirectoryMultiSelect.enabled.value"
             :isDirectorySelected="isDirectoryMultiSelected"
+            :isSessionMultiSelectEnabledForDirectory="isSessionMultiSelectEnabledForDirectory"
+            :toggleDirectorySessionMultiSelect="toggleDirectorySessionMultiSelect"
+            :selectedSessionCountForDirectory="selectedSessionCountForDirectory"
+            :sessionSelectableCountForDirectory="sessionSelectableCountForDirectory"
+            :selectAllSessionsForDirectory="selectAllSessionsForDirectory"
+            :invertSessionsForDirectory="invertSessionsForDirectory"
+            :deleteSelectedSessionsForDirectory="deleteSelectedSessionsForDirectory"
             :isSessionSelected="isSessionMultiSelected"
             :toggleDirectorySelected="toggleDirectoryMultiSelected"
             :toggleSessionSelected="toggleSessionMultiSelected"
@@ -2017,7 +2207,7 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
               :pinnedSessionsPageCount="pinnedSessionsPageCount"
               :selectedSessionId="chat.selectedSessionId"
               :uiIsMobile="ui.isMobile"
-              :multiSelectEnabled="chatMultiSelect.enabled.value"
+              :multiSelectEnabled="false"
               :isSessionSelected="isSessionMultiSelected"
               :toggleSessionSelected="toggleSessionMultiSelected"
               :pinnedSessionIds="pinnedSessionIds"
@@ -2056,7 +2246,7 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
               :recentSessionsPageCount="recentSessionsPageCount"
               :selectedSessionId="chat.selectedSessionId"
               :uiIsMobile="ui.isMobile"
-              :multiSelectEnabled="chatMultiSelect.enabled.value"
+              :multiSelectEnabled="false"
               :isSessionSelected="isSessionMultiSelected"
               :toggleSessionSelected="toggleSessionMultiSelected"
               :pinnedSessionIds="pinnedSessionIds"
@@ -2095,7 +2285,7 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
               :runningSessionsPageCount="runningSessionsPageCount"
               :selectedSessionId="chat.selectedSessionId"
               :statusLabelForSessionId="statusLabelForSessionId"
-              :multiSelectEnabled="chatMultiSelect.enabled.value"
+              :multiSelectEnabled="false"
               :isSessionSelected="isSessionMultiSelected"
               :toggleSessionSelected="toggleSessionMultiSelected"
               @open-session="openRunningSession"

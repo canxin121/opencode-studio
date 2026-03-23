@@ -9,6 +9,7 @@ import {
   RiCloseLine,
   RiDeleteBinLine,
   RiEditLine,
+  RiListCheck3,
   RiLoader4Line,
   RiPlayLine,
   RiPencilLine,
@@ -23,7 +24,6 @@ import Input from '@/components/ui/Input.vue'
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import ListItemOverflowActionButton from '@/components/ui/ListItemOverflowActionButton.vue'
 import ListItemSelectionIndicator from '@/components/ui/ListItemSelectionIndicator.vue'
-import MiniActionButton from '@/components/ui/MiniActionButton.vue'
 import OptionMenu from '@/components/ui/OptionMenu.vue'
 import type { OptionMenuGroup, OptionMenuItem } from '@/components/ui/optionMenu.types'
 import SearchInput from '@/components/ui/SearchInput.vue'
@@ -935,6 +935,36 @@ function selectSession(sessionId: string) {
           >
             <RiRefreshLine class="h-4 w-4" :class="preview.loading ? 'animate-spin' : ''" />
           </IconButton>
+
+          <IconButton
+            :tooltip="
+              String(
+                previewMultiSelect.enabled.value
+                  ? t('workspaceDock.preview.sidebar.actions.exitMultiSelect')
+                  : t('workspaceDock.preview.sidebar.actions.enterMultiSelect'),
+              )
+            "
+            :title="
+              String(
+                previewMultiSelect.enabled.value
+                  ? t('workspaceDock.preview.sidebar.actions.exitMultiSelect')
+                  : t('workspaceDock.preview.sidebar.actions.enterMultiSelect'),
+              )
+            "
+            :aria-label="
+              String(
+                previewMultiSelect.enabled.value
+                  ? t('workspaceDock.preview.sidebar.actions.exitMultiSelect')
+                  : t('workspaceDock.preview.sidebar.actions.enterMultiSelect'),
+              )
+            "
+            :is-mobile-pointer="ui.isMobilePointer"
+            :class="previewMultiSelect.enabled.value ? 'bg-primary/10 text-primary hover:bg-primary/15' : ''"
+            @click="togglePreviewMultiSelectMode"
+          >
+            <RiCloseLine v-if="previewMultiSelect.enabled.value" class="h-4 w-4" />
+            <RiListCheck3 v-else class="h-4 w-4" />
+          </IconButton>
         </div>
       </div>
     </div>
@@ -958,76 +988,97 @@ function selectSession(sessionId: string) {
       />
     </div>
 
-    <div
-      class="flex items-center justify-between gap-2 px-3 pb-2"
-      :class="previewFilteredSessions.length > 0 ? 'flex-shrink-0' : 'hidden'"
-    >
-      <div class="text-[11px] text-muted-foreground">
-        {{
-          previewMultiSelect.enabled.value
-            ? t('workspaceDock.preview.sidebar.multiSelect.on')
-            : t('workspaceDock.preview.sidebar.multiSelect.off')
-        }}
-        <span v-if="previewMultiSelect.enabled.value" class="ml-1">
-          ({{
-            t('workspaceDock.preview.sidebar.multiSelect.selectedCount', {
-              count: previewMultiSelect.selectedCount.value,
-            })
-          }})
-        </span>
-      </div>
-
-      <div class="flex items-center gap-1">
-        <MiniActionButton size="xs" @click="togglePreviewMultiSelectMode">
-          {{
-            previewMultiSelect.enabled.value
-              ? t('workspaceDock.preview.sidebar.actions.exitMultiSelect')
-              : t('workspaceDock.preview.sidebar.actions.enterMultiSelect')
-          }}
-        </MiniActionButton>
-        <MiniActionButton
-          v-if="previewMultiSelect.enabled.value"
-          size="xs"
-          :disabled="
-            filteredPreviewSessionIds.length === 0 ||
-            previewMultiSelect.selectedCount.value === filteredPreviewSessionIds.length
-          "
-          @click="selectAllPreviewSessions"
-        >
-          {{ t('common.selectAll') }}
-        </MiniActionButton>
-        <MiniActionButton
-          v-if="previewMultiSelect.enabled.value"
-          size="xs"
-          :disabled="filteredPreviewSessionIds.length === 0"
-          @click="invertPreviewSessionsSelection"
-        >
-          {{ t('common.invertSelection') }}
-        </MiniActionButton>
-        <ConfirmPopover
-          :title="String(t('workspaceDock.preview.sidebar.confirmDeleteSelected.title'))"
-          :description="
-            String(
-              t('workspaceDock.preview.sidebar.confirmDeleteSelected.description', {
-                count: previewMultiSelect.selectedCount.value,
-              }),
-            )
-          "
-          :confirm-text="String(t('workspaceDock.preview.sidebar.actions.deleteSelected'))"
-          :cancel-text="String(t('common.cancel'))"
-          variant="destructive"
-          @confirm="deleteSelectedPreviewSessions"
-        >
-          <MiniActionButton
-            size="xs"
-            variant="destructive"
-            :disabled="!previewMultiSelect.enabled.value || previewMultiSelect.selectedCount.value === 0"
-            @click.stop
+    <div v-if="previewMultiSelect.enabled.value" class="flex-shrink-0 border-b border-sidebar-border/60 px-2.5 py-1.5">
+      <div class="flex flex-wrap items-center justify-between gap-1.5">
+        <div class="flex min-w-0 items-center">
+          <span
+            class="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-muted px-1 text-[10px] font-medium text-foreground/80"
+            :title="
+              String(
+                t('workspaceDock.preview.sidebar.multiSelect.selectedCount', {
+                  count: previewMultiSelect.selectedCount.value,
+                }),
+              )
+            "
+            :aria-label="
+              String(
+                t('workspaceDock.preview.sidebar.multiSelect.selectedCount', {
+                  count: previewMultiSelect.selectedCount.value,
+                }),
+              )
+            "
           >
-            <RiDeleteBinLine class="mr-1 h-3.5 w-3.5" />
-            {{ t('workspaceDock.preview.sidebar.actions.deleteSelected') }}
-          </MiniActionButton>
-        </ConfirmPopover>
+            {{ previewMultiSelect.selectedCount.value }}
+          </span>
+        </div>
+
+        <div class="flex items-center gap-1">
+          <IconButton
+            size="xs"
+            :tooltip="String(t('common.selectAll'))"
+            :title="String(t('common.selectAll'))"
+            :aria-label="String(t('common.selectAll'))"
+            :is-mobile-pointer="ui.isMobilePointer"
+            :disabled="
+              filteredPreviewSessionIds.length === 0 ||
+              previewMultiSelect.selectedCount.value === filteredPreviewSessionIds.length
+            "
+            @click="selectAllPreviewSessions"
+          >
+            <RiListCheck3 class="h-3.5 w-3.5" />
+          </IconButton>
+
+          <IconButton
+            size="xs"
+            :tooltip="String(t('common.invertSelection'))"
+            :title="String(t('common.invertSelection'))"
+            :aria-label="String(t('common.invertSelection'))"
+            :is-mobile-pointer="ui.isMobilePointer"
+            :disabled="filteredPreviewSessionIds.length === 0"
+            @click="invertPreviewSessionsSelection"
+          >
+            <RiRefreshLine class="h-3.5 w-3.5" />
+          </IconButton>
+
+          <ConfirmPopover
+            :title="String(t('workspaceDock.preview.sidebar.confirmDeleteSelected.title'))"
+            :description="
+              String(
+                t('workspaceDock.preview.sidebar.confirmDeleteSelected.description', {
+                  count: previewMultiSelect.selectedCount.value,
+                }),
+              )
+            "
+            :confirm-text="String(t('workspaceDock.preview.sidebar.actions.deleteSelected'))"
+            :cancel-text="String(t('common.cancel'))"
+            variant="destructive"
+            @confirm="deleteSelectedPreviewSessions"
+          >
+            <IconButton
+              size="xs"
+              variant="ghost-destructive"
+              :tooltip="String(t('workspaceDock.preview.sidebar.actions.deleteSelected'))"
+              :title="String(t('workspaceDock.preview.sidebar.actions.deleteSelected'))"
+              :aria-label="String(t('workspaceDock.preview.sidebar.actions.deleteSelected'))"
+              :is-mobile-pointer="ui.isMobilePointer"
+              :disabled="previewMultiSelect.selectedCount.value === 0"
+              @click.stop
+            >
+              <RiDeleteBinLine class="h-3.5 w-3.5" />
+            </IconButton>
+          </ConfirmPopover>
+
+          <IconButton
+            size="xs"
+            :tooltip="String(t('workspaceDock.preview.sidebar.actions.exitMultiSelect'))"
+            :title="String(t('workspaceDock.preview.sidebar.actions.exitMultiSelect'))"
+            :aria-label="String(t('workspaceDock.preview.sidebar.actions.exitMultiSelect'))"
+            :is-mobile-pointer="ui.isMobilePointer"
+            @click="togglePreviewMultiSelectMode"
+          >
+            <RiCloseLine class="h-3.5 w-3.5" />
+          </IconButton>
+        </div>
       </div>
     </div>
 

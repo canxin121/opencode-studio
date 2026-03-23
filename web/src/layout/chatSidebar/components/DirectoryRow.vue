@@ -1,6 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { RiAddLine, RiArrowDownSLine, RiArrowRightSLine, RiDeleteBinLine, RiRefreshLine } from '@remixicon/vue'
+import {
+  RiAddLine,
+  RiArrowDownSLine,
+  RiArrowRightSLine,
+  RiDeleteBinLine,
+  RiListCheck3,
+  RiRefreshLine,
+} from '@remixicon/vue'
 import { useI18n } from 'vue-i18n'
 
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
@@ -19,6 +26,7 @@ const props = withDefaults(
     focused?: boolean
     multiSelectEnabled?: boolean
     multiSelected?: boolean
+    sessionMultiSelectEnabled?: boolean
     activityState?: 'running' | 'blocked' | 'mixed' | null
     loading?: boolean
     creatingSession?: boolean
@@ -28,6 +36,7 @@ const props = withDefaults(
     focused: false,
     multiSelectEnabled: false,
     multiSelected: false,
+    sessionMultiSelectEnabled: false,
     activityState: null,
     loading: false,
     creatingSession: false,
@@ -37,6 +46,7 @@ const props = withDefaults(
 const emit = defineEmits<{
   (e: 'toggle-collapse'): void
   (e: 'row-click', event: MouseEvent): void
+  (e: 'toggle-session-multi-select'): void
   (e: 'open-actions'): void
   (e: 'refresh'): void
   (e: 'new-session'): void
@@ -47,6 +57,15 @@ const { t } = useI18n()
 
 const actionsAlwaysVisible = computed(() => props.uiIsMobile)
 const rowActive = computed(() => (props.multiSelectEnabled ? props.multiSelected : props.focused))
+const sessionMultiSelectTooltip = computed(() =>
+  String(
+    t(
+      props.sessionMultiSelectEnabled
+        ? 'chat.sidebar.multiSelect.actions.exitSessionMultiSelect'
+        : 'chat.sidebar.multiSelect.actions.enterSessionMultiSelect',
+    ),
+  ),
+)
 
 const activityTitle = computed(() => {
   if (props.activityState === 'running') {
@@ -137,6 +156,20 @@ function handleMobileOpenActionsClick() {
       </template>
 
       <template v-else>
+        <IconButton
+          size="xs"
+          :class="
+            props.sessionMultiSelectEnabled
+              ? 'text-primary bg-primary/10 hover:bg-primary/15'
+              : 'text-muted-foreground hover:text-foreground hover:dark:bg-accent/40 hover:bg-primary/6'
+          "
+          :title="sessionMultiSelectTooltip"
+          :aria-label="sessionMultiSelectTooltip"
+          @click.stop="emit('toggle-session-multi-select')"
+        >
+          <RiListCheck3 class="h-4 w-4" />
+        </IconButton>
+
         <IconButton
           size="xs"
           class="text-muted-foreground hover:text-foreground hover:dark:bg-accent/40 hover:bg-primary/6"
