@@ -7,6 +7,7 @@ use std::time::Duration;
 use clap::ValueEnum;
 use dashmap::DashMap;
 use reqwest::StatusCode as ReqStatus;
+use serde::Serialize;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 use tokio::process::{Child, Command};
@@ -130,6 +131,102 @@ pub struct OpenCodeStatus {
     pub restarting: bool,
     pub ready: bool,
     pub last_error: Option<String>,
+    pub last_error_info: Option<OpenCodeErrorInfo>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenCodeErrorInfo {
+    pub code: String,
+    pub summary: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hint: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stderr_excerpt: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub exit_code: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub signal: Option<i32>,
+}
+
+impl OpenCodeErrorInfo {
+    fn new(code: impl Into<String>, summary: impl Into<String>) -> Self {
+        Self {
+            code: code.into(),
+            summary: summary.into(),
+            detail: None,
+            hint: None,
+            stderr_excerpt: None,
+            exit_code: None,
+            signal: None,
+        }
+    }
+
+    fn with_detail(mut self, detail: impl Into<String>) -> Self {
+        let text = detail.into();
+        let trimmed = text.trim();
+        if !trimmed.is_empty() {
+            self.detail = Some(trimmed.to_string());
+        }
+        self
+    }
+
+    fn with_hint(mut self, hint: Option<String>) -> Self {
+        self.hint = hint.and_then(|value| {
+            let trimmed = value.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        });
+        self
+    }
+
+    fn with_stderr_excerpt(mut self, stderr_excerpt: Option<String>) -> Self {
+        self.stderr_excerpt = stderr_excerpt.and_then(|value| {
+            let trimmed = value.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        });
+        self
+    }
+
+    fn with_exit_status(mut self, exit_code: Option<i32>, signal: Option<i32>) -> Self {
+        self.exit_code = exit_code;
+        self.signal = signal;
+        self
+    }
+
+    fn legacy_message(&self) -> String {
+        let mut out = self.summary.trim().to_string();
+
+        if let Some(detail) = self.detail.as_deref().map(str::trim)
+            && !detail.is_empty()
+            && !detail.eq_ignore_ascii_case(&out)
+        {
+            if out.ends_with('.') {
+                out.push(' ');
+            } else {
+                out.push_str(": ");
+            }
+            out.push_str(detail);
+        }
+
+        if let Some(stderr_excerpt) = self.stderr_excerpt.as_deref().map(str::trim)
+            && !stderr_excerpt.is_empty()
+        {
+            out.push_str(". Recent OpenCode stderr: ");
+            out.push_str(stderr_excerpt);
+        }
+
+        out
+    }
 }
 
 pub struct OpenCodeManager {
@@ -149,6 +246,7 @@ pub struct OpenCodeManager {
     restarting: RwLock<bool>,
     ready: RwLock<bool>,
     last_error: RwLock<Option<String>>,
+    last_error_info: RwLock<Option<OpenCodeErrorInfo>>,
     startup_stderr: RwLock<VecDeque<String>>,
 
     // Small in-memory cache of the bridge instance by port.
@@ -176,17 +274,20 @@ impl OpenCodeManager {
             restarting: RwLock::new(false),
             ready: RwLock::new(false),
             last_error: RwLock::new(None),
+            last_error_info: RwLock::new(None),
             startup_stderr: RwLock::new(VecDeque::new()),
             bridge_cache: DashMap::new(),
         }
     }
 
     pub async fn status(&self) -> OpenCodeStatus {
+        let last_error_info = self.last_error_info.read().await.clone();
         OpenCodeStatus {
             port: self.port().await,
             restarting: *self.restarting.read().await,
             ready: *self.ready.read().await,
             last_error: self.last_error.read().await.clone(),
+            last_error_info,
         }
     }
 
@@ -255,7 +356,7 @@ impl OpenCodeManager {
         let result = async {
             if self.configured_port.is_some() {
                 // External server: can't restart, just re-check readiness.
-                self.last_error.write().await.take();
+                self.clear_last_error().await;
                 self.wait_for_ready(Duration::from_secs(20)).await?;
                 return Ok(());
             }
@@ -278,17 +379,40 @@ impl OpenCodeManager {
         self.wait_for_ready(timeout).await
     }
 
+    async fn clear_last_error(&self) {
+        self.last_error.write().await.take();
+        self.last_error_info.write().await.take();
+    }
+
+    async fn set_last_error_info(&self, info: OpenCodeErrorInfo) -> String {
+        let message = info.legacy_message();
+        *self.last_error.write().await = Some(message.clone());
+        *self.last_error_info.write().await = Some(info);
+        message
+    }
+
     async fn start_managed(self: &Arc<Self>) -> Result<(), String> {
-        let port = {
-            let mut guard = self.managed_port.write().await;
-            if let Some(p) = *guard {
-                p
-            } else {
-                let p =
-                    pick_free_port().ok_or_else(|| "Failed to allocate a free port".to_string())?;
-                *guard = Some(p);
-                p
-            }
+        let port = if let Some(p) = *self.managed_port.read().await {
+            p
+        } else {
+            let Some(p) = pick_free_port() else {
+                let message = self
+                    .set_last_error_info(
+                        OpenCodeErrorInfo::new(
+                            "port_allocation_failed",
+                            "Failed to allocate a free local port for OpenCode",
+                        )
+                        .with_hint(Some(
+                            "Verify local TCP ports are available and not blocked by system policy."
+                                .to_string(),
+                        )),
+                    )
+                    .await;
+                *self.ready.write().await = false;
+                return Err(message);
+            };
+            *self.managed_port.write().await = Some(p);
+            p
         };
 
         // Spawn `opencode serve`.
@@ -334,9 +458,18 @@ impl OpenCodeManager {
         let mut child = match cmd.spawn() {
             Ok(child) => child,
             Err(err) => {
-                let message = format!("Failed to start OpenCode: {err}");
+                let detail = err.to_string();
+                let message = self
+                    .set_last_error_info(
+                        OpenCodeErrorInfo::new(
+                            "spawn_failed",
+                            "Failed to launch the OpenCode process",
+                        )
+                        .with_detail(detail.clone())
+                        .with_hint(infer_hint_from_spawn_error(&detail)),
+                    )
+                    .await;
                 *self.ready.write().await = false;
-                *self.last_error.write().await = Some(message.clone());
                 *self.managed_port.write().await = None;
                 return Err(message);
             }
@@ -354,7 +487,7 @@ impl OpenCodeManager {
 
         *self.child.lock().await = Some(child);
 
-        self.last_error.write().await.take();
+        self.clear_last_error().await;
         Ok(())
     }
 
@@ -398,12 +531,32 @@ impl OpenCodeManager {
             }
 
             if tokio::time::Instant::now() >= deadline {
+                let code = if self.configured_port.is_some() {
+                    "external_ready_timeout"
+                } else {
+                    "ready_timeout"
+                };
+                let summary = if self.configured_port.is_some() {
+                    "Timed out waiting for configured OpenCode endpoint to become ready"
+                } else {
+                    "Timed out waiting for OpenCode to become ready"
+                };
+                let stderr_excerpt = self.recent_startup_stderr_excerpt().await;
                 let msg = self
-                    .with_recent_stderr_context(
-                        "Timed out waiting for OpenCode to become ready".to_string(),
+                    .set_last_error_info(
+                        OpenCodeErrorInfo::new(code, summary)
+                            .with_stderr_excerpt(stderr_excerpt.clone())
+                            .with_hint(
+                                infer_hint_from_startup_stderr(stderr_excerpt.as_deref()).or_else(
+                                    || {
+                                        Some(
+                                            "Check OpenCode startup logs and run `opencode serve --print-logs` manually for full diagnostics.".to_string(),
+                                        )
+                                    },
+                                ),
+                            ),
                     )
                     .await;
-                *self.last_error.write().await = Some(msg.clone());
                 *self.ready.write().await = false;
                 return Err(msg);
             }
@@ -427,7 +580,7 @@ impl OpenCodeManager {
 
             if ok {
                 *self.ready.write().await = true;
-                self.last_error.write().await.take();
+                self.clear_last_error().await;
                 return Ok(());
             }
 
@@ -459,13 +612,6 @@ impl OpenCodeManager {
         ))
     }
 
-    async fn with_recent_stderr_context(&self, msg: String) -> String {
-        let Some(stderr) = self.recent_startup_stderr_excerpt().await else {
-            return msg;
-        };
-        format!("{msg}. Recent OpenCode stderr: {stderr}")
-    }
-
     async fn check_managed_process_before_ready(&self) -> Option<String> {
         if self.configured_port.is_some() {
             return None;
@@ -487,27 +633,51 @@ impl OpenCodeManager {
                     ManagedProcessState::Exited(status)
                 }
                 Ok(None) => ManagedProcessState::Running,
-                Err(err) => ManagedProcessState::ProbeFailed(format!(
-                    "Failed to inspect OpenCode process status: {err}"
-                )),
+                Err(err) => ManagedProcessState::ProbeFailed(err.to_string()),
             }
         };
 
         match state {
             ManagedProcessState::Running => None,
-            ManagedProcessState::ProbeFailed(msg) => {
+            ManagedProcessState::ProbeFailed(detail) => {
+                let msg = self
+                    .set_last_error_info(
+                        OpenCodeErrorInfo::new(
+                            "process_probe_failed",
+                            "Failed to inspect OpenCode process status",
+                        )
+                        .with_detail(detail)
+                        .with_hint(Some(
+                            "Retry startup. If this repeats, check host process permissions and process limits."
+                                .to_string(),
+                        )),
+                    )
+                    .await;
                 *self.ready.write().await = false;
-                *self.last_error.write().await = Some(msg.clone());
                 Some(msg)
             }
             ManagedProcessState::Exited(status) => {
                 *self.ready.write().await = false;
                 *self.managed_port.write().await = None;
 
+                let (summary, exit_code, signal) = exit_status_context(status);
+                let stderr_excerpt = self.recent_startup_stderr_excerpt().await;
                 let msg = self
-                    .with_recent_stderr_context(format_exit_status_message(status))
+                    .set_last_error_info(
+                        OpenCodeErrorInfo::new("exited_before_ready", summary)
+                            .with_exit_status(exit_code, signal)
+                            .with_stderr_excerpt(stderr_excerpt.clone())
+                            .with_hint(
+                                infer_hint_from_startup_stderr(stderr_excerpt.as_deref()).or_else(
+                                    || {
+                                        Some(
+                                            "OpenCode exited during startup. Run `opencode serve --print-logs` manually and inspect the reported error.".to_string(),
+                                        )
+                                    },
+                                ),
+                            ),
+                    )
                     .await;
-                *self.last_error.write().await = Some(msg.clone());
                 Some(msg)
             }
         }
@@ -631,20 +801,96 @@ fn truncate_error_detail(input: &str, max_chars: usize) -> String {
     out
 }
 
-fn format_exit_status_message(status: ExitStatus) -> String {
+fn infer_hint_from_spawn_error(detail: &str) -> Option<String> {
+    let lower = detail.to_ascii_lowercase();
+
+    if lower.contains("no such file or directory")
+        || lower.contains("not found")
+        || lower.contains("cannot find the file")
+    {
+        return Some(
+            "OpenCode CLI was not found. Install `opencode-ai` and make sure `opencode` is on PATH."
+                .to_string(),
+        );
+    }
+
+    if lower.contains("permission denied")
+        || lower.contains("access is denied")
+        || lower.contains("operation not permitted")
+    {
+        return Some(
+            "OpenCode exists but could not be executed. Check executable permissions and security policy."
+                .to_string(),
+        );
+    }
+
+    None
+}
+
+fn infer_hint_from_startup_stderr(stderr_excerpt: Option<&str>) -> Option<String> {
+    let stderr = stderr_excerpt?.trim();
+    if stderr.is_empty() {
+        return None;
+    }
+
+    let lower = stderr.to_ascii_lowercase();
+
+    if lower.contains("eaddrinuse") || lower.contains("address already in use") {
+        return Some(
+            "OpenCode could not bind its port. Free the conflicting port/process and retry."
+                .to_string(),
+        );
+    }
+
+    if lower.contains("permission denied")
+        || lower.contains("eacces")
+        || lower.contains("operation not permitted")
+    {
+        return Some(
+            "OpenCode hit a permissions error. Verify access to config/data directories and retry."
+                .to_string(),
+        );
+    }
+
+    if lower.contains("database is locked")
+        || lower.contains("readonly database")
+        || lower.contains("sqlite")
+    {
+        return Some(
+            "OpenCode storage appears locked or unavailable. Close other OpenCode instances and retry."
+                .to_string(),
+        );
+    }
+
+    None
+}
+
+fn exit_status_context(status: ExitStatus) -> (String, Option<i32>, Option<i32>) {
     if let Some(code) = status.code() {
-        return format!("OpenCode exited before becoming ready (exit code {code})");
+        return (
+            format!("OpenCode exited before becoming ready (exit code {code})"),
+            Some(code),
+            None,
+        );
     }
 
     #[cfg(unix)]
     {
         use std::os::unix::process::ExitStatusExt;
         if let Some(signal) = status.signal() {
-            return format!("OpenCode exited before becoming ready (signal {signal})");
+            return (
+                format!("OpenCode exited before becoming ready (signal {signal})"),
+                None,
+                Some(signal),
+            );
         }
     }
 
-    "OpenCode exited before becoming ready".to_string()
+    (
+        "OpenCode exited before becoming ready".to_string(),
+        None,
+        None,
+    )
 }
 
 async fn forward_child_output(label: &'static str, stream: impl tokio::io::AsyncRead + Unpin) {
@@ -878,7 +1124,34 @@ mod tests {
     }
 
     #[test]
-    fn format_exit_status_message_includes_exit_code() {
+    fn infer_hint_from_spawn_error_handles_missing_binary() {
+        let hint =
+            infer_hint_from_spawn_error("No such file or directory (os error 2)").expect("hint");
+        assert!(hint.contains("Install `opencode-ai`"), "{hint}");
+    }
+
+    #[test]
+    fn infer_hint_from_startup_stderr_handles_port_conflict() {
+        let hint = infer_hint_from_startup_stderr(Some(
+            "Error: listen EADDRINUSE: address already in use",
+        ))
+        .expect("hint");
+        assert!(hint.contains("port"), "{hint}");
+    }
+
+    #[test]
+    fn opencode_error_info_legacy_message_includes_stderr_excerpt() {
+        let msg = OpenCodeErrorInfo::new("spawn_failed", "Failed to launch OpenCode")
+            .with_detail("permission denied")
+            .with_stderr_excerpt(Some("stacktrace line".to_string()))
+            .legacy_message();
+        assert!(msg.contains("Failed to launch OpenCode"), "{msg}");
+        assert!(msg.contains("permission denied"), "{msg}");
+        assert!(msg.contains("Recent OpenCode stderr"), "{msg}");
+    }
+
+    #[test]
+    fn exit_status_context_includes_exit_code() {
         #[cfg(unix)]
         let status = {
             use std::os::unix::process::ExitStatusExt;
@@ -891,8 +1164,10 @@ mod tests {
             ExitStatus::from_raw(7)
         };
 
-        let msg = format_exit_status_message(status);
+        let (msg, code, signal) = exit_status_context(status);
         assert!(msg.contains("exit code 7"), "{msg}");
+        assert_eq!(code, Some(7));
+        assert_eq!(signal, None);
     }
 
     #[cfg(unix)]

@@ -38,9 +38,6 @@ pub enum AppError {
     BadGateway { message: String },
 
     #[error("{message}")]
-    ServiceUnavailable { message: String, restarting: bool },
-
-    #[error("{message}")]
     Internal { message: String },
 }
 
@@ -81,20 +78,6 @@ impl AppError {
         }
     }
 
-    pub fn service_unavailable(message: impl Into<String>) -> Self {
-        Self::ServiceUnavailable {
-            message: message.into(),
-            restarting: false,
-        }
-    }
-
-    pub fn service_restarting(message: impl Into<String>) -> Self {
-        Self::ServiceUnavailable {
-            message: message.into(),
-            restarting: true,
-        }
-    }
-
     pub fn internal(message: impl Into<String>) -> Self {
         Self::Internal {
             message: message.into(),
@@ -109,7 +92,6 @@ impl AppError {
             Self::PayloadTooLarge { .. } => StatusCode::PAYLOAD_TOO_LARGE,
             Self::TooManyRequests { .. } => StatusCode::TOO_MANY_REQUESTS,
             Self::BadGateway { .. } => StatusCode::BAD_GATEWAY,
-            Self::ServiceUnavailable { .. } => StatusCode::SERVICE_UNAVAILABLE,
             Self::Internal { .. } => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -126,15 +108,6 @@ impl AppError {
                 error: message.clone(),
                 locked: None,
                 restarting: None,
-            },
-            Self::ServiceUnavailable {
-                message,
-                restarting,
-            } => ErrorBody {
-                error: message.clone(),
-                locked: None,
-                // Keep response shape stable: only include when true.
-                restarting: if *restarting { Some(true) } else { None },
             },
         }
     }

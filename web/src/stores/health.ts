@@ -16,6 +16,16 @@ function timeoutSignal(ms: number): AbortSignal | undefined {
   return undefined
 }
 
+export type OpenCodeErrorInfo = {
+  code: string
+  summary: string
+  detail?: string | null
+  hint?: string | null
+  stderrExcerpt?: string | null
+  exitCode?: number | null
+  signal?: number | null
+}
+
 type Health = {
   status: string
   timestamp: string
@@ -23,6 +33,7 @@ type Health = {
   openCodeRunning: boolean
   isOpenCodeReady: boolean
   lastOpenCodeError?: string | null
+  lastOpenCodeErrorInfo?: OpenCodeErrorInfo | null
 }
 
 export const useHealthStore = defineStore('health', () => {

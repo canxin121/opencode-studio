@@ -5,6 +5,7 @@ import { useAuthStore } from './stores/auth'
 import { useHealthStore } from './stores/health'
 import { useSettingsStore } from './stores/settings'
 import { desktopBackendStatus, desktopOpenConfig, isDesktopRuntime } from './lib/desktopConfig'
+import type { DesktopBackendErrorInfo } from './lib/desktopConfig'
 import { syncDesktopBackendTarget } from './lib/backend'
 
 import { applyAppearanceSettingsToDom } from './lib/appearance'
@@ -27,6 +28,7 @@ const showLogin = computed(() => !showDesktopLoading.value && (auth.needsLogin |
 let desktopProbeTimer: ReturnType<typeof setInterval> | null = null
 let desktopProbeBusy = false
 const desktopBackendError = ref('')
+const desktopBackendErrorInfo = ref<DesktopBackendErrorInfo | null>(null)
 
 async function refreshDesktopBootState() {
   if (desktopProbeBusy) return
@@ -36,16 +38,19 @@ async function refreshDesktopBootState() {
       const syncState = await syncDesktopBackendTarget().catch(() => null)
       if (String(syncState?.last_error || '').trim()) {
         desktopBackendError.value = String(syncState?.last_error || '').trim()
+        desktopBackendErrorInfo.value = syncState?.last_error_info || null
       } else {
         const status = await desktopBackendStatus().catch(() => null)
         const err = String(status?.last_error || '').trim()
         desktopBackendError.value = err
+        desktopBackendErrorInfo.value = status?.last_error_info || null
       }
     }
 
     await health.refresh().catch(() => {})
     if (health.data !== null) {
       desktopBackendError.value = ''
+      desktopBackendErrorInfo.value = null
       await auth.refresh().catch(() => {})
     }
   } finally {
@@ -54,6 +59,7 @@ async function refreshDesktopBootState() {
 }
 
 const loadingError = computed(() => (desktopRuntime ? desktopBackendError.value : ''))
+const loadingErrorInfo = computed(() => (desktopRuntime ? desktopBackendErrorInfo.value : null))
 
 function openRuntimeConfig() {
   if (!desktopRuntime) return
@@ -108,6 +114,7 @@ watchEffect(() => {
     <DesktopLoadingPage
       v-if="showDesktopLoading"
       :backend-error="loadingError"
+      :backend-error-info="loadingErrorInfo"
       @retry="refreshDesktopBootState"
       @open-config="openRuntimeConfig"
     />

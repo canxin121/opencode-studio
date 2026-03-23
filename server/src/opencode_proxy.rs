@@ -175,12 +175,54 @@ fn sanitize_chat_session_response_payload(payload: &mut serde_json::Value) {
     }
 }
 
-fn open_code_unavailable() -> Response {
-    AppError::service_unavailable("OpenCode service unavailable").into_response()
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OpenCodeUnavailableBody {
+    error: String,
+    code: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    restarting: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    hint: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    opencode_error: Option<crate::opencode::OpenCodeErrorInfo>,
 }
 
-fn open_code_restarting() -> Response {
-    AppError::service_restarting("OpenCode is restarting").into_response()
+fn open_code_unavailable(oc: Option<&crate::opencode::OpenCodeStatus>) -> Response {
+    let info = oc.and_then(|status| status.last_error_info.clone());
+    let body = OpenCodeUnavailableBody {
+        error: info
+            .as_ref()
+            .map(|value| value.summary.clone())
+            .unwrap_or_else(|| "OpenCode service unavailable".to_string()),
+        code: "opencode_unavailable".to_string(),
+        restarting: None,
+        hint: info.as_ref().and_then(|value| value.hint.clone()),
+        opencode_error: info,
+    };
+    (StatusCode::SERVICE_UNAVAILABLE, Json(body)).into_response()
+}
+
+fn open_code_restarting(oc: &crate::opencode::OpenCodeStatus) -> Response {
+    let info = oc.last_error_info.clone();
+    let body = OpenCodeUnavailableBody {
+        error: info
+            .as_ref()
+            .map(|value| value.summary.clone())
+            .unwrap_or_else(|| "OpenCode is restarting".to_string()),
+        code: "opencode_restarting".to_string(),
+        restarting: Some(true),
+        hint: info.as_ref().and_then(|value| value.hint.clone()),
+        opencode_error: info,
+    };
+    (StatusCode::SERVICE_UNAVAILABLE, Json(body)).into_response()
+}
+
+fn open_code_not_ready(oc: &crate::opencode::OpenCodeStatus) -> Response {
+    if oc.restarting {
+        return open_code_restarting(oc);
+    }
+    open_code_unavailable(Some(oc))
 }
 
 #[derive(Debug, Deserialize)]
@@ -870,16 +912,17 @@ async fn proxy_opencode_sse_event_inner(
     uri: Uri,
     path: &str,
 ) -> ApiResult<Response> {
-    if state.opencode.is_restarting().await {
-        return Ok(open_code_restarting());
+    let oc = state.opencode.status().await;
+    if oc.restarting || !oc.ready {
+        return Ok(open_code_not_ready(&oc));
     }
     let Some(bridge) = state.opencode.bridge().await else {
-        return Ok(open_code_unavailable());
+        return Ok(open_code_unavailable(Some(&oc)));
     };
 
     let target = match bridge.build_url(path, Some(&uri)) {
         Ok(url) => url,
-        Err(_) => return Ok(open_code_unavailable()),
+        Err(_) => return Ok(open_code_unavailable(Some(&oc))),
     };
 
     let mut req = reqwest::Request::new(reqwest::Method::GET, target.parse().expect("valid url"));
@@ -1122,10 +1165,10 @@ pub(crate) async fn proxy_opencode_rest_inner(
 
     let oc = state.opencode.status().await;
     if oc.restarting || !oc.ready {
-        return Ok(open_code_restarting());
+        return Ok(open_code_not_ready(&oc));
     }
     let Some(bridge) = state.opencode.bridge().await else {
-        return Ok(open_code_unavailable());
+        return Ok(open_code_unavailable(Some(&oc)));
     };
 
     let query_directory = directory_from_uri_query(&uri);
@@ -1138,7 +1181,7 @@ pub(crate) async fn proxy_opencode_rest_inner(
     let upstream_path = format!("/{}", path);
     let target = match bridge.build_url(&upstream_path, Some(&uri)) {
         Ok(url) => url,
-        Err(_) => return Ok(open_code_unavailable()),
+        Err(_) => return Ok(open_code_unavailable(Some(&oc))),
     };
 
     // UX: OpenCode's /session/:id/message call may run for the entire generation.
@@ -1292,7 +1335,7 @@ pub(crate) async fn proxy_opencode_rest_inner(
             reqwest::Method::POST,
             match async_target_url.parse() {
                 Ok(url) => url,
-                Err(_) => return Ok(open_code_unavailable()),
+                Err(_) => return Ok(open_code_unavailable(Some(&oc))),
             },
         );
 
@@ -1346,7 +1389,7 @@ pub(crate) async fn proxy_opencode_rest_inner(
         reqwest::Method::from_bytes(method.as_str().as_bytes()).unwrap_or(reqwest::Method::GET),
         match target.parse() {
             Ok(url) => url,
-            Err(_) => return Ok(open_code_unavailable()),
+            Err(_) => return Ok(open_code_unavailable(Some(&oc))),
         },
     );
 
@@ -4119,12 +4162,12 @@ pub(crate) async fn session_status_get(
         return Ok(out);
     }
     let Some(bridge) = state.opencode.bridge().await else {
-        return Ok(open_code_unavailable());
+        return Ok(open_code_unavailable(Some(&oc)));
     };
 
     let target = match bridge.build_url("/session/status", Some(&uri)) {
         Ok(url) => url,
-        Err(_) => return Ok(open_code_unavailable()),
+        Err(_) => return Ok(open_code_unavailable(Some(&oc))),
     };
 
     let resp = bridge.client.get(target).send().await;
@@ -4328,15 +4371,15 @@ pub(crate) async fn lsp_list(
 ) -> ApiResult<Response> {
     let oc = state.opencode.status().await;
     if oc.restarting || !oc.ready {
-        return Ok(open_code_restarting());
+        return Ok(open_code_not_ready(&oc));
     }
     let Some(bridge) = state.opencode.bridge().await else {
-        return Ok(open_code_unavailable());
+        return Ok(open_code_unavailable(Some(&oc)));
     };
 
     let target = match bridge.build_url("/lsp", Some(&uri)) {
         Ok(url) => url,
-        Err(_) => return Ok(open_code_unavailable()),
+        Err(_) => return Ok(open_code_unavailable(Some(&oc))),
     };
 
     let resp = bridge
@@ -4388,15 +4431,15 @@ pub(crate) async fn mcp_status(
 ) -> ApiResult<Response> {
     let oc = state.opencode.status().await;
     if oc.restarting || !oc.ready {
-        return Ok(open_code_restarting());
+        return Ok(open_code_not_ready(&oc));
     }
     let Some(bridge) = state.opencode.bridge().await else {
-        return Ok(open_code_unavailable());
+        return Ok(open_code_unavailable(Some(&oc)));
     };
 
     let target = match bridge.build_url("/mcp", Some(&uri)) {
         Ok(url) => url,
-        Err(_) => return Ok(open_code_unavailable()),
+        Err(_) => return Ok(open_code_unavailable(Some(&oc))),
     };
 
     let resp = bridge
@@ -4436,15 +4479,15 @@ pub(crate) async fn permission_list(
 ) -> ApiResult<Response> {
     let oc = state.opencode.status().await;
     if oc.restarting || !oc.ready {
-        return Ok(open_code_restarting());
+        return Ok(open_code_not_ready(&oc));
     }
     let Some(bridge) = state.opencode.bridge().await else {
-        return Ok(open_code_unavailable());
+        return Ok(open_code_unavailable(Some(&oc)));
     };
 
     let target = match bridge.build_url("/permission", Some(&uri)) {
         Ok(url) => url,
-        Err(_) => return Ok(open_code_unavailable()),
+        Err(_) => return Ok(open_code_unavailable(Some(&oc))),
     };
 
     let resp = bridge
@@ -4500,15 +4543,15 @@ pub(crate) async fn question_list(
 ) -> ApiResult<Response> {
     let oc = state.opencode.status().await;
     if oc.restarting || !oc.ready {
-        return Ok(open_code_restarting());
+        return Ok(open_code_not_ready(&oc));
     }
     let Some(bridge) = state.opencode.bridge().await else {
-        return Ok(open_code_unavailable());
+        return Ok(open_code_unavailable(Some(&oc)));
     };
 
     let target = match bridge.build_url("/question", Some(&uri)) {
         Ok(url) => url,
-        Err(_) => return Ok(open_code_unavailable()),
+        Err(_) => return Ok(open_code_unavailable(Some(&oc))),
     };
 
     let resp = bridge

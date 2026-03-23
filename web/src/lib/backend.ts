@@ -1,5 +1,6 @@
 import { getLocalJson, setLocalJson } from './persist'
 import { localStorageKeys } from './persistence/storageKeys'
+import type { DesktopBackendErrorInfo, DesktopBackendStatus } from './desktopConfig'
 
 export type BackendTarget = {
   id: string
@@ -19,12 +20,6 @@ const STORAGE_KEY = localStorageKeys.backends.configV1
 
 function nowMs(): number {
   return Date.now()
-}
-
-export type DesktopBackendStatus = {
-  running: boolean
-  url?: string | null
-  last_error?: string | null
 }
 
 type TauriInvoke = (cmd: string, args?: Record<string, unknown>) => Promise<unknown>
@@ -240,12 +235,68 @@ function readTauriInvoke(): TauriInvoke | null {
   }
 }
 
+function normalizeDesktopErrorInfo(raw: unknown): DesktopBackendErrorInfo | null {
+  if (!isRecord(raw)) return null
+  const code = typeof raw.code === 'string' ? raw.code.trim() : ''
+  const summary = typeof raw.summary === 'string' ? raw.summary.trim() : ''
+  if (!code || !summary) return null
+
+  const detail = typeof raw.detail === 'string' && raw.detail.trim() ? raw.detail.trim() : null
+  const hint = typeof raw.hint === 'string' && raw.hint.trim() ? raw.hint.trim() : null
+
+  const exitCodeRaw =
+    typeof raw.exitCode === 'number' ? raw.exitCode : typeof raw.exit_code === 'number' ? raw.exit_code : Number.NaN
+  const signalRaw = typeof raw.signal === 'number' ? raw.signal : Number.NaN
+
+  return {
+    code,
+    summary,
+    detail,
+    hint,
+    exitCode: Number.isFinite(exitCodeRaw) ? Math.floor(exitCodeRaw) : null,
+    signal: Number.isFinite(signalRaw) ? Math.floor(signalRaw) : null,
+  }
+}
+
+function inferStartupErrorCode(text: string): string {
+  const lower = text.toLowerCase()
+  if (lower.includes('backend service not available in this build')) return 'sidecar_unavailable'
+  if (lower.includes('unable to locate ui dist directory')) return 'ui_dist_missing'
+  if (lower.includes('backend port') && lower.includes('not available')) return 'backend_port_unavailable'
+  if (lower.includes('spawn backend')) return 'backend_spawn_failed'
+  if (lower.includes('healthcheck timed out')) return 'backend_health_timeout'
+  return 'backend_start_failed'
+}
+
+function inferStartupErrorSummary(code: string): string {
+  if (code === 'sidecar_unavailable') return 'Desktop backend service is not available in this build'
+  if (code === 'ui_dist_missing') return 'Desktop UI assets were not found'
+  if (code === 'backend_port_unavailable') return 'Configured desktop backend port is not available'
+  if (code === 'backend_spawn_failed') return 'Failed to spawn desktop backend process'
+  if (code === 'backend_health_timeout') return 'Timed out waiting for desktop backend health endpoint'
+  return 'Failed to start desktop backend service'
+}
+
+function fallbackStartupErrorInfo(message: string): DesktopBackendErrorInfo {
+  const detail = String(message || '').trim()
+  const code = inferStartupErrorCode(detail)
+  return {
+    code,
+    summary: inferStartupErrorSummary(code),
+    detail: detail || null,
+    hint: null,
+    exitCode: null,
+    signal: null,
+  }
+}
+
 function normalizeDesktopStatus(raw: unknown): DesktopBackendStatus | null {
   if (!isRecord(raw)) return null
   return {
     running: raw.running === true,
     url: typeof raw.url === 'string' ? raw.url : null,
     last_error: typeof raw.last_error === 'string' ? raw.last_error : null,
+    last_error_info: normalizeDesktopErrorInfo(raw.last_error_info ?? raw.lastErrorInfo),
   }
 }
 
@@ -383,6 +434,7 @@ export async function syncDesktopBackendTarget(): Promise<DesktopBackendStatus |
         running: false,
         url: status?.url ?? null,
         last_error: startupError,
+        last_error_info: status?.last_error_info ?? fallbackStartupErrorInfo(startupError),
       }
     }
 

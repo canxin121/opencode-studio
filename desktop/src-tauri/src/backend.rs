@@ -20,6 +20,81 @@ pub struct BackendStatus {
     pub running: bool,
     pub url: Option<String>,
     pub last_error: Option<String>,
+    pub last_error_info: Option<BackendErrorInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackendErrorInfo {
+    pub code: String,
+    pub summary: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hint: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub exit_code: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub signal: Option<i32>,
+}
+
+impl BackendErrorInfo {
+    fn new(code: impl Into<String>, summary: impl Into<String>) -> Self {
+        Self {
+            code: code.into(),
+            summary: summary.into(),
+            detail: None,
+            hint: None,
+            exit_code: None,
+            signal: None,
+        }
+    }
+
+    fn with_detail(mut self, detail: impl Into<String>) -> Self {
+        let value = detail.into();
+        let trimmed = value.trim();
+        if !trimmed.is_empty() {
+            self.detail = Some(trimmed.to_string());
+        }
+        self
+    }
+
+    fn with_hint(mut self, hint: Option<String>) -> Self {
+        self.hint = hint.and_then(|value| {
+            let trimmed = value.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        });
+        self
+    }
+
+    fn with_exit_context(mut self, exit_code: Option<i32>, signal: Option<i32>) -> Self {
+        self.exit_code = exit_code;
+        self.signal = signal;
+        self
+    }
+
+    fn legacy_message(&self) -> String {
+        let mut out = self.summary.trim().to_string();
+        if let Some(detail) = self.detail.as_deref().map(str::trim)
+            && !detail.is_empty()
+            && !detail.eq_ignore_ascii_case(out.as_str())
+        {
+            if out.is_empty() {
+                out = detail.to_string();
+            } else if out.ends_with('.') {
+                out.push(' ');
+                out.push_str(detail);
+            } else {
+                out.push_str(": ");
+                out.push_str(detail);
+            }
+        }
+        out
+    }
 }
 
 #[derive(Clone, Default)]
@@ -34,6 +109,20 @@ struct BackendInner {
     pid: Option<u32>,
     url: Option<String>,
     last_error: Option<String>,
+    last_error_info: Option<BackendErrorInfo>,
+}
+
+impl BackendInner {
+    fn clear_last_error(&mut self) {
+        self.last_error = None;
+        self.last_error_info = None;
+    }
+
+    fn set_last_error_info(&mut self, info: BackendErrorInfo) {
+        let message = info.legacy_message();
+        self.last_error = Some(message);
+        self.last_error_info = Some(info);
+    }
 }
 
 impl BackendManager {
@@ -47,6 +136,7 @@ impl BackendManager {
             running: guard.child.is_some(),
             url: guard.url.clone(),
             last_error: guard.last_error.clone(),
+            last_error_info: guard.last_error_info.clone(),
         }
     }
 
@@ -60,23 +150,45 @@ impl BackendManager {
                     running: true,
                     url: guard.url.clone(),
                     last_error: guard.last_error.clone(),
+                    last_error_info: guard.last_error_info.clone(),
                 });
             }
         }
 
         let cfg = config::load_or_create(app).unwrap_or_default();
-        let runtime_config_path = config::runtime_config_path(app)
-            .ok_or_else(|| "unable to resolve runtime config path".to_string())?;
-        let (child, url) = match spawn_backend_service(app, &cfg, &runtime_config_path).await {
-            Ok(started) => started,
-            Err(err) => {
+        let runtime_config_path = match config::runtime_config_path(app) {
+            Some(path) => path,
+            None => {
+                let info = BackendErrorInfo::new(
+                    "runtime_config_unavailable",
+                    "Unable to resolve desktop runtime config path",
+                )
+                .with_hint(Some(
+                    "Restart the desktop app and verify configuration directory permissions."
+                        .to_string(),
+                ));
+                let message = info.legacy_message();
                 let mut guard = self.inner.lock().await;
                 guard.child = None;
                 guard.pid = None;
                 guard.url = None;
-                guard.last_error = Some(err.clone());
-                append_backend_log_line(app, &format!("[desktop] backend start failed: {err}"));
-                return Err(err);
+                guard.set_last_error_info(info);
+                append_backend_log_line(app, &format!("[desktop] backend start failed: {message}"));
+                return Err(message);
+            }
+        };
+        let (child, url) = match spawn_backend_service(app, &cfg, &runtime_config_path).await {
+            Ok(started) => started,
+            Err(err) => {
+                let info = backend_start_error_info(err);
+                let message = info.legacy_message();
+                let mut guard = self.inner.lock().await;
+                guard.child = None;
+                guard.pid = None;
+                guard.url = None;
+                guard.set_last_error_info(info);
+                append_backend_log_line(app, &format!("[desktop] backend start failed: {message}"));
+                return Err(message);
             }
         };
 
@@ -89,15 +201,17 @@ impl BackendManager {
             guard.pid = Some(pid);
             guard.child = Some(child);
             guard.url = Some(url.clone());
-            guard.last_error = None;
+            guard.clear_last_error();
         }
 
         if let Err(err) = wait_for_health(&url).await {
+            let info = backend_start_error_info(err);
+            let message = info.legacy_message();
             let _ = self.stop(app).await;
             let mut guard = self.inner.lock().await;
-            guard.last_error = Some(err.clone());
-            append_backend_log_line(app, &format!("[desktop] backend start failed: {err}"));
-            return Err(err);
+            guard.set_last_error_info(info);
+            append_backend_log_line(app, &format!("[desktop] backend start failed: {message}"));
+            return Err(message);
         }
 
         Ok(self.status().await)
@@ -277,16 +391,17 @@ async fn spawn_backend_service(
                     let manager = app_handle.state::<BackendManager>().inner().clone();
                     let mut guard = manager.inner.lock().await;
                     if guard.pid == Some(child_pid) {
-                        guard.last_error = Some(err.to_string());
+                        guard.set_last_error_info(backend_process_error_info(err.to_string()));
                     }
                 }
                 CommandEvent::Terminated(payload) => {
-                    let msg = format!(
+                    let info = backend_terminated_error_info(payload.code, payload.signal);
+                    let log_line = format!(
                         "[backend terminated] code={:?} signal={:?}",
                         payload.code, payload.signal
                     );
                     if let Some(f) = file.as_mut() {
-                        let _ = f.write_all(msg.as_bytes());
+                        let _ = f.write_all(log_line.as_bytes());
                         let _ = f.write_all(b"\n");
                     }
                     let manager = app_handle.state::<BackendManager>().inner().clone();
@@ -295,7 +410,7 @@ async fn spawn_backend_service(
                         guard.child = None;
                         guard.pid = None;
                         guard.url = None;
-                        guard.last_error = Some(msg);
+                        guard.set_last_error_info(info);
                     }
                     break;
                 }
@@ -633,6 +748,128 @@ fn process_name_for_pid_windows(pid: u32) -> Option<String> {
     } else {
         Some(image.to_string())
     }
+}
+
+fn backend_start_error_info(detail: impl Into<String>) -> BackendErrorInfo {
+    let raw = detail.into();
+    let detail = raw.trim().to_string();
+    let lower = detail.to_ascii_lowercase();
+
+    if lower.contains("backend service not available in this build") {
+        return BackendErrorInfo::new(
+            "sidecar_unavailable",
+            "Desktop backend service is not available in this build",
+        )
+        .with_detail(detail)
+        .with_hint(Some(
+            "Reinstall OpenCode Studio Desktop or use a build that includes the backend sidecar."
+                .to_string(),
+        ));
+    }
+
+    if lower.contains("unable to locate ui dist directory") {
+        return BackendErrorInfo::new("ui_dist_missing", "Desktop UI assets were not found")
+            .with_detail(detail)
+            .with_hint(Some(
+                "Reinstall OpenCode Studio Desktop so bundled web assets are available."
+                    .to_string(),
+            ));
+    }
+
+    if lower.contains("backend port") && lower.contains("not available") {
+        return BackendErrorInfo::new(
+            "backend_port_unavailable",
+            "Configured desktop backend port is not available",
+        )
+        .with_detail(detail)
+        .with_hint(Some(
+            "Change `backend.port` in opencode-studio.toml or stop the process using that port."
+                .to_string(),
+        ));
+    }
+
+    if lower.contains("healthcheck timed out") {
+        return BackendErrorInfo::new(
+            "backend_health_timeout",
+            "Timed out waiting for desktop backend health endpoint",
+        )
+        .with_detail(detail)
+        .with_hint(Some(
+            "Check desktop backend logs and ensure startup dependencies are available.".to_string(),
+        ));
+    }
+
+    if lower.contains("spawn backend") {
+        return BackendErrorInfo::new(
+            "backend_spawn_failed",
+            "Failed to spawn desktop backend process",
+        )
+        .with_detail(detail.clone())
+        .with_hint(infer_backend_spawn_hint(&detail));
+    }
+
+    BackendErrorInfo::new(
+        "backend_start_failed",
+        "Failed to start desktop backend service",
+    )
+    .with_detail(detail.clone())
+    .with_hint(infer_backend_spawn_hint(&detail))
+}
+
+fn backend_process_error_info(detail: impl Into<String>) -> BackendErrorInfo {
+    let detail = detail.into();
+    BackendErrorInfo::new(
+        "backend_process_error",
+        "Desktop backend process reported an error",
+    )
+    .with_detail(detail.clone())
+    .with_hint(
+        infer_backend_spawn_hint(&detail).or_else(|| {
+            Some("Check desktop backend logs for details and retry startup.".to_string())
+        }),
+    )
+}
+
+fn backend_terminated_error_info(exit_code: Option<i32>, signal: Option<i32>) -> BackendErrorInfo {
+    let summary = if let Some(code) = exit_code {
+        format!("Desktop backend process terminated (exit code {code})")
+    } else if let Some(sig) = signal {
+        format!("Desktop backend process terminated (signal {sig})")
+    } else {
+        "Desktop backend process terminated".to_string()
+    };
+
+    BackendErrorInfo::new("backend_terminated", summary)
+        .with_exit_context(exit_code, signal)
+        .with_hint(Some(
+            "Check desktop backend logs to understand why the process exited.".to_string(),
+        ))
+}
+
+fn infer_backend_spawn_hint(detail: &str) -> Option<String> {
+    let lower = detail.to_ascii_lowercase();
+
+    if lower.contains("permission denied")
+        || lower.contains("access is denied")
+        || lower.contains("operation not permitted")
+    {
+        return Some(
+            "Backend process could not be executed due to permissions. Check executable permissions and security policy."
+                .to_string(),
+        );
+    }
+
+    if lower.contains("no such file")
+        || lower.contains("not found")
+        || lower.contains("cannot find the file")
+    {
+        return Some(
+            "Backend binary or required files are missing. Reinstall OpenCode Studio Desktop."
+                .to_string(),
+        );
+    }
+
+    None
 }
 
 fn normalize_connect_host(host: &str) -> String {

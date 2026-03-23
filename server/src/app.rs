@@ -56,6 +56,7 @@ struct HealthResponse {
     open_code_running: bool,
     is_open_code_ready: bool,
     last_open_code_error: Option<String>,
+    last_open_code_error_info: Option<crate::opencode::OpenCodeErrorInfo>,
 }
 
 async fn health(
@@ -71,6 +72,7 @@ async fn health(
         open_code_running: oc.port.is_some() && oc.ready && !oc.restarting,
         is_open_code_ready: oc.ready,
         last_open_code_error: oc.last_error,
+        last_open_code_error_info: oc.last_error_info,
     };
     Json(resp)
 }
@@ -179,6 +181,7 @@ async fn opencode_studio_diagnostics(
                 "ready": oc.ready,
                 "restarting": oc.restarting,
                 "lastError": oc.last_error,
+                "lastErrorInfo": oc.last_error_info,
                 "baseUrl": bridge.as_ref().map(|b| b.base_url.clone()),
             },
             "version": {

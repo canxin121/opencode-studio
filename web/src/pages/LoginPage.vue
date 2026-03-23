@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/auth'
 import { useBackendsStore } from '@/stores/backends'
 import { useHealthStore } from '@/stores/health'
+import type { OpenCodeErrorInfo } from '@/stores/health'
 import { useToastsStore } from '@/stores/toasts'
 import { clearUiAuthTokenForBaseUrl } from '@/lib/uiAuthToken'
 import { isDesktopRuntime } from '@/lib/desktopConfig'
@@ -192,24 +193,57 @@ const showBackendLoadingNotice = computed(() => {
   return desktopRuntime && (health.data === null || !health.data.isOpenCodeReady)
 })
 
+const shouldShowOpenCodeIssue = computed(() => {
+  if (health.data === null) return desktopRuntime
+  return !health.data.isOpenCodeReady
+})
+
 let backendProbeTimer: ReturnType<typeof setInterval> | null = null
 const backendProbeBusy = ref(false)
 let backendLoadingToastShown = false
 
 const visibleAuthError = computed(() => {
-  if (showBackendLoadingNotice.value) return null
+  if (shouldShowOpenCodeIssue.value) return null
   return auth.lastError
 })
 
-const visibleOpenCodeError = computed(() => {
-  if (!showBackendLoadingNotice.value) return null
-  const detail = String(health.data?.lastOpenCodeError || '').trim()
-  if (!detail) return null
-  return `${String(t('login.opencodeNotReady'))}: ${detail}`
+function normalizeText(value: unknown): string {
+  if (typeof value !== 'string') return ''
+  return value.trim()
+}
+
+function buildOpenCodeIssue(info: OpenCodeErrorInfo | null | undefined, fallbackDetail: string) {
+  const summary = normalizeText(info?.summary) || fallbackDetail
+
+  let detail = normalizeText(info?.detail)
+  if (!detail) {
+    detail = normalizeText(info?.stderrExcerpt)
+  }
+  if (!detail && fallbackDetail && fallbackDetail !== summary) {
+    detail = fallbackDetail
+  }
+
+  const hint = normalizeText(info?.hint)
+  const code = normalizeText(info?.code)
+
+  return {
+    title: String(t('login.opencodeNotReady')),
+    summary: summary || String(t('login.opencodeNotReady')),
+    detail,
+    hint,
+    code,
+  }
+}
+
+const visibleOpenCodeIssue = computed(() => {
+  if (!shouldShowOpenCodeIssue.value) return null
+  const legacyDetail = normalizeText(health.data?.lastOpenCodeError)
+  const info = health.data?.lastOpenCodeErrorInfo
+  return buildOpenCodeIssue(info, legacyDetail)
 })
 
 const visiblePageError = computed(() => {
-  return formError.value || visibleOpenCodeError.value || visibleAuthError.value
+  return formError.value || visibleAuthError.value
 })
 
 async function refreshBackendStatusOnce() {
@@ -328,10 +362,13 @@ async function submit() {
     }
 
     if (!health.data?.isOpenCodeReady) {
-      const detail = String(health.data?.lastOpenCodeError || '').trim()
-      formError.value = detail
-        ? `${String(t('login.opencodeNotReady'))}: ${detail}`
-        : String(t('login.opencodeNotReady'))
+      if (!desktopRuntime) {
+        const detail =
+          normalizeText(health.data?.lastOpenCodeErrorInfo?.summary) || normalizeText(health.data?.lastOpenCodeError)
+        formError.value = detail
+          ? `${String(t('login.opencodeNotReady'))}: ${detail}`
+          : String(t('login.opencodeNotReady'))
+      }
       return
     }
 
@@ -525,11 +562,31 @@ async function submit() {
         </Button>
       </div>
 
-      <div v-if="visiblePageError" class="animate-in fade-in slide-in-from-top-2">
+      <div v-if="visibleOpenCodeIssue || visiblePageError" class="animate-in fade-in slide-in-from-top-2">
         <div
-          class="rounded-lg bg-destructive/10 p-3 text-center text-sm font-medium text-destructive ring-1 ring-inset ring-destructive/20"
+          class="rounded-lg bg-destructive/10 p-3 text-sm font-medium text-destructive ring-1 ring-inset ring-destructive/20"
         >
-          {{ visiblePageError }}
+          <template v-if="visibleOpenCodeIssue">
+            <div class="space-y-1 text-left">
+              <p class="text-center">{{ visibleOpenCodeIssue.title }}</p>
+              <p v-if="visibleOpenCodeIssue.summary && visibleOpenCodeIssue.summary !== visibleOpenCodeIssue.title">
+                {{ visibleOpenCodeIssue.summary }}
+              </p>
+              <p
+                v-if="visibleOpenCodeIssue.detail"
+                class="break-words rounded bg-destructive/5 px-2 py-1 font-mono text-[11px] text-destructive/90"
+              >
+                {{ visibleOpenCodeIssue.detail }}
+              </p>
+              <p v-if="visibleOpenCodeIssue.hint" class="text-[12px]">{{ visibleOpenCodeIssue.hint }}</p>
+              <p v-if="visibleOpenCodeIssue.code" class="font-mono text-[10px] text-destructive/70">
+                code: {{ visibleOpenCodeIssue.code }}
+              </p>
+            </div>
+          </template>
+          <template v-else>
+            <div class="text-center">{{ visiblePageError }}</div>
+          </template>
         </div>
       </div>
     </div>

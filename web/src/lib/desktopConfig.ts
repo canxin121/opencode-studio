@@ -34,10 +34,20 @@ export type DesktopUpdateProgress = {
   error: string | null
 }
 
+export type DesktopBackendErrorInfo = {
+  code: string
+  summary: string
+  detail?: string | null
+  hint?: string | null
+  exitCode?: number | null
+  signal?: number | null
+}
+
 export type DesktopBackendStatus = {
   running: boolean
   url?: string | null
   last_error?: string | null
+  last_error_info?: DesktopBackendErrorInfo | null
 }
 
 function readTauriInvoke(): TauriInvoke | null {
@@ -115,6 +125,30 @@ function asDesktopUpdateProgress(value: unknown): DesktopUpdateProgress | null {
   }
 }
 
+function asDesktopBackendErrorInfo(value: unknown): DesktopBackendErrorInfo | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const root = value as Record<string, unknown>
+  const code = typeof root.code === 'string' ? root.code.trim() : ''
+  const summary = typeof root.summary === 'string' ? root.summary.trim() : ''
+  if (!code || !summary) return null
+
+  const detail = typeof root.detail === 'string' && root.detail.trim() ? root.detail.trim() : null
+  const hint = typeof root.hint === 'string' && root.hint.trim() ? root.hint.trim() : null
+
+  const exitCodeRaw =
+    typeof root.exitCode === 'number' ? root.exitCode : typeof root.exit_code === 'number' ? root.exit_code : Number.NaN
+  const signalRaw = typeof root.signal === 'number' ? root.signal : Number.NaN
+
+  return {
+    code,
+    summary,
+    detail,
+    hint,
+    exitCode: Number.isFinite(exitCodeRaw) ? Math.floor(exitCodeRaw) : null,
+    signal: Number.isFinite(signalRaw) ? Math.floor(signalRaw) : null,
+  }
+}
+
 function asDesktopBackendStatus(value: unknown): DesktopBackendStatus | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const root = value as Record<string, unknown>
@@ -122,6 +156,7 @@ function asDesktopBackendStatus(value: unknown): DesktopBackendStatus | null {
     running: root.running === true,
     url: typeof root.url === 'string' ? root.url : null,
     last_error: typeof root.last_error === 'string' ? root.last_error : null,
+    last_error_info: asDesktopBackendErrorInfo(root.last_error_info ?? root.lastErrorInfo),
   }
 }
 
