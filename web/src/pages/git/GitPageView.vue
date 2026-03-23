@@ -1446,7 +1446,11 @@ void diffPaneRef
                 side="bottom"
                 align="end"
                 :side-offset="6"
+                :avoid-collisions="true"
                 :collision-padding="8"
+                sticky="always"
+                update-position-strategy="always"
+                :prioritize-position="true"
               >
                 <div class="text-[11px] font-medium text-foreground">
                   {{ t('git.ui.signing.sshMayFailTitle') }}
@@ -1635,6 +1639,7 @@ void diffPaneRef
                     :mobile-title="t('git.ui.sequencer.mergeActions')"
                     :searchable="false"
                     :is-mobile-pointer="ui.isMobilePointer"
+                    :desktop-fixed="true"
                     desktop-placement="bottom-end"
                     desktop-class="w-48"
                     @update:open="setMergeActionMenuOpen"
@@ -1676,6 +1681,7 @@ void diffPaneRef
                     :mobile-title="t('git.ui.sequencer.rebaseActions')"
                     :searchable="false"
                     :is-mobile-pointer="ui.isMobilePointer"
+                    :desktop-fixed="true"
                     desktop-placement="bottom-end"
                     desktop-class="w-48"
                     @update:open="setRebaseActionMenuOpen"
@@ -1719,6 +1725,7 @@ void diffPaneRef
                     :mobile-title="t('git.ui.sequencer.cherryPickActions')"
                     :searchable="false"
                     :is-mobile-pointer="ui.isMobilePointer"
+                    :desktop-fixed="true"
                     desktop-placement="bottom-end"
                     desktop-class="w-48"
                     @update:open="setCherryPickActionMenuOpen"
@@ -1762,6 +1769,7 @@ void diffPaneRef
                     :mobile-title="t('git.ui.sequencer.revertActions')"
                     :searchable="false"
                     :is-mobile-pointer="ui.isMobilePointer"
+                    :desktop-fixed="true"
                     desktop-placement="bottom-end"
                     desktop-class="w-48"
                     @update:open="setRevertActionMenuOpen"

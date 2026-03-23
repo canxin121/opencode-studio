@@ -1541,6 +1541,7 @@ function selectSession(sessionId: string) {
       :mobile-title="String(t('common.actions'))"
       :searchable="false"
       :is-mobile-pointer="ui.isMobilePointer"
+      :desktop-fixed="true"
       desktop-placement="bottom-end"
       :desktop-anchor-el="rowMenuAnchorEl"
       @update:open="setRowMenuOpen"

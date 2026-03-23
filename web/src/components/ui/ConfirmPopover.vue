@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, useSlots } from 'vue'
+import { computed, onBeforeUnmount, ref, useSlots, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   DialogContent,
@@ -18,6 +18,7 @@ import {
 import { RiCheckLine, RiCloseLine, RiDeleteBinLine, RiLoader4Line } from '@remixicon/vue'
 
 import Button from '@/components/ui/Button.vue'
+import { lockListItemActionsForAnchor } from '@/components/ui/listItemActionVisibilityLock'
 import { tooltipMotionClass } from '@/components/ui/tooltip.variants'
 import { cn } from '@/lib/utils'
 import { useUiStore } from '@/stores/ui'
@@ -96,11 +97,69 @@ const effectiveCancelText = computed(() => {
 })
 
 const anchorRect = ref<DOMRect | null>(null)
+const triggerEl = ref<HTMLElement | null>(null)
 const virtualRef = computed(() => {
   if (!anchorRect.value) return undefined
   return {
     getBoundingClientRect: () => anchorRect.value!,
   }
+})
+
+let releaseActionLock: (() => void) | null = null
+
+function clearActionLock() {
+  if (!releaseActionLock) return
+  releaseActionLock()
+  releaseActionLock = null
+}
+
+function syncActionLock() {
+  clearActionLock()
+  if (!openModel.value || useDialog.value) return
+  releaseActionLock = lockListItemActionsForAnchor(triggerEl.value)
+}
+
+const POPOVER_EDGE_MARGIN_PX = 10
+const POPOVER_MIN_HEIGHT_PX = 140
+const POPOVER_SIDE_OFFSET_PX = 5
+
+function resolveViewportHeight(): number {
+  if (typeof window === 'undefined') return 0
+  const vvHeight = window.visualViewport?.height
+  if (typeof vvHeight === 'number' && Number.isFinite(vvHeight) && vvHeight > 0) {
+    return vvHeight
+  }
+  return window.innerHeight
+}
+
+function resolveViewportTop(): number {
+  if (typeof window === 'undefined') return 0
+  const vvTop = window.visualViewport?.offsetTop
+  if (typeof vvTop === 'number' && Number.isFinite(vvTop) && vvTop > 0) {
+    return vvTop
+  }
+  return 0
+}
+
+const popoverSide = computed<'top' | 'bottom'>(() => {
+  if (useDialog.value) return 'bottom'
+  const rect = anchorRect.value
+  const viewportHeight = resolveViewportHeight()
+  if (!rect || !viewportHeight) return 'bottom'
+
+  const viewportTop = resolveViewportTop()
+  const viewportBottom = viewportTop + viewportHeight
+  const minTop = viewportTop + POPOVER_EDGE_MARGIN_PX
+  const maxBottom = viewportBottom - POPOVER_EDGE_MARGIN_PX
+
+  const spaceBelow = maxBottom - rect.bottom - POPOVER_SIDE_OFFSET_PX
+  const spaceAbove = rect.top - minTop - POPOVER_SIDE_OFFSET_PX
+
+  if (spaceBelow < POPOVER_MIN_HEIGHT_PX && spaceAbove > spaceBelow) {
+    return 'top'
+  }
+
+  return 'bottom'
 })
 
 function pointRect(clientX: number, clientY: number): DOMRect {
@@ -132,6 +191,11 @@ function elementRect(el: HTMLElement): DOMRect {
   } as DOMRect
 }
 
+function rememberTriggerEl(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return
+  triggerEl.value = target
+}
+
 function setAnchorFromTrigger(target: EventTarget | null) {
   if (!props.anchorToCursor || useDialog.value) return
   if (!(target instanceof HTMLElement)) return
@@ -143,20 +207,34 @@ function setOpen(next: boolean) {
 }
 
 function onTriggerPointerEnter(event: PointerEvent) {
+  rememberTriggerEl(event.currentTarget)
   setAnchorFromTrigger(event.currentTarget)
 }
 
 function onTriggerFocus(event: FocusEvent) {
+  rememberTriggerEl(event.currentTarget)
   setAnchorFromTrigger(event.currentTarget)
 }
 
 function onTriggerPointerDown(event: PointerEvent) {
+  rememberTriggerEl(event.currentTarget)
   if (!props.anchorToCursor || useDialog.value) return
-
   // Anchor the desktop popover to cursor coordinates so it stays stable even
   // if the trigger element shifts due to hover state changes.
   anchorRect.value = pointRect(event.clientX, event.clientY)
 }
+
+watch(
+  () => [openModel.value, useDialog.value, triggerEl.value] as const,
+  () => {
+    syncActionLock()
+  },
+  { immediate: true },
+)
+
+onBeforeUnmount(() => {
+  clearActionLock()
+})
 
 function onCancel() {
   emit('cancel')
@@ -242,10 +320,14 @@ function onConfirm() {
             tooltipMotionClass,
           )
         "
-        side="bottom"
+        :side="popoverSide"
         align="start"
         :side-offset="5"
+        :avoid-collisions="true"
         :collision-padding="10"
+        sticky="always"
+        update-position-strategy="always"
+        :prioritize-position="true"
       >
         <div v-if="title || description" class="p-2 border-b border-border/60">
           <div v-if="title" class="text-xs font-semibold text-foreground px-1 mb-0.5">{{ title }}</div>

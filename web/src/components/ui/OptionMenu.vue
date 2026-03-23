@@ -8,6 +8,7 @@ import IconButton from '@/components/ui/IconButton.vue'
 import Input from '@/components/ui/Input.vue'
 import ListRowButton from '@/components/ui/ListRowButton.vue'
 import PaginationControls from '@/components/ui/PaginationControls.vue'
+import { lockListItemActionsForAnchor } from '@/components/ui/listItemActionVisibilityLock'
 import type { OptionMenuGroup, OptionMenuItem } from '@/components/ui/optionMenu.types'
 import { cn } from '@/lib/utils'
 
@@ -76,7 +77,7 @@ const props = withDefaults(
     desktopPlacement: 'bottom-start',
     desktopClass: 'w-64',
     desktopStyle: undefined,
-    desktopFixed: false,
+    desktopFixed: true,
     desktopAnchorEl: null,
     desktopContentMaxHeightClass: 'max-h-64',
     desktopGapPx: 8,
@@ -177,6 +178,7 @@ const mobileSheetStyle = ref<CSSProperties>({
 let desktopFixedEventsBound = false
 let dismissEventsBound = false
 let mobileViewportEventsBound = false
+let releaseActionLock: (() => void) | null = null
 const onViewportChange = () => {
   void syncDesktopFixedPosition()
 }
@@ -267,6 +269,19 @@ function resolveDesktopAnchorRect(): DOMRect | null {
   return fallbackAnchor.getBoundingClientRect()
 }
 
+function clearActionLock() {
+  if (!releaseActionLock) return
+  releaseActionLock()
+  releaseActionLock = null
+}
+
+function syncActionLock() {
+  clearActionLock()
+  if (!props.open || isMobileSheet.value) return
+  const anchor = resolveDesktopAnchor()
+  releaseActionLock = lockListItemActionsForAnchor(anchor)
+}
+
 function resetDesktopFixedStyle() {
   const margin = panelViewportMarginPx.value
   desktopFixedStyle.value = {
@@ -284,31 +299,43 @@ async function waitForAnimationFrame(): Promise<void> {
   })
 }
 
+function clamp(value: number, min: number, max: number): number {
+  if (max < min) return min
+  return Math.max(min, Math.min(value, max))
+}
+
 function computeDesktopFixedStyle(): CSSProperties | null {
   const panel = panelEl.value
   const anchorRect = resolveDesktopAnchorRect()
   if (!panel || !anchorRect) return null
 
   const panelRect = panel.getBoundingClientRect()
-  const viewportWidth = window.innerWidth
-  const viewportHeight = window.innerHeight
+  const viewportWidth = resolveViewportWidth()
+  const viewportHeight = resolveViewportHeight()
+  const viewportLeft = resolveViewportLeft()
+  const viewportTop = resolveViewportTop()
   const gap = panelGapPx.value
   const margin = panelViewportMarginPx.value
 
   const alignEnd = props.desktopPlacement.endsWith('end')
   const placeTop = props.desktopPlacement.startsWith('top')
 
+  const minLeft = viewportLeft + margin
+  const maxLeft = viewportLeft + viewportWidth - panelRect.width - margin
+  const minTop = viewportTop + margin
+  const maxTop = viewportTop + viewportHeight - panelRect.height - margin
+
   let left = alignEnd ? anchorRect.right - panelRect.width : anchorRect.left
   let top = placeTop ? anchorRect.top - panelRect.height - gap : anchorRect.bottom + gap
 
-  if (!placeTop && top + panelRect.height > viewportHeight - margin) {
+  if (!placeTop && top + panelRect.height > viewportTop + viewportHeight - margin) {
     top = anchorRect.top - panelRect.height - gap
-  } else if (placeTop && top < margin) {
+  } else if (placeTop && top < viewportTop + margin) {
     top = anchorRect.bottom + gap
   }
 
-  left = Math.max(margin, Math.min(left, viewportWidth - panelRect.width - margin))
-  top = Math.max(margin, Math.min(top, viewportHeight - panelRect.height - margin))
+  left = clamp(left, minLeft, maxLeft)
+  top = clamp(top, minTop, maxTop)
 
   return {
     ...(props.desktopStyle || {}),
@@ -323,6 +350,24 @@ function cssVarPx(name: string, fallback: number): number {
   const raw = getComputedStyle(document.documentElement).getPropertyValue(name)
   const parsed = Number.parseFloat(String(raw || '').trim())
   return Number.isFinite(parsed) ? parsed : fallback
+}
+
+function resolveViewportWidth(): number {
+  if (typeof window === 'undefined') return 0
+  const vvWidth = window.visualViewport?.width
+  if (typeof vvWidth === 'number' && Number.isFinite(vvWidth) && vvWidth > 0) {
+    return vvWidth
+  }
+  return window.innerWidth
+}
+
+function resolveViewportLeft(): number {
+  if (typeof window === 'undefined') return 0
+  const vvLeft = window.visualViewport?.offsetLeft
+  if (typeof vvLeft === 'number' && Number.isFinite(vvLeft) && vvLeft > 0) {
+    return vvLeft
+  }
+  return 0
 }
 
 function resolveViewportHeight(): number {
@@ -697,6 +742,8 @@ function containsTarget(target: Node | null): boolean {
 watch(
   () => props.open,
   (open) => {
+    syncActionLock()
+
     if (open) {
       if (isMobileSheet.value) {
         bindMobileViewportEvents()
@@ -726,6 +773,8 @@ watch(
 watch(
   () => isMobileSheet.value,
   (mobile) => {
+    syncActionLock()
+
     if (!props.open) return
     if (mobile) {
       unbindDismissEvents()
@@ -756,7 +805,8 @@ watch(
       props.open,
       isMobileSheet.value,
     ] as const,
-  ([fixed, _placement, _anchor, _style, open, mobile]) => {
+  ([fixed, _placement, _anchor, _style, _gap, _margin, open, mobile]) => {
+    syncActionLock()
     if (!fixed || !open || mobile) return
     resetDesktopFixedStyle()
     void syncDesktopFixedPosition()
@@ -764,6 +814,7 @@ watch(
 )
 
 onBeforeUnmount(() => {
+  clearActionLock()
   unbindDismissEvents()
   unbindDesktopFixedEvents()
   unbindMobileViewportEvents()

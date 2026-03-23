@@ -1275,6 +1275,7 @@ onBeforeUnmount(() => {
           :mobile-title="sessionPickerLabel"
           :searchable="true"
           :is-mobile-pointer="ui.isMobilePointer"
+          :desktop-fixed="true"
           :paginated="true"
           :page-size="18"
           :loading="preview.loading"

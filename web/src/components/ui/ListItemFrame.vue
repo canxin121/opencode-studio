@@ -66,6 +66,8 @@ const actionsClass = computed(() => {
   <component
     :is="as"
     type="button"
+    data-oc-list-item-frame
+    data-oc-actions-lock-frame
     :class="rootClass"
     :style="{ paddingLeft: typeof indent === 'number' ? `${indent}px` : undefined }"
     :disabled="disabled"
@@ -89,8 +91,16 @@ const actionsClass = computed(() => {
       <slot name="meta" />
     </div>
 
-    <div v-if="$slots.actions" :class="actionsClass" @click.stop>
+    <div v-if="$slots.actions" :class="cn('oc-list-item-actions', actionsClass)" @click.stop>
       <slot name="actions" />
     </div>
   </component>
 </template>
+
+<style scoped>
+[data-oc-actions-lock-frame][data-oc-actions-locked='true'] .oc-list-item-actions {
+  max-width: 100% !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+</style>

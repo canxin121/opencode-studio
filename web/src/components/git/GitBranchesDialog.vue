@@ -128,6 +128,7 @@ function onQuickSwitch() {
             v-for="b in branchList"
             :key="b.name"
             class="flex items-center justify-between px-3 py-2 hover:bg-muted/50 rounded-sm text-sm group"
+            data-oc-actions-lock-frame
           >
             <div class="flex items-center gap-2 min-w-0">
               <RiCheckLine v-if="b.current" class="h-4 w-4 text-primary flex-shrink-0" />
@@ -136,7 +137,7 @@ function onQuickSwitch() {
                 <div v-if="b.label" class="text-[10px] text-muted-foreground truncate">{{ b.label }}</div>
               </div>
             </div>
-            <div class="flex items-center gap-1">
+            <div class="oc-git-branch-actions flex items-center gap-1">
               <Button
                 v-if="!b.current"
                 size="sm"
@@ -203,3 +204,10 @@ function onQuickSwitch() {
     </div>
   </FormDialog>
 </template>
+
+<style scoped>
+[data-oc-actions-lock-frame][data-oc-actions-locked='true'] .oc-git-branch-actions > * {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+</style>
