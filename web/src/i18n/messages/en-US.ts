@@ -3014,13 +3014,16 @@ export default {
         actions: {
           stageAll: 'Stage all',
           stage: 'Stage',
+          stageSelected: 'Stage selected',
           unstageAll: 'Unstage all',
           unstage: 'Unstage',
+          unstageSelected: 'Unstage selected',
           enterMultiSelect: 'Multi-select',
           exitMultiSelect: 'Done',
           history: 'History',
           ignore: 'Ignore',
           discardChanges: 'Discard changes',
+          discardSelected: 'Discard selected',
           deleteFile: 'Delete file',
           deleteSelected: 'Delete selected',
         },
@@ -3032,6 +3035,10 @@ export default {
         confirmDiscard: {
           title: 'Discard changes?',
           description: 'This cannot be undone.',
+        },
+        confirmDiscardSelected: {
+          title: 'Discard selected changes?',
+          description: 'Discard changes in {count} selected file(s)? This cannot be undone.',
         },
         confirmDeleteSelected: {
           title: 'Delete selected files?',

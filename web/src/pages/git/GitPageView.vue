@@ -6,7 +6,6 @@ import {
   RiArrowLeftSLine,
   RiArrowRightSLine,
   RiCloseLine,
-  RiDeleteBinLine,
   RiGitBranchLine,
   RiClipboardLine,
   RiMore2Line,
@@ -682,18 +681,185 @@ type SourceControlView = 'changes' | 'history' | 'historyCommit'
 
 const sourceControlView = ref<SourceControlView>('changes')
 
-const gitMultiSelect = useUnifiedMultiSelect()
-const allGitSelectablePaths = computed(() => {
-  const staged = Array.isArray(stagedList.value) ? stagedList.value : []
-  const changed = Array.isArray(changesList.value) ? changesList.value : []
-  const untracked = Array.isArray(untrackedList.value) ? untrackedList.value : []
-  const paths = new Set<string>()
-  for (const entry of [...staged, ...changed, ...untracked]) {
-    const path = String(entry?.path || '').trim()
-    if (path) paths.add(path)
+const mergeMultiSelect = useUnifiedMultiSelect()
+const stagedMultiSelect = useUnifiedMultiSelect()
+const changesMultiSelect = useUnifiedMultiSelect()
+const untrackedMultiSelect = useUnifiedMultiSelect()
+
+function buildPathSet(entries: unknown): Set<string> {
+  const rows = Array.isArray(entries) ? entries : []
+  const out = new Set<string>()
+  for (const row of rows) {
+    const path = String((row as { path?: string | null } | null)?.path || '').trim()
+    if (path) out.add(path)
   }
-  return Array.from(paths)
-})
+  return out
+}
+
+const mergePathSet = computed(() => buildPathSet(mergeList.value))
+const stagedPathSet = computed(() => buildPathSet(stagedList.value))
+const changesPathSet = computed(() => buildPathSet(changesList.value))
+const untrackedPathSet = computed(() => buildPathSet(untrackedList.value))
+
+const mergeSelectablePaths = computed(() => Array.from(mergePathSet.value))
+const stagedSelectablePaths = computed(() => Array.from(stagedPathSet.value))
+const changesSelectablePaths = computed(() => Array.from(changesPathSet.value))
+const untrackedSelectablePaths = computed(() => Array.from(untrackedPathSet.value))
+
+function disableAllWorkingTreeMultiSelect() {
+  mergeMultiSelect.setEnabled(false)
+  stagedMultiSelect.setEnabled(false)
+  changesMultiSelect.setEnabled(false)
+  untrackedMultiSelect.setEnabled(false)
+}
+
+async function runForEachPath(paths: string[], op: (path: string) => Promise<void>) {
+  for (const path of paths) {
+    await op(path)
+  }
+}
+
+function toggleMergeMultiSelectMode() {
+  mergeMultiSelect.toggleEnabled()
+}
+
+function onToggleMergePathSelection(path: string, event?: MouseEvent) {
+  if (!mergeMultiSelect.enabled.value) return
+  mergeMultiSelect.selectByInteraction(path, mergeSelectablePaths.value, event)
+}
+
+function selectAllMergePaths() {
+  if (!mergeMultiSelect.enabled.value) return
+  mergeMultiSelect.selectAll(mergeSelectablePaths.value)
+}
+
+function invertMergePathSelection() {
+  if (!mergeMultiSelect.enabled.value) return
+  mergeMultiSelect.invertSelection(mergeSelectablePaths.value)
+}
+
+async function stageSelectedMergePaths() {
+  const targets = [...mergeMultiSelect.selectedList.value]
+  if (targets.length === 0) return
+  await stagePaths(targets)
+}
+
+async function discardSelectedMergePaths() {
+  const targets = [...mergeMultiSelect.selectedList.value]
+  if (targets.length === 0) return
+  await runForEachPath(targets, (path) => revertFile(path))
+}
+
+function toggleStagedMultiSelectMode() {
+  stagedMultiSelect.toggleEnabled()
+}
+
+function onToggleStagedPathSelection(path: string, event?: MouseEvent) {
+  if (!stagedMultiSelect.enabled.value) return
+  stagedMultiSelect.selectByInteraction(path, stagedSelectablePaths.value, event)
+}
+
+function selectAllStagedPaths() {
+  if (!stagedMultiSelect.enabled.value) return
+  stagedMultiSelect.selectAll(stagedSelectablePaths.value)
+}
+
+function invertStagedPathSelection() {
+  if (!stagedMultiSelect.enabled.value) return
+  stagedMultiSelect.invertSelection(stagedSelectablePaths.value)
+}
+
+async function unstageSelectedStagedPaths() {
+  const targets = [...stagedMultiSelect.selectedList.value]
+  if (targets.length === 0) return
+  await unstagePaths(targets)
+}
+
+async function discardSelectedStagedPaths() {
+  const targets = [...stagedMultiSelect.selectedList.value]
+  if (targets.length === 0) return
+  await runForEachPath(targets, (path) => revertFile(path))
+}
+
+async function deleteSelectedStagedPaths() {
+  const targets = [...stagedMultiSelect.selectedList.value]
+  if (targets.length === 0) return
+  await runForEachPath(targets, (path) => deletePath(path, false))
+}
+
+function toggleChangesMultiSelectMode() {
+  changesMultiSelect.toggleEnabled()
+}
+
+function onToggleChangesPathSelection(path: string, event?: MouseEvent) {
+  if (!changesMultiSelect.enabled.value) return
+  changesMultiSelect.selectByInteraction(path, changesSelectablePaths.value, event)
+}
+
+function selectAllChangesPaths() {
+  if (!changesMultiSelect.enabled.value) return
+  changesMultiSelect.selectAll(changesSelectablePaths.value)
+}
+
+function invertChangesPathSelection() {
+  if (!changesMultiSelect.enabled.value) return
+  changesMultiSelect.invertSelection(changesSelectablePaths.value)
+}
+
+async function stageSelectedChangesPaths() {
+  const targets = [...changesMultiSelect.selectedList.value]
+  if (targets.length === 0) return
+  await stagePaths(targets)
+}
+
+async function discardSelectedChangesPaths() {
+  const targets = [...changesMultiSelect.selectedList.value]
+  if (targets.length === 0) return
+  await runForEachPath(targets, (path) => revertFile(path))
+}
+
+async function deleteSelectedChangesPaths() {
+  const targets = [...changesMultiSelect.selectedList.value]
+  if (targets.length === 0) return
+  await runForEachPath(targets, (path) => deletePath(path, false))
+}
+
+function toggleUntrackedMultiSelectMode() {
+  untrackedMultiSelect.toggleEnabled()
+}
+
+function onToggleUntrackedPathSelection(path: string, event?: MouseEvent) {
+  if (!untrackedMultiSelect.enabled.value) return
+  untrackedMultiSelect.selectByInteraction(path, untrackedSelectablePaths.value, event)
+}
+
+function selectAllUntrackedPaths() {
+  if (!untrackedMultiSelect.enabled.value) return
+  untrackedMultiSelect.selectAll(untrackedSelectablePaths.value)
+}
+
+function invertUntrackedPathSelection() {
+  if (!untrackedMultiSelect.enabled.value) return
+  untrackedMultiSelect.invertSelection(untrackedSelectablePaths.value)
+}
+
+async function stageSelectedUntrackedPaths() {
+  const targets = [...untrackedMultiSelect.selectedList.value]
+  if (targets.length === 0) return
+  await stagePaths(targets)
+}
+
+async function ignoreSelectedUntrackedPaths() {
+  const targets = [...untrackedMultiSelect.selectedList.value]
+  if (targets.length === 0) return
+  await runForEachPath(targets, (path) => ignorePath(path))
+}
+
+async function deleteSelectedUntrackedPaths() {
+  const targets = [...untrackedMultiSelect.selectedList.value]
+  if (targets.length === 0) return
+  await runForEachPath(targets, (path) => deletePath(path, false))
+}
 
 const isHistoryListView = computed(() => sourceControlView.value === 'history')
 const isHistoryCommitView = computed(() => sourceControlView.value === 'historyCommit')
@@ -772,34 +938,6 @@ function openChangesView() {
   }
 }
 
-function toggleGitMultiSelectMode() {
-  gitMultiSelect.toggleEnabled()
-}
-
-function onToggleGitPathSelection(path: string, event?: MouseEvent) {
-  if (!gitMultiSelect.enabled.value) return
-  gitMultiSelect.selectByInteraction(path, allGitSelectablePaths.value, event)
-}
-
-function selectAllGitPaths() {
-  if (!gitMultiSelect.enabled.value) return
-  gitMultiSelect.selectAll(allGitSelectablePaths.value)
-}
-
-function invertGitPathSelection() {
-  if (!gitMultiSelect.enabled.value) return
-  gitMultiSelect.invertSelection(allGitSelectablePaths.value)
-}
-
-async function deleteSelectedGitPaths() {
-  const targets = [...gitMultiSelect.selectedList.value]
-  if (targets.length === 0) return
-  for (const path of targets) {
-    await deletePath(path, false)
-  }
-  gitMultiSelect.setEnabled(false)
-}
-
 function openHistoryWithRefs() {
   openHistoryView()
 }
@@ -867,6 +1005,7 @@ function onClearHistoryPathFilter() {
 watch(
   () => repoRoot.value,
   () => {
+    disableAllWorkingTreeMultiSelect()
     sourceControlView.value = 'changes'
   },
 )
@@ -1155,7 +1294,7 @@ watch(
   () => sourceControlView.value,
   (view) => {
     if (view !== 'changes') {
-      gitMultiSelect.setEnabled(false)
+      disableAllWorkingTreeMultiSelect()
     }
     if (!props.embedded) return
     if (view === 'changes') {
@@ -1171,9 +1310,33 @@ watch(
 )
 
 watch(
-  () => allGitSelectablePaths.value,
+  () => mergeSelectablePaths.value,
   (paths) => {
-    gitMultiSelect.retain(paths)
+    mergeMultiSelect.retain(paths)
+  },
+  { immediate: true },
+)
+
+watch(
+  () => stagedSelectablePaths.value,
+  (paths) => {
+    stagedMultiSelect.retain(paths)
+  },
+  { immediate: true },
+)
+
+watch(
+  () => changesSelectablePaths.value,
+  (paths) => {
+    changesMultiSelect.retain(paths)
+  },
+  { immediate: true },
+)
+
+watch(
+  () => untrackedSelectablePaths.value,
+  (paths) => {
+    untrackedMultiSelect.retain(paths)
   },
   { immediate: true },
 )
@@ -1184,10 +1347,6 @@ function showEmbeddedList() {
 }
 
 function selectFileFromSidebar(path: string, source: 'working' | 'staged') {
-  if (gitMultiSelect.enabled.value) {
-    onToggleGitPathSelection(path)
-    return
-  }
   selectFile(path, source)
   if (!props.embedded) return
   embeddedView.value = 'diff'
@@ -1444,74 +1603,6 @@ void diffPaneRef
 
       <ScrollArea class="flex-1 min-h-0">
         <div v-if="sourceControlView === 'changes'" class="space-y-2 p-1.5">
-          <div
-            v-if="gitReady"
-            class="flex items-center justify-between gap-2 rounded-sm border border-sidebar-border/60 bg-sidebar-accent/10 px-2 py-1.5"
-          >
-            <div class="text-[11px] text-muted-foreground">
-              {{
-                gitMultiSelect.enabled.value
-                  ? t('git.ui.workingTree.multiSelect.on')
-                  : t('git.ui.workingTree.multiSelect.off')
-              }}
-              <span v-if="gitMultiSelect.enabled.value" class="ml-1"
-                >({{
-                  t('git.ui.workingTree.multiSelect.selectedCount', { count: gitMultiSelect.selectedCount.value })
-                }})</span
-              >
-            </div>
-            <div class="flex items-center gap-1">
-              <MiniActionButton size="xs" @click="toggleGitMultiSelectMode">
-                {{
-                  gitMultiSelect.enabled.value
-                    ? t('git.ui.workingTree.actions.exitMultiSelect')
-                    : t('git.ui.workingTree.actions.enterMultiSelect')
-                }}
-              </MiniActionButton>
-              <MiniActionButton
-                v-if="gitMultiSelect.enabled.value"
-                size="xs"
-                :disabled="
-                  allGitSelectablePaths.length === 0 ||
-                  gitMultiSelect.selectedCount.value === allGitSelectablePaths.length
-                "
-                @click="selectAllGitPaths"
-              >
-                {{ t('common.selectAll') }}
-              </MiniActionButton>
-              <MiniActionButton
-                v-if="gitMultiSelect.enabled.value"
-                size="xs"
-                :disabled="allGitSelectablePaths.length === 0"
-                @click="invertGitPathSelection"
-              >
-                {{ t('common.invertSelection') }}
-              </MiniActionButton>
-              <ConfirmPopover
-                :title="t('git.ui.workingTree.confirmDeleteSelected.title')"
-                :description="
-                  t('git.ui.workingTree.confirmDeleteSelected.description', {
-                    count: gitMultiSelect.selectedCount.value,
-                  })
-                "
-                :confirm-text="t('git.ui.workingTree.actions.deleteSelected')"
-                :cancel-text="t('common.cancel')"
-                variant="destructive"
-                @confirm="deleteSelectedGitPaths"
-              >
-                <MiniActionButton
-                  size="xs"
-                  variant="destructive"
-                  :disabled="!gitMultiSelect.enabled.value || gitMultiSelect.selectedCount.value === 0"
-                  @click.stop
-                >
-                  <RiDeleteBinLine class="h-3.5 w-3.5 mr-1" />
-                  {{ t('git.ui.workingTree.actions.deleteSelected') }}
-                </MiniActionButton>
-              </ConfirmPopover>
-            </div>
-          </div>
-
           <!-- Commit Section -->
           <div v-if="gitReady" class="space-y-2">
             <div
@@ -1759,14 +1850,17 @@ void diffPaneRef
               :loading="mergeListLoading"
               :can-operate="!!root"
               :is-mobile-pointer="ui.isMobilePointer"
+              :multi-select-mode="mergeMultiSelect.enabled.value"
+              :selected-paths="mergeMultiSelect.selectedList.value"
               @select="(p: string) => selectFileFromSidebar(p, 'working')"
-              @unstage="(p: string) => unstagePaths([p])"
-              @stage="(p: string) => stagePaths([p])"
-              @rename="openRenameDialog"
+              @toggleSelect="onToggleMergePathSelection"
+              @toggleMultiSelect="toggleMergeMultiSelectMode"
+              @selectAllSelected="selectAllMergePaths"
+              @invertSelected="invertMergePathSelection"
+              @stageSelected="stageSelectedMergePaths"
+              @discardSelected="discardSelectedMergePaths"
               @history="(p: string) => openFileHistoryWithRefs(p)"
               @discard="(p: string) => revertFile(p)"
-              @delete="(p: string) => deletePath(p, false)"
-              @deleteForce="(p: string) => deletePath(p, true)"
               @showMore="showMoreMerge"
             />
 
@@ -1780,10 +1874,16 @@ void diffPaneRef
               :loading="stagedListLoading"
               :can-operate="!!root"
               :is-mobile-pointer="ui.isMobilePointer"
-              :multi-select-mode="gitMultiSelect.enabled.value"
-              :selected-paths="gitMultiSelect.selectedList.value"
+              :multi-select-mode="stagedMultiSelect.enabled.value"
+              :selected-paths="stagedMultiSelect.selectedList.value"
               @select="(p: string) => selectFileFromSidebar(p, 'staged')"
-              @toggleSelect="onToggleGitPathSelection"
+              @toggleSelect="onToggleStagedPathSelection"
+              @toggleMultiSelect="toggleStagedMultiSelectMode"
+              @selectAllSelected="selectAllStagedPaths"
+              @invertSelected="invertStagedPathSelection"
+              @unstageSelected="unstageSelectedStagedPaths"
+              @discardSelected="discardSelectedStagedPaths"
+              @deleteSelected="deleteSelectedStagedPaths"
               @unstageAll="unstageAll"
               @unstage="(p: string) => unstagePaths([p])"
               @rename="openRenameDialog"
@@ -1804,10 +1904,16 @@ void diffPaneRef
               :loading="changesListLoading"
               :can-operate="!!root"
               :is-mobile-pointer="ui.isMobilePointer"
-              :multi-select-mode="gitMultiSelect.enabled.value"
-              :selected-paths="gitMultiSelect.selectedList.value"
+              :multi-select-mode="changesMultiSelect.enabled.value"
+              :selected-paths="changesMultiSelect.selectedList.value"
               @select="(p: string) => selectFileFromSidebar(p, 'working')"
-              @toggleSelect="onToggleGitPathSelection"
+              @toggleSelect="onToggleChangesPathSelection"
+              @toggleMultiSelect="toggleChangesMultiSelectMode"
+              @selectAllSelected="selectAllChangesPaths"
+              @invertSelected="invertChangesPathSelection"
+              @stageSelected="stageSelectedChangesPaths"
+              @discardSelected="discardSelectedChangesPaths"
+              @deleteSelected="deleteSelectedChangesPaths"
               @stageAll="stageAllTracked"
               @discardAll="discardAllTracked"
               @stage="(p: string) => stagePaths([p])"
@@ -1829,10 +1935,16 @@ void diffPaneRef
               :loading="untrackedListLoading"
               :can-operate="!!root"
               :is-mobile-pointer="ui.isMobilePointer"
-              :multi-select-mode="gitMultiSelect.enabled.value"
-              :selected-paths="gitMultiSelect.selectedList.value"
+              :multi-select-mode="untrackedMultiSelect.enabled.value"
+              :selected-paths="untrackedMultiSelect.selectedList.value"
               @select="(p: string) => selectFileFromSidebar(p, 'working')"
-              @toggleSelect="onToggleGitPathSelection"
+              @toggleSelect="onToggleUntrackedPathSelection"
+              @toggleMultiSelect="toggleUntrackedMultiSelectMode"
+              @selectAllSelected="selectAllUntrackedPaths"
+              @invertSelected="invertUntrackedPathSelection"
+              @stageSelected="stageSelectedUntrackedPaths"
+              @ignoreSelected="ignoreSelectedUntrackedPaths"
+              @deleteSelected="deleteSelectedUntrackedPaths"
               @stageAll="stageAllUntracked"
               @discardAll="() => cleanUntracked(false)"
               @stage="(p: string) => stagePaths([p])"

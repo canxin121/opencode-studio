@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { RiAddLine, RiArrowGoBackLine, RiDeleteBinLine, RiHistoryLine, RiPencilLine } from '@remixicon/vue'
+import { RiCloseLine, RiListCheck3, RiRefreshLine } from '@remixicon/vue'
 import { useI18n } from 'vue-i18n'
 
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
@@ -37,6 +39,12 @@ const emit = defineEmits<{
   (e: 'update:expanded', value: boolean): void
   (e: 'select', path: string): void
   (e: 'toggleSelect', path: string, event: MouseEvent): void
+  (e: 'toggleMultiSelect'): void
+  (e: 'selectAllSelected'): void
+  (e: 'invertSelected'): void
+  (e: 'stageSelected'): void
+  (e: 'discardSelected'): void
+  (e: 'deleteSelected'): void
   (e: 'stageAll'): void
   (e: 'discardAll'): void
   (e: 'stage', path: string): void
@@ -62,6 +70,9 @@ function onFileSelect(path: string, event: MouseEvent) {
   }
   emit('select', path)
 }
+
+const selectedCount = computed(() => props.files.filter((f) => isPathSelected(f.path)).length)
+const selectableCount = computed(() => props.files.length)
 
 function statusClass(code: string): string {
   const lead = (code || '').trim().charAt(0).toUpperCase()
@@ -154,35 +165,150 @@ function runMobileAction(path: string, actionId: string) {
       @toggle="toggle"
     >
       <template #actions>
-        <ConfirmPopover
-          :title="t('git.actionsMenu.cleanup.discardAllTracked.confirmTitle')"
-          :description="t('git.actionsMenu.cleanup.discardAllTracked.confirmDescription')"
-          :confirm-text="t('common.discard')"
-          :cancel-text="t('common.cancel')"
-          variant="destructive"
-          @confirm="$emit('discardAll')"
-        >
+        <template v-if="multiSelectMode">
+          <span
+            class="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-muted px-1 text-[10px] font-medium text-foreground/80"
+            :title="String(t('git.ui.workingTree.multiSelect.selectedCount', { count: selectedCount }))"
+            :aria-label="String(t('git.ui.workingTree.multiSelect.selectedCount', { count: selectedCount }))"
+          >
+            {{ selectedCount }}
+          </span>
+
           <SidebarIconButton
             size="sm"
-            destructive
-            :disabled="count === 0"
-            :tooltip="t('git.actionsMenu.cleanup.discardAllTracked.label')"
+            :tooltip="String(t('common.selectAll'))"
             :is-mobile-pointer="isMobilePointer"
-            :aria-label="t('git.actionsMenu.cleanup.discardAllTracked.label')"
-            @click.stop
+            :aria-label="String(t('common.selectAll'))"
+            :disabled="selectableCount === 0 || selectedCount === selectableCount"
+            @click.stop="emit('selectAllSelected')"
           >
-            <RiArrowGoBackLine class="h-3.5 w-3.5" />
+            <RiListCheck3 class="h-3.5 w-3.5" />
           </SidebarIconButton>
-        </ConfirmPopover>
-        <SidebarIconButton
-          size="sm"
-          :tooltip="t('git.ui.workingTree.actions.stageAll')"
-          :is-mobile-pointer="isMobilePointer"
-          :aria-label="t('git.ui.workingTree.actions.stageAll')"
-          @click.stop="$emit('stageAll')"
-        >
-          <RiAddLine class="h-3.5 w-3.5" />
-        </SidebarIconButton>
+
+          <SidebarIconButton
+            size="sm"
+            :tooltip="String(t('common.invertSelection'))"
+            :is-mobile-pointer="isMobilePointer"
+            :aria-label="String(t('common.invertSelection'))"
+            :disabled="selectableCount === 0"
+            @click.stop="emit('invertSelected')"
+          >
+            <RiRefreshLine class="h-3.5 w-3.5" />
+          </SidebarIconButton>
+
+          <SidebarIconButton
+            size="sm"
+            :tooltip="String(t('git.ui.workingTree.actions.stageSelected'))"
+            :is-mobile-pointer="isMobilePointer"
+            :aria-label="String(t('git.ui.workingTree.actions.stageSelected'))"
+            :disabled="selectedCount === 0"
+            @click.stop="emit('stageSelected')"
+          >
+            <RiAddLine class="h-3.5 w-3.5" />
+          </SidebarIconButton>
+
+          <ConfirmPopover
+            :title="t('git.ui.workingTree.confirmDiscardSelected.title')"
+            :description="
+              t('git.ui.workingTree.confirmDiscardSelected.description', {
+                count: selectedCount,
+              })
+            "
+            :confirm-text="t('git.ui.workingTree.actions.discardSelected')"
+            :cancel-text="t('common.cancel')"
+            variant="destructive"
+            @confirm="emit('discardSelected')"
+          >
+            <SidebarIconButton
+              size="sm"
+              destructive
+              :tooltip="String(t('git.ui.workingTree.actions.discardSelected'))"
+              :is-mobile-pointer="isMobilePointer"
+              :aria-label="String(t('git.ui.workingTree.actions.discardSelected'))"
+              :disabled="selectedCount === 0"
+              @click.stop
+            >
+              <RiArrowGoBackLine class="h-3.5 w-3.5" />
+            </SidebarIconButton>
+          </ConfirmPopover>
+
+          <ConfirmPopover
+            :title="t('git.ui.workingTree.confirmDeleteSelected.title')"
+            :description="
+              t('git.ui.workingTree.confirmDeleteSelected.description', {
+                count: selectedCount,
+              })
+            "
+            :confirm-text="t('git.ui.workingTree.actions.deleteSelected')"
+            :cancel-text="t('common.cancel')"
+            variant="destructive"
+            @confirm="emit('deleteSelected')"
+          >
+            <SidebarIconButton
+              size="sm"
+              destructive
+              :tooltip="String(t('git.ui.workingTree.actions.deleteSelected'))"
+              :is-mobile-pointer="isMobilePointer"
+              :aria-label="String(t('git.ui.workingTree.actions.deleteSelected'))"
+              :disabled="selectedCount === 0"
+              @click.stop
+            >
+              <RiDeleteBinLine class="h-3.5 w-3.5" />
+            </SidebarIconButton>
+          </ConfirmPopover>
+
+          <SidebarIconButton
+            size="sm"
+            :tooltip="String(t('git.ui.workingTree.actions.exitMultiSelect'))"
+            :is-mobile-pointer="isMobilePointer"
+            :aria-label="String(t('git.ui.workingTree.actions.exitMultiSelect'))"
+            @click.stop="emit('toggleMultiSelect')"
+          >
+            <RiCloseLine class="h-3.5 w-3.5" />
+          </SidebarIconButton>
+        </template>
+
+        <template v-else>
+          <ConfirmPopover
+            :title="t('git.actionsMenu.cleanup.discardAllTracked.confirmTitle')"
+            :description="t('git.actionsMenu.cleanup.discardAllTracked.confirmDescription')"
+            :confirm-text="t('common.discard')"
+            :cancel-text="t('common.cancel')"
+            variant="destructive"
+            @confirm="$emit('discardAll')"
+          >
+            <SidebarIconButton
+              size="sm"
+              destructive
+              :disabled="count === 0"
+              :tooltip="t('git.actionsMenu.cleanup.discardAllTracked.label')"
+              :is-mobile-pointer="isMobilePointer"
+              :aria-label="t('git.actionsMenu.cleanup.discardAllTracked.label')"
+              @click.stop
+            >
+              <RiArrowGoBackLine class="h-3.5 w-3.5" />
+            </SidebarIconButton>
+          </ConfirmPopover>
+          <SidebarIconButton
+            size="sm"
+            :tooltip="t('git.ui.workingTree.actions.stageAll')"
+            :is-mobile-pointer="isMobilePointer"
+            :aria-label="t('git.ui.workingTree.actions.stageAll')"
+            @click.stop="$emit('stageAll')"
+          >
+            <RiAddLine class="h-3.5 w-3.5" />
+          </SidebarIconButton>
+          <SidebarIconButton
+            size="sm"
+            :tooltip="String(t('git.ui.workingTree.actions.enterMultiSelect'))"
+            :is-mobile-pointer="isMobilePointer"
+            :aria-label="String(t('git.ui.workingTree.actions.enterMultiSelect'))"
+            :disabled="selectableCount === 0"
+            @click.stop="emit('toggleMultiSelect')"
+          >
+            <RiListCheck3 class="h-3.5 w-3.5" />
+          </SidebarIconButton>
+        </template>
       </template>
     </SectionToggleButton>
 

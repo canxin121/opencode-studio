@@ -3009,13 +3009,16 @@ export default {
         actions: {
           stageAll: '全部暂存',
           stage: '暂存',
+          stageSelected: '暂存已选',
           unstageAll: '全部取消暂存',
           unstage: '取消暂存',
+          unstageSelected: '取消暂存已选',
           enterMultiSelect: '多选模式',
           exitMultiSelect: '完成',
           history: '历史',
           ignore: '忽略',
           discardChanges: '丢弃更改',
+          discardSelected: '丢弃已选',
           deleteFile: '删除文件',
           deleteSelected: '删除已选',
         },
@@ -3027,6 +3030,10 @@ export default {
         confirmDiscard: {
           title: '丢弃更改？',
           description: '此操作无法撤销。',
+        },
+        confirmDiscardSelected: {
+          title: '丢弃已选更改？',
+          description: '确认丢弃已选 {count} 个文件的更改？此操作无法撤销。',
         },
         confirmDeleteSelected: {
           title: '删除已选文件？',
