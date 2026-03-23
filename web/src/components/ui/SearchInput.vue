@@ -26,6 +26,7 @@ interface Props {
   searchTitle?: string
   clearAriaLabel?: string
   clearTitle?: string
+  isTouchPointer?: boolean
   isMobilePointer?: boolean
 }
 
@@ -58,6 +59,7 @@ const value = useVModel(props, 'modelValue', emit, {
 })
 
 const hasValue = computed(() => String(value.value || '').length > 0)
+const isTouchPointer = computed(() => props.isTouchPointer ?? props.isMobilePointer)
 
 function triggerSearch() {
   if (props.disabled || props.searchDisabled) return
@@ -108,7 +110,7 @@ const inputClasses = computed(() => {
         )
       "
       :disabled="disabled || clearDisabled"
-      :is-mobile-pointer="isMobilePointer"
+      :is-touch-pointer="isTouchPointer"
       :aria-label="clearAriaLabel"
       :title="clearTitle"
       :tooltip="clearTitle"
@@ -123,7 +125,7 @@ const inputClasses = computed(() => {
       variant="ghost"
       class="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:bg-secondary/60 hover:text-foreground"
       :disabled="disabled || searchDisabled"
-      :is-mobile-pointer="isMobilePointer"
+      :is-touch-pointer="isTouchPointer"
       :aria-label="searchAriaLabel"
       :title="searchTitle"
       :tooltip="searchTitle"

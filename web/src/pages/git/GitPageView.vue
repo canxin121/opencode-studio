@@ -1361,13 +1361,13 @@ function openFirstConflictAndShowDiff() {
 
 const useShellSidebar = computed(() => {
   if (props.embedded) return embeddedView.value === 'list'
-  return ui.isMobile ? ui.isSessionSwitcherOpen : ui.isSidebarOpen
+  return ui.isCompactLayout ? ui.isSessionSwitcherOpen : ui.isSidebarOpen
 })
 
-const canResizeSidebar = computed(() => !ui.isMobile && !props.embedded)
+const canResizeSidebar = computed(() => !ui.isCompactLayout && !props.embedded)
 
 const sidebarStyle = computed(() => {
-  if (ui.isMobile) return undefined
+  if (ui.isCompactLayout) return undefined
   if (props.embedded) {
     return {
       width: '100%',
@@ -1379,7 +1379,7 @@ const sidebarStyle = computed(() => {
 const showDiffPane = computed(() => {
   if (props.embedded) return embeddedView.value === 'diff'
   if (isHistoryView.value) return true
-  return !ui.isMobile || !ui.isSessionSwitcherOpen
+  return !ui.isCompactLayout || !ui.isSessionSwitcherOpen
 })
 
 // Referenced only by template `ref=` and destructuring, silence noUnusedLocals.
@@ -1393,7 +1393,7 @@ void diffPaneRef
     <div
       v-if="useShellSidebar"
       class="oc-vscode-pane relative shrink-0"
-      :class="ui.isMobile ? 'w-full' : 'border-r border-sidebar-border/60'"
+      :class="ui.isCompactLayout ? 'w-full' : 'border-r border-sidebar-border/60'"
       :style="sidebarStyle"
     >
       <div
@@ -1406,7 +1406,7 @@ void diffPaneRef
         <div class="oc-vscode-toolbar">
           <SidebarIconButton
             :tooltip="t('git.actions.fetch')"
-            :is-mobile-pointer="ui.isMobilePointer"
+            :is-touch-pointer="ui.isTouchPointer"
             :disabled="!gitReady || !root || repoBusy"
             @click="fetchRemote"
           >
@@ -1414,7 +1414,7 @@ void diffPaneRef
           </SidebarIconButton>
           <SidebarIconButton
             :tooltip="t('git.actions.pull')"
-            :is-mobile-pointer="ui.isMobilePointer"
+            :is-touch-pointer="ui.isTouchPointer"
             :disabled="!gitReady || !root || repoBusy"
             @click="pull"
           >
@@ -1422,7 +1422,7 @@ void diffPaneRef
           </SidebarIconButton>
           <SidebarIconButton
             :tooltip="t('git.actions.push')"
-            :is-mobile-pointer="ui.isMobilePointer"
+            :is-touch-pointer="ui.isTouchPointer"
             :disabled="!gitReady || !root || repoBusy"
             @click="push"
           >
@@ -1432,7 +1432,7 @@ void diffPaneRef
             <PopoverTrigger as-child>
               <SidebarIconButton
                 :tooltip="t('git.ui.signing.sshMayFailTitle')"
-                :is-mobile-pointer="ui.isMobilePointer"
+                :is-touch-pointer="ui.isTouchPointer"
                 :disable-tooltip="true"
                 class="text-amber-600 hover:text-amber-700 hover:bg-amber-500/15"
                 :aria-label="t('git.ui.signing.sshMayFailTitle')"
@@ -1460,7 +1460,7 @@ void diffPaneRef
           <div ref="actionsMenuAnchorEl" class="inline-flex">
             <SidebarIconButton
               :tooltip="t('git.ui.moreActions')"
-              :is-mobile-pointer="ui.isMobilePointer"
+              :is-touch-pointer="ui.isTouchPointer"
               :disabled="!gitReady || !root || repoBusy"
               @mousedown.prevent
               @click.stop="actionsOpen = !actionsOpen"
@@ -1829,7 +1829,8 @@ void diffPaneRef
               :stashes="stashList"
               :loading="stashLoading"
               :can-operate="!!repoRoot"
-              :is-mobile-pointer="ui.isMobilePointer"
+              :is-touch-pointer="ui.isTouchPointer"
+              :is-mobile-form-factor="ui.isMobilePointer"
               @openCreate="stashDialogOpen = true"
               @dropAll="stashDropAll"
               @view="stashView"
@@ -1849,7 +1850,8 @@ void diffPaneRef
               :has-more="hasMoreMerge"
               :loading="mergeListLoading"
               :can-operate="!!root"
-              :is-mobile-pointer="ui.isMobilePointer"
+              :is-touch-pointer="ui.isTouchPointer"
+              :is-mobile-form-factor="ui.isMobilePointer"
               :multi-select-mode="mergeMultiSelect.enabled.value"
               :selected-paths="mergeMultiSelect.selectedList.value"
               @select="(p: string) => selectFileFromSidebar(p, 'working')"
@@ -1873,7 +1875,8 @@ void diffPaneRef
               :has-more="hasMoreStaged"
               :loading="stagedListLoading"
               :can-operate="!!root"
-              :is-mobile-pointer="ui.isMobilePointer"
+              :is-touch-pointer="ui.isTouchPointer"
+              :is-mobile-form-factor="ui.isMobilePointer"
               :multi-select-mode="stagedMultiSelect.enabled.value"
               :selected-paths="stagedMultiSelect.selectedList.value"
               @select="(p: string) => selectFileFromSidebar(p, 'staged')"
@@ -1903,7 +1906,8 @@ void diffPaneRef
               :has-more="hasMoreUnstaged"
               :loading="changesListLoading"
               :can-operate="!!root"
-              :is-mobile-pointer="ui.isMobilePointer"
+              :is-touch-pointer="ui.isTouchPointer"
+              :is-mobile-form-factor="ui.isMobilePointer"
               :multi-select-mode="changesMultiSelect.enabled.value"
               :selected-paths="changesMultiSelect.selectedList.value"
               @select="(p: string) => selectFileFromSidebar(p, 'working')"
@@ -1934,7 +1938,8 @@ void diffPaneRef
               :has-more="hasMoreUntracked"
               :loading="untrackedListLoading"
               :can-operate="!!root"
-              :is-mobile-pointer="ui.isMobilePointer"
+              :is-touch-pointer="ui.isTouchPointer"
+              :is-mobile-form-factor="ui.isMobilePointer"
               :multi-select-mode="untrackedMultiSelect.enabled.value"
               :selected-paths="untrackedMultiSelect.selectedList.value"
               @select="(p: string) => selectFileFromSidebar(p, 'working')"
@@ -2005,7 +2010,7 @@ void diffPaneRef
                   :search-title="t('common.search')"
                   :clear-aria-label="t('common.clear')"
                   :clear-title="t('common.clear')"
-                  :is-mobile-pointer="ui.isMobilePointer"
+                  :is-touch-pointer="ui.isTouchPointer"
                   @search="onApplyHistoryFilters"
                 />
               </div>
@@ -2223,7 +2228,7 @@ void diffPaneRef
           :diff-source="'working'"
           :commit="historySelected?.hash || ''"
           :parent-commit="historyParentCommitHash"
-          :is-mobile="ui.isMobile"
+          :is-compact-layout="ui.isCompactLayout"
           :selected-is-conflict="false"
           :open-file="openFileInFiles"
           :reveal-file="revealFileInFiles"
@@ -2233,7 +2238,7 @@ void diffPaneRef
 
       <template v-else>
         <MobileSidebarEmptyState
-          v-if="ui.isMobile && !selectedFile"
+          v-if="ui.isCompactLayout && !selectedFile"
           :title="t('git.ui.dialogs.selectChangedFileTitle')"
           :description="t('git.ui.dialogs.selectChangedFileDescription')"
           :action-label="t('git.ui.dialogs.openSourceControlPanel')"
@@ -2247,7 +2252,7 @@ void diffPaneRef
           :directory="root || ''"
           v-model:selectedFile="selectedFile"
           :diff-source="diffSource"
-          :is-mobile="ui.isMobile"
+          :is-compact-layout="ui.isCompactLayout"
           :selected-is-conflict="selectedIsConflict"
           :conflict-paths="conflictPaths"
           :stage-hunk="stageHunk"

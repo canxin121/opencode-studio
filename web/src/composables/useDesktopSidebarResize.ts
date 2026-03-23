@@ -7,7 +7,7 @@ export function useDesktopSidebarResize() {
   const ui = useUiStore()
 
   function startDesktopSidebarResize(e: PointerEvent) {
-    if (ui.isMobile || !ui.isSidebarOpen) return
+    if (ui.isCompactLayout || !ui.isSidebarOpen) return
 
     const startX = e.clientX
     const startW = ui.sidebarWidth

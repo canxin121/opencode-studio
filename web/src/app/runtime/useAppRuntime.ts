@@ -275,7 +275,9 @@ export function useAppRuntime() {
   function applyDevice() {
     const info = getDeviceInfo()
     applyDeviceClasses(info)
-    ui.setIsMobile(info.isMobile)
+    ui.setIsCompactLayout(info.isCompactLayout)
+    ui.setIsMobileDevice(info.isMobileDevice)
+    ui.setIsTouchPointer(info.isTouchPointer)
     ui.setIsMobilePointer(info.isMobilePointer)
   }
 

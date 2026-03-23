@@ -19,8 +19,13 @@ const props = defineProps<{
   error: string | null
   hasMore: boolean
   selectedHash: string | null
-  isMobilePointer: boolean
+  isTouchPointer?: boolean
+  isMobileFormFactor?: boolean
+  isMobilePointer?: boolean
 }>()
+
+const isMobileFormFactor = computed(() => props.isMobileFormFactor ?? props.isMobilePointer)
+const isTouchPointer = computed(() => props.isTouchPointer ?? isMobileFormFactor.value)
 
 defineEmits<{
   (e: 'update:expanded', value: boolean): void
@@ -58,7 +63,7 @@ function formatDate(value: string): string {
         <SidebarIconButton
           size="sm"
           :tooltip="t('common.refresh')"
-          :is-mobile-pointer="isMobilePointer"
+          :is-touch-pointer="isTouchPointer"
           :aria-label="t('common.refresh')"
           @click.stop="$emit('refresh')"
         >
@@ -67,7 +72,7 @@ function formatDate(value: string): string {
         <SidebarIconButton
           size="sm"
           :tooltip="t('git.ui.historySidebar.openDetails')"
-          :is-mobile-pointer="isMobilePointer"
+          :is-touch-pointer="isTouchPointer"
           :aria-label="t('git.ui.historySidebar.openDetails')"
           @click.stop="$emit('openHistory')"
         >

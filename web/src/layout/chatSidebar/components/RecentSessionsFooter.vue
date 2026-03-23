@@ -48,7 +48,7 @@ const props = defineProps<{
   recentSessionRows: RecentSessionRow[]
   selectedSessionId: string | null
 
-  uiIsMobile: boolean
+  uiIsCompactLayout: boolean
   multiSelectEnabled: boolean
   isSessionSelected: (sessionId: string) => boolean
   toggleSessionSelected: (sessionId: string, opts?: SessionToggleSelectionOptions) => void
@@ -141,7 +141,7 @@ function statusMeta(sessionId: string) {
           :session-id="item.id"
           :session="item.session"
           :directory="item.directory"
-          :ui-is-mobile="uiIsMobile"
+          :ui-is-compact-layout="uiIsCompactLayout"
           :selected="multiSelectEnabled ? isSessionSelected(item.id) : selectedSessionId === item.id"
           :multi-select-enabled="multiSelectEnabled"
           :multi-selected="isSessionSelected(item.id)"

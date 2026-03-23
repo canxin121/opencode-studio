@@ -2,7 +2,7 @@ import { computed, nextTick, ref, watch, type Ref } from 'vue'
 
 import { isScrollableY, usePinnedScroll } from '@/composables/chat/usePinnedScroll'
 
-type UiLike = { isMobile: boolean; isMobilePointer: boolean }
+type UiLike = { isCompactLayout: boolean; isMobilePointer: boolean }
 type ChatPartValue = unknown
 type ChatMessageLike = {
   info?: { role?: string; id?: string }
@@ -220,7 +220,7 @@ export function useChatScrollNav(opts: {
 
   const navBottomOffset = computed(() => {
     const base = ui.isMobilePointer ? 96 : 112
-    const divider = !composerFullscreenActive.value && !ui.isMobile ? composerDividerHitPx : 0
+    const divider = !composerFullscreenActive.value && !ui.isCompactLayout ? composerDividerHitPx : 0
     const height = composerShellHeight.value + divider
     if (!height) return `${base}px`
     return `${Math.max(base, height + 12)}px`

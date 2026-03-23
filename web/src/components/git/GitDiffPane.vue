@@ -17,7 +17,7 @@ const props = defineProps<{
   diffSource: DiffSource
   commit?: string | null
   parentCommit?: string | null
-  isMobile: boolean
+  isCompactLayout: boolean
   selectedIsConflict: boolean
   conflictPaths?: string[]
   stageHunk?: (patch: string) => void | Promise<void>
@@ -106,7 +106,7 @@ function close() {
 <template>
   <div class="flex flex-1 flex-col min-w-0 bg-background/30 relative h-full overflow-hidden">
     <div
-      v-if="isMobile && selectedFile"
+      v-if="isCompactLayout && selectedFile"
       class="h-12 border-b border-border/40 flex items-center bg-background flex-shrink-0 px-4 select-none"
     >
       <Button variant="ghost" size="sm" class="h-8 w-8 -ml-2 mr-1 p-0 rounded-full" @click="close">

@@ -46,7 +46,7 @@
   }
 
   /* On mobile, let the keyboard cover the bottom nav instead of pushing it upward. */
-  :root[data-oc-keyboard-open='true'] .oc-bottom-nav {
+  :root.device-mobile[data-oc-keyboard-open='true'] .oc-bottom-nav {
     display: none !important;
   }
 }

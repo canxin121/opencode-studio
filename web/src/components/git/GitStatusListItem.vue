@@ -16,6 +16,7 @@ const props = withDefaults(
     statusClass?: string
     insertions?: number
     deletions?: number
+    isMobileFormFactor?: boolean
     isMobilePointer?: boolean
     mobileActionItems?: OptionMenuItem[]
     mobileActionTitle?: string
@@ -28,6 +29,7 @@ const props = withDefaults(
     statusClass: 'text-muted-foreground',
     insertions: 0,
     deletions: 0,
+    isMobileFormFactor: false,
     isMobilePointer: false,
     mobileActionItems: () => [],
     mobileActionTitle: '',
@@ -46,9 +48,10 @@ const emit = defineEmits<{
 const hasStat = computed(() => (props.insertions ?? 0) > 0 || (props.deletions ?? 0) > 0)
 const mobileActionMenuOpen = ref(false)
 const mobileActionMenuQuery = ref('')
+const isMobileFormFactor = computed(() => Boolean(props.isMobileFormFactor ?? props.isMobilePointer))
 
 const hasMobileActions = computed(
-  () => props.isMobilePointer && Array.isArray(props.mobileActionItems) && props.mobileActionItems.length > 0,
+  () => isMobileFormFactor.value && Array.isArray(props.mobileActionItems) && props.mobileActionItems.length > 0,
 )
 
 const mobileActionTitleText = computed(
@@ -128,7 +131,7 @@ function handleMobileActionTrigger() {
           :title="mobileActionTitleText"
           :mobile-title="mobileActionTitleText"
           :searchable="true"
-          :is-mobile-pointer="isMobilePointer"
+          :is-mobile-pointer="isMobileFormFactor"
           @update:open="setMobileActionMenuOpen"
           @update:query="(v) => (mobileActionMenuQuery = v)"
           @select="onMobileActionSelect"

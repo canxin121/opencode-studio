@@ -1,7 +1,7 @@
 import { nextTick, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
 import { localStorageKeys } from '@/lib/persistence/storageKeys'
 
-type UiLike = { isMobile: boolean; isMobilePointer: boolean }
+type UiLike = { isCompactLayout: boolean; isMobilePointer: boolean; isTouchPointer: boolean }
 
 type ComposerExpose = {
   shellEl?: HTMLDivElement | { value: HTMLDivElement | null } | null
@@ -138,7 +138,7 @@ export function useChatComposerLayout(opts: {
   }
 
   // Override for mobile: enforce a compact fixed height initially.
-  if (ui.isMobile) {
+  if (ui.isCompactLayout) {
     composerTargetHeight.value = DEFAULT_MOBILE_COMPOSER_HEIGHT
     composerUserHeight.value = DEFAULT_MOBILE_COMPOSER_HEIGHT
   }
@@ -151,7 +151,7 @@ export function useChatComposerLayout(opts: {
 
   // Called when VerticalSplitPane updates the size (dragging)
   function handleComposerResize(newHeight: number) {
-    if (ui.isMobile) return
+    if (ui.isCompactLayout) return
 
     // If we are dragging, we update the target height immediately
     composerTargetHeight.value = newHeight
@@ -164,14 +164,14 @@ export function useChatComposerLayout(opts: {
   }
 
   function resetComposerHeight() {
-    if (ui.isMobile || editorFullscreen.value) return
+    if (ui.isCompactLayout || editorFullscreen.value) return
     composerUserHeight.value = DEFAULT_COMPOSER_HEIGHT
     composerTargetHeight.value = DEFAULT_COMPOSER_HEIGHT
     persistUserHeight(DEFAULT_COMPOSER_HEIGHT)
   }
 
   function applyComposerUserHeight() {
-    if (ui.isMobile) return
+    if (ui.isCompactLayout) return
     if (!editorFullscreen.value) {
       composerTargetHeight.value = composerUserHeight.value
     }
@@ -203,7 +203,7 @@ export function useChatComposerLayout(opts: {
       scrollToBottom('auto')
 
       // Mobile UX: don't auto-open the IME just because the user toggled fullscreen.
-      if (!ui.isMobilePointer) {
+      if (!ui.isTouchPointer) {
         getComposerTextareaEl(composerRef.value)?.focus()
       }
     })
@@ -214,7 +214,7 @@ export function useChatComposerLayout(opts: {
     editorClosing.value = true
 
     // Mobile UX: collapsing the fullscreen editor should dismiss the IME.
-    if (ui.isMobilePointer) {
+    if (ui.isTouchPointer) {
       try {
         getComposerTextareaEl(composerRef.value)?.blur()
       } catch {
@@ -230,7 +230,7 @@ export function useChatComposerLayout(opts: {
       editorClosing.value = false
 
       // Keep desktop behavior (restore focus), but avoid reopening the keyboard on mobile.
-      if (!ui.isMobilePointer) {
+      if (!ui.isTouchPointer) {
         getComposerTextareaEl(composerRef.value)?.focus()
       }
     }, 240) // Match transition duration

@@ -62,7 +62,10 @@ const selection = defineModel<SelectionRange | null>('selection', { default: nul
 const commentText = defineModel<string>('commentText', { default: '' })
 
 const props = defineProps<{
-  isMobile: boolean
+  isCompactLayout: boolean
+  isTouchPointer?: boolean
+  isMobileFormFactor?: boolean
+  isMobilePointer?: boolean
   selectedFile: FileNode | null
   displaySelectedPath: string
   viewerMode: ViewerMode
@@ -146,6 +149,8 @@ const markdownPreviewContent = computed(() => {
   return ['```mermaid', source, '```'].join('\n')
 })
 const canShowViewMenu = computed(() => props.viewerMode === 'text' || props.viewerMode === 'markdown')
+const isMobileFormFactor = computed(() => props.isMobileFormFactor ?? props.isMobilePointer)
+const isTouchPointer = computed(() => props.isTouchPointer ?? isMobileFormFactor.value)
 
 const viewMenuGroups = computed<OptionMenuGroup[]>(() => [
   {
@@ -1099,10 +1104,10 @@ function onSendSelection() {
   <section class="flex min-h-0 h-full flex-col overflow-hidden bg-background">
     <div class="flex min-w-0 items-center gap-2 border-b border-border/40 px-3 py-2">
       <IconButton
-        v-if="isMobile && showMobileViewer"
+        v-if="isCompactLayout && showMobileViewer"
         size="lg"
         :tooltip="t('nav.back')"
-        :is-mobile-pointer="isMobile"
+        :is-touch-pointer="isTouchPointer"
         :aria-label="t('nav.back')"
         @click="showMobileViewer = false"
       >
@@ -1136,7 +1141,7 @@ function onSendSelection() {
         :title="t('files.viewer.viewMenu.title')"
         :mobile-title="t('files.viewer.viewMenu.title')"
         :searchable="true"
-        :is-mobile-pointer="isMobile"
+        :is-mobile-pointer="isMobileFormFactor"
         desktop-placement="bottom-end"
         :desktop-fixed="true"
         :desktop-anchor-el="viewMenuAnchorEl"
@@ -1159,7 +1164,7 @@ function onSendSelection() {
           :tooltip="
             isRefreshingFile ? t('files.viewer.actions.refreshingContents') : t('files.viewer.actions.refreshContents')
           "
-          :is-mobile-pointer="isMobile"
+          :is-touch-pointer="isTouchPointer"
           :disabled="fileLoading || isRefreshingFile"
           :title="
             isRefreshingFile ? t('files.viewer.actions.refreshingContents') : t('files.viewer.actions.refreshContents')
@@ -1176,7 +1181,7 @@ function onSendSelection() {
           size="sm"
           class="h-7 w-7"
           :tooltip="dirty ? t('files.viewer.save.titleDirty') : t('files.viewer.save.titleSaved')"
-          :is-mobile-pointer="isMobile"
+          :is-touch-pointer="isTouchPointer"
           :disabled="!dirty || isSaving"
           :title="dirty ? t('files.viewer.save.titleDirty') : t('files.viewer.save.titleSaved')"
           @click="() => save()"
@@ -1191,7 +1196,7 @@ function onSendSelection() {
           size="sm"
           class="h-7 w-7"
           :tooltip="t('files.viewer.actions.copyContents')"
-          :is-mobile-pointer="isMobile"
+          :is-touch-pointer="isTouchPointer"
           :title="t('files.viewer.actions.copyContents')"
           @click="copyToClipboard(displayedContent)"
         >
@@ -1205,7 +1210,7 @@ function onSendSelection() {
             class="h-7 w-7"
             :class="viewMenuOpen ? 'bg-secondary/60 text-foreground' : ''"
             :tooltip="t('files.viewer.viewMenu.title')"
-            :is-mobile-pointer="isMobile"
+            :is-touch-pointer="isTouchPointer"
             :title="t('files.viewer.viewMenu.title')"
             :aria-label="t('files.viewer.viewMenu.title')"
             @mousedown.prevent
@@ -1258,7 +1263,7 @@ function onSendSelection() {
     <div class="flex-1 min-h-0 relative">
       <template v-if="!selectedFile">
         <MobileSidebarEmptyState
-          v-if="isMobile"
+          v-if="isCompactLayout"
           :title="t('files.viewer.title.selectFile')"
           :description="t('files.viewer.empty.mobileDescription')"
           :action-label="t('header.openFilesPanel')"
@@ -1371,7 +1376,7 @@ function onSendSelection() {
       <div
         v-else-if="viewerMode === 'markdown'"
         class="h-full flex min-h-0"
-        :class="showMarkdownSplit && isMobile ? 'flex-col' : ''"
+        :class="showMarkdownSplit && isCompactLayout ? 'flex-col' : ''"
       >
         <div
           v-if="fileChunkUi && (fileChunkUi.hasMore || fileChunkUi.loadingMore)"
@@ -1399,7 +1404,7 @@ function onSendSelection() {
           class="min-h-0 min-w-0"
           :class="
             showMarkdownSplit
-              ? isMobile
+              ? isCompactLayout
                 ? 'flex-1 border-b border-border/30'
                 : 'flex-1 border-r border-border/30'
               : 'flex-1'
@@ -1507,7 +1512,7 @@ function onSendSelection() {
               :mobile-title="t('files.viewer.timeline.selectCommitTitle')"
               :search-placeholder="t('files.viewer.timeline.searchPlaceholder')"
               :empty-text="t('files.viewer.timeline.emptyText')"
-              :is-mobile-pointer="isMobile"
+              :is-mobile-pointer="isMobileFormFactor"
               desktop-placement="bottom-start"
               :desktop-fixed="true"
               :desktop-anchor-el="timelineLeftMenuAnchorEl"
@@ -1533,7 +1538,7 @@ function onSendSelection() {
               :mobile-title="t('files.viewer.timeline.selectCommitTitle')"
               :search-placeholder="t('files.viewer.timeline.searchPlaceholder')"
               :empty-text="t('files.viewer.timeline.emptyText')"
-              :is-mobile-pointer="isMobile"
+              :is-mobile-pointer="isMobileFormFactor"
               desktop-placement="bottom-start"
               :desktop-fixed="true"
               :desktop-anchor-el="timelineRightMenuAnchorEl"
@@ -1591,7 +1596,7 @@ function onSendSelection() {
             <IconButton
               size="xs"
               :tooltip="t('files.viewer.selection.clearAria')"
-              :is-mobile-pointer="isMobile"
+              :is-touch-pointer="isTouchPointer"
               :aria-label="t('files.viewer.selection.clearAria')"
               @click="clearSelection"
             >

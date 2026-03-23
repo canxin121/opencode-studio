@@ -246,7 +246,6 @@ const {
 
 modelSelection = useChatModelSelection({
   chat,
-  ui,
   opencodeConfig,
   sessionDirectory,
   composerControlsRef,
@@ -872,7 +871,7 @@ async function toggleComposerActionMenu(event?: MouseEvent | PointerEvent) {
   commandQuery.value = ''
   commandIndex.value = 0
   // Desktop: focus search for quick filtering. Mobile: don't auto-focus (avoid IME popup).
-  if (!ui.isMobilePointer) {
+  if (!ui.isTouchPointer) {
     void nextTick(() => sessionActionsMenuRef.value?.focusSearch?.())
   }
 }

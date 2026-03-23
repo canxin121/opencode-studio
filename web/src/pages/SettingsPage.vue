@@ -63,7 +63,7 @@ const router = useRouter()
 const { startDesktopSidebarResize } = useDesktopSidebarResize()
 const { t } = useI18n()
 
-const useShellSidebar = computed(() => (ui.isMobile ? ui.isSessionSwitcherOpen : ui.isSidebarOpen))
+const useShellSidebar = computed(() => (ui.isCompactLayout ? ui.isSessionSwitcherOpen : ui.isSidebarOpen))
 const SETTINGS_LAST_ROUTE_KEY = localStorageKeys.settings.lastRoute
 
 function persistSettingsRoute(path: string) {
@@ -75,7 +75,7 @@ function persistSettingsRoute(path: string) {
 }
 
 const settingsSidebarClass = computed(() =>
-  ui.isMobile
+  ui.isCompactLayout
     ? 'relative h-full w-full border-r border-border bg-muted/10 shrink-0'
     : 'relative h-full border-r border-border bg-muted/10 shrink-0',
 )
@@ -727,10 +727,10 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
       <aside
         v-if="useShellSidebar"
         :class="settingsSidebarClass"
-        :style="ui.isMobile ? undefined : { width: `${ui.sidebarWidth}px` }"
+        :style="ui.isCompactLayout ? undefined : { width: `${ui.sidebarWidth}px` }"
       >
         <div
-          v-if="!ui.isMobile"
+          v-if="!ui.isCompactLayout"
           class="absolute right-0 top-0 z-10 h-full w-1 cursor-col-resize hover:bg-primary/40"
           @pointerdown="startDesktopSidebarResize"
         />
@@ -820,7 +820,10 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
       </aside>
 
       <!-- Content -->
-      <main class="flex-1 min-w-0 overflow-y-auto bg-background" v-show="!ui.isMobile || !ui.isSessionSwitcherOpen">
+      <main
+        class="flex-1 min-w-0 overflow-y-auto bg-background"
+        v-show="!ui.isCompactLayout || !ui.isSessionSwitcherOpen"
+      >
         <div :class="['mx-auto w-full p-4 lg:p-8 space-y-8', activeTab === 'opencode' ? 'max-w-6xl' : 'max-w-3xl']">
           <div
             v-if="dirtyHint"

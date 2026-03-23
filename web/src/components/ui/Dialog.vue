@@ -51,7 +51,7 @@ const contentClass = computed(() =>
             size="md"
             class="h-8 w-8"
             :tooltip="t('common.close')"
-            :is-mobile-pointer="ui.isMobilePointer"
+            :is-touch-pointer="ui.isTouchPointer"
             :title="t('common.close')"
             :aria-label="t('common.close')"
             @click="close"

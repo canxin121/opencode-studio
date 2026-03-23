@@ -46,13 +46,13 @@ function clearMobileSidebarPointerRafs() {
 
 watch(
   () => ({
-    isMobile: ui.isMobile,
+    isCompactLayout: ui.isCompactLayout,
     switcherOpen: ui.isSessionSwitcherOpen,
     usesChatShellSidebar: usesChatShellSidebar.value,
   }),
-  ({ isMobile, switcherOpen, usesChatShellSidebar: usesSidebar }) => {
+  ({ isCompactLayout, switcherOpen, usesChatShellSidebar: usesSidebar }) => {
     clearMobileSidebarPointerRafs()
-    if (!isMobile || !usesSidebar || !switcherOpen) {
+    if (!isCompactLayout || !usesSidebar || !switcherOpen) {
       mobileSidebarPointerReady.value = false
       return
     }
@@ -78,7 +78,7 @@ onBeforeUnmount(() => {
 watch(
   () => route.fullPath,
   (next, prev) => {
-    if (!ui.isMobile) return
+    if (!ui.isCompactLayout) return
     if (!ui.isSessionSwitcherOpen) return
     if (next === prev) return
     ui.setSessionSwitcherOpen(false)
@@ -88,7 +88,9 @@ watch(
 const mobileBottomNavInset =
   'calc(var(--oc-bottom-nav-height, 56px) + var(--oc-safe-area-bottom, 0px) - clamp(0px, var(--oc-keyboard-inset, 0px), var(--oc-bottom-nav-height, 56px)))'
 
-const showWorkspaceRightDock = computed(() => !ui.isMobile && ui.isWorkspaceDockOpen)
+const showBottomNav = computed(() => ui.isCompactLayout && ui.isMobileDevice)
+const compactBottomInset = computed(() => (showBottomNav.value ? mobileBottomNavInset : '0px'))
+const showWorkspaceRightDock = computed(() => !ui.isCompactLayout && ui.isWorkspaceDockOpen)
 </script>
 
 <template>
@@ -101,7 +103,7 @@ const showWorkspaceRightDock = computed(() => !ui.isMobile && ui.isWorkspaceDock
 
       <div class="flex flex-1 overflow-hidden">
         <aside
-          v-if="!ui.isMobile && usesChatShellSidebar"
+          v-if="!ui.isCompactLayout && usesChatShellSidebar"
           class="relative h-full overflow-hidden border-r border-border bg-sidebar"
           :style="{ width: `${ui.effectiveSidebarWidth}px` }"
           :aria-hidden="!ui.isSidebarOpen"
@@ -117,11 +119,11 @@ const showWorkspaceRightDock = computed(() => !ui.isMobile && ui.isWorkspaceDock
 
         <div class="relative flex-1 h-full overflow-hidden">
           <div
-            v-if="ui.isMobile && usesChatShellSidebar"
+            v-if="ui.isCompactLayout && usesChatShellSidebar"
             v-show="ui.isSessionSwitcherOpen"
             class="absolute inset-x-0 top-0 z-40 bg-sidebar"
             :class="mobileSidebarPointerReady ? '' : 'pointer-events-none'"
-            :style="{ bottom: mobileBottomNavInset }"
+            :style="{ bottom: compactBottomInset }"
             :aria-hidden="!ui.isSessionSwitcherOpen"
           >
             <ChatSidebar mobile-variant />
@@ -130,9 +132,9 @@ const showWorkspaceRightDock = computed(() => !ui.isMobile && ui.isWorkspaceDock
           <main
             class="h-full overflow-hidden"
             :style="
-              ui.isMobile
+              ui.isCompactLayout
                 ? {
-                    paddingBottom: mobileBottomNavInset,
+                    paddingBottom: compactBottomInset,
                   }
                 : undefined
             "
@@ -156,7 +158,7 @@ const showWorkspaceRightDock = computed(() => !ui.isMobile && ui.isWorkspaceDock
         </div>
       </div>
 
-      <BottomNav v-if="ui.isMobile" />
+      <BottomNav v-if="showBottomNav" />
     </div>
   </div>
 </template>

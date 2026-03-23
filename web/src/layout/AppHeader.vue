@@ -144,8 +144,8 @@ const tabs = computed<Tab[]>(() => {
     ...tab,
     label: String(t(labelKey)),
     icon: TAB_ICONS[tab.id],
-    badge: tab.id === 'git' && !ui.isMobile && diffFileCount.value > 0 ? diffFileCount.value : undefined,
-    showDot: tab.id === 'git' && ui.isMobile && diffFileCount.value > 0,
+    badge: tab.id === 'git' && !ui.isCompactLayout && diffFileCount.value > 0 ? diffFileCount.value : undefined,
+    showDot: tab.id === 'git' && ui.isCompactLayout && diffFileCount.value > 0,
   }))
 })
 
@@ -242,7 +242,7 @@ onBeforeUnmount(() => {
 
 // -- Actions --
 function handleOpenSessionSwitcher() {
-  if (ui.isMobile) {
+  if (ui.isCompactLayout) {
     // Blur active element to close mobile keyboard
     const active = document.activeElement as HTMLElement | null
     if (active && (['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName) || active.isContentEditable)) {
@@ -303,20 +303,22 @@ function openHelpDialog() {
       <!-- Sidebar Toggle / Mobile Back -->
       <IconButton
         size="lg"
-        :tooltip="ui.isMobile ? mobilePanelToggleLabel : String(t('header.toggleSidebar'))"
-        :is-mobile-pointer="ui.isMobilePointer"
-        :aria-label="ui.isMobile ? mobilePanelToggleLabel : String(t('header.toggleSidebar'))"
+        :tooltip="ui.isCompactLayout ? mobilePanelToggleLabel : String(t('header.toggleSidebar'))"
+        :is-touch-pointer="ui.isTouchPointer"
+        :aria-label="ui.isCompactLayout ? mobilePanelToggleLabel : String(t('header.toggleSidebar'))"
         @click="handleOpenSessionSwitcher"
       >
         <component
-          :is="ui.isMobile ? (ui.isSessionSwitcherOpen ? RiArrowLeftSLine : RiPlayListAddLine) : RiLayoutLeftLine"
+          :is="
+            ui.isCompactLayout ? (ui.isSessionSwitcherOpen ? RiArrowLeftSLine : RiPlayListAddLine) : RiLayoutLeftLine
+          "
           class="h-5 w-5"
         />
       </IconButton>
 
       <!-- Desktop Navigation Tabs -->
       <nav
-        v-if="!ui.isMobile"
+        v-if="!ui.isCompactLayout"
         class="flex items-center gap-1"
         role="tablist"
         :aria-label="String(t('aria.mainNavigation'))"
@@ -347,7 +349,7 @@ function openHelpDialog() {
       </nav>
 
       <!-- Mobile Title -->
-      <div v-if="ui.isMobile" class="min-w-0 flex-1">
+      <div v-if="ui.isCompactLayout" class="min-w-0 flex-1">
         <div class="typography-ui-label font-semibold truncate">{{ mobileTitle }}</div>
       </div>
 
@@ -365,7 +367,7 @@ function openHelpDialog() {
         <RiArrowDownSLine class="h-4 w-4 text-muted-foreground flex-shrink-0" />
       </button>
 
-      <div class="flex-1" v-if="!ui.isMobile" />
+      <div class="flex-1" v-if="!ui.isCompactLayout" />
 
       <!-- Right Actions -->
       <div class="flex items-center pr-1">
@@ -382,10 +384,10 @@ function openHelpDialog() {
 
         <div class="flex items-center gap-1">
           <IconButton
-            v-if="!ui.isMobile"
+            v-if="!ui.isCompactLayout"
             size="lg"
             :tooltip="workspaceDockToggleLabel"
-            :is-mobile-pointer="ui.isMobilePointer"
+            :is-touch-pointer="ui.isTouchPointer"
             :aria-label="workspaceDockToggleLabel"
             :variant="ui.isWorkspaceDockOpen ? 'secondary' : 'ghost'"
             @click="toggleWorkspaceDock"
@@ -396,7 +398,7 @@ function openHelpDialog() {
           <IconButton
             size="lg"
             :tooltip="String(t('header.help'))"
-            :is-mobile-pointer="ui.isMobilePointer"
+            :is-touch-pointer="ui.isTouchPointer"
             :aria-label="String(t('header.help'))"
             :title="String(t('header.help'))"
             @click="openHelpDialog"
@@ -408,7 +410,7 @@ function openHelpDialog() {
             v-if="chat.selectedSessionId"
             size="lg"
             :tooltip="String(t('header.locateSession'))"
-            :is-mobile-pointer="ui.isMobilePointer"
+            :is-touch-pointer="ui.isTouchPointer"
             :aria-label="String(t('header.locateCurrentSession'))"
             :title="String(t('header.locateSession'))"
             @click="locateCurrentSessionInSidebar"
@@ -417,10 +419,10 @@ function openHelpDialog() {
           </IconButton>
 
           <IconButton
-            v-if="ui.isMobile"
+            v-if="ui.isCompactLayout"
             size="lg"
             :tooltip="directoryPath || String(t('header.noDirectorySelected'))"
-            :is-mobile-pointer="ui.isMobilePointer"
+            :is-touch-pointer="ui.isTouchPointer"
             :aria-label="String(t('header.changeDirectory'))"
             :title="directoryPath || String(t('header.noDirectorySelected'))"
             @click="directoryPickerOpen = true"
@@ -431,7 +433,7 @@ function openHelpDialog() {
           <IconButton
             size="lg"
             :tooltip="String(t('nav.settings'))"
-            :is-mobile-pointer="ui.isMobilePointer"
+            :is-touch-pointer="ui.isTouchPointer"
             :aria-label="String(t('nav.settings'))"
             @click="openSettings"
           >

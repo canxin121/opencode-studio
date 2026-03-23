@@ -60,7 +60,8 @@ type SessionToggleSelectionOptions = {
 }
 
 const props = defineProps<{
-  uiIsMobile: boolean
+  uiIsCompactLayout: boolean
+  uiIsTouchPointer: boolean
   directories: DirectoryEntry[]
   pagedDirectories: DirectoryEntry[]
   visibleDirectories: DirectoryEntry[]
@@ -237,7 +238,7 @@ function sessionSelectableCount(directoryId: string): number {
             >
               <DirectoryRow
                 :directory="directory"
-                :ui-is-mobile="uiIsMobile"
+                :ui-is-compact-layout="uiIsCompactLayout"
                 :collapsed="props.isDirectoryCollapsed(directory.id)"
                 :focused="props.isDirectoryFocused(directory)"
                 :activity-state="props.directoryActivityState(directory)"
@@ -316,7 +317,7 @@ function sessionSelectableCount(directoryId: string): number {
                         :tooltip="String(t('common.selectAll'))"
                         :title="String(t('common.selectAll'))"
                         :aria-label="String(t('common.selectAll'))"
-                        :is-mobile-pointer="props.uiIsMobile"
+                        :is-touch-pointer="props.uiIsTouchPointer"
                         :disabled="
                           sessionSelectableCount(directory.id) === 0 ||
                           selectedSessionCount(directory.id) === sessionSelectableCount(directory.id)
@@ -331,7 +332,7 @@ function sessionSelectableCount(directoryId: string): number {
                         :tooltip="String(t('common.invertSelection'))"
                         :title="String(t('common.invertSelection'))"
                         :aria-label="String(t('common.invertSelection'))"
-                        :is-mobile-pointer="props.uiIsMobile"
+                        :is-touch-pointer="props.uiIsTouchPointer"
                         :disabled="sessionSelectableCount(directory.id) === 0"
                         @click="props.invertSessionsForDirectory(directory.id)"
                       >
@@ -356,7 +357,7 @@ function sessionSelectableCount(directoryId: string): number {
                           :tooltip="String(t('chat.sidebar.multiSelect.actions.deleteSelected'))"
                           :title="String(t('chat.sidebar.multiSelect.actions.deleteSelected'))"
                           :aria-label="String(t('chat.sidebar.multiSelect.actions.deleteSelected'))"
-                          :is-mobile-pointer="props.uiIsMobile"
+                          :is-touch-pointer="props.uiIsTouchPointer"
                           :disabled="selectedSessionCount(directory.id) === 0"
                           @click.stop
                         >
@@ -369,7 +370,7 @@ function sessionSelectableCount(directoryId: string): number {
                         :tooltip="String(t('chat.sidebar.multiSelect.actions.exitSessionMultiSelect'))"
                         :title="String(t('chat.sidebar.multiSelect.actions.exitSessionMultiSelect'))"
                         :aria-label="String(t('chat.sidebar.multiSelect.actions.exitSessionMultiSelect'))"
-                        :is-mobile-pointer="props.uiIsMobile"
+                        :is-touch-pointer="props.uiIsTouchPointer"
                         @click="props.toggleDirectorySessionMultiSelect(directory.id)"
                       >
                         <RiCloseLine class="h-3.5 w-3.5" />
@@ -436,7 +437,7 @@ function sessionSelectableCount(directoryId: string): number {
                         :session-id="row.id"
                         :session="row.session"
                         :directory="row.directory || directory"
-                        :ui-is-mobile="uiIsMobile"
+                        :ui-is-compact-layout="uiIsCompactLayout"
                         :selected="
                           props.isSessionMultiSelectEnabledForDirectory(directory.id)
                             ? props.isSessionSelected(row.id)
@@ -526,7 +527,7 @@ function sessionSelectableCount(directoryId: string): number {
                         :session-id="row.id"
                         :session="row.session"
                         :directory="directory"
-                        :ui-is-mobile="uiIsMobile"
+                        :ui-is-compact-layout="uiIsCompactLayout"
                         :selected="
                           props.isSessionMultiSelectEnabledForDirectory(directory.id)
                             ? props.isSessionSelected(row.id)

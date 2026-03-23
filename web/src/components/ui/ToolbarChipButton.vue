@@ -14,6 +14,7 @@ interface Props {
   class?: HTMLAttributes['class']
   tooltip?: string
   disableTooltip?: boolean
+  isTouchPointer?: boolean
   isMobilePointer?: boolean
 }
 
@@ -31,7 +32,9 @@ const coarsePointer = computed(() => {
   return window.matchMedia('(pointer: coarse)').matches
 })
 
-const isMobilePointer = computed(() => props.isMobilePointer ?? coarsePointer.value)
+const isTouchPointer = computed(
+  () => props.isTouchPointer ?? (props.isMobilePointer === true ? true : coarsePointer.value),
+)
 
 defineExpose({
   triggerEl,
@@ -44,7 +47,7 @@ function normalizeText(value: unknown): string {
 
 const tooltipFromAttrs = computed(() => normalizeText(attrs.title))
 const tooltipText = computed(() => normalizeText(props.tooltip) || tooltipFromAttrs.value)
-const showCustomTooltip = computed(() => !props.disableTooltip && !isMobilePointer.value && Boolean(tooltipText.value))
+const showCustomTooltip = computed(() => !props.disableTooltip && !isTouchPointer.value && Boolean(tooltipText.value))
 
 const passthroughAttrs = computed(() => {
   const { title, ...rest } = attrs

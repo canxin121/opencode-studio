@@ -38,7 +38,7 @@ const props = withDefaults(
     session?: SessionLike | null
     directory?: DirectoryEntry | null
 
-    uiIsMobile: boolean
+    uiIsCompactLayout: boolean
     selected?: boolean
     highlighted?: boolean
 
@@ -128,8 +128,8 @@ const statusLabelText = computed(() => {
 const canShowActions = computed(() => props.actionsEnabled && hasSessionContext.value)
 const renameInputEl = ref<HTMLInputElement | null>(null)
 
-const isInlineRename = computed(() => props.renaming && !props.uiIsMobile && hasSessionContext.value)
-const actionsAlwaysVisible = computed(() => isInlineRename.value || (props.uiIsMobile && canShowActions.value))
+const isInlineRename = computed(() => props.renaming && !props.uiIsCompactLayout && hasSessionContext.value)
+const actionsAlwaysVisible = computed(() => isInlineRename.value || (props.uiIsCompactLayout && canShowActions.value))
 const renameDraftText = computed(() => String(props.renameDraft || ''))
 const canSaveRename = computed(() => !props.renameBusy && renameDraftText.value.trim().length > 0)
 
@@ -326,7 +326,7 @@ function handleRowClick(event: MouseEvent) {
           </IconButton>
         </template>
 
-        <template v-else-if="uiIsMobile && canShowActions">
+        <template v-else-if="uiIsCompactLayout && canShowActions">
           <ListItemOverflowActionButton
             mobile
             :label="String(t('chat.sidebar.sessionActions.menuTitle'))"

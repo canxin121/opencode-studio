@@ -10,6 +10,8 @@ export function installKeyboardInsets(options: Options) {
 
   const root = document.documentElement
 
+  const shouldTrackSoftKeyboard = () => root.classList.contains('device-mobile')
+
   let keyboardInset = 0
   let keyboardAvoidTarget: HTMLElement | null = null
   let keyboardAvoidOffset = 0
@@ -53,6 +55,19 @@ export function installKeyboardInsets(options: Options) {
     const offsetTop = viewport ? Math.max(0, Math.round(viewport.offsetTop)) : 0
     root.style.setProperty('--oc-visual-viewport-offset-top', `${offsetTop}px`)
 
+    if (!shouldTrackSoftKeyboard()) {
+      const orientationKey = getOrientationKey()
+      lastOrientationKey = orientationKey
+      maxViewportHeight = height
+
+      keyboardInset = 0
+      root.style.setProperty('--oc-keyboard-inset', '0px')
+      root.style.setProperty('--oc-keyboard-home-indicator', '0px')
+      root.removeAttribute('data-oc-keyboard-open')
+      clearKeyboardAvoid()
+      return
+    }
+
     const orientationKey = getOrientationKey()
     if (orientationKey !== lastOrientationKey) {
       lastOrientationKey = orientationKey
@@ -65,9 +80,14 @@ export function installKeyboardInsets(options: Options) {
     const isTextTarget = Boolean(isInput || active?.isContentEditable)
 
     // Update baseline only when we're not actively typing (keyboard likely closed).
-    // Use max so address-bar/toolbars animations don't temporarily lower the baseline.
+    // Keep max for transient toolbar animations, but reset on large persistent viewport drops
+    // (desktop window resize, tablet split-screen changes, etc.) to avoid stale keyboard insets.
     if (!isTextTarget) {
-      maxViewportHeight = Math.max(maxViewportHeight, height)
+      if (maxViewportHeight - height >= 160) {
+        maxViewportHeight = height
+      } else {
+        maxViewportHeight = Math.max(maxViewportHeight, height)
+      }
     }
 
     const rawInset = Math.max(0, maxViewportHeight - height)

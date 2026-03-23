@@ -321,8 +321,8 @@ void sessionActionsMenuRef
       :collapse-top="composerSplitTopCollapsed"
       @update:model-value="handleComposerResize"
       @dblclick="resetComposerHeight"
-      :min-height="ui.isMobile ? 170 : 190"
-      :disabled="ui.isMobile"
+      :min-height="ui.isCompactLayout ? 170 : 190"
+      :disabled="ui.isCompactLayout"
     >
       <template #top>
         <div
@@ -333,7 +333,7 @@ void sessionActionsMenuRef
         >
           <div ref="contentEl" class="chat-message-column py-4">
             <MessageList
-              :is-mobile="ui.isMobile"
+              :is-compact-layout="ui.isCompactLayout"
               :selected-session-id="chat.selectedSessionId"
               :messages-loading="chat.messagesLoading"
               :messages-error="chat.messagesError"
@@ -382,7 +382,7 @@ void sessionActionsMenuRef
         <div
           v-if="
             !composerFullscreenActive &&
-            !(ui.isMobile && ui.isSessionSwitcherOpen) &&
+            !(ui.isCompactLayout && ui.isSessionSwitcherOpen) &&
             (navigableMessageIds.length > 1 ||
               (!isAtBottom && chat.messages.length) ||
               (navigableMessageIds.length > 0 && !chat.selectedHistory.exhausted))
@@ -395,7 +395,7 @@ void sessionActionsMenuRef
             variant="outline"
             class="h-8 w-8 rounded-full bg-background/80 backdrop-blur"
             :tooltip="t('chat.page.nav.previousUserMessage')"
-            :is-mobile-pointer="ui.isMobilePointer"
+            :is-touch-pointer="ui.isTouchPointer"
             :aria-label="t('chat.page.nav.previousUserMessage')"
             @click="navPrev"
             :disabled="(navIndex <= 0 && chat.selectedHistory.exhausted) || loadingOlder"
@@ -407,7 +407,7 @@ void sessionActionsMenuRef
             variant="outline"
             class="h-8 w-8 rounded-full bg-background/80 backdrop-blur"
             :tooltip="t('chat.page.nav.nextUserMessage')"
-            :is-mobile-pointer="ui.isMobilePointer"
+            :is-touch-pointer="ui.isTouchPointer"
             :aria-label="t('chat.page.nav.nextUserMessage')"
             @click="navNext"
             :disabled="navIndex >= navigableMessageIds.length - 1"
@@ -427,7 +427,7 @@ void sessionActionsMenuRef
             variant="outline"
             class="h-8 w-8 rounded-full bg-background/80 backdrop-blur"
             :tooltip="t('chat.page.nav.bottom')"
-            :is-mobile-pointer="ui.isMobilePointer"
+            :is-touch-pointer="ui.isTouchPointer"
             :aria-label="t('chat.page.nav.bottom')"
             :class="!isAtBottom && chat.messages.length ? '' : 'invisible pointer-events-none'"
             @click="scrollToBottom('smooth')"
@@ -456,7 +456,7 @@ void sessionActionsMenuRef
           class="h-full flex flex-col min-h-0 bg-background/85 backdrop-blur ios-keyboard-safe-area"
           :data-keyboard-avoid="composerFullscreenActive ? 'resize' : 'shift'"
         >
-          <div class="chat-column flex flex-col min-h-0 h-full" :class="ui.isMobile ? 'py-2' : 'py-3'">
+          <div class="chat-column flex flex-col min-h-0 h-full" :class="ui.isCompactLayout ? 'py-2' : 'py-3'">
             <div class="relative flex flex-1 flex-col min-h-0">
               <ChatHeader
                 :session-id="chat.selectedSessionId"
@@ -533,7 +533,7 @@ void sessionActionsMenuRef
                               ? t('chat.page.attachmentsWithCount', { count: attachmentsCount })
                               : t('chat.page.attachments')
                           "
-                          :is-mobile-pointer="ui.isMobilePointer"
+                          :is-touch-pointer="ui.isTouchPointer"
                           :title="t('chat.page.attachments')"
                           :aria-label="t('chat.page.attachments')"
                           @mousedown.prevent
@@ -561,7 +561,7 @@ void sessionActionsMenuRef
                           class="text-muted-foreground hover:text-foreground hover:bg-secondary/40"
                           :class="[composerActionMenuOpen ? 'bg-secondary/60 text-foreground' : '']"
                           :tooltip="t('chat.page.tools')"
-                          :is-mobile-pointer="ui.isMobilePointer"
+                          :is-touch-pointer="ui.isTouchPointer"
                           :title="t('chat.page.tools')"
                           :aria-label="t('chat.page.tools')"
                           @mousedown.prevent
@@ -596,7 +596,7 @@ void sessionActionsMenuRef
                         <ToolbarChipButton
                           :active="composerPickerOpen === 'agent'"
                           :tooltip="agentHint"
-                          :is-mobile-pointer="ui.isMobilePointer"
+                          :is-touch-pointer="ui.isTouchPointer"
                           :title="t('chat.composer.picker.agentTitle')"
                           :aria-label="t('chat.composer.picker.agentTitle')"
                           ref="agentTriggerRef"
@@ -610,7 +610,7 @@ void sessionActionsMenuRef
                         <ToolbarChipButton
                           :active="composerPickerOpen === 'model'"
                           :tooltip="modelHint"
-                          :is-mobile-pointer="ui.isMobilePointer"
+                          :is-touch-pointer="ui.isTouchPointer"
                           :title="t('chat.composer.picker.modelTitle')"
                           :aria-label="t('chat.composer.picker.modelTitle')"
                           ref="modelTriggerRef"
@@ -627,7 +627,7 @@ void sessionActionsMenuRef
                           v-if="hasVariantsForSelection"
                           :active="composerPickerOpen === 'variant'"
                           :tooltip="variantHint"
-                          :is-mobile-pointer="ui.isMobilePointer"
+                          :is-touch-pointer="ui.isTouchPointer"
                           :title="t('chat.composer.picker.variantTitle')"
                           :aria-label="t('chat.composer.picker.variantTitle')"
                           ref="variantTriggerRef"
@@ -670,7 +670,7 @@ void sessionActionsMenuRef
                           class="h-8 w-8 text-destructive hover:text-destructive"
                           data-oc-keyboard-tap="blur"
                           :tooltip="t('chat.page.primary.stopRun')"
-                          :is-mobile-pointer="ui.isMobilePointer"
+                          :is-touch-pointer="ui.isTouchPointer"
                           :aria-label="t('chat.page.primary.stopRun')"
                           :disabled="composerStopDisabled"
                           @click="handleComposerStopAction"
@@ -684,7 +684,7 @@ void sessionActionsMenuRef
                           class="h-8 w-8"
                           data-oc-keyboard-tap="blur"
                           :tooltip="t('chat.page.primary.send')"
-                          :is-mobile-pointer="ui.isMobilePointer"
+                          :is-touch-pointer="ui.isTouchPointer"
                           :aria-label="t('chat.page.primary.sendMessage')"
                           :disabled="composerPrimaryDisabled"
                           @click="handleComposerPrimaryAction"

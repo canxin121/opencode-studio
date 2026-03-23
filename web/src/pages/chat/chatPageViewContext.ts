@@ -84,7 +84,7 @@ export type ChatPageViewContext = {
     clearSessionError: (sessionId: string) => void
   }
   ui: {
-    isMobile: boolean
+    isCompactLayout: boolean
     isMobilePointer: boolean
     isSessionSwitcherOpen: boolean
     setSessionSwitcherOpen: (open: boolean) => void

@@ -577,7 +577,7 @@ function isRenamingSession(session: WorkspacePreviewSession, scope: PreviewSideb
 }
 
 function isInlineRenameSession(session: WorkspacePreviewSession, scope: PreviewSidebarScope): boolean {
-  return !ui.isMobile && isRenamingSession(session, scope)
+  return !ui.isCompactLayout && isRenamingSession(session, scope)
 }
 
 function startRenameSession(sessionId: string, scope: PreviewSidebarScope) {
@@ -594,7 +594,7 @@ function startRenameSession(sessionId: string, scope: PreviewSidebarScope) {
   if (scope === 'directory') directorySectionOpen.value = true
   if (scope === 'all') allSectionOpen.value = true
 
-  if (ui.isMobile) {
+  if (ui.isCompactLayout) {
     renameDialogOpen.value = true
   }
 }
@@ -641,10 +641,10 @@ function onRenameDraftInput(event: Event) {
 }
 
 watch(
-  () => ({ id: renamingSessionId.value, scope: renamingScope.value, isMobile: ui.isMobile }),
+  () => ({ id: renamingSessionId.value, scope: renamingScope.value, isCompactLayout: ui.isCompactLayout }),
   (next) => {
     if (!next.id) return
-    if (next.isMobile) return
+    if (next.isCompactLayout) return
     void nextTick(() => {
       const el = renameInputEl.value
       if (!el) return
@@ -894,7 +894,7 @@ onBeforeUnmount(() => {
 
 function selectSession(sessionId: string) {
   preview.selectSession(sessionId)
-  if (ui.isMobile) ui.setSessionSwitcherOpen(false)
+  if (ui.isCompactLayout) ui.setSessionSwitcherOpen(false)
   probeVisibleSessions()
 }
 </script>
@@ -902,7 +902,7 @@ function selectSession(sessionId: string) {
 <template>
   <section
     class="flex h-full min-h-0 flex-col bg-sidebar text-sidebar-foreground"
-    :class="ui.isMobile ? '' : 'border-r border-border'"
+    :class="ui.isCompactLayout ? '' : 'border-r border-border'"
   >
     <div class="h-9 pt-1 select-none pl-3.5 pr-2 flex-shrink-0">
       <div class="flex h-full items-center justify-between gap-2">
@@ -919,7 +919,7 @@ function selectSession(sessionId: string) {
           <IconButton
             :tooltip="String(t('workspaceDock.preview.emptyState.addAction'))"
             :aria-label="String(t('workspaceDock.preview.emptyState.addAction'))"
-            :is-mobile-pointer="ui.isMobilePointer"
+            :is-touch-pointer="ui.isTouchPointer"
             :disabled="actionLoading"
             @click="openCreateDialog"
           >
@@ -929,7 +929,7 @@ function selectSession(sessionId: string) {
           <IconButton
             :tooltip="String(t('workspaceDock.preview.refresh'))"
             :aria-label="String(t('workspaceDock.preview.refresh'))"
-            :is-mobile-pointer="ui.isMobilePointer"
+            :is-touch-pointer="ui.isTouchPointer"
             :disabled="preview.loading"
             @click="refreshSessions({ forceFrameReload: true })"
           >
@@ -958,7 +958,7 @@ function selectSession(sessionId: string) {
                   : t('workspaceDock.preview.sidebar.actions.enterMultiSelect'),
               )
             "
-            :is-mobile-pointer="ui.isMobilePointer"
+            :is-touch-pointer="ui.isTouchPointer"
             :class="previewMultiSelect.enabled.value ? 'bg-primary/10 text-primary hover:bg-primary/15' : ''"
             @click="togglePreviewMultiSelectMode"
           >
@@ -984,7 +984,7 @@ function selectSession(sessionId: string) {
         :search-title="String(t('common.search'))"
         :clear-aria-label="String(t('common.clear'))"
         :clear-title="String(t('common.clear'))"
-        :is-mobile-pointer="ui.isMobilePointer"
+        :is-touch-pointer="ui.isTouchPointer"
       />
     </div>
 
@@ -1018,7 +1018,7 @@ function selectSession(sessionId: string) {
             :tooltip="String(t('common.selectAll'))"
             :title="String(t('common.selectAll'))"
             :aria-label="String(t('common.selectAll'))"
-            :is-mobile-pointer="ui.isMobilePointer"
+            :is-touch-pointer="ui.isTouchPointer"
             :disabled="
               filteredPreviewSessionIds.length === 0 ||
               previewMultiSelect.selectedCount.value === filteredPreviewSessionIds.length
@@ -1033,7 +1033,7 @@ function selectSession(sessionId: string) {
             :tooltip="String(t('common.invertSelection'))"
             :title="String(t('common.invertSelection'))"
             :aria-label="String(t('common.invertSelection'))"
-            :is-mobile-pointer="ui.isMobilePointer"
+            :is-touch-pointer="ui.isTouchPointer"
             :disabled="filteredPreviewSessionIds.length === 0"
             @click="invertPreviewSessionsSelection"
           >
@@ -1060,7 +1060,7 @@ function selectSession(sessionId: string) {
               :tooltip="String(t('workspaceDock.preview.sidebar.actions.deleteSelected'))"
               :title="String(t('workspaceDock.preview.sidebar.actions.deleteSelected'))"
               :aria-label="String(t('workspaceDock.preview.sidebar.actions.deleteSelected'))"
-              :is-mobile-pointer="ui.isMobilePointer"
+              :is-touch-pointer="ui.isTouchPointer"
               :disabled="previewMultiSelect.selectedCount.value === 0"
               @click.stop
             >
@@ -1073,7 +1073,7 @@ function selectSession(sessionId: string) {
             :tooltip="String(t('workspaceDock.preview.sidebar.actions.exitMultiSelect'))"
             :title="String(t('workspaceDock.preview.sidebar.actions.exitMultiSelect'))"
             :aria-label="String(t('workspaceDock.preview.sidebar.actions.exitMultiSelect'))"
-            :is-mobile-pointer="ui.isMobilePointer"
+            :is-touch-pointer="ui.isTouchPointer"
             @click="togglePreviewMultiSelectMode"
           >
             <RiCloseLine class="h-3.5 w-3.5" />

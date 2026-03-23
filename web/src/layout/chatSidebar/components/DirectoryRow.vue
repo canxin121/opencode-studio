@@ -21,7 +21,7 @@ import type { DirectoryEntry } from '@/features/sessions/model/types'
 const props = withDefaults(
   defineProps<{
     directory: DirectoryEntry
-    uiIsMobile: boolean
+    uiIsCompactLayout: boolean
     collapsed?: boolean
     focused?: boolean
     multiSelectEnabled?: boolean
@@ -55,7 +55,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 
-const actionsAlwaysVisible = computed(() => props.uiIsMobile)
+const actionsAlwaysVisible = computed(() => props.uiIsCompactLayout)
 const rowActive = computed(() => (props.multiSelectEnabled ? props.multiSelected : props.focused))
 const sessionMultiSelectTooltip = computed(() =>
   String(
@@ -147,7 +147,7 @@ function handleMobileOpenActionsClick() {
 
     <template #actions>
       <template v-if="multiSelectEnabled" />
-      <template v-else-if="uiIsMobile">
+      <template v-else-if="uiIsCompactLayout">
         <ListItemOverflowActionButton
           mobile
           :label="String(t('chat.sidebar.directoriesList.directoryActions'))"

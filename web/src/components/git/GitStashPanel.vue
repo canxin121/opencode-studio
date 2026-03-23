@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { RiAddLine, RiArrowDownLine, RiArrowUpLine, RiDeleteBinLine, RiGitBranchLine } from '@remixicon/vue'
 import { useI18n } from 'vue-i18n'
 
@@ -16,8 +17,13 @@ const props = defineProps<{
   stashes: GitStashEntry[]
   loading: boolean
   canOperate: boolean
-  isMobilePointer: boolean
+  isTouchPointer?: boolean
+  isMobileFormFactor?: boolean
+  isMobilePointer?: boolean
 }>()
+
+const isMobileFormFactor = computed(() => props.isMobileFormFactor ?? props.isMobilePointer)
+const isTouchPointer = computed(() => props.isTouchPointer ?? isMobileFormFactor.value)
 
 const emit = defineEmits<{
   (e: 'update:expanded', value: boolean): void
@@ -62,7 +68,7 @@ function stashTitle(entry: GitStashEntry): string {
             destructive
             :disabled="loading || !stashes.length"
             :tooltip="t('git.ui.stashPanel.actions.dropAll')"
-            :is-mobile-pointer="isMobilePointer"
+            :is-touch-pointer="isTouchPointer"
             :aria-label="t('git.ui.stashPanel.actions.dropAll')"
             @click.stop
           >
@@ -74,7 +80,7 @@ function stashTitle(entry: GitStashEntry): string {
           size="sm"
           :disabled="!canOperate"
           :tooltip="t('git.ui.stashPanel.actions.stashEllipsis')"
-          :is-mobile-pointer="isMobilePointer"
+          :is-touch-pointer="isTouchPointer"
           :aria-label="t('git.ui.stashPanel.actions.stashEllipsis')"
           @click.stop="$emit('openCreate')"
         >
@@ -91,7 +97,7 @@ function stashTitle(entry: GitStashEntry): string {
         <SidebarListItem
           v-for="s in stashes"
           :key="s.ref"
-          :actions-always-visible="isMobilePointer"
+          :actions-always-visible="isMobileFormFactor"
           class="py-1.5"
           @click="$emit('view', s.ref)"
         >
@@ -106,7 +112,7 @@ function stashTitle(entry: GitStashEntry): string {
             <SidebarIconButton
               size="sm"
               :tooltip="t('common.apply')"
-              :is-mobile-pointer="isMobilePointer"
+              :is-touch-pointer="isTouchPointer"
               :aria-label="t('common.apply')"
               @click.stop="$emit('apply', s.ref)"
             >
@@ -115,7 +121,7 @@ function stashTitle(entry: GitStashEntry): string {
             <SidebarIconButton
               size="sm"
               :tooltip="t('git.ui.stashPanel.actions.pop')"
-              :is-mobile-pointer="isMobilePointer"
+              :is-touch-pointer="isTouchPointer"
               :aria-label="t('git.ui.stashPanel.actions.pop')"
               @click.stop="$emit('pop', s.ref)"
             >
@@ -124,7 +130,7 @@ function stashTitle(entry: GitStashEntry): string {
             <SidebarIconButton
               size="sm"
               :tooltip="t('git.fields.branch')"
-              :is-mobile-pointer="isMobilePointer"
+              :is-touch-pointer="isTouchPointer"
               :aria-label="t('git.fields.branch')"
               @click.stop="$emit('branch', s.ref)"
             >
@@ -134,7 +140,7 @@ function stashTitle(entry: GitStashEntry): string {
               size="sm"
               destructive
               :tooltip="t('git.ui.stashPanel.actions.drop')"
-              :is-mobile-pointer="isMobilePointer"
+              :is-touch-pointer="isTouchPointer"
               :aria-label="t('git.ui.stashPanel.actions.drop')"
               @click.stop="$emit('drop', s.ref)"
             >

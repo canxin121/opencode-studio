@@ -25,11 +25,15 @@ const props = withDefaults(
     diffSource: DiffSource
     hasMore: boolean
     loading: boolean
-    isMobilePointer: boolean
+    isTouchPointer?: boolean
+    isMobileFormFactor?: boolean
+    isMobilePointer?: boolean
     multiSelectMode?: boolean
     selectedPaths?: string[]
   }>(),
   {
+    isMobileFormFactor: false,
+    isMobilePointer: false,
     multiSelectMode: false,
     selectedPaths: () => [],
   },
@@ -72,6 +76,8 @@ function onFileSelect(path: string, event: MouseEvent) {
 
 const selectedCount = computed(() => props.files.filter((f) => isPathSelected(f.path)).length)
 const selectableCount = computed(() => props.files.length)
+const isMobileFormFactor = computed(() => props.isMobileFormFactor ?? props.isMobilePointer)
+const isTouchPointer = computed(() => props.isTouchPointer ?? isMobileFormFactor.value)
 
 function mobileActionsForFile(path: string): OptionMenuItem[] {
   return [
@@ -151,7 +157,7 @@ function runMobileAction(path: string, actionId: string) {
           <SidebarIconButton
             size="sm"
             :tooltip="String(t('common.selectAll'))"
-            :is-mobile-pointer="isMobilePointer"
+            :is-touch-pointer="isTouchPointer"
             :aria-label="String(t('common.selectAll'))"
             :disabled="selectableCount === 0 || selectedCount === selectableCount"
             @click.stop="emit('selectAllSelected')"
@@ -162,7 +168,7 @@ function runMobileAction(path: string, actionId: string) {
           <SidebarIconButton
             size="sm"
             :tooltip="String(t('common.invertSelection'))"
-            :is-mobile-pointer="isMobilePointer"
+            :is-touch-pointer="isTouchPointer"
             :aria-label="String(t('common.invertSelection'))"
             :disabled="selectableCount === 0"
             @click.stop="emit('invertSelected')"
@@ -173,7 +179,7 @@ function runMobileAction(path: string, actionId: string) {
           <SidebarIconButton
             size="sm"
             :tooltip="String(t('git.ui.workingTree.actions.stageSelected'))"
-            :is-mobile-pointer="isMobilePointer"
+            :is-touch-pointer="isTouchPointer"
             :aria-label="String(t('git.ui.workingTree.actions.stageSelected'))"
             :disabled="selectedCount === 0"
             @click.stop="emit('stageSelected')"
@@ -184,7 +190,7 @@ function runMobileAction(path: string, actionId: string) {
           <SidebarIconButton
             size="sm"
             :tooltip="String(t('git.ui.workingTree.actions.ignore'))"
-            :is-mobile-pointer="isMobilePointer"
+            :is-touch-pointer="isTouchPointer"
             :aria-label="String(t('git.ui.workingTree.actions.ignore'))"
             :disabled="selectedCount === 0"
             @click.stop="emit('ignoreSelected')"
@@ -208,7 +214,7 @@ function runMobileAction(path: string, actionId: string) {
               size="sm"
               destructive
               :tooltip="String(t('git.ui.workingTree.actions.deleteSelected'))"
-              :is-mobile-pointer="isMobilePointer"
+              :is-touch-pointer="isTouchPointer"
               :aria-label="String(t('git.ui.workingTree.actions.deleteSelected'))"
               :disabled="selectedCount === 0"
               @click.stop
@@ -220,7 +226,7 @@ function runMobileAction(path: string, actionId: string) {
           <SidebarIconButton
             size="sm"
             :tooltip="String(t('git.ui.workingTree.actions.exitMultiSelect'))"
-            :is-mobile-pointer="isMobilePointer"
+            :is-touch-pointer="isTouchPointer"
             :aria-label="String(t('git.ui.workingTree.actions.exitMultiSelect'))"
             @click.stop="emit('toggleMultiSelect')"
           >
@@ -242,7 +248,7 @@ function runMobileAction(path: string, actionId: string) {
               destructive
               :disabled="count === 0"
               :tooltip="t('git.actionsMenu.cleanup.cleanUntracked.label')"
-              :is-mobile-pointer="isMobilePointer"
+              :is-touch-pointer="isTouchPointer"
               :aria-label="t('git.actionsMenu.cleanup.cleanUntracked.label')"
               @click.stop
             >
@@ -252,7 +258,7 @@ function runMobileAction(path: string, actionId: string) {
           <SidebarIconButton
             size="sm"
             :tooltip="t('git.ui.workingTree.actions.stageAll')"
-            :is-mobile-pointer="isMobilePointer"
+            :is-touch-pointer="isTouchPointer"
             :aria-label="t('git.ui.workingTree.actions.stageAll')"
             @click.stop="$emit('stageAll')"
           >
@@ -261,7 +267,7 @@ function runMobileAction(path: string, actionId: string) {
           <SidebarIconButton
             size="sm"
             :tooltip="String(t('git.ui.workingTree.actions.enterMultiSelect'))"
-            :is-mobile-pointer="isMobilePointer"
+            :is-touch-pointer="isTouchPointer"
             :aria-label="String(t('git.ui.workingTree.actions.enterMultiSelect'))"
             :disabled="selectableCount === 0"
             @click.stop="emit('toggleMultiSelect')"
@@ -287,7 +293,7 @@ function runMobileAction(path: string, actionId: string) {
           :insertions="f.insertions ?? 0"
           :show-selection="multiSelectMode"
           :selected="isPathSelected(f.path)"
-          :is-mobile-pointer="isMobilePointer"
+          :is-mobile-form-factor="isMobileFormFactor"
           :mobile-action-items="mobileActionsForFile(f.path)"
           :mobile-action-title="t('git.ui.workingTree.fileActionsTitle')"
           @select="(event) => onFileSelect(f.path, event)"
@@ -297,7 +303,7 @@ function runMobileAction(path: string, actionId: string) {
             <SidebarIconButton
               size="sm"
               :tooltip="t('git.ui.workingTree.actions.stage')"
-              :is-mobile-pointer="isMobilePointer"
+              :is-touch-pointer="isTouchPointer"
               :aria-label="t('git.ui.workingTree.actions.stage')"
               @click.stop="$emit('stage', f.path)"
             >
@@ -306,7 +312,7 @@ function runMobileAction(path: string, actionId: string) {
             <SidebarIconButton
               size="sm"
               :tooltip="t('common.rename')"
-              :is-mobile-pointer="isMobilePointer"
+              :is-touch-pointer="isTouchPointer"
               :aria-label="t('common.rename')"
               @click.stop="$emit('rename', f.path)"
             >
@@ -315,7 +321,7 @@ function runMobileAction(path: string, actionId: string) {
             <SidebarIconButton
               size="sm"
               :tooltip="t('git.ui.workingTree.actions.ignore')"
-              :is-mobile-pointer="isMobilePointer"
+              :is-touch-pointer="isTouchPointer"
               :aria-label="t('git.ui.workingTree.actions.ignore')"
               @click.stop="$emit('ignore', f.path)"
             >
@@ -333,7 +339,7 @@ function runMobileAction(path: string, actionId: string) {
                 size="sm"
                 destructive
                 :tooltip="t('git.ui.workingTree.actions.deleteFile')"
-                :is-mobile-pointer="isMobilePointer"
+                :is-touch-pointer="isTouchPointer"
                 :aria-label="t('git.ui.workingTree.actions.deleteFile')"
                 @click.stop
               >

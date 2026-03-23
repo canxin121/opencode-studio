@@ -25,6 +25,12 @@ const STORAGE_WORKSPACE_DOCK_WIDTH = localStorageKeys.ui.workspaceDockWidth
 const STORAGE_WORKSPACE_DOCK_HEIGHT = localStorageKeys.ui.workspaceDockHeight
 
 export const useUiStore = defineStore('ui', () => {
+  // Explicit semantic signals.
+  const isCompactLayout = ref(false)
+  const isMobileDevice = ref(false)
+  const isTouchPointer = ref(false)
+
+  // Legacy aliases kept for broad compatibility while migrating call sites.
   const isMobile = ref(false)
   const isMobilePointer = ref(false)
 
@@ -53,7 +59,7 @@ export const useUiStore = defineStore('ui', () => {
   const sidebarLocateSeq = ref(0)
   const sidebarLocateSessionId = ref<string | null>(null)
 
-  const effectiveSidebarWidth = computed(() => (isSidebarOpen.value && !isMobile.value ? sidebarWidth.value : 0))
+  const effectiveSidebarWidth = computed(() => (isSidebarOpen.value && !isCompactLayout.value ? sidebarWidth.value : 0))
 
   const gitHistorySearchExpanded = ref(getLocalString(STORAGE_GIT_HISTORY_SEARCH_EXPANDED) === 'true')
   watch(gitHistorySearchExpanded, (v) => setLocalString(STORAGE_GIT_HISTORY_SEARCH_EXPANDED, v ? 'true' : 'false'))
@@ -127,11 +133,25 @@ export const useUiStore = defineStore('ui', () => {
 
   const sessionQueryEnabled = ref(false)
 
-  function setIsMobile(next: boolean) {
+  function setIsCompactLayout(next: boolean) {
+    isCompactLayout.value = next
     isMobile.value = next
     if (!next) {
       isSessionSwitcherOpen.value = false
     }
+  }
+
+  function setIsMobileDevice(next: boolean) {
+    isMobileDevice.value = next
+  }
+
+  function setIsTouchPointer(next: boolean) {
+    isTouchPointer.value = next
+  }
+
+  function setIsMobile(next: boolean) {
+    // Legacy API: historically used as compact layout signal.
+    setIsCompactLayout(next)
   }
 
   function setIsMobilePointer(next: boolean) {
@@ -139,7 +159,7 @@ export const useUiStore = defineStore('ui', () => {
   }
 
   function toggleSidebar() {
-    if (isMobile.value) {
+    if (isCompactLayout.value) {
       isSessionSwitcherOpen.value = !isSessionSwitcherOpen.value
       return
     }
@@ -206,7 +226,7 @@ export const useUiStore = defineStore('ui', () => {
 
   function openAndLocateSessionInSidebar(sessionId: string | null) {
     const sid = (sessionId || '').trim()
-    if (isMobile.value) {
+    if (isCompactLayout.value) {
       isSessionSwitcherOpen.value = true
     } else {
       setSidebarOpen(true, { preserveWidth: true })
@@ -261,6 +281,9 @@ export const useUiStore = defineStore('ui', () => {
   }
 
   return {
+    isCompactLayout,
+    isMobileDevice,
+    isTouchPointer,
     isMobile,
     isMobilePointer,
     isSidebarOpen,
@@ -283,6 +306,9 @@ export const useUiStore = defineStore('ui', () => {
     sessionActionSeq,
     sessionActionId,
     sessionQueryEnabled,
+    setIsCompactLayout,
+    setIsMobileDevice,
+    setIsTouchPointer,
     setIsMobile,
     setIsMobilePointer,
     toggleSidebar,

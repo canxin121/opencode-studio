@@ -1958,7 +1958,7 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
       :searchable="true"
       :search-placeholder="String(t('common.searchActions'))"
       :empty-text="String(t('common.noActionsFound'))"
-      :is-mobile-pointer="true"
+      :is-mobile-pointer="ui.isMobilePointer"
       filter-mode="external"
       @update:open="
         (v) => {
@@ -1978,7 +1978,7 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
       :searchable="true"
       :search-placeholder="String(t('common.searchActions'))"
       :empty-text="String(t('common.noActionsFound'))"
-      :is-mobile-pointer="true"
+      :is-mobile-pointer="ui.isMobilePointer"
       filter-mode="external"
       @update:open="
         (v) => {
@@ -2010,7 +2010,7 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
         :directoryPaging="directoryPaging || directoryPageLoading"
         :sessionsLoading="sessionsLoading"
         :query="sidebarQueryDraft"
-        :is-mobile-pointer="ui.isMobilePointer"
+        :is-touch-pointer="ui.isTouchPointer"
         :multi-select-enabled="chatDirectoryMultiSelect.enabled.value"
         @update:query="(v) => (sidebarQueryDraft = v)"
         @submit-query="submitSidebarQuery"
@@ -2060,7 +2060,7 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
               :tooltip="String(t('common.selectAll'))"
               :title="String(t('common.selectAll'))"
               :aria-label="String(t('common.selectAll'))"
-              :is-mobile-pointer="ui.isMobilePointer"
+              :is-touch-pointer="ui.isTouchPointer"
               :disabled="
                 chatDirectorySelectableIds.length === 0 ||
                 chatDirectoryMultiSelect.selectedCount.value === chatDirectorySelectableIds.length
@@ -2075,7 +2075,7 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
               :tooltip="String(t('common.invertSelection'))"
               :title="String(t('common.invertSelection'))"
               :aria-label="String(t('common.invertSelection'))"
-              :is-mobile-pointer="ui.isMobilePointer"
+              :is-touch-pointer="ui.isTouchPointer"
               :disabled="chatDirectorySelectableIds.length === 0"
               @click="invertChatMultiSelected"
             >
@@ -2100,7 +2100,7 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
                 :tooltip="String(t('chat.sidebar.multiSelect.actions.deleteSelected'))"
                 :title="String(t('chat.sidebar.multiSelect.actions.deleteSelected'))"
                 :aria-label="String(t('chat.sidebar.multiSelect.actions.deleteSelected'))"
-                :is-mobile-pointer="ui.isMobilePointer"
+                :is-touch-pointer="ui.isTouchPointer"
                 :disabled="chatSelectedDirectoryCount === 0"
                 @click.stop
               >
@@ -2113,7 +2113,7 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
               :tooltip="String(t('chat.sidebar.multiSelect.actions.exitMultiSelect'))"
               :title="String(t('chat.sidebar.multiSelect.actions.exitMultiSelect'))"
               :aria-label="String(t('chat.sidebar.multiSelect.actions.exitMultiSelect'))"
-              :is-mobile-pointer="ui.isMobilePointer"
+              :is-touch-pointer="ui.isTouchPointer"
               @click="toggleChatMultiSelectMode"
             >
               <RiCloseLine class="h-3.5 w-3.5" />
@@ -2125,7 +2125,8 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
       <div class="flex-1 min-h-0 overflow-x-hidden overflow-y-auto pb-2">
         <div class="flex min-h-full flex-col">
           <DirectoriesList
-            :uiIsMobile="ui.isMobile"
+            :ui-is-compact-layout="ui.isCompactLayout"
+            :ui-is-touch-pointer="ui.isTouchPointer"
             :directories="directories"
             :pagedDirectories="pagedDirectories"
             :visibleDirectories="visibleDirectories"
@@ -2206,7 +2207,7 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
               :pinnedSessionsTotal="pinnedSessionsTotal"
               :pinnedSessionsPageCount="pinnedSessionsPageCount"
               :selectedSessionId="chat.selectedSessionId"
-              :uiIsMobile="ui.isMobile"
+              :ui-is-compact-layout="ui.isCompactLayout"
               :multiSelectEnabled="false"
               :isSessionSelected="isSessionMultiSelected"
               :toggleSessionSelected="toggleSessionMultiSelected"
@@ -2245,7 +2246,7 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
               :recentSessionsTotal="recentSessionsTotal"
               :recentSessionsPageCount="recentSessionsPageCount"
               :selectedSessionId="chat.selectedSessionId"
-              :uiIsMobile="ui.isMobile"
+              :ui-is-compact-layout="ui.isCompactLayout"
               :multiSelectEnabled="false"
               :isSessionSelected="isSessionMultiSelected"
               :toggleSessionSelected="toggleSessionMultiSelected"
@@ -2289,7 +2290,7 @@ const { locatedSessionId, locateFromSearch, searchWarming, sessionSearchHits, se
               :isSessionSelected="isSessionMultiSelected"
               :toggleSessionSelected="toggleSessionMultiSelected"
               @open-session="openRunningSession"
-              :uiIsMobile="ui.isMobile"
+              :ui-is-compact-layout="ui.isCompactLayout"
               :pinnedSessionIds="pinnedSessionIds"
               :hasAttention="hasAttention"
               :openSessionActions="openSessionActions"

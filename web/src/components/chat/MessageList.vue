@@ -21,7 +21,7 @@ import { formatTimeHMS } from '@/i18n/intl'
 import type { OptimisticUserMessage } from '@/composables/chat/useMessageStreaming'
 
 const props = defineProps<{
-  isMobile: boolean
+  isCompactLayout: boolean
   selectedSessionId: string | null
   messagesLoading: boolean
   messagesError: string | null
@@ -100,9 +100,12 @@ function sessionErrorAtLabel(): string {
 </script>
 
 <template>
-  <div v-if="!selectedSessionId" :class="isMobile ? 'h-full min-h-[240px]' : 'py-16 text-center text-muted-foreground'">
+  <div
+    v-if="!selectedSessionId"
+    :class="isCompactLayout ? 'h-full min-h-[240px]' : 'py-16 text-center text-muted-foreground'"
+  >
     <MobileSidebarEmptyState
-      v-if="isMobile"
+      v-if="isCompactLayout"
       :title="t('chat.messages.empty.title')"
       :description="t('chat.messages.empty.description')"
       :action-label="t('chat.messages.empty.actionLabel')"

@@ -53,7 +53,9 @@ const showGitignored = defineModel<boolean>('showGitignored', { default: false }
 
 const props = defineProps<{
   root: string
-  isMobile: boolean
+  isCompactLayout: boolean
+  isMobileFormFactor?: boolean
+  isMobilePointer?: boolean
   selectedFilePath: string
   activeCreateDir: string
   hasRootChildren: boolean
@@ -81,6 +83,8 @@ const props = defineProps<{
   clearSelectedPaths: () => void
   uploadFiles: (files: readonly File[], targetDir?: string) => void | Promise<void>
 }>()
+
+const isMobileFormFactor = computed(() => Boolean(props.isMobileFormFactor ?? props.isMobilePointer))
 
 const uploadInputRef = ref<HTMLInputElement | null>(null)
 const dropTargetDir = ref('')
@@ -414,7 +418,7 @@ function isWithinInlineRename(target: Node | null): boolean {
 }
 
 async function startCreate(kind: InlineCreateKind) {
-  if (props.isMobile) {
+  if (props.isCompactLayout) {
     props.openDialog(kind, selectedDirectoryNode.value || undefined)
     return
   }
@@ -439,7 +443,7 @@ async function startCreate(kind: InlineCreateKind) {
 }
 
 async function startRename(node: FileNode) {
-  if (props.isMobile) {
+  if (props.isCompactLayout) {
     props.openDialog('rename', node)
     return
   }
@@ -647,7 +651,7 @@ function onRowPointerDown(ev: PointerEvent, node: FileNode) {
     suppressClickUntil.value = Date.now() + 650
     void props.handleNodeLongPress(state.node)
 
-    if (!props.isMobile && ev.pointerType !== 'touch') {
+    if (!props.isCompactLayout && ev.pointerType !== 'touch') {
       const sourcePath = normalizePath(String(state.node.path || '').trim())
       const sourceParentDir = dirname(sourcePath) || props.root
       dragSourcePath.value = sourcePath
@@ -1000,7 +1004,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section class="oc-vscode-pane" :class="isMobile ? 'border-0 rounded-none' : ''">
+  <section class="oc-vscode-pane" :class="isCompactLayout ? 'border-0 rounded-none' : ''">
     <div class="oc-vscode-pane-header">
       <div class="oc-vscode-pane-title">{{ t('files.explorer.title') }}</div>
       <div class="flex items-center gap-1">
@@ -1055,7 +1059,7 @@ onBeforeUnmount(() => {
             :mobile-title="t('files.explorer.toolbar.actions')"
             :searchable="true"
             filter-mode="internal"
-            :is-mobile-pointer="isMobile"
+            :is-mobile-pointer="isMobileFormFactor"
             :desktop-fixed="true"
             desktop-placement="bottom-start"
             desktop-class="w-72"
@@ -1266,7 +1270,7 @@ onBeforeUnmount(() => {
                   v-else
                   :active="isNodeSelected(entry.row.node.path) || selectedFilePath === entry.row.node.path"
                   :indent="8 + entry.row.depth * 14"
-                  :actions-always-visible="isMobile"
+                  :actions-always-visible="isCompactLayout"
                   class="h-[22px] rounded-sm border border-transparent !py-0 !pr-1 !text-[12px]"
                   :data-node-path="entry.row.node.path"
                   :data-node-type="entry.row.node.type"
@@ -1313,7 +1317,7 @@ onBeforeUnmount(() => {
                   <span class="min-w-0 flex-1 truncate" :title="entry.row.node.path">{{ entry.row.node.name }}</span>
 
                   <template #actions>
-                    <div v-if="isMobile" class="relative" data-file-action-root="true">
+                    <div v-if="isCompactLayout" class="relative" data-file-action-root="true">
                       <SidebarIconButton
                         size="sm"
                         :title="t('files.explorer.actions.actions')"
@@ -1330,7 +1334,7 @@ onBeforeUnmount(() => {
                         :mobile-title="rowActionMenuTitle(entry.row.node)"
                         :searchable="true"
                         filter-mode="internal"
-                        :is-mobile-pointer="isMobile"
+                        :is-mobile-pointer="isMobileFormFactor"
                         :desktop-fixed="true"
                         desktop-placement="bottom-start"
                         desktop-class="w-56"
@@ -1362,7 +1366,7 @@ onBeforeUnmount(() => {
                           :mobile-title="rowActionMenuTitle(entry.row.node)"
                           :searchable="true"
                           filter-mode="internal"
-                          :is-mobile-pointer="isMobile"
+                          :is-mobile-pointer="isMobileFormFactor"
                           :desktop-fixed="true"
                           desktop-placement="bottom-start"
                           desktop-class="w-44"

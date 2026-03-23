@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { RiAddLine, RiCloseLine, RiListCheck3, RiRefreshLine } from '@remixicon/vue'
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import IconButton from '@/components/ui/IconButton.vue'
@@ -14,9 +15,12 @@ const props = defineProps<{
   directoryPaging?: boolean
   sessionsLoading: boolean
   query: string
+  isTouchPointer?: boolean
   isMobilePointer?: boolean
   multiSelectEnabled?: boolean
 }>()
+
+const isTouchPointer = computed(() => Boolean(props.isTouchPointer ?? props.isMobilePointer))
 
 const emit = defineEmits<{
   (e: 'update:query', v: string): void
@@ -51,7 +55,7 @@ const emit = defineEmits<{
 
         <IconButton
           :tooltip="String(t('chat.sidebar.header.addDirectory'))"
-          :is-mobile-pointer="Boolean(props.isMobilePointer)"
+          :is-touch-pointer="isTouchPointer"
           :title="String(t('chat.sidebar.header.addDirectory'))"
           @click="emit('add-directory')"
         >
@@ -60,7 +64,7 @@ const emit = defineEmits<{
 
         <IconButton
           :tooltip="String(t('chat.sidebar.header.refresh'))"
-          :is-mobile-pointer="Boolean(props.isMobilePointer)"
+          :is-touch-pointer="isTouchPointer"
           :title="String(t('chat.sidebar.header.refresh'))"
           :disabled="sessionsLoading"
           @click="emit('refresh')"
@@ -76,7 +80,7 @@ const emit = defineEmits<{
                 : t('chat.sidebar.multiSelect.actions.enterMultiSelect'),
             )
           "
-          :is-mobile-pointer="Boolean(props.isMobilePointer)"
+          :is-touch-pointer="isTouchPointer"
           :title="
             String(
               props.multiSelectEnabled
@@ -116,7 +120,7 @@ const emit = defineEmits<{
       :search-title="String(t('common.search'))"
       :clear-aria-label="String(t('chat.sidebar.header.clearSearch'))"
       :clear-title="String(t('common.clear'))"
-      :is-mobile-pointer="Boolean(props.isMobilePointer)"
+      :is-touch-pointer="isTouchPointer"
     />
   </div>
 </template>

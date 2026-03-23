@@ -220,7 +220,7 @@ function hydratePendingSendFromQuery() {
   }
 }
 
-const useShellSidebar = computed(() => (ui.isMobile ? ui.isSessionSwitcherOpen : ui.isSidebarOpen))
+const useShellSidebar = computed(() => (ui.isCompactLayout ? ui.isSessionSwitcherOpen : ui.isSidebarOpen))
 const sessionId = ref<string | null>(null)
 const sessionList = ref<string[]>([])
 const sessionMetaById = ref<Record<string, TerminalSessionMeta>>({})
@@ -973,7 +973,7 @@ const activeSessionName = computed(() => {
 })
 
 function openTerminalSidebar() {
-  if (ui.isMobile) {
+  if (ui.isCompactLayout) {
     ui.setSessionSwitcherOpen(true)
     return
   }
@@ -1673,8 +1673,8 @@ function ensureTerminalMounted() {
   t.open(el.value)
   f.fit()
 
-  // On mobile, avoid auto-focus so the IME doesn't pop immediately.
-  if (!ui.isMobilePointer) t.focus()
+  // On touch pointers, avoid auto-focus so the IME doesn't pop immediately.
+  if (!ui.isTouchPointer) t.focus()
 
   // Force an initial paint. Without this, some browsers show a black viewport
   // until the first input/scroll.
@@ -1965,11 +1965,11 @@ watch(el, () => {
     <aside
       v-if="useShellSidebar"
       class="relative flex h-full min-h-0 flex-col overflow-hidden bg-sidebar text-sidebar-foreground"
-      :class="ui.isMobile ? 'w-full' : 'border-r border-sidebar-border/60'"
-      :style="ui.isMobile ? undefined : { width: `${ui.sidebarWidth}px` }"
+      :class="ui.isCompactLayout ? 'w-full' : 'border-r border-sidebar-border/60'"
+      :style="ui.isCompactLayout ? undefined : { width: `${ui.sidebarWidth}px` }"
     >
       <div
-        v-if="!ui.isMobile"
+        v-if="!ui.isCompactLayout"
         class="absolute right-0 top-0 z-10 h-full w-1 cursor-col-resize hover:bg-primary/40"
         @pointerdown="startDesktopSidebarResize"
       />
@@ -1990,7 +1990,7 @@ watch(el, () => {
               size="md"
               class="h-8 w-8"
               :tooltip="String(t('terminal.session.create'))"
-              :is-mobile-pointer="ui.isMobilePointer"
+              :is-touch-pointer="ui.isTouchPointer"
               :title="String(t('terminal.session.create'))"
               :aria-label="String(t('terminal.session.create'))"
               @click="startSessionCreate"
@@ -2003,7 +2003,7 @@ watch(el, () => {
               size="md"
               class="h-8 w-8"
               :tooltip="String(t('terminal.sidebar.refreshSessions'))"
-              :is-mobile-pointer="ui.isMobilePointer"
+              :is-touch-pointer="ui.isTouchPointer"
               :title="String(t('terminal.sidebar.refreshSessions'))"
               :aria-label="String(t('terminal.sidebar.refreshSessions'))"
               :disabled="sessionListRefreshing"
@@ -2024,7 +2024,7 @@ watch(el, () => {
                     : t('terminal.actions.enterMultiSelect'),
                 )
               "
-              :is-mobile-pointer="ui.isMobilePointer"
+              :is-touch-pointer="ui.isTouchPointer"
               :title="
                 String(
                   terminalMultiSelect.enabled.value
@@ -2059,7 +2059,7 @@ watch(el, () => {
           :search-title="String(t('terminal.sidebar.searchAria'))"
           :clear-aria-label="String(t('terminal.sidebar.clearSearch'))"
           :clear-title="String(t('common.clear'))"
-          :is-mobile-pointer="ui.isMobilePointer"
+          :is-touch-pointer="ui.isTouchPointer"
         />
       </div>
 
@@ -2092,7 +2092,7 @@ watch(el, () => {
               :tooltip="String(t('common.selectAll'))"
               :title="String(t('common.selectAll'))"
               :aria-label="String(t('common.selectAll'))"
-              :is-mobile-pointer="ui.isMobilePointer"
+              :is-touch-pointer="ui.isTouchPointer"
               :disabled="
                 visibleTerminalSelectableIds.length === 0 ||
                 terminalMultiSelect.selectedCount.value === visibleTerminalSelectableIds.length
@@ -2107,7 +2107,7 @@ watch(el, () => {
               :tooltip="String(t('common.invertSelection'))"
               :title="String(t('common.invertSelection'))"
               :aria-label="String(t('common.invertSelection'))"
-              :is-mobile-pointer="ui.isMobilePointer"
+              :is-touch-pointer="ui.isTouchPointer"
               :disabled="visibleTerminalSelectableIds.length === 0"
               @click="invertTerminalSessionsSelection"
             >
@@ -2134,7 +2134,7 @@ watch(el, () => {
                 :tooltip="String(t('terminal.actions.deleteSelected'))"
                 :title="String(t('terminal.actions.deleteSelected'))"
                 :aria-label="String(t('terminal.actions.deleteSelected'))"
-                :is-mobile-pointer="ui.isMobilePointer"
+                :is-touch-pointer="ui.isTouchPointer"
                 :disabled="terminalMultiSelect.selectedCount.value === 0"
                 @click.stop
               >
@@ -2147,7 +2147,7 @@ watch(el, () => {
               :tooltip="String(t('terminal.actions.exitMultiSelect'))"
               :title="String(t('terminal.actions.exitMultiSelect'))"
               :aria-label="String(t('terminal.actions.exitMultiSelect'))"
-              :is-mobile-pointer="ui.isMobilePointer"
+              :is-touch-pointer="ui.isTouchPointer"
               @click="toggleTerminalMultiSelectMode"
             >
               <RiCloseLine class="h-3.5 w-3.5" />
@@ -2360,13 +2360,13 @@ watch(el, () => {
       </div>
     </aside>
 
-    <div class="min-w-0 flex-1 flex flex-col overflow-hidden" v-show="!ui.isMobile || !ui.isSessionSwitcherOpen">
+    <div class="min-w-0 flex-1 flex flex-col overflow-hidden" v-show="!ui.isCompactLayout || !ui.isSessionSwitcherOpen">
       <MobileSidebarEmptyState
         v-if="!sessionId"
         :title="String(t('terminal.emptyState.title'))"
         :description="String(t('terminal.emptyState.description'))"
         :action-label="String(t('terminal.emptyState.actionLabel'))"
-        :show-action="ui.isMobile"
+        :show-action="ui.isCompactLayout"
         @action="openTerminalSidebar"
       />
 
@@ -2386,7 +2386,7 @@ watch(el, () => {
             size="md"
             class="h-8 w-8 shrink-0"
             :tooltip="String(t('terminal.shortcuts.openHelp'))"
-            :is-mobile-pointer="ui.isMobilePointer"
+            :is-touch-pointer="ui.isTouchPointer"
             :aria-label="String(t('terminal.shortcuts.openHelp'))"
             :title="String(t('terminal.shortcuts.openHelp'))"
             @click="shortcutHelpOpen = !shortcutHelpOpen"
@@ -2410,7 +2410,7 @@ watch(el, () => {
               class="h-8 w-8 shrink-0"
               :disabled="connectionToggleDisabled"
               :tooltip="connectionToggleLabel"
-              :is-mobile-pointer="ui.isMobilePointer"
+              :is-touch-pointer="ui.isTouchPointer"
               :aria-label="connectionToggleLabel"
               :title="connectionToggleLabel"
             >
@@ -2425,7 +2425,7 @@ watch(el, () => {
             class="h-8 w-8 shrink-0 border-emerald-500/45 text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-300"
             :disabled="connectionToggleDisabled"
             :tooltip="connectionToggleLabel"
-            :is-mobile-pointer="ui.isMobilePointer"
+            :is-touch-pointer="ui.isTouchPointer"
             :aria-label="connectionToggleLabel"
             :title="connectionToggleLabel"
             @click="toggleConnection"

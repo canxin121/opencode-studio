@@ -140,7 +140,8 @@ const filesMultiSelect = useUnifiedMultiSelect()
 
 const projectRoot = computed(() => directoryStore.currentDirectory || '')
 const root = computed(() => trimTrailingSlashes(normalizePath((projectRoot.value || '').trim())))
-const isMobile = computed(() => ui.isMobile)
+const isCompactLayout = computed(() => ui.isCompactLayout)
+const isMobileFormFactor = computed(() => ui.isMobilePointer)
 const embeddedView = ref<'list' | 'viewer'>(props.embedded ? 'list' : 'viewer')
 
 const showHidden = ref(localStorage.getItem(STORAGE_FILES_SHOW_HIDDEN) === 'true')
@@ -399,7 +400,7 @@ const uploading = ref(false)
 const showMobileViewer = ref(false)
 const showFilesSidebar = computed(() => {
   if (props.embedded) return embeddedView.value === 'list'
-  return isMobile.value ? ui.isSessionSwitcherOpen : ui.isSidebarOpen
+  return isCompactLayout.value ? ui.isSessionSwitcherOpen : ui.isSidebarOpen
 })
 
 const blameEnabled = ref(localStorage.getItem(STORAGE_FILES_VIEWER_BLAME_VISIBLE) === 'true')
@@ -610,7 +611,7 @@ watch(
 )
 
 watch(
-  () => [isMobile.value, showMobileViewer.value] as const,
+  () => [isCompactLayout.value, showMobileViewer.value] as const,
   ([mobile, showViewer]) => {
     if (!mobile || showViewer) return
     if (!selectedFile.value) return
@@ -1253,7 +1254,7 @@ async function applyGitNavigationTarget(rawPath: string, action: GitNavigationAc
   if (props.embedded) {
     embeddedView.value = 'list'
   }
-  if (isMobile.value) {
+  if (isCompactLayout.value) {
     showMobileViewer.value = false
   }
   persistExplorerSoon()
@@ -1628,6 +1629,140 @@ function mapDirectoryEntries(dirPath: string, entries: ListEntry[]): FileNode[] 
     if (a.type !== b.type) return a.type === 'directory' ? -1 : 1
     return a.name.localeCompare(b.name)
   })
+}
+
+function normalizeTreePath(path: string): string {
+  const normalized = normalizePath(String(path || '').trim())
+  if (!normalized) return ''
+  if (normalized === '/') return normalized
+  return trimTrailingSlashes(normalized)
+}
+
+function isSameOrDescendantPath(path: string, basePath: string): boolean {
+  return path === basePath || path.startsWith(`${basePath}/`)
+}
+
+function remapPathPrefix(path: string, fromPath: string, toPath: string): string {
+  if (!path) return ''
+  if (path === fromPath) return toPath
+  if (path.startsWith(`${fromPath}/`)) return `${toPath}${path.slice(fromPath.length)}`
+  return path
+}
+
+function remapPathSet(paths: Set<string>, fromPath: string, toPath: string): Set<string> {
+  const next = new Set<string>()
+  for (const path of paths) {
+    const normalized = normalizeTreePath(path)
+    if (!normalized) continue
+    next.add(remapPathPrefix(normalized, fromPath, toPath))
+  }
+  return next
+}
+
+function prunePathSet(paths: Set<string>, targetPath: string): Set<string> {
+  const next = new Set<string>()
+  for (const path of paths) {
+    const normalized = normalizeTreePath(path)
+    if (!normalized) continue
+    if (isSameOrDescendantPath(normalized, targetPath)) continue
+    next.add(normalized)
+  }
+  return next
+}
+
+function resolveEntryPath(dirPath: string, entry: ListEntry): string {
+  const direct = normalizeTreePath(String(entry.path || '').trim())
+  if (direct) return direct
+  return normalizeTreePath(joinPath(dirPath, entry.name))
+}
+
+function mapChildrenFromEntries(source: Record<string, ListEntry[]>): Record<string, FileNode[]> {
+  const next: Record<string, FileNode[]> = {}
+  for (const [dirPathRaw, entriesRaw] of Object.entries(source)) {
+    const dirPath = normalizeTreePath(String(dirPathRaw || '').trim())
+    if (!dirPath) continue
+    const entries = Array.isArray(entriesRaw) ? entriesRaw : []
+    next[dirPath] = mapDirectoryEntries(dirPath, entries)
+  }
+  return next
+}
+
+function applyExplorerRenameState(oldPath: string, newPath: string) {
+  const sourcePath = normalizeTreePath(oldPath)
+  const destinationPath = normalizeTreePath(newPath)
+  if (!sourcePath || !destinationPath || sourcePath === destinationPath) return
+
+  const nextEntries: Record<string, ListEntry[]> = {}
+  for (const [dirPathRaw, entriesRaw] of Object.entries(entriesByDir.value)) {
+    const dirPath = normalizeTreePath(String(dirPathRaw || '').trim())
+    if (!dirPath) continue
+
+    const mappedDirPath = remapPathPrefix(dirPath, sourcePath, destinationPath)
+    const entries = Array.isArray(entriesRaw) ? entriesRaw : []
+    const mappedEntries = entries.map<ListEntry>((entry) => {
+      const currentPath = resolveEntryPath(dirPath, entry)
+      const mappedPath = remapPathPrefix(currentPath, sourcePath, destinationPath)
+      if (!mappedPath || mappedPath === currentPath) return entry
+      const mappedName = mappedPath.split('/').filter(Boolean).pop() || entry.name
+      return {
+        ...entry,
+        name: mappedName,
+        path: mappedPath,
+      }
+    })
+    nextEntries[mappedDirPath] = mappedEntries
+  }
+
+  entriesByDir.value = nextEntries
+  childrenByDir.value = mapChildrenFromEntries(nextEntries)
+
+  loadedDirs.value = remapPathSet(loadedDirs.value, sourcePath, destinationPath)
+  expandedDirs.value = remapPathSet(expandedDirs.value, sourcePath, destinationPath)
+  inFlightDirs.value = remapPathSet(inFlightDirs.value, sourcePath, destinationPath)
+
+  selectedPaths.value = remapPathSet(selectedPaths.value, sourcePath, destinationPath)
+
+  const nextAnchor = remapPathPrefix(normalizeTreePath(selectionAnchorPath.value), sourcePath, destinationPath)
+  selectionAnchorPath.value = nextAnchor
+
+  const nextHighlight = remapPathPrefix(normalizeTreePath(highlightedPath.value), sourcePath, destinationPath)
+  highlightedPath.value = nextHighlight
+
+  const selectedDir = normalizeTreePath(selectedDirectoryPath.value)
+  selectedDirectoryPath.value = selectedDir ? remapPathPrefix(selectedDir, sourcePath, destinationPath) : ''
+
+  persistExplorerSoon()
+}
+
+function applyExplorerDeletionState(targetPath: string) {
+  const normalizedTarget = normalizeTreePath(targetPath)
+  if (!normalizedTarget) return
+
+  const rootPath = normalizeTreePath(root.value)
+  if (rootPath && normalizedTarget === rootPath) return
+
+  const nextEntries: Record<string, ListEntry[]> = {}
+  for (const [dirPathRaw, entriesRaw] of Object.entries(entriesByDir.value)) {
+    const dirPath = normalizeTreePath(String(dirPathRaw || '').trim())
+    if (!dirPath) continue
+    if (isSameOrDescendantPath(dirPath, normalizedTarget)) continue
+
+    const entries = Array.isArray(entriesRaw) ? entriesRaw : []
+    const filtered = entries.filter((entry) => {
+      const entryPath = resolveEntryPath(dirPath, entry)
+      return Boolean(entryPath) && !isSameOrDescendantPath(entryPath, normalizedTarget)
+    })
+    nextEntries[dirPath] = filtered
+  }
+
+  entriesByDir.value = nextEntries
+  childrenByDir.value = mapChildrenFromEntries(nextEntries)
+
+  loadedDirs.value = prunePathSet(loadedDirs.value, normalizedTarget)
+  expandedDirs.value = prunePathSet(expandedDirs.value, normalizedTarget)
+  inFlightDirs.value = prunePathSet(inFlightDirs.value, normalizedTarget)
+
+  persistExplorerSoon()
 }
 
 async function loadDirectory(dirPath: string, opts?: { force?: boolean }) {
@@ -2488,7 +2623,7 @@ async function openFile(node: FileNode) {
   resetFileChunkState()
   fileLoading.value = true
 
-  if (isMobile.value) {
+  if (isCompactLayout.value) {
     showMobileViewer.value = true
   }
   if (props.embedded) {
@@ -3062,19 +3197,27 @@ async function renameNodePath(oldPath: string, nextName: string) {
   const rootPath = root.value
   if (!rootPath) throw new Error(String(t('files.errors.noProjectSelected')))
 
+  const sourcePath = normalizeTreePath(oldPath)
+  if (!sourcePath || !withinWorkspace(sourcePath, rootPath)) return
+
   const trimmedName = String(nextName || '').trim()
   if (!trimmedName) throw new Error(t('files.errors.nameRequired'))
 
-  const parent = oldPath.split('/').slice(0, -1).join('/')
+  const parent = sourcePath.split('/').slice(0, -1).join('/')
   const newPath = joinPath(parent || rootPath, trimmedName)
-  await renamePath({ directory: rootPath, oldPath, newPath })
+  if (newPath === sourcePath) return
+
+  await renamePath({ directory: rootPath, oldPath: sourcePath, newPath })
+  applyExplorerRenameState(sourcePath, newPath)
 
   const selectedDir = normalizePath(String(selectedDirectoryPath.value || '').trim())
-  if (selectedDir === oldPath || selectedDir.startsWith(`${oldPath}/`)) {
-    selectedDirectoryPath.value = selectedDir === oldPath ? newPath : `${newPath}${selectedDir.slice(oldPath.length)}`
+  if (selectedDir === sourcePath || selectedDir.startsWith(`${sourcePath}/`)) {
+    selectedDirectoryPath.value =
+      selectedDir === sourcePath ? newPath : `${newPath}${selectedDir.slice(sourcePath.length)}`
   }
 
-  if (selectedFile.value?.path === oldPath) {
+  const selectedFilePath = normalizePath(String(selectedFile.value?.path || '').trim())
+  if (selectedFilePath && (selectedFilePath === sourcePath || selectedFilePath.startsWith(`${sourcePath}/`))) {
     selectedFile.value = null
     viewerMode.value = 'none'
     fileContent.value = ''
@@ -3085,6 +3228,8 @@ async function renameNodePath(oldPath: string, nextName: string) {
     clearGitDiff()
     closeFileTimeline()
   }
+
+  await refreshRoot()
 
   toasts.push('success', t('files.toasts.renamed'))
 }
@@ -3206,6 +3351,7 @@ async function deletePaths(targets: string[], opts?: { batch?: boolean }) {
       try {
         await deletePathApi({ directory: rootPath, path: target })
         successCount += 1
+        applyExplorerDeletionState(target)
         applyDeletionState(target)
       } catch (err) {
         failedCount += 1
@@ -3583,7 +3729,7 @@ onMounted(async () => {
 
     <div class="flex-1 min-h-0 m-0 p-0">
       <div v-if="!root" class="h-full">
-        <div v-if="isMobile && ui.isSessionSwitcherOpen" class="h-full p-3">
+        <div v-if="isCompactLayout && ui.isSessionSwitcherOpen" class="h-full p-3">
           <div class="rounded-sm border border-sidebar-border/60 bg-sidebar-accent/10 p-3">
             <div class="text-sm font-medium">{{ t('files.empty.noProject.title') }}</div>
             <div class="mt-1 text-xs text-muted-foreground">
@@ -3598,15 +3744,15 @@ onMounted(async () => {
 
       <div v-else class="h-full m-0 p-0">
         <div class="flex h-full min-h-0 flex-col m-0 p-0">
-          <div class="flex min-h-0 flex-1 gap-0" :class="isMobile ? 'flex-col' : ''">
+          <div class="flex min-h-0 flex-1 gap-0" :class="isCompactLayout ? 'flex-col' : ''">
             <div
               class="relative min-h-0 overflow-hidden m-0 p-0"
-              :class="isMobile || props.embedded ? 'flex-1' : 'flex-shrink-0'"
-              :style="isMobile || props.embedded ? undefined : { width: `${ui.sidebarWidth}px` }"
+              :class="isCompactLayout || props.embedded ? 'flex-1' : 'flex-shrink-0'"
+              :style="isCompactLayout || props.embedded ? undefined : { width: `${ui.sidebarWidth}px` }"
               v-show="showFilesSidebar"
             >
               <div
-                v-if="!isMobile && !props.embedded"
+                v-if="!isCompactLayout && !props.embedded"
                 class="absolute right-0 top-0 z-10 h-full w-1 cursor-col-resize hover:bg-primary/40"
                 @pointerdown="startDesktopSidebarResize"
               />
@@ -3615,7 +3761,8 @@ onMounted(async () => {
                 v-model:showHidden="showHidden"
                 v-model:showGitignored="showGitignored"
                 :root="root"
-                :is-mobile="isMobile"
+                :is-compact-layout="isCompactLayout"
+                :is-mobile-form-factor="isMobileFormFactor"
                 :selected-file-path="highlightedPath || selectedDirectoryPath || selectedFile?.path || ''"
                 :has-root-children="hasRootChildren"
                 :flattened-tree="flattenedTree"
@@ -3681,7 +3828,7 @@ onMounted(async () => {
                               :search-title="String(searching ? t('common.loading') : t('common.search'))"
                               :clear-aria-label="String(t('common.clear'))"
                               :clear-title="String(t('common.clear'))"
-                              :is-mobile-pointer="ui.isMobilePointer"
+                              :is-touch-pointer="ui.isTouchPointer"
                               @search="runSearch"
                               @clear="clearFileSearch"
                             />
@@ -3727,7 +3874,7 @@ onMounted(async () => {
                                 :search-title="String(contentSearchLoading ? t('common.loading') : t('common.search'))"
                                 :clear-aria-label="String(t('common.clear'))"
                                 :clear-title="String(t('common.clear'))"
-                                :is-mobile-pointer="ui.isMobilePointer"
+                                :is-touch-pointer="ui.isTouchPointer"
                                 @search="runContentSearch"
                                 @clear="clearContentSearch"
                               />
@@ -3932,7 +4079,7 @@ onMounted(async () => {
 
             <div
               class="flex-1 min-h-0 overflow-hidden m-0 p-0"
-              v-show="props.embedded ? embeddedView === 'viewer' : !isMobile || !ui.isSessionSwitcherOpen"
+              v-show="props.embedded ? embeddedView === 'viewer' : !isCompactLayout || !ui.isSessionSwitcherOpen"
             >
               <div v-if="props.embedded" class="flex items-center gap-2 border-b border-sidebar-border/50 px-2 py-1.5">
                 <IconButton
@@ -3957,7 +4104,9 @@ onMounted(async () => {
                 v-model:draftContent="draftContent"
                 v-model:selection="selection"
                 v-model:commentText="commentText"
-                :is-mobile="isMobile"
+                :is-compact-layout="isCompactLayout"
+                :is-touch-pointer="ui.isTouchPointer"
+                :is-mobile-form-factor="isMobileFormFactor"
                 :selected-file="selectedFile"
                 :display-selected-path="displaySelectedPath"
                 :viewer-mode="viewerMode"

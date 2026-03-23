@@ -31,11 +31,8 @@ type ChatLike = {
   messages: ChatMessageLike[]
 }
 
-type UiLike = { isMobile: boolean; isMobilePointer: boolean }
-
 export function useChatModelSelection(opts: {
   chat: ChatLike
-  ui: UiLike
   opencodeConfig: OpencodeConfigStoreLike
   sessionDirectory: Ref<string>
 

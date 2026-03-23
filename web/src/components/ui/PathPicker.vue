@@ -446,7 +446,7 @@ watch(
                 class="h-8 w-8"
                 :class="showHidden ? 'bg-secondary/60' : ''"
                 :tooltip="showHidden ? t('ui.pathPicker.titles.hiddenShown') : t('ui.pathPicker.titles.hiddenHidden')"
-                :is-mobile-pointer="ui.isMobilePointer"
+                :is-touch-pointer="ui.isTouchPointer"
                 :title="showHidden ? t('ui.pathPicker.titles.hiddenShown') : t('ui.pathPicker.titles.hiddenHidden')"
                 :aria-pressed="showHidden"
                 :aria-label="t('ui.pathPicker.aria.toggleHidden')"
@@ -466,7 +466,7 @@ watch(
                     ? t('ui.pathPicker.titles.gitignoredShown')
                     : t('ui.pathPicker.titles.gitignoredHidden')
                 "
-                :is-mobile-pointer="ui.isMobilePointer"
+                :is-touch-pointer="ui.isTouchPointer"
                 :title="
                   showGitignored
                     ? t('ui.pathPicker.titles.gitignoredShown')

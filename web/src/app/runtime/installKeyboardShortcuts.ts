@@ -49,7 +49,7 @@ export function installKeyboardShortcuts(): () => void {
   const isOnSettingsPage = () => router.currentRoute.value.path.startsWith('/settings')
 
   const isOverlayOpen = () => {
-    return Boolean(ui.isHelpDialogOpen || (ui.isMobile && ui.isSessionSwitcherOpen) || isOnSettingsPage())
+    return Boolean(ui.isHelpDialogOpen || (ui.isCompactLayout && ui.isSessionSwitcherOpen) || isOnSettingsPage())
   }
 
   const canAbortNow = (): boolean => {
