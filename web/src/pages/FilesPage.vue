@@ -2,7 +2,6 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import { RiArrowLeftSLine } from '@remixicon/vue'
 import Button from '@/components/ui/Button.vue'
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import FormDialog from '@/components/ui/FormDialog.vue'
@@ -683,6 +682,7 @@ const rawApiPath = computed(() => {
 
 const rawUrl = ref('')
 let rawUrlSeq = 0
+const blobPreviewReloadKey = ref(0)
 
 const usesBlobPreview = computed(() => ['image', 'pdf', 'audio', 'video'].includes(viewerMode.value))
 
@@ -701,7 +701,7 @@ function revokeRawUrl() {
 
 watch(
   () => {
-    return [rawApiPath.value, usesBlobPreview.value] as const
+    return [rawApiPath.value, usesBlobPreview.value, blobPreviewReloadKey.value] as const
   },
   async ([path, needsBlob]) => {
     rawUrlSeq += 1
@@ -712,7 +712,7 @@ watch(
     if (!path) return
 
     try {
-      const blob = await apiBlob(path)
+      const blob = await apiBlob(path, { cache: 'no-store' })
       if (seq !== rawUrlSeq) return
       const href = URL.createObjectURL(blob)
       rawUrl.value = href
@@ -2502,6 +2502,9 @@ async function refreshCurrentFile(opts?: { source?: FileRefreshSource; silent?: 
   const inEditableMode = ['text', 'markdown'].includes(viewerMode.value) && canEdit.value
   if (!inEditableMode) {
     if (source === 'auto') return false
+    if (usesBlobPreview.value) {
+      blobPreviewReloadKey.value += 1
+    }
     await openFile(node)
     return true
   }
@@ -4081,21 +4084,6 @@ onMounted(async () => {
               class="flex-1 min-h-0 overflow-hidden m-0 p-0"
               v-show="props.embedded ? embeddedView === 'viewer' : !isCompactLayout || !ui.isSessionSwitcherOpen"
             >
-              <div v-if="props.embedded" class="flex items-center gap-2 border-b border-sidebar-border/50 px-2 py-1.5">
-                <IconButton
-                  variant="ghost"
-                  size="sm"
-                  class="h-7 w-7"
-                  :tooltip="t('common.back')"
-                  :aria-label="t('common.back')"
-                  @click="showEmbeddedFileList"
-                >
-                  <RiArrowLeftSLine class="h-4 w-4" />
-                </IconButton>
-                <div class="truncate text-xs text-muted-foreground">
-                  {{ displaySelectedPath || t('files.explorer.title') }}
-                </div>
-              </div>
               <FileViewerPane
                 v-model:showMobileViewer="showMobileViewer"
                 v-model:autoSaveEnabled="autoSaveEnabled"
@@ -4105,6 +4093,7 @@ onMounted(async () => {
                 v-model:selection="selection"
                 v-model:commentText="commentText"
                 :is-compact-layout="isCompactLayout"
+                :show-header-back-button="props.embedded"
                 :is-touch-pointer="ui.isTouchPointer"
                 :is-mobile-form-factor="isMobileFormFactor"
                 :selected-file="selectedFile"
@@ -4158,6 +4147,7 @@ onMounted(async () => {
                 :select-timeline-commit="selectFileTimelineCommit"
                 :open-timeline="openFileTimeline"
                 :open-sidebar="props.embedded ? showEmbeddedFileList : () => ui.setSessionSwitcherOpen(true)"
+                :on-header-back="showEmbeddedFileList"
                 :refresh-file="() => refreshCurrentFile({ source: 'manual' })"
                 :save="() => save()"
                 :confirm-large-file-load="confirmLargeFileLoad"

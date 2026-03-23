@@ -63,6 +63,7 @@ const commentText = defineModel<string>('commentText', { default: '' })
 
 const props = defineProps<{
   isCompactLayout: boolean
+  showHeaderBackButton?: boolean
   isTouchPointer?: boolean
   isMobileFormFactor?: boolean
   isMobilePointer?: boolean
@@ -116,6 +117,7 @@ const props = defineProps<{
   selectTimelineCommit: (side: TimelineSide, commit: GitLogCommit) => boolean | void | Promise<boolean | void>
   openTimeline: () => boolean | void | Promise<boolean | void>
   openSidebar: () => boolean | void | Promise<boolean | void>
+  onHeaderBack?: () => boolean | void | Promise<boolean | void>
   openRaw: () => boolean | void | Promise<boolean | void>
   refreshFile: () => boolean | void | Promise<boolean | void>
   save: () => boolean | void | Promise<boolean | void>
@@ -151,6 +153,9 @@ const markdownPreviewContent = computed(() => {
 const canShowViewMenu = computed(() => props.viewerMode === 'text' || props.viewerMode === 'markdown')
 const isMobileFormFactor = computed(() => props.isMobileFormFactor ?? props.isMobilePointer)
 const isTouchPointer = computed(() => props.isTouchPointer ?? isMobileFormFactor.value)
+const shouldShowHeaderBackButton = computed(
+  () => Boolean(props.showHeaderBackButton) || (props.isCompactLayout && showMobileViewer.value),
+)
 
 const viewMenuGroups = computed<OptionMenuGroup[]>(() => [
   {
@@ -1098,18 +1103,26 @@ function clearSelection() {
 function onSendSelection() {
   emit('insertSelection')
 }
+
+function handleHeaderBackClick() {
+  if (props.showHeaderBackButton && props.onHeaderBack) {
+    void props.onHeaderBack()
+    return
+  }
+  showMobileViewer.value = false
+}
 </script>
 
 <template>
   <section class="flex min-h-0 h-full flex-col overflow-hidden bg-background">
     <div class="flex min-w-0 items-center gap-2 border-b border-border/40 px-3 py-2">
       <IconButton
-        v-if="isCompactLayout && showMobileViewer"
+        v-if="shouldShowHeaderBackButton"
         size="lg"
         :tooltip="t('nav.back')"
         :is-touch-pointer="isTouchPointer"
         :aria-label="t('nav.back')"
-        @click="showMobileViewer = false"
+        @click="handleHeaderBackClick"
       >
         <RiArrowLeftSLine class="h-5 w-5" />
       </IconButton>
