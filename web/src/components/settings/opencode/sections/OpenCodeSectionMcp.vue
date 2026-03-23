@@ -84,7 +84,7 @@ export default defineComponent({
           variant="outline"
           class="gap-2"
           :tooltip="t('settings.opencodeConfig.sections.mcp.actions.connectionsHelp')"
-          :is-touch-pointer="ui.isTouchPointer"
+          :is-mobile-pointer="ui.isMobilePointer"
           :aria-label="t('settings.opencodeConfig.sections.mcp.actions.manageConnectionsAria')"
           @click="openMcpConnections"
         >
