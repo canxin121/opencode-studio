@@ -387,13 +387,13 @@ void sessionActionsMenuRef
               (!isAtBottom && chat.messages.length) ||
               (navigableMessageIds.length > 0 && !chat.selectedHistory.exhausted))
           "
-          class="absolute right-3 z-20 flex flex-col items-center gap-2"
+          class="pointer-events-none absolute right-3 z-20 flex flex-col items-center gap-2"
           :style="{ bottom: navBottomOffset }"
         >
           <IconButton
             v-if="navigableMessageIds.length > 1 || (navigableMessageIds.length > 0 && !chat.selectedHistory.exhausted)"
             variant="outline"
-            class="h-8 w-8 rounded-full bg-background/80 backdrop-blur"
+            class="pointer-events-auto h-8 w-8 rounded-full bg-background/80 backdrop-blur"
             :tooltip="t('chat.page.nav.previousUserMessage')"
             :is-touch-pointer="ui.isTouchPointer"
             :aria-label="t('chat.page.nav.previousUserMessage')"
@@ -405,7 +405,7 @@ void sessionActionsMenuRef
           <IconButton
             v-if="navigableMessageIds.length > 1"
             variant="outline"
-            class="h-8 w-8 rounded-full bg-background/80 backdrop-blur"
+            class="pointer-events-auto h-8 w-8 rounded-full bg-background/80 backdrop-blur"
             :tooltip="t('chat.page.nav.nextUserMessage')"
             :is-touch-pointer="ui.isTouchPointer"
             :aria-label="t('chat.page.nav.nextUserMessage')"
@@ -417,7 +417,7 @@ void sessionActionsMenuRef
 
           <div
             v-if="navigableMessageIds.length > 0"
-            class="text-[10px] text-muted-foreground/80 bg-background/80 backdrop-blur rounded-full px-2 py-0.5 border border-border/60 select-none"
+            class="pointer-events-none text-[10px] text-muted-foreground/80 bg-background/80 backdrop-blur rounded-full px-2 py-0.5 border border-border/60 select-none"
           >
             {{ navIndex + 1 }} / {{ navTotalLabel }}
           </div>
@@ -429,7 +429,7 @@ void sessionActionsMenuRef
             :tooltip="t('chat.page.nav.bottom')"
             :is-touch-pointer="ui.isTouchPointer"
             :aria-label="t('chat.page.nav.bottom')"
-            :class="!isAtBottom && chat.messages.length ? '' : 'invisible pointer-events-none'"
+            :class="!isAtBottom && chat.messages.length ? 'pointer-events-auto' : 'invisible pointer-events-none'"
             @click="scrollToBottom('smooth')"
           >
             <RiArrowDownDoubleLine class="h-4 w-4" />
