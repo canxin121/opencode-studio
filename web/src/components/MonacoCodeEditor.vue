@@ -30,6 +30,9 @@ const props = defineProps<{
   diffDecorations?: Array<{ line: number; className: string }>
   diffDecorationsEnabled?: boolean
   codeLensActions?: Array<{ line: number; title: string; onClick: () => void }>
+  revealLine?: number | null
+  revealColumn?: number | null
+  revealRequestSeq?: number
 }>()
 
 const { t } = useI18n()
@@ -71,6 +74,7 @@ let lineMarkerDecorationCollection: Monaco.editor.IEditorDecorationsCollection |
 let diffDecorationCollection: Monaco.editor.IEditorDecorationsCollection | null = null
 let diffZoneIds: string[] = []
 let codeLensKey: string | null = null
+let lastRevealRequestKey = ''
 
 const findSession = useMonacoFindSession(() => editorRef.value, {
   query: findQuery,
@@ -285,6 +289,46 @@ function normalizeGitType(value: string): 'add' | 'del' | 'mod' {
   if (value === 'del') return 'del'
   if (value === 'mod') return 'mod'
   return 'add'
+}
+
+function positiveInt(raw: unknown): number | null {
+  const value = Number(raw)
+  if (!Number.isFinite(value) || value <= 0) return null
+  return Math.floor(value)
+}
+
+function revealRequestedPosition() {
+  const editor = editorRef.value
+  const monaco = monacoRef.value
+  if (!editor || !monaco) return
+
+  const model = editor.getModel()
+  if (!model) return
+
+  const line = positiveInt(props.revealLine)
+  if (line === null) return
+
+  const requestSeq = positiveInt(props.revealRequestSeq) ?? 0
+  const lineNumber = Math.max(1, Math.min(model.getLineCount(), line))
+  const maxColumn = model.getLineMaxColumn(lineNumber)
+  const requestedColumn = positiveInt(props.revealColumn) ?? 1
+  const column = Math.max(1, Math.min(maxColumn, requestedColumn))
+
+  const key = `${requestSeq}:${model.uri.toString()}:${lineNumber}:${column}`
+  if (key === lastRevealRequestKey) return
+  lastRevealRequestKey = key
+
+  const position = { lineNumber, column }
+  const selection = new monaco.Selection(lineNumber, column, lineNumber, column)
+  editor.setSelection(selection)
+
+  const smooth = monaco.editor.ScrollType.Smooth
+  if (typeof smooth === 'number') {
+    editor.revealPositionInCenter(position, smooth)
+  } else {
+    editor.revealPositionInCenter(position)
+  }
+  editor.focus()
 }
 
 function updateGitLineDecorations() {
@@ -619,6 +663,7 @@ function handleMount(
   updateDiffZones()
   updateDiffDecorations()
   updateCodeLens()
+  revealRequestedPosition()
 }
 
 function getSelection(): { fromLine: number; toLine: number; text: string } | null {
@@ -860,10 +905,18 @@ watch(modelPath, () => {
   updateDiffZones()
   updateDiffDecorations()
   updateCodeLens()
+  revealRequestedPosition()
   if (isFindVisible.value) {
     findSession.refresh({ revealCurrent: true })
   }
 })
+
+watch(
+  () => [props.revealRequestSeq, props.revealLine, props.revealColumn] as const,
+  () => {
+    queueMicrotask(() => revealRequestedPosition())
+  },
+)
 </script>
 
 <template>

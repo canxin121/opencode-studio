@@ -19,6 +19,14 @@ import {
   buildAssistantErrorMetaEntries,
   getAssistantErrorInfo,
 } from '@/pages/chat/assistantError'
+import {
+  buildWorkspaceRawFileUrl,
+  extractWorkspacePathFromFileUrl,
+  mediaKindFromHref,
+  resolveWorkspaceFileLink,
+} from '@/lib/workspaceLinks'
+import { useDirectoryStore } from '@/stores/directory'
+import { useUiStore } from '@/stores/ui'
 import type { JsonValue } from '@/types/json'
 import { useI18n } from 'vue-i18n'
 
@@ -29,6 +37,7 @@ type MessagePartLike = {
   url?: string
   mime?: string
   filename?: string
+  serverPath?: string
   synthetic?: boolean
   ignored?: boolean
   [k: string]: JsonValue
@@ -43,6 +52,7 @@ type MessageLike = {
     error?: JsonValue
     agent?: string
     modelID?: string
+    [k: string]: JsonValue
   }
   parts: MessagePartLike[]
 }
@@ -66,6 +76,8 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+const directoryStore = useDirectoryStore()
+const ui = useUiStore()
 const errorDetailsOpen = ref(false)
 
 function isFilePart(part: MessagePartLike): part is FilePart {
@@ -82,6 +94,146 @@ function isImageFilePart(part: FilePart): boolean {
 
 function imageFileParts(parts: MessagePartLike[]): FilePart[] {
   return getFileParts(parts).filter((part) => isImageFilePart(part))
+}
+
+function isVideoFilePart(part: FilePart): boolean {
+  if (String(part?.mime || '').startsWith('video/')) return true
+  const filename = typeof part?.filename === 'string' ? part.filename : ''
+  if (mediaKindFromHref(filename) === 'video') return true
+  return mediaKindFromHref(typeof part?.url === 'string' ? part.url : '') === 'video'
+}
+
+function videoFileParts(parts: MessagePartLike[]): FilePart[] {
+  return getFileParts(parts).filter((part) => isVideoFilePart(part))
+}
+
+function isAudioFilePart(part: FilePart): boolean {
+  if (String(part?.mime || '').startsWith('audio/')) return true
+  const filename = typeof part?.filename === 'string' ? part.filename : ''
+  if (mediaKindFromHref(filename) === 'audio') return true
+  return mediaKindFromHref(typeof part?.url === 'string' ? part.url : '') === 'audio'
+}
+
+function audioFileParts(parts: MessagePartLike[]): FilePart[] {
+  return getFileParts(parts).filter((part) => isAudioFilePart(part))
+}
+
+function resolveWorkspacePathForFilePart(part: MessagePartLike): string {
+  const workspaceRoot = String(directoryStore.currentDirectory || '').trim()
+  if (!workspaceRoot) return ''
+
+  const serverPath = typeof part?.serverPath === 'string' ? part.serverPath.trim() : ''
+  if (serverPath) {
+    return extractWorkspacePathFromFileUrl(serverPath, workspaceRoot) || ''
+  }
+
+  const url = typeof part?.url === 'string' ? part.url.trim() : ''
+  if (!url) return ''
+  return extractWorkspacePathFromFileUrl(url, workspaceRoot) || ''
+}
+
+function filePartPreviewUrl(part: MessagePartLike): string {
+  const url = typeof part?.url === 'string' ? part.url.trim() : ''
+  if (!url) return ''
+  if (url.startsWith('data:') || url.startsWith('blob:')) return url
+
+  const workspaceRoot = String(directoryStore.currentDirectory || '').trim()
+  if (!workspaceRoot) return url
+
+  const path = resolveWorkspacePathForFilePart(part)
+  if (!path) return url
+  return buildWorkspaceRawFileUrl(workspaceRoot, path)
+}
+
+function recordFieldString(record: Record<string, JsonValue> | null | undefined, key: string): string {
+  const value = record?.[key]
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function asJsonRecord(value: JsonValue | null | undefined): Record<string, JsonValue> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  return value as Record<string, JsonValue>
+}
+
+const SOURCE_PATH_KEYS = ['sourcePath', 'source_path', 'filePath', 'file_path', 'path'] as const
+const SOURCE_PATH_NESTED_KEYS = ['source', 'meta', 'metadata', 'context'] as const
+
+function sourcePathCandidateFromRecord(record: Record<string, JsonValue> | null | undefined): string {
+  if (!record) return ''
+
+  for (const key of SOURCE_PATH_KEYS) {
+    const direct = recordFieldString(record, key)
+    if (direct) return direct
+  }
+
+  for (const nestedKey of SOURCE_PATH_NESTED_KEYS) {
+    const nested = asJsonRecord(record[nestedKey])
+    if (!nested) continue
+    for (const key of SOURCE_PATH_KEYS) {
+      const nestedValue = recordFieldString(nested, key)
+      if (nestedValue) return nestedValue
+    }
+  }
+
+  return ''
+}
+
+function resolveWorkspaceSourcePath(candidate: string, baseFilePath?: string): string {
+  const workspaceRoot = String(directoryStore.currentDirectory || '').trim()
+  const input = String(candidate || '').trim()
+  if (!workspaceRoot || !input) return ''
+
+  const fromFileUrl = extractWorkspacePathFromFileUrl(input, workspaceRoot)
+  if (fromFileUrl) return fromFileUrl
+
+  const resolved = resolveWorkspaceFileLink(input, {
+    workspaceRoot,
+    ...(baseFilePath ? { baseFilePath } : {}),
+  })
+  return resolved?.path || ''
+}
+
+const fallbackMessageSourcePath = computed(() => {
+  for (const part of getFileParts(props.message.parts)) {
+    const path = resolveWorkspacePathForFilePart(part)
+    if (path) return path
+  }
+  return ''
+})
+
+const messageInfoSourcePath = computed(() => {
+  const infoRecord = asJsonRecord((props.message?.info || null) as JsonValue)
+  if (!infoRecord) return ''
+
+  const candidate = sourcePathCandidateFromRecord(infoRecord)
+  if (!candidate) return ''
+  return resolveWorkspaceSourcePath(candidate, fallbackMessageSourcePath.value || undefined)
+})
+
+const messageFallbackSourcePath = computed(() => messageInfoSourcePath.value || fallbackMessageSourcePath.value)
+
+function sourcePathForTextPart(part: MessagePartLike): string {
+  const partRecord = asJsonRecord(part as JsonValue)
+  if (partRecord) {
+    const candidate = sourcePathCandidateFromRecord(partRecord)
+    if (candidate) {
+      const resolved = resolveWorkspaceSourcePath(candidate, messageFallbackSourcePath.value || undefined)
+      if (resolved) return resolved
+    }
+  }
+  return messageFallbackSourcePath.value
+}
+
+function openFilePart(part: MessagePartLike) {
+  const targetPath = resolveWorkspacePathForFilePart(part)
+  if (targetPath) {
+    ui.requestWorkspaceDockFile(targetPath, 'open')
+    return
+  }
+
+  const url = typeof part?.url === 'string' ? part.url.trim() : ''
+  if (!url) return
+  window.open(url, '_blank', 'noopener,noreferrer')
 }
 
 function filePartLabel(part: MessagePartLike): string {
@@ -236,12 +388,22 @@ const assistantHasError = () => role() === 'assistant' && Boolean(assistantError
           />
           <div v-for="p in textParts" :key="p.id" class="space-y-2">
             <div class="break-words">
-              <MarkdownRenderer :content="p.text || ''" mode="markdown" :stream="isStreaming" />
+              <MarkdownRenderer
+                :content="p.text || ''"
+                mode="markdown"
+                :stream="isStreaming"
+                :source-path="sourcePathForTextPart(p)"
+              />
             </div>
           </div>
 
           <div v-if="assistantErrorMessage()" class="mt-2 break-words">
-            <MarkdownRenderer :content="assistantErrorMessage()" mode="markdown" :stream="false" />
+            <MarkdownRenderer
+              :content="assistantErrorMessage()"
+              mode="markdown"
+              :stream="false"
+              :source-path="messageFallbackSourcePath"
+            />
           </div>
 
           <div v-if="assistantErrorMetaEntries().length" class="mt-2 flex flex-wrap gap-1.5">
@@ -279,32 +441,75 @@ const assistantHasError = () => role() === 'assistant' && Boolean(assistantError
           <div v-if="getFileParts(message.parts).length" class="mt-3 space-y-2">
             <div class="flex flex-wrap gap-2">
               <template v-for="f in getFileParts(message.parts)" :key="f.id || f.url">
-                <a
-                  v-if="!(String(f.mime || '').startsWith('image/') && f.url)"
-                  :href="f.url"
-                  target="_blank"
-                  rel="noreferrer"
+                <button
+                  v-if="!(isImageFilePart(f) || isVideoFilePart(f) || isAudioFilePart(f))"
+                  type="button"
                   class="inline-flex items-center gap-2 rounded-md bg-muted/25 px-3 py-1 text-[11px] hover:bg-muted/35"
                   :title="filePartLabel(f)"
+                  @click="openFilePart(f)"
                 >
                   <RiFileLine class="h-3.5 w-3.5" />
                   <span class="font-mono truncate max-w-[220px]">{{ filePartLabel(f) }}</span>
-                </a>
+                </button>
               </template>
             </div>
 
             <div v-if="imageFileParts(message.parts).length" class="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              <a
+              <button
                 v-for="img in imageFileParts(message.parts)"
                 :key="img.id || img.url"
-                :href="img.url"
-                target="_blank"
-                rel="noreferrer"
+                type="button"
                 class="block rounded-md overflow-hidden bg-muted/10"
                 :title="filePartLabel(img)"
+                @click="openFilePart(img)"
               >
-                <img :src="img.url" :alt="filePartLabel(img)" class="w-full h-24 object-cover" />
-              </a>
+                <img
+                  :src="filePartPreviewUrl(img) || img.url"
+                  :alt="filePartLabel(img)"
+                  class="w-full h-24 object-cover"
+                />
+              </button>
+            </div>
+
+            <div v-if="videoFileParts(message.parts).length" class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div
+                v-for="video in videoFileParts(message.parts)"
+                :key="video.id || video.url"
+                class="rounded-md overflow-hidden bg-muted/10 border border-border/50"
+              >
+                <video
+                  :src="filePartPreviewUrl(video) || video.url"
+                  controls
+                  preload="metadata"
+                  class="w-full h-28 object-cover"
+                />
+                <button
+                  type="button"
+                  class="w-full border-t border-border/40 px-2 py-1 text-left text-[11px] font-mono text-muted-foreground hover:text-foreground"
+                  :title="filePartLabel(video)"
+                  @click="openFilePart(video)"
+                >
+                  <span class="block truncate">{{ filePartLabel(video) }}</span>
+                </button>
+              </div>
+            </div>
+
+            <div v-if="audioFileParts(message.parts).length" class="space-y-2">
+              <div
+                v-for="audio in audioFileParts(message.parts)"
+                :key="audio.id || audio.url"
+                class="rounded-md overflow-hidden bg-muted/10 border border-border/50 p-2"
+              >
+                <audio :src="filePartPreviewUrl(audio) || audio.url" controls preload="metadata" class="w-full" />
+                <button
+                  type="button"
+                  class="mt-1 w-full border-t border-border/40 px-2 pt-1 text-left text-[11px] font-mono text-muted-foreground hover:text-foreground"
+                  :title="filePartLabel(audio)"
+                  @click="openFilePart(audio)"
+                >
+                  <span class="block truncate">{{ filePartLabel(audio) }}</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

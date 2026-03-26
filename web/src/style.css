@@ -414,6 +414,15 @@
     @apply font-mono bg-transparent p-0 text-foreground;
   }
 
+  .prose :where(.oc-md-media) {
+    @apply my-4 w-full max-w-full rounded-md border border-border/40 bg-muted/10;
+    display: block;
+  }
+
+  .prose :where(.oc-md-media--audio) {
+    max-width: 32rem;
+  }
+
   /* Markdown fenced blocks (custom renderer): header + actions + sane sizing. */
   .oc-md-codeblock {
     @apply relative w-full min-w-0 my-4 rounded-md border border-border bg-muted/35 overflow-hidden;

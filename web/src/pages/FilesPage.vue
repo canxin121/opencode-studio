@@ -655,6 +655,10 @@ let openFileSeq = 0
 let pageMounted = false
 const handledGitNavigationKey = ref('')
 const handledWorkspaceDockFileRequestSeq = ref(0)
+const fileRevealRequestSeq = ref(0)
+const fileRevealLine = ref<number | null>(null)
+const fileRevealColumn = ref<number | null>(null)
+const fileRevealAnchor = ref('')
 
 function isStaleRootRestore(seq: number, rootPath: string): boolean {
   return seq !== rootRestoreSeq || root.value !== rootPath
@@ -1158,6 +1162,11 @@ function buildFileNode(path: string): FileNode {
 }
 
 type GitNavigationAction = 'open' | 'reveal'
+type GitNavigationLocation = {
+  line?: number
+  column?: number
+  anchor?: string
+}
 
 function routeQueryValue(value: unknown): string {
   if (Array.isArray(value)) return String(value[0] || '').trim()
@@ -1166,6 +1175,39 @@ function routeQueryValue(value: unknown): string {
 
 function parseGitNavigationAction(value: unknown): GitNavigationAction {
   return routeQueryValue(value) === 'reveal' ? 'reveal' : 'open'
+}
+
+function parsePositiveInt(value: unknown): number | undefined {
+  const n = Number(value)
+  if (!Number.isFinite(n) || n <= 0) return undefined
+  return Math.floor(n)
+}
+
+function parseAnchor(value: unknown): string | undefined {
+  const raw = routeQueryValue(value)
+  return raw || undefined
+}
+
+function parseGitNavigationLocation(
+  lineValue: unknown,
+  columnValue: unknown,
+  anchorValue?: unknown,
+): GitNavigationLocation {
+  const line = parsePositiveInt(Array.isArray(lineValue) ? lineValue[0] : lineValue)
+  const column = parsePositiveInt(Array.isArray(columnValue) ? columnValue[0] : columnValue)
+  const anchor = parseAnchor(Array.isArray(anchorValue) ? anchorValue[0] : anchorValue)
+  return {
+    ...(line ? { line } : {}),
+    ...(column ? { column } : {}),
+    ...(anchor ? { anchor } : {}),
+  }
+}
+
+function gitNavigationLocationKey(location?: GitNavigationLocation): string {
+  const line = parsePositiveInt(location?.line)
+  const column = parsePositiveInt(location?.column)
+  const anchor = parseAnchor(location?.anchor)
+  return `${line || ''}:${column || ''}:${anchor || ''}`
 }
 
 function showEmbeddedFileList() {
@@ -1204,11 +1246,39 @@ function parentDirectoriesForPath(path: string, workspaceRoot: string): string[]
 }
 
 function clearGitNavigationQuery() {
-  if (!route.query.gitPath && !route.query.gitAction) return
+  if (
+    !route.query.gitPath &&
+    !route.query.gitAction &&
+    !route.query.gitLine &&
+    !route.query.gitColumn &&
+    !route.query.gitAnchor
+  )
+    return
   const nextQuery = { ...route.query }
   delete nextQuery.gitPath
   delete nextQuery.gitAction
+  delete nextQuery.gitLine
+  delete nextQuery.gitColumn
+  delete nextQuery.gitAnchor
   void router.replace({ path: route.path, query: nextQuery })
+}
+
+function clearFileRevealRequest() {
+  fileRevealLine.value = null
+  fileRevealColumn.value = null
+  fileRevealAnchor.value = ''
+}
+
+function queueFileReveal(line?: number, column?: number, anchor?: string) {
+  const nextLine = parsePositiveInt(line)
+  const nextAnchor = parseAnchor(anchor)
+  if (!nextLine && !nextAnchor) return
+  const nextColumn = parsePositiveInt(column)
+
+  fileRevealLine.value = nextLine || null
+  fileRevealColumn.value = nextLine ? nextColumn || null : null
+  fileRevealAnchor.value = nextLine ? '' : nextAnchor || ''
+  fileRevealRequestSeq.value += 1
 }
 
 async function applyGitNavigationQuery() {
@@ -1219,16 +1289,21 @@ async function applyGitNavigationQuery() {
   if (!workspaceRoot || !gitPathRaw) return
 
   const action = parseGitNavigationAction(route.query.gitAction)
+  const location = parseGitNavigationLocation(route.query.gitLine, route.query.gitColumn, route.query.gitAnchor)
   const targetPath = resolveGitNavigationPath(gitPathRaw, workspaceRoot)
-  const key = `${workspaceRoot}::${action}::${targetPath || gitPathRaw}`
+  const key = `${workspaceRoot}::${action}::${targetPath || gitPathRaw}::${gitNavigationLocationKey(location)}`
   if (handledGitNavigationKey.value === key) return
   handledGitNavigationKey.value = key
 
-  await applyGitNavigationTarget(gitPathRaw, action)
+  await applyGitNavigationTarget(gitPathRaw, action, location)
   clearGitNavigationQuery()
 }
 
-async function applyGitNavigationTarget(rawPath: string, action: GitNavigationAction) {
+async function applyGitNavigationTarget(
+  rawPath: string,
+  action: GitNavigationAction,
+  location?: GitNavigationLocation,
+) {
   const workspaceRoot = root.value
   if (!workspaceRoot) return
 
@@ -1245,6 +1320,22 @@ async function applyGitNavigationTarget(rawPath: string, action: GitNavigationAc
 
   if (action === 'open') {
     await openFile(buildFileNode(targetPath))
+    const line = parsePositiveInt(location?.line)
+    const anchor = parseAnchor(location?.anchor)
+    if (line && (viewerMode.value === 'text' || viewerMode.value === 'markdown')) {
+      if (viewerMode.value === 'markdown' && markdownViewMode.value === 'preview') {
+        markdownViewMode.value = 'source'
+      }
+      queueFileReveal(line, parsePositiveInt(location?.column))
+      return
+    }
+
+    if (anchor && viewerMode.value === 'markdown') {
+      if (markdownViewMode.value === 'source') {
+        markdownViewMode.value = 'preview'
+      }
+      queueFileReveal(undefined, undefined, anchor)
+    }
     return
   }
 
@@ -2624,6 +2715,7 @@ async function openFile(node: FileNode) {
   selection.value = null
   commentText.value = ''
   resetFileChunkState()
+  clearFileRevealRequest()
   fileLoading.value = true
 
   if (isCompactLayout.value) {
@@ -3533,7 +3625,15 @@ watch(
 )
 
 watch(
-  () => [root.value, route.query.gitPath, route.query.gitAction] as const,
+  () =>
+    [
+      root.value,
+      route.query.gitPath,
+      route.query.gitAction,
+      route.query.gitLine,
+      route.query.gitColumn,
+      route.query.gitAnchor,
+    ] as const,
   () => {
     void applyGitNavigationQuery()
   },
@@ -3555,7 +3655,8 @@ watch(
     if (!request?.path) return
 
     const action: GitNavigationAction = request.action === 'reveal' ? 'reveal' : 'open'
-    void applyGitNavigationTarget(request.path, action)
+    const location = parseGitNavigationLocation(request.line, request.column, request.anchor)
+    void applyGitNavigationTarget(request.path, action, location)
   },
 )
 
@@ -4107,6 +4208,10 @@ onMounted(async () => {
                 :raw-url="rawUrl"
                 :open-raw="openSelectedFileRaw"
                 :selected-path="selectedPath"
+                :reveal-line="fileRevealLine"
+                :reveal-column="fileRevealColumn"
+                :reveal-anchor="fileRevealAnchor"
+                :reveal-request-seq="fileRevealRequestSeq"
                 :file-loading="fileLoading"
                 :file-error="fileError"
                 :file-status-label="fileStatusLabel"

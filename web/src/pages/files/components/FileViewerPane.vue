@@ -77,6 +77,10 @@ const props = defineProps<{
   displayedContent: string
   rawUrl: string
   selectedPath: string
+  revealLine?: number | null
+  revealColumn?: number | null
+  revealAnchor?: string
+  revealRequestSeq?: number
   fileLoading: boolean
   fileError: string | null
   fileStatusLabel: string
@@ -1429,6 +1433,9 @@ function handleHeaderBackClick() {
             ref="editorRef"
             v-model="draftContent"
             :path="selectedPath"
+            :reveal-line="revealLine"
+            :reveal-column="revealColumn"
+            :reveal-request-seq="revealRequestSeq"
             :use-files-theme="true"
             :wrap="wrapLines"
             :read-only="!canEdit"
@@ -1442,7 +1449,13 @@ function handleHeaderBackClick() {
           :class="showMarkdownSplit ? 'flex-1' : 'flex-1'"
         >
           <div class="mx-auto w-full max-w-4xl p-4">
-            <MarkdownRenderer :content="markdownPreviewContent" mode="markdown" />
+            <MarkdownRenderer
+              :content="markdownPreviewContent"
+              mode="markdown"
+              :source-path="selectedPath"
+              :reveal-anchor="revealAnchor || ''"
+              :reveal-request-seq="revealRequestSeq"
+            />
           </div>
         </div>
       </div>
@@ -1582,6 +1595,9 @@ function handleHeaderBackClick() {
             ref="editorRef"
             v-model="draftContent"
             :path="selectedPath"
+            :reveal-line="revealLine"
+            :reveal-column="revealColumn"
+            :reveal-request-seq="revealRequestSeq"
             :use-files-theme="true"
             :wrap="wrapLines"
             :read-only="!canEdit || blameEnabled || gitInlineEnabled"

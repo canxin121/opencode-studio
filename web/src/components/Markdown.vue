@@ -1,22 +1,32 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { onClickOutside } from '@vueuse/core'
 import { RiListUnordered } from '@remixicon/vue'
 import { useI18n } from 'vue-i18n'
 import { renderMarkdown, type MarkdownUiLabels } from '@/lib/markdown'
 import { copyTextToClipboard } from '@/lib/clipboard'
+import { resolveWorkspaceFileLink, resolveWorkspaceMediaUrl } from '@/lib/workspaceLinks'
+import { useDirectoryStore } from '@/stores/directory'
 import { useToastsStore } from '@/stores/toasts'
+import { useUiStore } from '@/stores/ui'
 
 const props = withDefaults(
   defineProps<{
     content: string
     mode?: 'markdown' | 'plain'
+    sourcePath?: string
+    revealAnchor?: string
+    revealRequestSeq?: number
     // When true, debounce markdown parsing to avoid re-rendering on every SSE chunk.
     stream?: boolean
     streamDebounceMs?: number
   }>(),
   {
     mode: 'markdown',
+    sourcePath: '',
+    revealAnchor: '',
+    revealRequestSeq: 0,
     stream: false,
     streamDebounceMs: 60,
   },
@@ -27,6 +37,7 @@ const rootEl = ref<HTMLElement | null>(null)
 let timer: number | null = null
 let copiedTimer: number | null = null
 let mermaidTimer: number | null = null
+let lastRevealAnchorKey = ''
 
 // Table of Contents
 type TocItem = { id: string; text: string; level: number }
@@ -61,15 +72,59 @@ function scanToc() {
   toc.value = items
 }
 
-function scrollToHeading(id: string) {
-  showToc.value = false
-  const heading = rootEl.value?.querySelector(`[data-oc-id="${id}"]`)
-  if (heading) {
-    heading.scrollIntoView({ behavior: 'smooth', block: 'start' })
+function decodeAnchorId(rawId: string): string {
+  const input = String(rawId || '').trim()
+  if (!input) return ''
+  try {
+    return decodeURIComponent(input)
+  } catch {
+    return input
   }
 }
 
+function findHeadingByAnchor(rawId: string): HTMLElement | null {
+  const id = decodeAnchorId(rawId)
+  if (!id) return null
+
+  const escaped = id.replace(/"/g, '\\"')
+  let heading = rootEl.value?.querySelector(`[data-oc-id="${escaped}"]`) as HTMLElement | null
+  if (heading) return heading
+
+  // Loose match: normalize punctuation differences between external sluggers and ours.
+  const normalize = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '')
+  const target = normalize(id)
+  if (!target) return null
+
+  const headings = rootEl.value?.querySelectorAll('[data-oc-id]')
+  if (!headings) return null
+  for (const h of headings) {
+    const hid = h.getAttribute('data-oc-id') || ''
+    if (normalize(hid) === target) {
+      heading = h as HTMLElement
+      break
+    }
+  }
+
+  return heading
+}
+
+function scrollToAnchor(rawId: string): boolean {
+  const heading = findHeadingByAnchor(rawId)
+  if (!heading) return false
+  heading.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  return true
+}
+
+function scrollToHeading(id: string) {
+  showToc.value = false
+  scrollToAnchor(id)
+}
+
 const toasts = useToastsStore()
+const directoryStore = useDirectoryStore()
+const ui = useUiStore()
+const route = useRoute()
+const router = useRouter()
 const { t } = useI18n()
 
 function buildMarkdownLabels(): Partial<MarkdownUiLabels> {
@@ -95,8 +150,64 @@ function clearTimer() {
 
 function updateNow() {
   html.value = renderMarkdown(props.content, buildMarkdownLabels())
-  // Scan TOC after rendering
-  nextTick(() => scanToc())
+  // Scan TOC and rewrite local media links after rendering.
+  nextTick(() => {
+    scanToc()
+    hydrateWorkspaceMedia()
+  })
+}
+
+function hydrateWorkspaceMedia() {
+  const root = rootEl.value
+  const workspaceRoot = String(directoryStore.currentDirectory || '').trim()
+  if (!root || !workspaceRoot) return
+
+  const mediaNodes = root.querySelectorAll<HTMLElement>(
+    'img[src], video[src], audio[src], video source[src], audio source[src]',
+  )
+  for (const node of mediaNodes) {
+    const src = String(node.getAttribute('src') || '').trim()
+    if (!src) continue
+
+    const next = resolveWorkspaceMediaUrl(src, {
+      workspaceRoot,
+      baseFilePath: props.sourcePath,
+    })
+    if (!next || next === src) continue
+    node.setAttribute('src', next)
+  }
+}
+
+function openWorkspaceLink(href: string): boolean {
+  const workspaceRoot = String(directoryStore.currentDirectory || '').trim()
+  if (!workspaceRoot) return false
+
+  const resolved = resolveWorkspaceFileLink(href, {
+    workspaceRoot,
+    baseFilePath: props.sourcePath,
+  })
+  if (!resolved?.path) return false
+
+  if (route.path === '/files') {
+    const nextQuery: Record<string, string | string[] | null | undefined> = { ...route.query }
+    nextQuery.gitPath = resolved.path
+    nextQuery.gitAction = 'open'
+    if (resolved.line) nextQuery.gitLine = String(resolved.line)
+    else delete nextQuery.gitLine
+    if (resolved.column) nextQuery.gitColumn = String(resolved.column)
+    else delete nextQuery.gitColumn
+    if (resolved.anchor) nextQuery.gitAnchor = String(resolved.anchor)
+    else delete nextQuery.gitAnchor
+    void router.push({ path: '/files', query: nextQuery })
+    return true
+  }
+
+  ui.requestWorkspaceDockFile(resolved.path, 'open', {
+    line: resolved.line,
+    column: resolved.column,
+    anchor: resolved.anchor,
+  })
+  return true
 }
 
 function hashString(input: string): string {
@@ -232,37 +343,18 @@ async function handleRootClick(event: MouseEvent) {
       const rawId = href.substring(1)
       if (!rawId) return
 
-      // Decode URI components to handle Chinese/special characters in URL hashes
-      const id = decodeURIComponent(rawId)
-
-      // Try exact match first (standard slug)
-      let heading = rootEl.value?.querySelector(`[data-oc-id="${id.replace(/"/g, '\\"')}"]`)
-
-      // If not found, try a "loose" match.
-      // The slug algorithm might differ between what generated the link (e.g. LLM)
-      // and our strict slugify function (e.g. regarding punctuation).
-      // We strip everything down to just letters/numbers for comparison.
-      if (!heading) {
-        const normalize = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '')
-        const target = normalize(id)
-
-        if (target) {
-          const headings = rootEl.value?.querySelectorAll('[data-oc-id]')
-          if (headings) {
-            for (const h of headings) {
-              const hid = h.getAttribute('data-oc-id') || ''
-              if (normalize(hid) === target) {
-                heading = h as HTMLElement
-                break
-              }
-            }
-          }
-        }
+      if (scrollToAnchor(rawId)) return
+      const decoded = decodeAnchorId(rawId)
+      if (props.sourcePath && /^(?:L\d+(?:C\d+)?|\d+(?::\d+)?)$/i.test(decoded)) {
+        // Support line-style fragments in markdown previews (e.g. #L42 / #42:3)
+        // by treating them as "open current file at location".
+        void openWorkspaceLink(`${props.sourcePath}#${decoded}`)
       }
+      return
+    }
 
-      if (heading) {
-        heading.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      }
+    if (href && openWorkspaceLink(href)) {
+      event.preventDefault()
       return
     }
   }
@@ -298,6 +390,31 @@ async function handleRootClick(event: MouseEvent) {
   }
 }
 
+function positiveInt(raw: unknown): number | undefined {
+  const value = Number(raw)
+  if (!Number.isFinite(value) || value <= 0) return undefined
+  return Math.floor(value)
+}
+
+function applyRequestedAnchorReveal() {
+  const anchor = String(props.revealAnchor || '').trim()
+  if (!anchor) return
+
+  const seq = positiveInt(props.revealRequestSeq) || 0
+  const sourcePath = String(props.sourcePath || '').trim()
+  const key = `${seq}:${sourcePath}:${anchor}`
+  if (key === lastRevealAnchorKey) return
+
+  if (scrollToAnchor(anchor)) {
+    lastRevealAnchorKey = key
+    return
+  }
+
+  if (sourcePath && /^(?:L\d+(?:C\d+)?|\d+(?::\d+)?)$/i.test(anchor) && openWorkspaceLink(`${sourcePath}#${anchor}`)) {
+    lastRevealAnchorKey = key
+  }
+}
+
 onMounted(() => {
   // Event delegation: rendered markdown comes from v-html.
   rootEl.value?.addEventListener('click', handleRootClick)
@@ -305,7 +422,7 @@ onMounted(() => {
 })
 
 watch(
-  () => [props.mode, props.content, props.stream, props.streamDebounceMs] as const,
+  () => [props.mode, props.content, props.sourcePath, props.stream, props.streamDebounceMs] as const,
   () => {
     clearTimer()
     if (props.mode !== 'markdown') {
@@ -324,6 +441,20 @@ watch(
     }, delay)
   },
   { immediate: true },
+)
+
+watch(
+  () => [directoryStore.currentDirectory, props.sourcePath] as const,
+  () => {
+    void nextTick(() => hydrateWorkspaceMedia())
+  },
+)
+
+watch(
+  () => [props.revealRequestSeq, props.revealAnchor, html.value] as const,
+  () => {
+    void nextTick(() => applyRequestedAnchorReveal())
+  },
 )
 
 onBeforeUnmount(() => {

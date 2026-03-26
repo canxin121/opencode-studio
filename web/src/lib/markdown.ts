@@ -3,6 +3,7 @@ import texmath from 'markdown-it-texmath'
 import katex from 'katex'
 
 import { highlightCodeToHtml } from '@/lib/highlight'
+import { mediaKindFromHref } from '@/lib/workspaceLinks'
 
 function safeLangClass(lang: string | undefined | null): string {
   const raw = typeof lang === 'string' ? lang.trim().toLowerCase() : ''
@@ -188,6 +189,18 @@ function renderFencedCodeBlock(code: string, lang?: string): string {
 </div>`.trim()
 }
 
+function renderEmbeddedMediaFromImage(kind: 'video' | 'audio', src: string, title: string, alt: string): string {
+  const srcEsc = escapeHtml(src)
+  const titleAttr = title ? ` title="${escapeHtml(title)}"` : ''
+  const ariaAttr = alt ? ` aria-label="${escapeHtml(alt)}"` : ''
+
+  if (kind === 'video') {
+    return `<video class="oc-md-media oc-md-media--video" controls preload="metadata"${titleAttr}${ariaAttr}><source src="${srcEsc}" /></video>`
+  }
+
+  return `<audio class="oc-md-media oc-md-media--audio" controls preload="metadata"${titleAttr}${ariaAttr}><source src="${srcEsc}" /></audio>`
+}
+
 const md = new MarkdownIt({
   html: false,
   breaks: true,
@@ -218,6 +231,25 @@ md.renderer.rules.fence = (tokens, idx) => {
 md.renderer.rules.code_block = (tokens, idx) => {
   const t = tokens[idx]
   return renderFencedCodeBlock(String(t?.content || ''), '')
+}
+
+const defaultImage = md.renderer.rules.image
+md.renderer.rules.image = (tokens, idx, options, env, self) => {
+  const token = tokens[idx]
+  if (token) {
+    const src = String(token.attrGet('src') || '').trim()
+    const mediaKind = mediaKindFromHref(src)
+    if (mediaKind === 'video' || mediaKind === 'audio') {
+      const title = String(token.attrGet('title') || '').trim()
+      const alt = String(token.content || '').trim()
+      return renderEmbeddedMediaFromImage(mediaKind, src, title, alt)
+    }
+
+    token.attrSet('loading', 'lazy')
+  }
+
+  if (defaultImage) return defaultImage(tokens, idx, options, env, self)
+  return self.renderToken(tokens, idx, options)
 }
 
 // Open links safely by default.

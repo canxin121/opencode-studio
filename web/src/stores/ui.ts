@@ -12,6 +12,9 @@ export type WorkspaceDockFileAction = 'open' | 'reveal'
 export type WorkspaceDockFileRequest = {
   path: string
   action: WorkspaceDockFileAction
+  line?: number
+  column?: number
+  anchor?: string
 }
 
 const STORAGE_SIDEBAR_OPEN = localStorageKeys.ui.sidebarOpen
@@ -208,9 +211,28 @@ export const useUiStore = defineStore('ui', () => {
     workspaceDockPanel.value = panel
   }
 
-  function requestWorkspaceDockFile(path: string, action: WorkspaceDockFileAction = 'open') {
+  function positiveIntOrUndefined(raw: unknown): number | undefined {
+    const value = Number(raw)
+    if (!Number.isFinite(value) || value <= 0) return undefined
+    return Math.floor(value)
+  }
+
+  function trimmedStringOrUndefined(raw: unknown): string | undefined {
+    const value = typeof raw === 'string' ? raw.trim() : ''
+    return value || undefined
+  }
+
+  function requestWorkspaceDockFile(
+    path: string,
+    action: WorkspaceDockFileAction = 'open',
+    location?: { line?: number | null; column?: number | null; anchor?: string | null },
+  ) {
     const targetPath = String(path || '').trim()
     if (!targetPath) return
+
+    const line = positiveIntOrUndefined(location?.line)
+    const column = positiveIntOrUndefined(location?.column)
+    const anchor = trimmedStringOrUndefined(location?.anchor)
 
     workspaceDockPanel.value = 'files'
     workspaceDockPlacement.value = 'right'
@@ -218,6 +240,9 @@ export const useUiStore = defineStore('ui', () => {
     workspaceDockFileRequest.value = {
       path: targetPath,
       action: action === 'reveal' ? 'reveal' : 'open',
+      ...(line ? { line } : {}),
+      ...(column ? { column } : {}),
+      ...(anchor ? { anchor } : {}),
     }
     workspaceDockFileRequestSeq.value += 1
   }

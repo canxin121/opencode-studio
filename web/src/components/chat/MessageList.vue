@@ -19,6 +19,9 @@ import type {
 } from '@/components/chat/messageList.types'
 import { formatTimeHMS } from '@/i18n/intl'
 import type { OptimisticUserMessage } from '@/composables/chat/useMessageStreaming'
+import { buildWorkspaceRawFileUrl, extractWorkspacePathFromFileUrl, mediaKindFromHref } from '@/lib/workspaceLinks'
+import { useDirectoryStore } from '@/stores/directory'
+import { useUiStore } from '@/stores/ui'
 
 const props = defineProps<{
   isCompactLayout: boolean
@@ -71,6 +74,116 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+const directoryStore = useDirectoryStore()
+const ui = useUiStore()
+
+type OptimisticFile = OptimisticUserMessage['files'][number]
+
+function resolveWorkspacePathForOptimisticFile(file: OptimisticFile): string {
+  const workspaceRoot = String(directoryStore.currentDirectory || '').trim()
+  if (!workspaceRoot) return ''
+
+  const serverPath = typeof file?.serverPath === 'string' ? file.serverPath.trim() : ''
+  if (serverPath) {
+    return extractWorkspacePathFromFileUrl(serverPath, workspaceRoot) || ''
+  }
+
+  const url = typeof file?.url === 'string' ? file.url.trim() : ''
+  if (!url) return ''
+  return extractWorkspacePathFromFileUrl(url, workspaceRoot) || ''
+}
+
+function openOptimisticFile(file: OptimisticFile) {
+  const targetPath = resolveWorkspacePathForOptimisticFile(file)
+  if (targetPath) {
+    ui.requestWorkspaceDockFile(targetPath, 'open')
+    return
+  }
+
+  const url = typeof file?.url === 'string' ? file.url.trim() : ''
+  if (!url) return
+  window.open(url, '_blank', 'noopener,noreferrer')
+}
+
+function optimisticFileClickable(file: OptimisticFile): boolean {
+  return Boolean(resolveWorkspacePathForOptimisticFile(file) || String(file?.url || '').trim())
+}
+
+function optimisticFileLabel(file: OptimisticFile): string {
+  const name = String(file?.filename || '').trim()
+  if (name) return name
+  const url = String(file?.url || '').trim()
+  if (!url) return String(t('chat.messageItem.fileFallback'))
+  if (url.startsWith('data:')) return String(t('chat.messageItem.attachmentFallback'))
+  try {
+    const parsed = new URL(url)
+    const last = parsed.pathname.split('/').filter(Boolean).pop()
+    return last || String(t('chat.messageItem.fileFallback'))
+  } catch {
+    return String(t('chat.messageItem.fileFallback'))
+  }
+}
+
+function optimisticFilePreviewUrl(file: OptimisticFile): string {
+  const url = typeof file?.url === 'string' ? file.url.trim() : ''
+  if (!url) return ''
+  if (url.startsWith('data:') || url.startsWith('blob:')) return url
+
+  const workspaceRoot = String(directoryStore.currentDirectory || '').trim()
+  if (!workspaceRoot) return url
+
+  const path = resolveWorkspacePathForOptimisticFile(file)
+  if (!path) return url
+  return buildWorkspaceRawFileUrl(workspaceRoot, path)
+}
+
+function isOptimisticImageFile(file: OptimisticFile): boolean {
+  if (String(file?.mime || '').startsWith('image/')) return true
+  const filename = typeof file?.filename === 'string' ? file.filename : ''
+  if (mediaKindFromHref(filename) === 'image') return true
+  return mediaKindFromHref(typeof file?.url === 'string' ? file.url : '') === 'image'
+}
+
+function isOptimisticVideoFile(file: OptimisticFile): boolean {
+  if (String(file?.mime || '').startsWith('video/')) return true
+  const filename = typeof file?.filename === 'string' ? file.filename : ''
+  if (mediaKindFromHref(filename) === 'video') return true
+  return mediaKindFromHref(typeof file?.url === 'string' ? file.url : '') === 'video'
+}
+
+function isOptimisticAudioFile(file: OptimisticFile): boolean {
+  if (String(file?.mime || '').startsWith('audio/')) return true
+  const filename = typeof file?.filename === 'string' ? file.filename : ''
+  if (mediaKindFromHref(filename) === 'audio') return true
+  return mediaKindFromHref(typeof file?.url === 'string' ? file.url : '') === 'audio'
+}
+
+function optimisticImageFiles(files: OptimisticFile[]): OptimisticFile[] {
+  return (files || []).filter((file) => isOptimisticImageFile(file))
+}
+
+function optimisticVideoFiles(files: OptimisticFile[]): OptimisticFile[] {
+  return (files || []).filter((file) => isOptimisticVideoFile(file))
+}
+
+function optimisticAudioFiles(files: OptimisticFile[]): OptimisticFile[] {
+  return (files || []).filter((file) => isOptimisticAudioFile(file))
+}
+
+function optimisticNonMediaFiles(files: OptimisticFile[]): OptimisticFile[] {
+  return (files || []).filter(
+    (file) => !(isOptimisticImageFile(file) || isOptimisticVideoFile(file) || isOptimisticAudioFile(file)),
+  )
+}
+
+function optimisticSourcePath(user: OptimisticUserMessage | null): string {
+  const list = Array.isArray(user?.files) ? user.files : []
+  for (const file of list) {
+    const path = resolveWorkspacePathForOptimisticFile(file)
+    if (path) return path
+  }
+  return ''
+}
 
 function sessionErrorClassificationLabel(): string {
   const classification = String(props.sessionError?.error?.classification || '').trim()
@@ -321,32 +434,103 @@ function sessionErrorAtLabel(): string {
             <div class="rounded-lg border border-border/60 px-4 py-3 text-sm leading-relaxed bg-secondary/50 relative">
               <div class="pointer-events-none absolute inset-y-0 left-0 w-1 rounded-l-lg bg-secondary/90" />
               <div v-if="optimisticUser.text" class="break-words">
-                <MarkdownRenderer :content="optimisticUser.text" />
+                <MarkdownRenderer :content="optimisticUser.text" :source-path="optimisticSourcePath(optimisticUser)" />
               </div>
 
               <div v-if="optimisticUser.files.length" class="mt-3">
-                <div class="flex flex-wrap gap-2">
-                  <template v-for="f in optimisticUser.files" :key="f.url || f.serverPath || f.filename">
-                    <a
-                      v-if="f.url"
-                      :href="f.url"
-                      target="_blank"
-                      rel="noreferrer"
+                <div v-if="optimisticNonMediaFiles(optimisticUser.files).length" class="flex flex-wrap gap-2">
+                  <template
+                    v-for="f in optimisticNonMediaFiles(optimisticUser.files)"
+                    :key="f.url || f.serverPath || f.filename"
+                  >
+                    <button
+                      v-if="optimisticFileClickable(f)"
+                      type="button"
                       class="inline-flex items-center gap-2 rounded-md bg-muted/25 px-3 py-1 text-[11px] hover:bg-muted/35"
-                      :title="f.filename"
+                      :title="optimisticFileLabel(f)"
+                      @click="openOptimisticFile(f)"
                     >
                       <RiFileLine class="h-3.5 w-3.5" />
-                      <span class="font-mono truncate max-w-[220px]">{{ f.filename }}</span>
-                    </a>
+                      <span class="font-mono truncate max-w-[220px]">{{ optimisticFileLabel(f) }}</span>
+                    </button>
                     <div
                       v-else
                       class="inline-flex items-center gap-2 rounded-md bg-muted/20 px-3 py-1 text-[11px]"
-                      :title="f.filename"
+                      :title="optimisticFileLabel(f)"
                     >
                       <RiFileLine class="h-3.5 w-3.5" />
-                      <span class="font-mono truncate max-w-[220px]">{{ f.filename }}</span>
+                      <span class="font-mono truncate max-w-[220px]">{{ optimisticFileLabel(f) }}</span>
                     </div>
                   </template>
+                </div>
+
+                <div
+                  v-if="optimisticImageFiles(optimisticUser.files).length"
+                  class="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2"
+                >
+                  <button
+                    v-for="img in optimisticImageFiles(optimisticUser.files)"
+                    :key="img.url || img.serverPath || img.filename"
+                    type="button"
+                    class="block rounded-md overflow-hidden bg-muted/10"
+                    :title="optimisticFileLabel(img)"
+                    @click="openOptimisticFile(img)"
+                  >
+                    <img
+                      :src="optimisticFilePreviewUrl(img) || img.url"
+                      :alt="optimisticFileLabel(img)"
+                      class="w-full h-24 object-cover"
+                    />
+                  </button>
+                </div>
+
+                <div
+                  v-if="optimisticVideoFiles(optimisticUser.files).length"
+                  class="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2"
+                >
+                  <div
+                    v-for="video in optimisticVideoFiles(optimisticUser.files)"
+                    :key="video.url || video.serverPath || video.filename"
+                    class="rounded-md overflow-hidden bg-muted/10 border border-border/50"
+                  >
+                    <video
+                      :src="optimisticFilePreviewUrl(video) || video.url"
+                      controls
+                      preload="metadata"
+                      class="w-full h-28 object-cover"
+                    />
+                    <button
+                      type="button"
+                      class="w-full border-t border-border/40 px-2 py-1 text-left text-[11px] font-mono text-muted-foreground hover:text-foreground"
+                      :title="optimisticFileLabel(video)"
+                      @click="openOptimisticFile(video)"
+                    >
+                      <span class="block truncate">{{ optimisticFileLabel(video) }}</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div v-if="optimisticAudioFiles(optimisticUser.files).length" class="mt-2 space-y-2">
+                  <div
+                    v-for="audio in optimisticAudioFiles(optimisticUser.files)"
+                    :key="audio.url || audio.serverPath || audio.filename"
+                    class="rounded-md overflow-hidden bg-muted/10 border border-border/50 p-2"
+                  >
+                    <audio
+                      :src="optimisticFilePreviewUrl(audio) || audio.url"
+                      controls
+                      preload="metadata"
+                      class="w-full"
+                    />
+                    <button
+                      type="button"
+                      class="mt-1 w-full border-t border-border/40 px-2 pt-1 text-left text-[11px] font-mono text-muted-foreground hover:text-foreground"
+                      :title="optimisticFileLabel(audio)"
+                      @click="openOptimisticFile(audio)"
+                    >
+                      <span class="block truncate">{{ optimisticFileLabel(audio) }}</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
