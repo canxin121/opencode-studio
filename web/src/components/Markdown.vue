@@ -9,7 +9,7 @@ import { copyTextToClipboard } from '@/lib/clipboard'
 import { resolveWorkspaceFileLink, resolveWorkspaceMediaUrl } from '@/lib/workspaceLinks'
 import { useDirectoryStore } from '@/stores/directory'
 import { useToastsStore } from '@/stores/toasts'
-import { useUiStore } from '@/stores/ui'
+import { useUiStore, type ImageViewerItem } from '@/stores/ui'
 
 const props = withDefaults(
   defineProps<{
@@ -178,6 +178,57 @@ function hydrateWorkspaceMedia() {
   }
 }
 
+function resolveImageSrcForViewer(rawSrc: string): string {
+  const src = String(rawSrc || '').trim()
+  if (!src) return ''
+  if (src.startsWith('data:') || src.startsWith('blob:')) return src
+
+  const workspaceRoot = String(directoryStore.currentDirectory || '').trim()
+  if (!workspaceRoot) return src
+
+  const mediaUrl = resolveWorkspaceMediaUrl(src, {
+    workspaceRoot,
+    baseFilePath: props.sourcePath,
+  })
+  return mediaUrl || src
+}
+
+function openMarkdownImagePreview(targetImage: HTMLImageElement): boolean {
+  const root = rootEl.value
+  if (!root) return false
+
+  const images = Array.from(root.querySelectorAll<HTMLImageElement>('img[src]'))
+  if (!images.length) return false
+
+  const items: ImageViewerItem[] = []
+  let activeIndex = -1
+
+  for (const image of images) {
+    const rawSrc = String(image.getAttribute('src') || image.currentSrc || image.src || '').trim()
+    const src = resolveImageSrcForViewer(rawSrc)
+    if (!src) continue
+
+    const alt = String(image.getAttribute('alt') || '').trim()
+    const title = String(image.getAttribute('title') || alt).trim()
+    const key = String(image.getAttribute('data-oc-md-image-key') || src).trim()
+    const index =
+      items.push({
+        src,
+        ...(alt ? { alt } : {}),
+        ...(title ? { title } : {}),
+        ...(key ? { key } : {}),
+      }) - 1
+
+    if (image === targetImage) {
+      activeIndex = index
+    }
+  }
+
+  if (!items.length) return false
+  ui.openImageViewer(items, activeIndex >= 0 ? activeIndex : 0)
+  return true
+}
+
 function openWorkspaceLink(href: string): boolean {
   const workspaceRoot = String(directoryStore.currentDirectory || '').trim()
   if (!workspaceRoot) return false
@@ -333,6 +384,12 @@ function scheduleHydrateMermaid() {
 async function handleRootClick(event: MouseEvent) {
   const target = event.target as HTMLElement | null
   if (!target) return
+
+  const image = target.closest('img') as HTMLImageElement | null
+  if (image && rootEl.value?.contains(image) && openMarkdownImagePreview(image)) {
+    event.preventDefault()
+    return
+  }
 
   // Handle TOC anchor links
   const link = target.closest('a')

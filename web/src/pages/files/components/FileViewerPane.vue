@@ -29,6 +29,7 @@ import Skeleton from '@/components/ui/Skeleton.vue'
 import type { OptionMenuGroup, OptionMenuItem } from '@/components/ui/optionMenu.types'
 import { buildUnifiedDiffModel, resolveInitialTopLineFromTextPair } from '@/features/git/diff/unifiedDiff'
 import { formatDateTimeYMDHM, formatDateYMDShort2DigitYear } from '@/i18n/intl'
+import { useUiStore, type ImageViewerItem } from '@/stores/ui'
 
 import { isImagePath } from '../fileKinds'
 import { isMermaidPath } from '../previewKinds'
@@ -77,6 +78,8 @@ const props = defineProps<{
   displayedContent: string
   rawUrl: string
   selectedPath: string
+  imageGalleryItems?: ImageViewerItem[]
+  selectedImageGalleryIndex?: number | null
   revealLine?: number | null
   revealColumn?: number | null
   revealAnchor?: string
@@ -131,6 +134,7 @@ const props = defineProps<{
 }>()
 
 const { t } = useI18n()
+const ui = useUiStore()
 
 const emit = defineEmits<{
   (e: 'insertSelection'): void
@@ -215,6 +219,38 @@ const gitDiffRangeLabel = computed(() =>
     ? t('files.viewer.gitDiffRange.headToIndex')
     : t('files.viewer.gitDiffRange.indexToWorkingTree'),
 )
+
+function openImageViewerFromFilePreview() {
+  const selectedPath = String(props.selectedPath || '').trim()
+  const fallbackLabel = String(props.selectedFile?.name || selectedPath || t('files.viewer.imageAltFallback'))
+  const fallbackItems: ImageViewerItem[] = props.rawUrl
+    ? [
+        {
+          src: props.rawUrl,
+          title: fallbackLabel,
+          alt: fallbackLabel,
+          ...(selectedPath ? { key: selectedPath } : {}),
+        },
+      ]
+    : []
+
+  const gallery = Array.isArray(props.imageGalleryItems)
+    ? props.imageGalleryItems.filter((item) => String(item?.src || '').trim())
+    : []
+  const items = gallery.length ? gallery : fallbackItems
+  if (!items.length) return
+
+  const requestedIndex = Number(props.selectedImageGalleryIndex)
+  const fallbackIndex = items.findIndex((item) => String(item?.key || '').trim() === selectedPath)
+  const maxIndex = items.length - 1
+  const index = Number.isFinite(requestedIndex)
+    ? Math.max(0, Math.min(maxIndex, Math.floor(requestedIndex)))
+    : fallbackIndex >= 0
+      ? fallbackIndex
+      : 0
+
+  ui.openImageViewer(items, index)
+}
 
 function runViewMenuAction(item: OptionMenuItem) {
   if (item.disabled) return
@@ -1382,12 +1418,19 @@ function handleHeaderBackClick() {
             <Skeleton class="h-[52vh] max-h-[36rem] w-full rounded-md" />
           </div>
         </div>
-        <img
+        <button
           v-else
-          :src="rawUrl"
-          :alt="selectedFile?.name || t('files.viewer.imageAltFallback')"
-          class="max-w-full max-h-[70vh] object-contain rounded-md border border-border/30 bg-primary/10"
-        />
+          type="button"
+          class="rounded-md border border-border/30 bg-primary/10 p-0"
+          :title="selectedFile?.name || t('files.viewer.imageAltFallback')"
+          @click="openImageViewerFromFilePreview"
+        >
+          <img
+            :src="rawUrl"
+            :alt="selectedFile?.name || t('files.viewer.imageAltFallback')"
+            class="max-w-full max-h-[70vh] object-contain rounded-md cursor-zoom-in"
+          />
+        </button>
       </div>
 
       <div

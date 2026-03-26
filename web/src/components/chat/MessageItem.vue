@@ -26,7 +26,7 @@ import {
   resolveWorkspaceFileLink,
 } from '@/lib/workspaceLinks'
 import { useDirectoryStore } from '@/stores/directory'
-import { useUiStore } from '@/stores/ui'
+import { useUiStore, type ImageViewerItem } from '@/stores/ui'
 import type { JsonValue } from '@/types/json'
 import { useI18n } from 'vue-i18n'
 
@@ -57,7 +57,7 @@ type MessageLike = {
   parts: MessagePartLike[]
 }
 
-type FilePart = MessagePartLike & { type: 'file'; url: string }
+type FilePart = MessagePartLike & { type: 'file' }
 
 const props = defineProps<{
   message: MessageLike
@@ -81,7 +81,9 @@ const ui = useUiStore()
 const errorDetailsOpen = ref(false)
 
 function isFilePart(part: MessagePartLike): part is FilePart {
-  return part?.type === 'file' && typeof part?.url === 'string' && part.url.length > 0
+  const url = typeof part?.url === 'string' ? part.url.trim() : ''
+  const serverPath = typeof part?.serverPath === 'string' ? part.serverPath.trim() : ''
+  return part?.type === 'file' && Boolean(url || serverPath)
 }
 
 function getFileParts(parts: MessagePartLike[]): FilePart[] {
@@ -89,7 +91,10 @@ function getFileParts(parts: MessagePartLike[]): FilePart[] {
 }
 
 function isImageFilePart(part: FilePart): boolean {
-  return String(part?.mime || '').startsWith('image/')
+  if (String(part?.mime || '').startsWith('image/')) return true
+  const filename = typeof part?.filename === 'string' ? part.filename : ''
+  if (mediaKindFromHref(filename) === 'image') return true
+  return mediaKindFromHref(typeof part?.url === 'string' ? part.url : '') === 'image'
 }
 
 function imageFileParts(parts: MessagePartLike[]): FilePart[] {
@@ -133,16 +138,56 @@ function resolveWorkspacePathForFilePart(part: MessagePartLike): string {
 }
 
 function filePartPreviewUrl(part: MessagePartLike): string {
+  const workspaceRoot = String(directoryStore.currentDirectory || '').trim()
+  const path = resolveWorkspacePathForFilePart(part)
+  if (workspaceRoot && path) {
+    return buildWorkspaceRawFileUrl(workspaceRoot, path)
+  }
+
   const url = typeof part?.url === 'string' ? part.url.trim() : ''
   if (!url) return ''
   if (url.startsWith('data:') || url.startsWith('blob:')) return url
+  return url
+}
 
-  const workspaceRoot = String(directoryStore.currentDirectory || '').trim()
-  if (!workspaceRoot) return url
+function keyForFilePart(part: MessagePartLike): string {
+  return String(part?.id || part?.serverPath || part?.url || part?.filename || '').trim()
+}
 
-  const path = resolveWorkspacePathForFilePart(part)
-  if (!path) return url
-  return buildWorkspaceRawFileUrl(workspaceRoot, path)
+function imageViewerItemFromFilePart(part: MessagePartLike): ImageViewerItem | null {
+  const src = filePartPreviewUrl(part)
+  if (!src) return null
+  const label = filePartLabel(part)
+  const key = keyForFilePart(part)
+  return {
+    src,
+    alt: label,
+    title: label,
+    ...(key ? { key } : {}),
+  }
+}
+
+function imageViewerItemsFromFileParts(parts: FilePart[]): ImageViewerItem[] {
+  const out: ImageViewerItem[] = []
+  for (const part of parts || []) {
+    const item = imageViewerItemFromFilePart(part)
+    if (!item) continue
+    out.push(item)
+  }
+  return out
+}
+
+function openImagePartPreview(part: FilePart) {
+  const images = imageFileParts(props.message.parts)
+  const items = imageViewerItemsFromFileParts(images)
+  if (!items.length) {
+    openFilePart(part)
+    return
+  }
+
+  const targetKey = keyForFilePart(part)
+  const index = images.findIndex((img) => keyForFilePart(img) === targetKey)
+  ui.openImageViewer(items, index >= 0 ? index : 0)
 }
 
 function recordFieldString(record: Record<string, JsonValue> | null | undefined, key: string): string {
@@ -440,7 +485,7 @@ const assistantHasError = () => role() === 'assistant' && Boolean(assistantError
 
           <div v-if="getFileParts(message.parts).length" class="mt-3 space-y-2">
             <div class="flex flex-wrap gap-2">
-              <template v-for="f in getFileParts(message.parts)" :key="f.id || f.url">
+              <template v-for="f in getFileParts(message.parts)" :key="keyForFilePart(f)">
                 <button
                   v-if="!(isImageFilePart(f) || isVideoFilePart(f) || isAudioFilePart(f))"
                   type="button"
@@ -457,16 +502,16 @@ const assistantHasError = () => role() === 'assistant' && Boolean(assistantError
             <div v-if="imageFileParts(message.parts).length" class="grid grid-cols-2 sm:grid-cols-3 gap-2">
               <button
                 v-for="img in imageFileParts(message.parts)"
-                :key="img.id || img.url"
+                :key="keyForFilePart(img)"
                 type="button"
                 class="block rounded-md overflow-hidden bg-muted/10"
                 :title="filePartLabel(img)"
-                @click="openFilePart(img)"
+                @click="openImagePartPreview(img)"
               >
                 <img
-                  :src="filePartPreviewUrl(img) || img.url"
+                  :src="filePartPreviewUrl(img)"
                   :alt="filePartLabel(img)"
-                  class="w-full h-24 object-cover"
+                  class="w-full h-24 object-cover cursor-zoom-in"
                 />
               </button>
             </div>
@@ -474,15 +519,10 @@ const assistantHasError = () => role() === 'assistant' && Boolean(assistantError
             <div v-if="videoFileParts(message.parts).length" class="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div
                 v-for="video in videoFileParts(message.parts)"
-                :key="video.id || video.url"
+                :key="keyForFilePart(video)"
                 class="rounded-md overflow-hidden bg-muted/10 border border-border/50"
               >
-                <video
-                  :src="filePartPreviewUrl(video) || video.url"
-                  controls
-                  preload="metadata"
-                  class="w-full h-28 object-cover"
-                />
+                <video :src="filePartPreviewUrl(video)" controls preload="metadata" class="w-full h-28 object-cover" />
                 <button
                   type="button"
                   class="w-full border-t border-border/40 px-2 py-1 text-left text-[11px] font-mono text-muted-foreground hover:text-foreground"
@@ -497,10 +537,10 @@ const assistantHasError = () => role() === 'assistant' && Boolean(assistantError
             <div v-if="audioFileParts(message.parts).length" class="space-y-2">
               <div
                 v-for="audio in audioFileParts(message.parts)"
-                :key="audio.id || audio.url"
+                :key="keyForFilePart(audio)"
                 class="rounded-md overflow-hidden bg-muted/10 border border-border/50 p-2"
               >
-                <audio :src="filePartPreviewUrl(audio) || audio.url" controls preload="metadata" class="w-full" />
+                <audio :src="filePartPreviewUrl(audio)" controls preload="metadata" class="w-full" />
                 <button
                   type="button"
                   class="mt-1 w-full border-t border-border/40 px-2 pt-1 text-left text-[11px] font-mono text-muted-foreground hover:text-foreground"

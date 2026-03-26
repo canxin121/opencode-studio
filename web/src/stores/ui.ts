@@ -17,6 +17,13 @@ export type WorkspaceDockFileRequest = {
   anchor?: string
 }
 
+export type ImageViewerItem = {
+  src: string
+  alt?: string
+  title?: string
+  key?: string
+}
+
 const STORAGE_SIDEBAR_OPEN = localStorageKeys.ui.sidebarOpen
 const STORAGE_SIDEBAR_WIDTH = localStorageKeys.ui.sidebarWidth
 const STORAGE_GIT_HISTORY_SEARCH_EXPANDED = localStorageKeys.ui.gitHistorySearchExpanded
@@ -127,6 +134,16 @@ export const useUiStore = defineStore('ui', () => {
   // Global overlays
   const isHelpDialogOpen = ref(false)
   const isMcpDialogOpen = ref(false)
+  const isImageViewerOpen = ref(false)
+  const imageViewerItems = ref<ImageViewerItem[]>([])
+  const imageViewerActiveIndex = ref(0)
+  const imageViewerZoom = ref(1)
+  const imageViewerActiveItem = computed(() => {
+    const items = imageViewerItems.value
+    if (!items.length) return null
+    const index = Math.min(Math.max(0, imageViewerActiveIndex.value), items.length - 1)
+    return items[index] || null
+  })
 
   // Cross-component session action requests (sidebar -> chat)
   const sessionActionSeq = ref(0)
@@ -285,6 +302,86 @@ export const useUiStore = defineStore('ui', () => {
     isMcpDialogOpen.value = open
   }
 
+  function normalizeImageViewerItems(items: ImageViewerItem[]): ImageViewerItem[] {
+    if (!Array.isArray(items)) return []
+    const out: ImageViewerItem[] = []
+    for (const item of items) {
+      const src = String(item?.src || '').trim()
+      if (!src) continue
+      const title = String(item?.title || '').trim()
+      const alt = String(item?.alt || '').trim()
+      const key = String(item?.key || '').trim()
+      out.push({
+        src,
+        ...(title ? { title } : {}),
+        ...(alt ? { alt } : {}),
+        ...(key ? { key } : {}),
+      })
+    }
+    return out
+  }
+
+  function clampImageViewerIndex(index: number): number {
+    const size = imageViewerItems.value.length
+    if (!size) return 0
+    const n = Number.isFinite(index) ? Math.floor(index) : 0
+    if (n < 0) return 0
+    if (n >= size) return size - 1
+    return n
+  }
+
+  function openImageViewer(items: ImageViewerItem[], index = 0) {
+    const normalized = normalizeImageViewerItems(items)
+    if (!normalized.length) return
+
+    imageViewerItems.value = normalized
+    imageViewerActiveIndex.value = clampImageViewerIndex(index)
+    imageViewerZoom.value = 1
+    isImageViewerOpen.value = true
+  }
+
+  function closeImageViewer() {
+    isImageViewerOpen.value = false
+    imageViewerZoom.value = 1
+  }
+
+  function setImageViewerIndex(index: number) {
+    imageViewerActiveIndex.value = clampImageViewerIndex(index)
+    imageViewerZoom.value = 1
+  }
+
+  function nextImageViewerItem() {
+    const size = imageViewerItems.value.length
+    if (size <= 1) return
+    imageViewerActiveIndex.value = (imageViewerActiveIndex.value + 1) % size
+    imageViewerZoom.value = 1
+  }
+
+  function prevImageViewerItem() {
+    const size = imageViewerItems.value.length
+    if (size <= 1) return
+    imageViewerActiveIndex.value = (imageViewerActiveIndex.value - 1 + size) % size
+    imageViewerZoom.value = 1
+  }
+
+  function setImageViewerZoom(zoom: number) {
+    const value = Number(zoom)
+    if (!Number.isFinite(value)) return
+    imageViewerZoom.value = Math.max(0.2, Math.min(5, value))
+  }
+
+  function zoomImageViewerIn(step = 0.2) {
+    setImageViewerZoom(imageViewerZoom.value + Math.max(0.05, step))
+  }
+
+  function zoomImageViewerOut(step = 0.2) {
+    setImageViewerZoom(imageViewerZoom.value - Math.max(0.05, step))
+  }
+
+  function resetImageViewerZoom() {
+    imageViewerZoom.value = 1
+  }
+
   function requestSessionAction(actionId: string) {
     const id = String(actionId || '').trim()
     if (!id) return
@@ -330,6 +427,11 @@ export const useUiStore = defineStore('ui', () => {
     activeMainTab,
     isHelpDialogOpen,
     isMcpDialogOpen,
+    isImageViewerOpen,
+    imageViewerItems,
+    imageViewerActiveItem,
+    imageViewerActiveIndex,
+    imageViewerZoom,
     sessionActionSeq,
     sessionActionId,
     sessionQueryEnabled,
@@ -352,6 +454,15 @@ export const useUiStore = defineStore('ui', () => {
     disableSessionQuery,
     toggleHelpDialog,
     setMcpDialogOpen,
+    openImageViewer,
+    closeImageViewer,
+    setImageViewerIndex,
+    nextImageViewerItem,
+    prevImageViewerItem,
+    setImageViewerZoom,
+    zoomImageViewerIn,
+    zoomImageViewerOut,
+    resetImageViewerZoom,
     requestSessionAction,
     clearSessionActionRequest,
     armAbortPrompt,

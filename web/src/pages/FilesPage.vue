@@ -74,6 +74,7 @@ type FileRefreshConflictState = {
 import { ApiError, apiBlob } from '@/lib/api'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import { gitJson } from '@/lib/gitApi'
+import { buildWorkspaceRawFileUrl } from '@/lib/workspaceLinks'
 import {
   applyGitPatch as applyGitPatchApi,
   deletePath as deletePathApi,
@@ -98,7 +99,7 @@ import { useSettingsStore } from '@/stores/settings'
 import type { Settings } from '@/stores/settings'
 import { useToastsStore } from '@/stores/toasts'
 import { useDirectoryStore } from '@/stores/directory'
-import { useUiStore } from '@/stores/ui'
+import { useUiStore, type ImageViewerItem } from '@/stores/ui'
 
 const props = withDefaults(
   defineProps<{
@@ -858,6 +859,55 @@ const flattenedTree = computed<FlatRow[]>(() => {
 
   walk(rootPath, 0)
   return rows
+})
+
+const filesImageGalleryItems = computed<ImageViewerItem[]>(() => {
+  const workspaceRoot = root.value
+  if (!workspaceRoot) return []
+
+  const items: ImageViewerItem[] = []
+  const seen = new Set<string>()
+  for (const row of flattenedTree.value) {
+    const node = row.node
+    if (!node || node.type !== 'file') continue
+
+    const path = normalizePath(String(node.path || '').trim())
+    if (!path || seen.has(path) || isPathHiddenInFiles(path)) continue
+    if (detectPreviewMode(path) !== 'image') continue
+
+    seen.add(path)
+    const label = String(node.name || path.split('/').filter(Boolean).pop() || path)
+    items.push({
+      src: buildWorkspaceRawFileUrl(workspaceRoot, path),
+      key: path,
+      title: label,
+      alt: label,
+    })
+  }
+
+  const selectedPath = normalizePath(String(selectedFile.value?.path || '').trim())
+  if (
+    selectedPath &&
+    !seen.has(selectedPath) &&
+    detectPreviewMode(selectedPath) === 'image' &&
+    !isPathHiddenInFiles(selectedPath)
+  ) {
+    const label = String(selectedFile.value?.name || selectedPath.split('/').filter(Boolean).pop() || selectedPath)
+    items.push({
+      src: buildWorkspaceRawFileUrl(workspaceRoot, selectedPath),
+      key: selectedPath,
+      title: label,
+      alt: label,
+    })
+  }
+
+  return items
+})
+
+const selectedImageGalleryIndex = computed(() => {
+  const selectedPath = normalizePath(String(selectedFile.value?.path || '').trim())
+  if (!selectedPath) return -1
+  return filesImageGalleryItems.value.findIndex((item) => normalizePath(String(item.key || '').trim()) === selectedPath)
 })
 
 const hasRootChildren = computed(() => {
@@ -4208,6 +4258,8 @@ onMounted(async () => {
                 :raw-url="rawUrl"
                 :open-raw="openSelectedFileRaw"
                 :selected-path="selectedPath"
+                :image-gallery-items="filesImageGalleryItems"
+                :selected-image-gallery-index="selectedImageGalleryIndex"
                 :reveal-line="fileRevealLine"
                 :reveal-column="fileRevealColumn"
                 :reveal-anchor="fileRevealAnchor"

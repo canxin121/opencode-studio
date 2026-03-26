@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import HelpDialog from '@/components/HelpDialog.vue'
+import ImageViewerDialog from '@/components/ImageViewerDialog.vue'
 import McpDialog from '@/components/McpDialog.vue'
 import HorizontalSplitPane from '@/components/ui/HorizontalSplitPane.vue'
 import AppHeader from '@/layout/AppHeader.vue'
@@ -97,6 +98,7 @@ const showWorkspaceRightDock = computed(() => !ui.isCompactLayout && ui.isWorksp
   <div class="main-content-safe-area relative h-[100dvh] bg-background text-foreground overflow-hidden flex flex-col">
     <HelpDialog />
     <McpDialog />
+    <ImageViewerDialog />
 
     <div class="flex flex-1 flex-col overflow-hidden">
       <AppHeader />

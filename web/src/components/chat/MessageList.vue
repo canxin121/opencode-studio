@@ -21,7 +21,7 @@ import { formatTimeHMS } from '@/i18n/intl'
 import type { OptimisticUserMessage } from '@/composables/chat/useMessageStreaming'
 import { buildWorkspaceRawFileUrl, extractWorkspacePathFromFileUrl, mediaKindFromHref } from '@/lib/workspaceLinks'
 import { useDirectoryStore } from '@/stores/directory'
-import { useUiStore } from '@/stores/ui'
+import { useUiStore, type ImageViewerItem } from '@/stores/ui'
 
 const props = defineProps<{
   isCompactLayout: boolean
@@ -125,16 +125,51 @@ function optimisticFileLabel(file: OptimisticFile): string {
 }
 
 function optimisticFilePreviewUrl(file: OptimisticFile): string {
+  const workspaceRoot = String(directoryStore.currentDirectory || '').trim()
+  const path = resolveWorkspacePathForOptimisticFile(file)
+  if (workspaceRoot && path) {
+    return buildWorkspaceRawFileUrl(workspaceRoot, path)
+  }
+
   const url = typeof file?.url === 'string' ? file.url.trim() : ''
   if (!url) return ''
   if (url.startsWith('data:') || url.startsWith('blob:')) return url
+  return url
+}
 
-  const workspaceRoot = String(directoryStore.currentDirectory || '').trim()
-  if (!workspaceRoot) return url
+function keyForOptimisticFile(file: OptimisticFile): string {
+  return String(file?.url || file?.serverPath || file?.filename || '').trim()
+}
 
-  const path = resolveWorkspacePathForOptimisticFile(file)
-  if (!path) return url
-  return buildWorkspaceRawFileUrl(workspaceRoot, path)
+function optimisticImageViewerItems(files: OptimisticFile[]): ImageViewerItem[] {
+  const out: ImageViewerItem[] = []
+  for (const file of optimisticImageFiles(files)) {
+    const src = optimisticFilePreviewUrl(file)
+    if (!src) continue
+    const label = optimisticFileLabel(file)
+    const key = keyForOptimisticFile(file)
+    out.push({
+      src,
+      alt: label,
+      title: label,
+      ...(key ? { key } : {}),
+    })
+  }
+  return out
+}
+
+function openOptimisticImagePreview(user: OptimisticUserMessage | null, file: OptimisticFile) {
+  const files = Array.isArray(user?.files) ? user.files : []
+  const images = optimisticImageFiles(files)
+  const items = optimisticImageViewerItems(images)
+  if (!items.length) {
+    openOptimisticFile(file)
+    return
+  }
+
+  const targetKey = keyForOptimisticFile(file)
+  const index = images.findIndex((item) => keyForOptimisticFile(item) === targetKey)
+  ui.openImageViewer(items, index >= 0 ? index : 0)
 }
 
 function isOptimisticImageFile(file: OptimisticFile): boolean {
@@ -439,10 +474,7 @@ function sessionErrorAtLabel(): string {
 
               <div v-if="optimisticUser.files.length" class="mt-3">
                 <div v-if="optimisticNonMediaFiles(optimisticUser.files).length" class="flex flex-wrap gap-2">
-                  <template
-                    v-for="f in optimisticNonMediaFiles(optimisticUser.files)"
-                    :key="f.url || f.serverPath || f.filename"
-                  >
+                  <template v-for="f in optimisticNonMediaFiles(optimisticUser.files)" :key="keyForOptimisticFile(f)">
                     <button
                       v-if="optimisticFileClickable(f)"
                       type="button"
@@ -470,16 +502,16 @@ function sessionErrorAtLabel(): string {
                 >
                   <button
                     v-for="img in optimisticImageFiles(optimisticUser.files)"
-                    :key="img.url || img.serverPath || img.filename"
+                    :key="keyForOptimisticFile(img)"
                     type="button"
                     class="block rounded-md overflow-hidden bg-muted/10"
                     :title="optimisticFileLabel(img)"
-                    @click="openOptimisticFile(img)"
+                    @click="openOptimisticImagePreview(optimisticUser, img)"
                   >
                     <img
-                      :src="optimisticFilePreviewUrl(img) || img.url"
+                      :src="optimisticFilePreviewUrl(img)"
                       :alt="optimisticFileLabel(img)"
-                      class="w-full h-24 object-cover"
+                      class="w-full h-24 object-cover cursor-zoom-in"
                     />
                   </button>
                 </div>
@@ -490,11 +522,11 @@ function sessionErrorAtLabel(): string {
                 >
                   <div
                     v-for="video in optimisticVideoFiles(optimisticUser.files)"
-                    :key="video.url || video.serverPath || video.filename"
+                    :key="keyForOptimisticFile(video)"
                     class="rounded-md overflow-hidden bg-muted/10 border border-border/50"
                   >
                     <video
-                      :src="optimisticFilePreviewUrl(video) || video.url"
+                      :src="optimisticFilePreviewUrl(video)"
                       controls
                       preload="metadata"
                       class="w-full h-28 object-cover"
@@ -513,15 +545,10 @@ function sessionErrorAtLabel(): string {
                 <div v-if="optimisticAudioFiles(optimisticUser.files).length" class="mt-2 space-y-2">
                   <div
                     v-for="audio in optimisticAudioFiles(optimisticUser.files)"
-                    :key="audio.url || audio.serverPath || audio.filename"
+                    :key="keyForOptimisticFile(audio)"
                     class="rounded-md overflow-hidden bg-muted/10 border border-border/50 p-2"
                   >
-                    <audio
-                      :src="optimisticFilePreviewUrl(audio) || audio.url"
-                      controls
-                      preload="metadata"
-                      class="w-full"
-                    />
+                    <audio :src="optimisticFilePreviewUrl(audio)" controls preload="metadata" class="w-full" />
                     <button
                       type="button"
                       class="mt-1 w-full border-t border-border/40 px-2 pt-1 text-left text-[11px] font-mono text-muted-foreground hover:text-foreground"
