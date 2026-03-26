@@ -245,7 +245,7 @@ md.renderer.rules.image = (tokens, idx, options, env, self) => {
       return renderEmbeddedMediaFromImage(mediaKind, src, title, alt)
     }
 
-    token.attrSet('loading', 'lazy')
+    token.attrSet('decoding', 'async')
   }
 
   if (defaultImage) return defaultImage(tokens, idx, options, env, self)

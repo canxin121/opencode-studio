@@ -419,8 +419,45 @@
     display: block;
   }
 
+  .prose :where(img[data-oc-md-src]) {
+    @apply my-4 block max-w-full rounded-md border border-border/40 bg-muted/10;
+    height: auto;
+  }
+
+  .prose :where(img.oc-md-image--pending),
+  .prose :where(img.oc-md-image--loading) {
+    background-image: linear-gradient(
+      110deg,
+      oklch(var(--muted) / 0.26) 25%,
+      oklch(var(--muted) / 0.4) 37%,
+      oklch(var(--muted) / 0.26) 63%
+    );
+    background-size: 220% 100%;
+    animation: oc-md-image-shimmer 1.25s linear infinite;
+  }
+
+  .prose :where(img.oc-md-image--loaded) {
+    animation: none;
+    background-image: none;
+  }
+
+  .prose :where(img.oc-md-image--error) {
+    animation: none;
+    background-image: none;
+    @apply border-destructive/40 bg-destructive/10;
+  }
+
   .prose :where(.oc-md-media--audio) {
     max-width: 32rem;
+  }
+
+  @keyframes oc-md-image-shimmer {
+    0% {
+      background-position: 100% 0;
+    }
+    100% {
+      background-position: -100% 0;
+    }
   }
 
   /* Markdown fenced blocks (custom renderer): header + actions + sane sizing. */
