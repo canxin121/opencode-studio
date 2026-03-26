@@ -6,6 +6,7 @@ import { useI18n } from 'vue-i18n'
 import Button from '@/components/ui/Button.vue'
 import IconButton from '@/components/ui/IconButton.vue'
 import Skeleton from '@/components/ui/Skeleton.vue'
+import { useUiStore, type ImageViewerItem } from '@/stores/ui'
 
 type AttachedFile = {
   id: string
@@ -50,6 +51,7 @@ const props = withDefaults(
 )
 
 const { t } = useI18n()
+const ui = useUiStore()
 
 const effectiveTitle = computed(() => String(props.title || '').trim() || String(t('chat.attachments.title')))
 
@@ -78,6 +80,33 @@ function isImageFile(f: AttachedFile): boolean {
     .toLowerCase()
   const url = typeof f?.url === 'string' ? f.url : ''
   return mime.startsWith('image/') && url.startsWith('data:')
+}
+
+function imageViewerItemsFromAttachments(files: AttachedFile[]): ImageViewerItem[] {
+  const out: ImageViewerItem[] = []
+  for (const file of files || []) {
+    if (!isImageFile(file)) continue
+    const src = String(file.url || '').trim()
+    if (!src) continue
+    const title = String(file.filename || '').trim()
+    const key = String(file.id || file.filename || src).trim()
+    out.push({
+      src,
+      ...(title ? { title, alt: title } : {}),
+      ...(key ? { key } : {}),
+    })
+  }
+  return out
+}
+
+function openAttachmentImage(file: AttachedFile) {
+  if (!isImageFile(file)) return
+  const items = imageViewerItemsFromAttachments(props.attachedFiles)
+  if (!items.length) return
+
+  const targetKey = String(file.id || file.filename || file.url || '').trim()
+  const index = items.findIndex((item) => String(item.key || '').trim() === targetKey)
+  ui.openImageViewer(items, index >= 0 ? index : 0)
 }
 
 function badgeTextForFilename(filename: string): string {
@@ -515,8 +544,9 @@ onBeforeUnmount(() => {
                   v-if="isImageFile(f)"
                   :src="f.url"
                   :alt="f.filename"
-                  class="h-full w-full object-cover"
+                  class="h-full w-full object-cover cursor-zoom-in"
                   draggable="false"
+                  @click.stop="openAttachmentImage(f)"
                 />
                 <span v-else class="text-[10px] font-mono text-muted-foreground uppercase">
                   {{ badgeTextForFilename(f.filename) }}
@@ -652,8 +682,9 @@ onBeforeUnmount(() => {
                   v-if="isImageFile(f)"
                   :src="f.url"
                   :alt="f.filename"
-                  class="h-full w-full object-cover"
+                  class="h-full w-full object-cover cursor-zoom-in"
                   draggable="false"
+                  @click.stop="openAttachmentImage(f)"
                 />
                 <span v-else class="text-[10px] font-mono text-muted-foreground uppercase">
                   {{ badgeTextForFilename(f.filename) }}

@@ -7,9 +7,11 @@ import MonacoDiffEditor from '@/components/MonacoDiffEditor.vue'
 import { apiJson } from '@/lib/api'
 import IconButton from '@/components/ui/IconButton.vue'
 import { buildUnifiedDiffModel } from '@/features/git/diff/unifiedDiff'
+import { useUiStore } from '@/stores/ui'
 import type { GitCommitDiffResponse, GitCommitFileContentResponse, GitDiffMeta, GitDiffResponse } from '@/types/git'
 
 const { t } = useI18n()
+const ui = useUiStore()
 
 type DiffHunkView = {
   id: string
@@ -171,6 +173,26 @@ const firstChangedLine = computed<number | null>(() => {
   }
   return null
 })
+
+function openImageDiffPreview(preferred: 'left' | 'right') {
+  const items: Array<{ src: string; title: string; alt: string; key: string }> = []
+  const leftSrc = isDataImageUrl(displayOriginal.value) ? String(displayOriginal.value || '').trim() : ''
+  const rightSrc = isDataImageUrl(displayModified.value) ? String(displayModified.value || '').trim() : ''
+
+  if (leftSrc) {
+    const label = String(leftLabel.value || 'left')
+    items.push({ src: leftSrc, title: label, alt: label, key: 'left' })
+  }
+  if (rightSrc) {
+    const label = String(rightLabel.value || 'right')
+    items.push({ src: rightSrc, title: label, alt: label, key: 'right' })
+  }
+  if (!items.length) return
+
+  const preferredKey = preferred === 'left' ? 'left' : 'right'
+  const preferredIndex = items.findIndex((item) => item.key === preferredKey)
+  ui.openImageViewer(items, preferredIndex >= 0 ? preferredIndex : 0)
+}
 
 function resetState() {
   loading.value = false
@@ -392,12 +414,24 @@ watch(
     <div v-else-if="isImageDiff" class="images">
       <div class="image-panel">
         <div class="image-title">{{ leftLabel }}</div>
-        <img v-if="displayOriginal" :src="displayOriginal" class="preview" />
+        <img
+          v-if="displayOriginal"
+          :src="displayOriginal"
+          class="preview cursor-zoom-in"
+          :alt="leftLabel"
+          @click="openImageDiffPreview('left')"
+        />
         <div v-else class="hint">{{ t('git.ui.diffViewer.noOriginal') }}</div>
       </div>
       <div class="image-panel">
         <div class="image-title">{{ rightLabel }}</div>
-        <img v-if="displayModified" :src="displayModified" class="preview" />
+        <img
+          v-if="displayModified"
+          :src="displayModified"
+          class="preview cursor-zoom-in"
+          :alt="rightLabel"
+          @click="openImageDiffPreview('right')"
+        />
         <div v-else class="hint">{{ t('git.ui.diffViewer.noModified') }}</div>
       </div>
     </div>
