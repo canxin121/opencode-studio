@@ -220,9 +220,6 @@
   [data-sonner-toaster].oc-toaster {
     z-index: 2147483000 !important;
     pointer-events: none;
-    padding-top: calc(var(--oc-safe-area-top, 0px) + 2px);
-    padding-right: calc(var(--oc-safe-area-right, 0px) + 2px);
-    padding-left: calc(var(--oc-safe-area-left, 0px) + 2px);
   }
 
   [data-sonner-toaster].oc-toaster [data-sonner-toast] {
@@ -266,8 +263,6 @@
   @media (max-width: 768px) {
     [data-sonner-toaster].oc-toaster {
       width: min(100vw, 100%);
-      padding-left: calc(var(--oc-safe-area-left, 0px) + 10px);
-      padding-right: calc(var(--oc-safe-area-right, 0px) + 10px);
     }
 
     [data-sonner-toaster].oc-toaster [data-sonner-toast] {

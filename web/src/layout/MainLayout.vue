@@ -135,18 +135,14 @@ const activePaneId = computed(() =>
   String(ui.activeWorkspaceWindowId || workspaceVisibleWindowIds.value[0] || '').trim(),
 )
 const showWorkspaceRightDock = computed(
-  () =>
-    !ui.isCompactLayout &&
-    !isEmbeddedWorkspacePane.value &&
-    !selectedWorkspaceGroupId.value &&
-    ui.isWorkspaceDockOpen &&
-    workspaceVisibleWindowIds.value.length === 1,
+  () => !ui.isCompactLayout && !isEmbeddedWorkspacePane.value && ui.isWorkspaceDockOpen,
 )
 const splitDropHover = ref(false)
 const isGroupPaneResizing = ref(false)
 const isLeftSidebarResizing = ref(false)
 const leftSidebarPreviewWidth = ref(ui.sidebarWidth)
 const isWorkspaceDockResizing = ref(false)
+const isAnySidebarResizing = computed(() => isLeftSidebarResizing.value || isWorkspaceDockResizing.value)
 const desktopSidebarRenderWidth = computed(() => {
   if (!showDesktopSidebarHost.value || !ui.isSidebarOpen) return 0
   return isLeftSidebarResizing.value ? leftSidebarPreviewWidth.value : ui.sidebarWidth
@@ -462,15 +458,20 @@ watch(
         >
           <div
             v-if="ui.isSidebarOpen"
-            class="absolute right-0 top-0 h-full w-1 cursor-col-resize hover:bg-primary/40"
+            class="absolute right-0 top-0 z-30 h-full w-1 cursor-col-resize hover:bg-primary/40"
             @pointerdown="handleDesktopSidebarResize"
           />
 
-          <div :id="WORKSPACE_SIDEBAR_HOST_ID" class="h-full min-h-0">
-            <ChatSidebar v-if="usesChatShellSidebar && ui.isSidebarOpen && !isLeftSidebarResizing" />
+          <div
+            :id="WORKSPACE_SIDEBAR_HOST_ID"
+            class="relative h-full min-h-0"
+            :class="{ 'oc-sidebar-host-resizing': isLeftSidebarResizing }"
+          >
+            <ChatSidebar v-if="usesChatShellSidebar && ui.isSidebarOpen" v-show="!isLeftSidebarResizing" />
+
             <div
-              v-else-if="ui.isSidebarOpen && isLeftSidebarResizing"
-              class="flex h-full items-center justify-center px-3"
+              v-if="ui.isSidebarOpen && isLeftSidebarResizing"
+              class="oc-sidebar-resize-overlay pointer-events-none absolute inset-0 z-20 flex items-center justify-center px-3"
             >
               <div class="flex flex-col items-center gap-2 text-center">
                 <Skeleton class="h-7 w-7 rounded-full" />
@@ -514,8 +515,102 @@ watch(
                 : undefined
             "
           >
+            <HorizontalSplitPane
+              v-if="showWorkspaceRightDock"
+              v-model="ui.workspaceDockWidth"
+              :min-width="280"
+              :max-width="1200"
+              @drag-start="handleWorkspaceDockResizeStart"
+              @drag-end="handleWorkspaceDockResizeEnd"
+            >
+              <template #left>
+                <div class="relative h-full min-h-0">
+                  <div v-show="!isAnySidebarResizing" class="h-full min-h-0">
+                    <MultiPaneHorizontalSplit
+                      v-if="isGroupPaneMode"
+                      :pane-ids="workspaceVisibleWindowIds"
+                      :ratios="groupPaneRatios"
+                      :min-pane-width="280"
+                      @update:ratios="handleGroupPaneRatiosUpdate"
+                      @drag-start="handleGroupPaneResizeStart"
+                      @drag-end="handleGroupPaneResizeEnd"
+                    >
+                      <template #pane="{ paneId }">
+                        <div class="relative h-full min-w-0">
+                          <WorkspaceSplitPaneView
+                            v-show="!isGroupPaneResizing"
+                            :window-id="paneId"
+                            class="h-full min-w-0"
+                            @close="ui.closeWorkspaceWindow(paneId)"
+                          />
+
+                          <div
+                            v-show="isGroupPaneResizing"
+                            class="flex h-full min-h-0 border-l border-border/60 bg-background"
+                            aria-hidden="true"
+                          >
+                            <div class="flex min-h-0 flex-1 items-center justify-center px-4">
+                              <div class="flex w-full max-w-xs flex-col items-center gap-3 px-4 py-6 text-center">
+                                <Skeleton class="h-8 w-8 rounded-full" />
+                                <Skeleton class="h-2.5 w-32" />
+                                <span class="text-xs font-medium text-muted-foreground">
+                                  {{ t('header.windowTabs.resizingSplit') }}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </template>
+                    </MultiPaneHorizontalSplit>
+
+                    <WorkspacePrimaryPaneView
+                      v-else-if="isEmbeddedWorkspacePane || workspaceVisibleWindowIds.length === 1"
+                      :window-id="activePaneId"
+                      :show-header="showWorkspacePaneHeader"
+                    />
+
+                    <div v-else class="flex h-full items-center justify-center px-4 text-xs text-muted-foreground">
+                      {{ t('header.windowTabs.splitNoContent') }}
+                    </div>
+                  </div>
+
+                  <div
+                    v-show="isAnySidebarResizing"
+                    class="pointer-events-none absolute inset-0 z-20 flex items-center justify-center px-4"
+                    aria-hidden="true"
+                  >
+                    <div class="flex flex-col items-center gap-2 text-center">
+                      <Skeleton class="h-7 w-7 rounded-full" />
+                      <span class="text-xs font-medium text-muted-foreground">
+                        {{ t('header.windowTabs.resizingSidebar') }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </template>
+              <template #right>
+                <div class="relative h-full min-h-0">
+                  <WorkspaceDockPanel v-show="!isAnySidebarResizing" />
+
+                  <div
+                    v-show="isAnySidebarResizing"
+                    class="pointer-events-none absolute inset-0 z-20 flex items-center justify-center px-4"
+                    aria-hidden="true"
+                  >
+                    <div class="flex flex-col items-center gap-2 text-center">
+                      <Skeleton class="h-7 w-7 rounded-full" />
+                      <span class="text-xs font-medium text-muted-foreground">
+                        {{ t('header.windowTabs.resizingSidebar') }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </template>
+            </HorizontalSplitPane>
+
             <MultiPaneHorizontalSplit
-              v-if="isGroupPaneMode"
+              v-show="!isAnySidebarResizing"
+              v-else-if="isGroupPaneMode"
               :pane-ids="workspaceVisibleWindowIds"
               :ratios="groupPaneRatios"
               :min-pane-width="280"
@@ -551,54 +646,36 @@ watch(
               </template>
             </MultiPaneHorizontalSplit>
 
-            <HorizontalSplitPane
-              v-else-if="showWorkspaceRightDock"
-              v-model="ui.workspaceDockWidth"
-              :min-width="280"
-              :max-width="1200"
-              @drag-start="handleWorkspaceDockResizeStart"
-              @drag-end="handleWorkspaceDockResizeEnd"
-            >
-              <template #left>
-                <WorkspacePrimaryPaneView
-                  v-if="!isWorkspaceDockResizing"
-                  :window-id="activePaneId"
-                  :show-header="showWorkspacePaneHeader"
-                />
-                <div v-else class="flex h-full items-center justify-center px-4">
-                  <div class="flex flex-col items-center gap-2 text-center">
-                    <Skeleton class="h-7 w-7 rounded-full" />
-                    <span class="text-xs font-medium text-muted-foreground">
-                      {{ t('header.windowTabs.resizingSidebar') }}
-                    </span>
-                  </div>
-                </div>
-              </template>
-              <template #right>
-                <WorkspaceDockPanel v-if="!isWorkspaceDockResizing" />
-                <div v-else class="flex h-full items-center justify-center px-4">
-                  <div class="flex flex-col items-center gap-2 text-center">
-                    <Skeleton class="h-7 w-7 rounded-full" />
-                    <span class="text-xs font-medium text-muted-foreground">
-                      {{ t('header.windowTabs.resizingSidebar') }}
-                    </span>
-                  </div>
-                </div>
-              </template>
-            </HorizontalSplitPane>
-
             <WorkspacePrimaryPaneView
+              v-show="!isAnySidebarResizing"
               v-else-if="isEmbeddedWorkspacePane || workspaceVisibleWindowIds.length === 1"
               :window-id="activePaneId"
               :show-header="showWorkspacePaneHeader"
             />
 
-            <div v-else class="flex h-full items-center justify-center px-4 text-xs text-muted-foreground">
+            <div
+              v-show="!isAnySidebarResizing"
+              v-else
+              class="flex h-full items-center justify-center px-4 text-xs text-muted-foreground"
+            >
               {{ t('header.windowTabs.splitNoContent') }}
             </div>
 
             <div
-              v-if="showWorkspaceSplitDropZone"
+              v-show="isAnySidebarResizing && !showWorkspaceRightDock"
+              class="pointer-events-none absolute inset-0 z-30 flex items-center justify-center px-4"
+              aria-hidden="true"
+            >
+              <div class="flex flex-col items-center gap-2 text-center">
+                <Skeleton class="h-7 w-7 rounded-full" />
+                <span class="text-xs font-medium text-muted-foreground">
+                  {{ t('header.windowTabs.resizingSidebar') }}
+                </span>
+              </div>
+            </div>
+
+            <div
+              v-if="showWorkspaceSplitDropZone && !isAnySidebarResizing"
               class="pointer-events-none absolute inset-y-0 right-0 z-40 flex w-28 items-stretch justify-end pr-2"
             >
               <div
@@ -624,3 +701,10 @@ watch(
     </div>
   </div>
 </template>
+
+<style>
+#workspace-sidebar-host.oc-sidebar-host-resizing > :not(.oc-sidebar-resize-overlay) {
+  visibility: hidden;
+  pointer-events: none;
+}
+</style>
