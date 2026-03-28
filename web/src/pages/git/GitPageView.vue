@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { PopoverContent, PopoverPortal, PopoverRoot, PopoverTrigger } from 'radix-vue'
 import {
   RiArrowDownSLine,
@@ -53,6 +54,7 @@ import GitAuthDialogs from './components/GitAuthDialogs.vue'
 import GitRemoteTargetDialogs from './components/GitRemoteTargetDialogs.vue'
 import GitPageMiscDialogs from './components/GitPageMiscDialogs.vue'
 import { formatDateTimeYMDHM } from '@/i18n/intl'
+import { WORKSPACE_SIDEBAR_HOST_SELECTOR } from '@/layout/workspaceSidebarHost'
 
 const props = defineProps({
   ctx: {
@@ -66,6 +68,7 @@ const props = defineProps({
 })
 const { startDesktopSidebarResize } = useDesktopSidebarResize()
 const { t } = useI18n()
+const route = useRoute()
 
 // NOTE: We deliberately destructure refs/functions from ctx so the template can remain
 // close to the original GitPage.vue markup. Values are mostly refs (from parent)
@@ -1360,14 +1363,23 @@ function openFirstConflictAndShowDiff() {
 }
 
 const useShellSidebar = computed(() => {
+  const isEmbeddedWorkspacePane = String(route.query?.ocEmbed || '').trim() === '1'
+  if (isEmbeddedWorkspacePane) return false
+  if (!props.embedded && !ui.isCompactLayout) return true
   if (props.embedded) return embeddedView.value === 'list'
   return ui.isCompactLayout ? ui.isSessionSwitcherOpen : ui.isSidebarOpen
 })
 
-const canResizeSidebar = computed(() => !ui.isCompactLayout && !props.embedded)
+const useDesktopSidebarHost = computed(() => {
+  if (props.embedded) return false
+  if (ui.isCompactLayout) return false
+  return String(route.query?.ocEmbed || '').trim() !== '1'
+})
+
+const canResizeSidebar = computed(() => !ui.isCompactLayout && !props.embedded && !useDesktopSidebarHost.value)
 
 const sidebarStyle = computed(() => {
-  if (ui.isCompactLayout) return undefined
+  if (ui.isCompactLayout || useDesktopSidebarHost.value) return undefined
   if (props.embedded) {
     return {
       width: '100%',
@@ -1390,824 +1402,831 @@ void diffPaneRef
 <template>
   <div class="flex h-full bg-background text-foreground overflow-hidden">
     <!-- Left Sidebar (Source Control) -->
-    <div
-      v-if="useShellSidebar"
-      class="oc-vscode-pane relative shrink-0"
-      :class="ui.isCompactLayout ? 'w-full' : 'border-r border-sidebar-border/60'"
-      :style="sidebarStyle"
-    >
+    <Teleport :to="WORKSPACE_SIDEBAR_HOST_SELECTOR" :disabled="!useDesktopSidebarHost">
       <div
-        v-if="canResizeSidebar"
-        class="absolute right-0 top-0 z-10 h-full w-1 cursor-col-resize hover:bg-primary/40"
-        @pointerdown="startDesktopSidebarResize"
-      />
-      <div class="oc-vscode-pane-header">
-        <div class="oc-vscode-pane-title">{{ t('git.ui.sourceControl') }}</div>
-        <div class="oc-vscode-toolbar">
-          <SidebarIconButton
-            :tooltip="t('git.actions.fetch')"
-            :is-touch-pointer="ui.isTouchPointer"
-            :disabled="!gitReady || !root || repoBusy"
-            @click="fetchRemote"
-          >
-            <RiRefreshLine class="h-3.5 w-3.5" :class="{ 'animate-spin': loading || repoBusy }" />
-          </SidebarIconButton>
-          <SidebarIconButton
-            :tooltip="t('git.actions.pull')"
-            :is-touch-pointer="ui.isTouchPointer"
-            :disabled="!gitReady || !root || repoBusy"
-            @click="pull"
-          >
-            <RiArrowDownSLine class="h-3.5 w-3.5" />
-          </SidebarIconButton>
-          <SidebarIconButton
-            :tooltip="t('git.actions.push')"
-            :is-touch-pointer="ui.isTouchPointer"
-            :disabled="!gitReady || !root || repoBusy"
-            @click="push"
-          >
-            <RiArrowRightSLine class="h-3.5 w-3.5 -rotate-45" />
-          </SidebarIconButton>
-          <PopoverRoot v-if="showSshSigningWarning">
-            <PopoverTrigger as-child>
-              <SidebarIconButton
-                :tooltip="t('git.ui.signing.sshMayFailTitle')"
-                :is-touch-pointer="ui.isTouchPointer"
-                :disable-tooltip="true"
-                class="text-amber-600 hover:text-amber-700 hover:bg-amber-500/15"
-                :aria-label="t('git.ui.signing.sshMayFailTitle')"
-              >
-                <span aria-hidden="true" class="text-[12px] font-bold leading-none">!</span>
-              </SidebarIconButton>
-            </PopoverTrigger>
-            <PopoverPortal>
-              <PopoverContent
-                class="z-[80] w-72 max-w-[calc(100vw-1rem)] rounded-sm border border-amber-500/40 bg-background/95 p-2 shadow-lg backdrop-blur outline-none"
-                side="bottom"
-                align="end"
-                :side-offset="6"
-                :avoid-collisions="true"
-                :collision-padding="8"
-                sticky="always"
-                update-position-strategy="always"
-                :prioritize-position="true"
-              >
-                <div class="text-[11px] font-medium text-foreground">
-                  {{ t('git.ui.signing.sshMayFailTitle') }}
-                </div>
-                <div class="mt-0.5 text-[11px] leading-snug text-muted-foreground">
-                  {{ t('git.ui.signing.sshMayFailDescription') }}
-                </div>
-              </PopoverContent>
-            </PopoverPortal>
-          </PopoverRoot>
-          <div ref="actionsMenuAnchorEl" class="inline-flex">
+        v-if="useShellSidebar"
+        class="oc-vscode-pane relative h-full shrink-0"
+        :class="ui.isCompactLayout || useDesktopSidebarHost ? 'w-full' : 'border-r border-sidebar-border/60'"
+        :style="sidebarStyle"
+      >
+        <div
+          v-if="canResizeSidebar"
+          class="absolute right-0 top-0 z-10 h-full w-1 cursor-col-resize hover:bg-primary/40"
+          @pointerdown="startDesktopSidebarResize"
+        />
+        <div class="oc-vscode-pane-header">
+          <div class="oc-vscode-pane-title">{{ t('git.ui.sourceControl') }}</div>
+          <div class="oc-vscode-toolbar">
             <SidebarIconButton
-              :tooltip="t('git.ui.moreActions')"
+              :tooltip="t('git.actions.fetch')"
               :is-touch-pointer="ui.isTouchPointer"
               :disabled="!gitReady || !root || repoBusy"
-              @mousedown.prevent
-              @click.stop="actionsOpen = !actionsOpen"
+              @click="fetchRemote"
             >
-              <RiMore2Line class="h-3.5 w-3.5" />
+              <RiRefreshLine class="h-3.5 w-3.5" :class="{ 'animate-spin': loading || repoBusy }" />
             </SidebarIconButton>
+            <SidebarIconButton
+              :tooltip="t('git.actions.pull')"
+              :is-touch-pointer="ui.isTouchPointer"
+              :disabled="!gitReady || !root || repoBusy"
+              @click="pull"
+            >
+              <RiArrowDownSLine class="h-3.5 w-3.5" />
+            </SidebarIconButton>
+            <SidebarIconButton
+              :tooltip="t('git.actions.push')"
+              :is-touch-pointer="ui.isTouchPointer"
+              :disabled="!gitReady || !root || repoBusy"
+              @click="push"
+            >
+              <RiArrowRightSLine class="h-3.5 w-3.5 -rotate-45" />
+            </SidebarIconButton>
+            <PopoverRoot v-if="showSshSigningWarning">
+              <PopoverTrigger as-child>
+                <SidebarIconButton
+                  :tooltip="t('git.ui.signing.sshMayFailTitle')"
+                  :is-touch-pointer="ui.isTouchPointer"
+                  :disable-tooltip="true"
+                  class="text-amber-600 hover:text-amber-700 hover:bg-amber-500/15"
+                  :aria-label="t('git.ui.signing.sshMayFailTitle')"
+                >
+                  <span aria-hidden="true" class="text-[12px] font-bold leading-none">!</span>
+                </SidebarIconButton>
+              </PopoverTrigger>
+              <PopoverPortal>
+                <PopoverContent
+                  class="z-[80] w-72 max-w-[calc(100vw-1rem)] rounded-sm border border-amber-500/40 bg-background/95 p-2 shadow-lg backdrop-blur outline-none"
+                  side="bottom"
+                  align="end"
+                  :side-offset="6"
+                  :avoid-collisions="true"
+                  :collision-padding="8"
+                  sticky="always"
+                  update-position-strategy="always"
+                  :prioritize-position="true"
+                >
+                  <div class="text-[11px] font-medium text-foreground">
+                    {{ t('git.ui.signing.sshMayFailTitle') }}
+                  </div>
+                  <div class="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+                    {{ t('git.ui.signing.sshMayFailDescription') }}
+                  </div>
+                </PopoverContent>
+              </PopoverPortal>
+            </PopoverRoot>
+            <div ref="actionsMenuAnchorEl" class="inline-flex">
+              <SidebarIconButton
+                :tooltip="t('git.ui.moreActions')"
+                :is-touch-pointer="ui.isTouchPointer"
+                :disabled="!gitReady || !root || repoBusy"
+                @mousedown.prevent
+                @click.stop="actionsOpen = !actionsOpen"
+              >
+                <RiMore2Line class="h-3.5 w-3.5" />
+              </SidebarIconButton>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div class="border-b border-sidebar-border/50 px-2 py-1.5">
-        <!-- Repository Selector -->
-        <div class="relative">
-          <button
-            ref="repoMenuAnchorEl"
-            type="button"
-            class="w-full flex items-center gap-2 rounded-sm border border-sidebar-border/60 bg-sidebar-accent/20 px-2 py-1.5 text-left transition"
-            :class="projectRoot ? 'hover:bg-sidebar-accent/40' : 'opacity-70 cursor-not-allowed'"
-            :disabled="!projectRoot"
-            @mousedown.prevent
-            @click.stop="toggleRepoMenu"
-          >
-            <span class="shrink-0 text-[10px] uppercase tracking-[0.08em] text-muted-foreground">{{
-              t('git.ui.repository')
-            }}</span>
-            <span class="min-w-0 flex-1 truncate font-mono text-[11px] text-foreground" :title="selectedRepoLabel">{{
-              selectedRepoLabel
-            }}</span>
-            <span v-if="repoPickerLoading || reposLoading" class="shrink-0 text-[10px] text-muted-foreground">{{
-              t('common.scanning')
-            }}</span>
-            <RiArrowDownSLine class="h-4 w-4 shrink-0 text-muted-foreground" />
-          </button>
-
-          <OptionMenu
-            :open="repoMenuOpen"
-            :query="repoMenuQuery"
-            :groups="repoMenuGroups"
-            :title="t('git.ui.dialogs.repoPicker.title')"
-            :mobile-title="t('git.ui.dialogs.repoPicker.title')"
-            :is-mobile-pointer="ui.isMobilePointer"
-            :filter-mode="'external'"
-            :close-on-select="false"
-            :desktop-fixed="true"
-            :desktop-anchor-el="repoMenuAnchorEl"
-            :external-page="repoPickerPage"
-            :external-page-count="repoPickerTotalPages"
-            :external-pager-loading="repoPickerLoading"
-            :loading="repoPickerLoading || reposLoading"
-            :refreshable="true"
-            :on-refresh="refreshRepoMenuOptions"
-            desktop-placement="bottom-start"
-            desktop-class="w-[26rem] max-w-[calc(100vw-1rem)]"
-            @update:open="setRepoMenuOpen"
-            @update:query="onRepoMenuQueryChange"
-            @request-page="requestRepoMenuPage"
-            @select="onRepoMenuSelect"
-          />
-        </div>
-
-        <div v-if="reposError" class="mt-1.5 text-xs text-destructive/90">
-          {{ reposError }}
-        </div>
-
-        <div v-else-if="error" class="mt-1.5 text-xs text-destructive/90 whitespace-pre-line">
-          {{ error }}
-        </div>
-
-        <div v-if="gitReady" class="mt-1.5">
+        <div class="border-b border-sidebar-border/50 px-2 py-1.5">
+          <!-- Repository Selector -->
           <div class="relative">
             <button
-              ref="branchMenuAnchorEl"
+              ref="repoMenuAnchorEl"
               type="button"
-              class="w-full flex items-center gap-1.5 rounded-sm px-1 py-1 text-[11px] transition-colors hover:bg-sidebar-accent/40"
-              :disabled="repoBusy"
+              class="w-full flex items-center gap-2 rounded-sm border border-sidebar-border/60 bg-sidebar-accent/20 px-2 py-1.5 text-left transition"
+              :class="projectRoot ? 'hover:bg-sidebar-accent/40' : 'opacity-70 cursor-not-allowed'"
+              :disabled="!projectRoot"
               @mousedown.prevent
-              @click.stop="toggleBranchMenu"
+              @click.stop="toggleRepoMenu"
             >
-              <RiGitBranchLine class="h-3.5 w-3.5 shrink-0 text-primary" />
-              <span class="min-w-0 flex-1 truncate text-left font-mono text-foreground/90" :title="status?.current">{{
-                headline
+              <span class="shrink-0 text-[10px] uppercase tracking-[0.08em] text-muted-foreground">{{
+                t('git.ui.repository')
+              }}</span>
+              <span class="min-w-0 flex-1 truncate font-mono text-[11px] text-foreground" :title="selectedRepoLabel">{{
+                selectedRepoLabel
+              }}</span>
+              <span v-if="repoPickerLoading || reposLoading" class="shrink-0 text-[10px] text-muted-foreground">{{
+                t('common.scanning')
               }}</span>
               <RiArrowDownSLine class="h-4 w-4 shrink-0 text-muted-foreground" />
             </button>
 
             <OptionMenu
-              :open="branchMenuOpen"
-              :query="branchMenuQuery"
-              :groups="branchMenuGroups"
-              :title="t('git.ui.dialogs.branches.title')"
-              :mobile-title="t('git.ui.dialogs.branches.title')"
+              :open="repoMenuOpen"
+              :query="repoMenuQuery"
+              :groups="repoMenuGroups"
+              :title="t('git.ui.dialogs.repoPicker.title')"
+              :mobile-title="t('git.ui.dialogs.repoPicker.title')"
               :is-mobile-pointer="ui.isMobilePointer"
               :filter-mode="'external'"
               :close-on-select="false"
               :desktop-fixed="true"
-              :desktop-anchor-el="branchMenuAnchorEl"
-              :external-page="branchPickerPage"
-              :external-page-count="branchPickerTotalPages"
-              :external-pager-loading="branchPickerLoading"
-              :loading="branchPickerLoading"
+              :desktop-anchor-el="repoMenuAnchorEl"
+              :external-page="repoPickerPage"
+              :external-page-count="repoPickerTotalPages"
+              :external-pager-loading="repoPickerLoading"
+              :loading="repoPickerLoading || reposLoading"
               :refreshable="true"
-              :on-refresh="refreshBranchMenuOptions"
+              :on-refresh="refreshRepoMenuOptions"
               desktop-placement="bottom-start"
-              desktop-class="w-72"
-              @update:open="setBranchMenuOpen"
-              @update:query="onBranchMenuQueryChange"
-              @request-page="requestBranchMenuPage"
-              @select="onBranchMenuSelect"
-            />
-          </div>
-        </div>
-
-        <div v-if="gitReady" class="mt-1.5 flex items-center gap-1 rounded-sm border border-sidebar-border/60 p-0.5">
-          <button
-            type="button"
-            class="flex-1 rounded-sm px-2 py-1 text-[11px] font-medium transition-colors"
-            :class="
-              sourceControlView === 'changes'
-                ? 'bg-sidebar-accent/60 text-foreground'
-                : 'text-muted-foreground hover:bg-sidebar-accent/35 hover:text-foreground'
-            "
-            @click="openChangesView"
-          >
-            {{ t('git.ui.workingTree.sections.changes') }}
-          </button>
-          <button
-            type="button"
-            class="flex-1 rounded-sm px-2 py-1 text-[11px] font-medium transition-colors"
-            :class="
-              sourceControlView !== 'changes'
-                ? 'bg-sidebar-accent/60 text-foreground'
-                : 'text-muted-foreground hover:bg-sidebar-accent/35 hover:text-foreground'
-            "
-            @click="openHistoryView"
-          >
-            {{ t('git.ui.dialogs.history.title') }}
-          </button>
-        </div>
-      </div>
-
-      <ScrollArea class="flex-1 min-h-0">
-        <div v-if="sourceControlView === 'changes'" class="space-y-2 p-1.5">
-          <!-- Commit Section -->
-          <div v-if="gitReady" class="space-y-2">
-            <div
-              v-if="gitState?.mergeInProgress"
-              class="rounded-sm border border-sidebar-border/60 bg-sidebar-accent/20 p-2 text-[11px]"
-            >
-              <div class="font-medium">{{ t('git.ui.sequencer.mergeInProgressTitle') }}</div>
-              <div class="text-[11px] text-muted-foreground mt-0.5">
-                {{ t('git.ui.sequencer.mergeInProgressDescription') }}
-              </div>
-              <div class="mt-2 flex flex-wrap items-center justify-end gap-2">
-                <MiniActionButton variant="destructive" @click="abortMerge">{{ t('common.abort') }}</MiniActionButton>
-
-                <div class="relative">
-                  <IconButton
-                    size="sm"
-                    class="text-muted-foreground hover:text-foreground hover:bg-primary/6"
-                    :title="t('git.ui.sequencer.moreMergeActions')"
-                    :aria-label="t('git.ui.sequencer.moreMergeActions')"
-                    @click.stop="openMergeActionMenu"
-                  >
-                    <RiMore2Line class="h-4 w-4" />
-                  </IconButton>
-
-                  <OptionMenu
-                    :open="mergeActionMenuOpen"
-                    :query="mergeActionMenuQuery"
-                    :groups="mergeActionMenuGroups"
-                    :title="t('git.ui.sequencer.mergeActions')"
-                    :mobile-title="t('git.ui.sequencer.mergeActions')"
-                    :searchable="false"
-                    :is-mobile-pointer="ui.isMobilePointer"
-                    :desktop-fixed="true"
-                    desktop-placement="bottom-end"
-                    desktop-class="w-48"
-                    @update:open="setMergeActionMenuOpen"
-                    @update:query="(v) => (mergeActionMenuQuery = v)"
-                    @select="onMergeActionMenuSelect"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div
-              v-else-if="gitState?.rebaseInProgress"
-              class="rounded-sm border border-sidebar-border/60 bg-sidebar-accent/20 p-2 text-[11px]"
-            >
-              <div class="font-medium">{{ t('git.ui.sequencer.rebaseInProgressTitle') }}</div>
-              <div class="text-[11px] text-muted-foreground mt-0.5">
-                {{ t('git.ui.sequencer.rebaseInProgressDescription') }}
-              </div>
-              <div class="mt-2 flex flex-wrap items-center justify-end gap-2">
-                <MiniActionButton @click="rebaseContinue">{{ t('common.continue') }}</MiniActionButton>
-                <MiniActionButton variant="destructive" @click="abortRebase">{{ t('common.abort') }}</MiniActionButton>
-
-                <div class="relative">
-                  <IconButton
-                    size="sm"
-                    class="text-muted-foreground hover:text-foreground hover:bg-primary/6"
-                    :title="t('git.ui.sequencer.moreRebaseActions')"
-                    :aria-label="t('git.ui.sequencer.moreRebaseActions')"
-                    @click.stop="openRebaseActionMenu"
-                  >
-                    <RiMore2Line class="h-4 w-4" />
-                  </IconButton>
-
-                  <OptionMenu
-                    :open="rebaseActionMenuOpen"
-                    :query="rebaseActionMenuQuery"
-                    :groups="rebaseActionMenuGroups"
-                    :title="t('git.ui.sequencer.rebaseActions')"
-                    :mobile-title="t('git.ui.sequencer.rebaseActions')"
-                    :searchable="false"
-                    :is-mobile-pointer="ui.isMobilePointer"
-                    :desktop-fixed="true"
-                    desktop-placement="bottom-end"
-                    desktop-class="w-48"
-                    @update:open="setRebaseActionMenuOpen"
-                    @update:query="(v) => (rebaseActionMenuQuery = v)"
-                    @select="onRebaseActionMenuSelect"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div
-              v-else-if="gitState?.cherryPickInProgress"
-              class="rounded-sm border border-sidebar-border/60 bg-sidebar-accent/20 p-2 text-[11px]"
-            >
-              <div class="font-medium">{{ t('git.ui.sequencer.cherryPickInProgressTitle') }}</div>
-              <div class="text-[11px] text-muted-foreground mt-0.5">
-                {{ t('git.ui.sequencer.cherryPickInProgressDescription') }}
-              </div>
-              <div class="mt-2 flex flex-wrap items-center justify-end gap-2">
-                <MiniActionButton @click="cherryPickContinue">{{ t('common.continue') }}</MiniActionButton>
-                <MiniActionButton variant="destructive" @click="cherryPickAbort">{{
-                  t('common.abort')
-                }}</MiniActionButton>
-
-                <div class="relative">
-                  <IconButton
-                    size="sm"
-                    class="text-muted-foreground hover:text-foreground hover:bg-primary/6"
-                    :title="t('git.ui.sequencer.moreCherryPickActions')"
-                    :aria-label="t('git.ui.sequencer.moreCherryPickActions')"
-                    @click.stop="openCherryPickActionMenu"
-                  >
-                    <RiMore2Line class="h-4 w-4" />
-                  </IconButton>
-
-                  <OptionMenu
-                    :open="cherryPickActionMenuOpen"
-                    :query="cherryPickActionMenuQuery"
-                    :groups="cherryPickActionMenuGroups"
-                    :title="t('git.ui.sequencer.cherryPickActions')"
-                    :mobile-title="t('git.ui.sequencer.cherryPickActions')"
-                    :searchable="false"
-                    :is-mobile-pointer="ui.isMobilePointer"
-                    :desktop-fixed="true"
-                    desktop-placement="bottom-end"
-                    desktop-class="w-48"
-                    @update:open="setCherryPickActionMenuOpen"
-                    @update:query="(v) => (cherryPickActionMenuQuery = v)"
-                    @select="onCherryPickActionMenuSelect"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div
-              v-else-if="gitState?.revertInProgress"
-              class="rounded-sm border border-sidebar-border/60 bg-sidebar-accent/20 p-2 text-[11px]"
-            >
-              <div class="font-medium">{{ t('git.ui.sequencer.revertInProgressTitle') }}</div>
-              <div class="text-[11px] text-muted-foreground mt-0.5">
-                {{ t('git.ui.sequencer.revertInProgressDescription') }}
-              </div>
-              <div class="mt-2 flex flex-wrap items-center justify-end gap-2">
-                <MiniActionButton @click="revertContinue">{{ t('common.continue') }}</MiniActionButton>
-                <MiniActionButton variant="destructive" @click="revertAbortSeq">{{
-                  t('common.abort')
-                }}</MiniActionButton>
-
-                <div class="relative">
-                  <IconButton
-                    size="sm"
-                    class="text-muted-foreground hover:text-foreground hover:bg-primary/6"
-                    :title="t('git.ui.sequencer.moreRevertActions')"
-                    :aria-label="t('git.ui.sequencer.moreRevertActions')"
-                    @click.stop="openRevertActionMenu"
-                  >
-                    <RiMore2Line class="h-4 w-4" />
-                  </IconButton>
-
-                  <OptionMenu
-                    :open="revertActionMenuOpen"
-                    :query="revertActionMenuQuery"
-                    :groups="revertActionMenuGroups"
-                    :title="t('git.ui.sequencer.revertActions')"
-                    :mobile-title="t('git.ui.sequencer.revertActions')"
-                    :searchable="false"
-                    :is-mobile-pointer="ui.isMobilePointer"
-                    :desktop-fixed="true"
-                    desktop-placement="bottom-end"
-                    desktop-class="w-48"
-                    @update:open="setRevertActionMenuOpen"
-                    @update:query="(v) => (revertActionMenuQuery = v)"
-                    @select="onRevertActionMenuSelect"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <GitCommitBox
-              v-model:message="commitMessage"
-              :committing="committing"
-              :gitmoji-enabled="gitmojiEnabled"
-              :gitmojis="gitmojis"
-              v-model:selectedGitmoji="selectedGitmoji"
-              @insertGitmoji="insertGitmoji"
-              @messageKeydown="onCommitMessageKeydown"
-              @commit="commitStaged"
+              desktop-class="w-[26rem] max-w-[calc(100vw-1rem)]"
+              @update:open="setRepoMenuOpen"
+              @update:query="onRepoMenuQueryChange"
+              @request-page="requestRepoMenuPage"
+              @select="onRepoMenuSelect"
             />
           </div>
 
-          <div
-            v-if="!projectRoot"
-            class="mx-1 rounded-sm border border-sidebar-border/60 bg-sidebar-accent/10 p-3 text-center"
-          >
-            <div class="text-sm font-medium">{{ t('git.ui.noProjectSelectedTitle') }}</div>
-            <div class="text-xs text-muted-foreground mt-1">{{ t('git.ui.noProjectSelectedDescription') }}</div>
+          <div v-if="reposError" class="mt-1.5 text-xs text-destructive/90">
+            {{ reposError }}
           </div>
 
-          <div
-            v-else-if="!gitReady && !loading"
-            class="mx-1 rounded-sm border border-sidebar-border/60 bg-sidebar-accent/10 p-3 text-center"
-          >
-            <div class="text-sm font-medium">{{ t('git.ui.noGitRepositoryTitle') }}</div>
-            <div class="text-xs text-muted-foreground mt-1">
-              {{ t('git.ui.noGitRepositoryDescription') }}
-            </div>
-            <div
-              v-if="unsafeRepoDetected"
-              class="mt-3 rounded-sm border border-amber-500/40 bg-amber-500/10 p-3 text-left"
-            >
-              <div class="text-xs font-medium">{{ t('git.ui.unsafeRepo.trustRequiredTitle') }}</div>
-              <div class="mt-1 text-[11px] text-muted-foreground break-words">
-                {{ unsafeRepoHint || t('git.ui.unsafeRepo.blockedDefaultHint') }}
-              </div>
-              <div class="mt-1 text-[11px] font-mono break-all" :title="unsafeRepoPath">{{ unsafeRepoPath }}</div>
-              <div class="mt-2 flex justify-end">
-                <MiniActionButton variant="default" :disabled="unsafeRepoBusy" @click="trustUnsafeRepo">
-                  {{ t('git.ui.unsafeRepo.trustThisRepository') }}
-                </MiniActionButton>
-              </div>
-            </div>
-            <div class="mt-3 flex items-center justify-center gap-2">
-              <MiniActionButton size="xs" @click="toggleRepoMenu">{{ t('git.ui.selectRepo') }}</MiniActionButton>
-              <MiniActionButton variant="default" size="xs" @click="initRepoOpen = true">{{
-                t('git.ui.initialize')
-              }}</MiniActionButton>
-            </div>
+          <div v-else-if="error" class="mt-1.5 text-xs text-destructive/90 whitespace-pre-line">
+            {{ error }}
           </div>
 
-          <div v-if="gitReady" class="space-y-0">
-            <GitStashPanel
-              v-model:expanded="isStashExpanded"
-              :stashes="stashList"
-              :loading="stashLoading"
-              :can-operate="!!repoRoot"
-              :is-touch-pointer="ui.isTouchPointer"
-              :is-mobile-form-factor="ui.isMobilePointer"
-              @openCreate="stashDialogOpen = true"
-              @dropAll="stashDropAll"
-              @view="stashView"
-              @apply="(ref: string) => stashAction('apply', ref)"
-              @pop="(ref: string) => stashAction('pop', ref)"
-              @branch="stashBranchFrom"
-              @drop="(ref: string) => stashAction('drop', ref)"
-            />
+          <div v-if="gitReady" class="mt-1.5">
+            <div class="relative">
+              <button
+                ref="branchMenuAnchorEl"
+                type="button"
+                class="w-full flex items-center gap-1.5 rounded-sm px-1 py-1 text-[11px] transition-colors hover:bg-sidebar-accent/40"
+                :disabled="repoBusy"
+                @mousedown.prevent
+                @click.stop="toggleBranchMenu"
+              >
+                <RiGitBranchLine class="h-3.5 w-3.5 shrink-0 text-primary" />
+                <span class="min-w-0 flex-1 truncate text-left font-mono text-foreground/90" :title="status?.current">{{
+                  headline
+                }}</span>
+                <RiArrowDownSLine class="h-4 w-4 shrink-0 text-muted-foreground" />
+              </button>
 
-            <GitMergeChangesSection
-              v-if="mergeCount > 0"
-              v-model:expanded="isMergeExpanded"
-              :count="mergeCount"
-              :files="mergeList"
-              :selected-file="selectedFile"
-              :diff-source="diffSource"
-              :has-more="hasMoreMerge"
-              :loading="mergeListLoading"
-              :can-operate="!!root"
-              :is-touch-pointer="ui.isTouchPointer"
-              :is-mobile-form-factor="ui.isMobilePointer"
-              :multi-select-mode="mergeMultiSelect.enabled.value"
-              :selected-paths="mergeMultiSelect.selectedList.value"
-              @select="(p: string) => selectFileFromSidebar(p, 'working')"
-              @toggleSelect="onToggleMergePathSelection"
-              @toggleMultiSelect="toggleMergeMultiSelectMode"
-              @selectAllSelected="selectAllMergePaths"
-              @invertSelected="invertMergePathSelection"
-              @stageSelected="stageSelectedMergePaths"
-              @discardSelected="discardSelectedMergePaths"
-              @history="(p: string) => openFileHistoryWithRefs(p)"
-              @discard="(p: string) => revertFile(p)"
-              @showMore="showMoreMerge"
-            />
-
-            <GitStagedChangesSection
-              v-model:expanded="isStagedExpanded"
-              :count="stagedCount"
-              :files="stagedList"
-              :selected-file="selectedFile"
-              :diff-source="diffSource"
-              :has-more="hasMoreStaged"
-              :loading="stagedListLoading"
-              :can-operate="!!root"
-              :is-touch-pointer="ui.isTouchPointer"
-              :is-mobile-form-factor="ui.isMobilePointer"
-              :multi-select-mode="stagedMultiSelect.enabled.value"
-              :selected-paths="stagedMultiSelect.selectedList.value"
-              @select="(p: string) => selectFileFromSidebar(p, 'staged')"
-              @toggleSelect="onToggleStagedPathSelection"
-              @toggleMultiSelect="toggleStagedMultiSelectMode"
-              @selectAllSelected="selectAllStagedPaths"
-              @invertSelected="invertStagedPathSelection"
-              @unstageSelected="unstageSelectedStagedPaths"
-              @discardSelected="discardSelectedStagedPaths"
-              @deleteSelected="deleteSelectedStagedPaths"
-              @unstageAll="unstageAll"
-              @unstage="(p: string) => unstagePaths([p])"
-              @rename="openRenameDialog"
-              @history="(p: string) => openFileHistoryWithRefs(p)"
-              @discard="(p: string) => revertFile(p)"
-              @delete="(p: string) => deletePath(p, false)"
-              @deleteForce="(p: string) => deletePath(p, true)"
-              @showMore="showMoreStaged"
-            />
-
-            <GitChangesSection
-              v-model:expanded="isChangesExpanded"
-              :count="changesCount"
-              :files="changesList"
-              :selected-file="selectedFile"
-              :diff-source="diffSource"
-              :has-more="hasMoreUnstaged"
-              :loading="changesListLoading"
-              :can-operate="!!root"
-              :is-touch-pointer="ui.isTouchPointer"
-              :is-mobile-form-factor="ui.isMobilePointer"
-              :multi-select-mode="changesMultiSelect.enabled.value"
-              :selected-paths="changesMultiSelect.selectedList.value"
-              @select="(p: string) => selectFileFromSidebar(p, 'working')"
-              @toggleSelect="onToggleChangesPathSelection"
-              @toggleMultiSelect="toggleChangesMultiSelectMode"
-              @selectAllSelected="selectAllChangesPaths"
-              @invertSelected="invertChangesPathSelection"
-              @stageSelected="stageSelectedChangesPaths"
-              @discardSelected="discardSelectedChangesPaths"
-              @deleteSelected="deleteSelectedChangesPaths"
-              @stageAll="stageAllTracked"
-              @discardAll="discardAllTracked"
-              @stage="(p: string) => stagePaths([p])"
-              @rename="openRenameDialog"
-              @history="(p: string) => openFileHistoryWithRefs(p)"
-              @discard="(p: string) => revertFile(p)"
-              @delete="(p: string) => deletePath(p, false)"
-              @deleteForce="(p: string) => deletePath(p, true)"
-              @showMore="showMoreChanges"
-            />
-
-            <GitUntrackedSection
-              v-model:expanded="isUntrackedExpanded"
-              :count="untrackedCount"
-              :files="untrackedList"
-              :selected-file="selectedFile"
-              :diff-source="diffSource"
-              :has-more="hasMoreUntracked"
-              :loading="untrackedListLoading"
-              :can-operate="!!root"
-              :is-touch-pointer="ui.isTouchPointer"
-              :is-mobile-form-factor="ui.isMobilePointer"
-              :multi-select-mode="untrackedMultiSelect.enabled.value"
-              :selected-paths="untrackedMultiSelect.selectedList.value"
-              @select="(p: string) => selectFileFromSidebar(p, 'working')"
-              @toggleSelect="onToggleUntrackedPathSelection"
-              @toggleMultiSelect="toggleUntrackedMultiSelectMode"
-              @selectAllSelected="selectAllUntrackedPaths"
-              @invertSelected="invertUntrackedPathSelection"
-              @stageSelected="stageSelectedUntrackedPaths"
-              @ignoreSelected="ignoreSelectedUntrackedPaths"
-              @deleteSelected="deleteSelectedUntrackedPaths"
-              @stageAll="stageAllUntracked"
-              @discardAll="() => cleanUntracked(false)"
-              @stage="(p: string) => stagePaths([p])"
-              @rename="openRenameDialog"
-              @discard="(p: string) => revertFile(p)"
-              @ignore="(p: string) => ignorePath(p)"
-              @showMore="showMoreUntracked"
-            />
-          </div>
-        </div>
-
-        <div v-else-if="sourceControlView === 'history'" class="space-y-2 p-1.5">
-          <div
-            v-if="!projectRoot"
-            class="mx-1 rounded-sm border border-sidebar-border/60 bg-sidebar-accent/10 p-3 text-center"
-          >
-            <div class="text-sm font-medium">{{ t('git.ui.noProjectSelectedTitle') }}</div>
-            <div class="text-xs text-muted-foreground mt-1">{{ t('git.ui.noProjectSelectedDescription') }}</div>
-          </div>
-
-          <div
-            v-else-if="!gitReady && !loading"
-            class="mx-1 rounded-sm border border-sidebar-border/60 bg-sidebar-accent/10 p-3 text-center"
-          >
-            <div class="text-sm font-medium">{{ t('git.ui.noGitRepositoryTitle') }}</div>
-            <div class="text-xs text-muted-foreground mt-1">{{ t('git.ui.noGitRepositoryDescription') }}</div>
-          </div>
-
-          <template v-else>
-            <div class="rounded-sm border border-sidebar-border/60 bg-sidebar-accent/10 p-2">
-              <div class="mb-1 flex items-center justify-between gap-2">
-                <div class="text-[11px] font-medium text-muted-foreground">{{ t('common.search') }}</div>
-              </div>
-
-              <div v-if="historyFilterPath" class="mb-2 flex items-center justify-between gap-2">
-                <div class="truncate text-[10px] text-muted-foreground font-mono" :title="historyFilterPath">
-                  {{ historyFilterPath }}
-                </div>
-                <IconButton
-                  size="xs"
-                  :tooltip="t('common.clear')"
-                  :aria-label="t('common.clear')"
-                  @click="onClearHistoryPathFilter"
-                >
-                  <RiCloseLine class="h-3.5 w-3.5" />
-                </IconButton>
-              </div>
-
-              <div class="grid gap-2">
-                <SearchInput
-                  v-model="historySearchDraft"
-                  class="flex-1 text-xs"
-                  input-class="h-8 font-mono text-xs"
-                  :placeholder="t('git.ui.dialogs.history.placeholders.commitMetaContains')"
-                  :input-aria-label="t('common.search')"
-                  :input-title="t('common.search')"
-                  :search-aria-label="t('common.search')"
-                  :search-title="t('common.search')"
-                  :clear-aria-label="t('common.clear')"
-                  :clear-title="t('common.clear')"
-                  :is-touch-pointer="ui.isTouchPointer"
-                  @search="onApplyHistoryFilters"
-                />
-              </div>
-            </div>
-
-            <div class="rounded-sm border border-sidebar-border/60 overflow-hidden">
-              <div class="border-b border-sidebar-border/50 px-2 py-1">
-                <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-                  <div aria-hidden="true" />
-                  <PaginationControls
-                    class="justify-center"
-                    :page="historyCurrentPage"
-                    :total-pages="historyPaginationTotalPages"
-                    :disabled="historyLoading"
-                    :prev-label="t('common.previousPage')"
-                    :next-label="t('common.nextPage')"
-                    :page-input-label="t('common.currentPage')"
-                    @update:page="setHistoryPage"
-                  />
-                  <div class="flex justify-end">
-                    <IconButton
-                      size="xs"
-                      :tooltip="t('common.refresh')"
-                      :aria-label="t('common.refresh')"
-                      :disabled="historyLoading"
-                      @click="refreshHistory"
-                    >
-                      <RiRefreshLine class="h-3.5 w-3.5" :class="historyLoading ? 'animate-spin' : ''" />
-                    </IconButton>
-                  </div>
-                </div>
-              </div>
-
-              <div v-if="historyError" class="px-2 py-2 text-xs text-destructive">
-                {{ historyError }}
-              </div>
-              <div v-else-if="historyLoading && !historyCommits.length" class="px-2 py-2 text-xs text-muted-foreground">
-                {{ t('common.loading') }}
-              </div>
-              <div v-else-if="!historyCommits.length" class="px-2 py-2 text-xs text-muted-foreground">
-                {{ t('git.ui.dialogs.history.emptyCommits') }}
-              </div>
-              <div v-else class="divide-y divide-sidebar-border/50">
-                <button
-                  v-for="commit in historyCommits"
-                  :key="commit.hash"
-                  type="button"
-                  class="w-full px-2 py-1.5 text-left hover:bg-sidebar-accent/35"
-                  @click="onSelectHistoryCommit(commit)"
-                >
-                  <div class="truncate text-[11px] font-medium text-foreground">
-                    {{ commit.subject || t('git.ui.dialogs.history.noMessage') }}
-                  </div>
-                  <div class="mt-0.5 flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                    <span class="font-mono">{{ commit.shortHash }}</span>
-                    <span class="truncate">{{ commit.authorName || t('common.unknown') }}</span>
-                    <span v-if="commit.authorDate">{{ formatDateTimeYMDHM(commit.authorDate) }}</span>
-                  </div>
-                </button>
-              </div>
-            </div>
-
-            <div class="px-1 py-0.5">
-              <PaginationControls
-                class="w-full justify-center"
-                :page="historyCurrentPage"
-                :total-pages="historyPaginationTotalPages"
-                :disabled="historyLoading"
-                :prev-label="t('common.previousPage')"
-                :next-label="t('common.nextPage')"
-                :page-input-label="t('common.currentPage')"
-                @update:page="setHistoryPage"
+              <OptionMenu
+                :open="branchMenuOpen"
+                :query="branchMenuQuery"
+                :groups="branchMenuGroups"
+                :title="t('git.ui.dialogs.branches.title')"
+                :mobile-title="t('git.ui.dialogs.branches.title')"
+                :is-mobile-pointer="ui.isMobilePointer"
+                :filter-mode="'external'"
+                :close-on-select="false"
+                :desktop-fixed="true"
+                :desktop-anchor-el="branchMenuAnchorEl"
+                :external-page="branchPickerPage"
+                :external-page-count="branchPickerTotalPages"
+                :external-pager-loading="branchPickerLoading"
+                :loading="branchPickerLoading"
+                :refreshable="true"
+                :on-refresh="refreshBranchMenuOptions"
+                desktop-placement="bottom-start"
+                desktop-class="w-72"
+                @update:open="setBranchMenuOpen"
+                @update:query="onBranchMenuQueryChange"
+                @request-page="requestBranchMenuPage"
+                @select="onBranchMenuSelect"
               />
             </div>
-          </template>
-        </div>
+          </div>
 
-        <div v-else class="space-y-2 p-1.5">
-          <div class="flex items-center justify-between gap-2 rounded-sm border border-sidebar-border/60 px-2 py-1.5">
+          <div v-if="gitReady" class="mt-1.5 flex items-center gap-1 rounded-sm border border-sidebar-border/60 p-0.5">
             <button
               type="button"
-              class="inline-flex items-center gap-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
-              @click="backToHistoryList"
+              class="flex-1 rounded-sm px-2 py-1 text-[11px] font-medium transition-colors"
+              :class="
+                sourceControlView === 'changes'
+                  ? 'bg-sidebar-accent/60 text-foreground'
+                  : 'text-muted-foreground hover:bg-sidebar-accent/35 hover:text-foreground'
+              "
+              @click="openChangesView"
             >
-              <RiArrowLeftSLine class="h-3.5 w-3.5" />
+              {{ t('git.ui.workingTree.sections.changes') }}
+            </button>
+            <button
+              type="button"
+              class="flex-1 rounded-sm px-2 py-1 text-[11px] font-medium transition-colors"
+              :class="
+                sourceControlView !== 'changes'
+                  ? 'bg-sidebar-accent/60 text-foreground'
+                  : 'text-muted-foreground hover:bg-sidebar-accent/35 hover:text-foreground'
+              "
+              @click="openHistoryView"
+            >
               {{ t('git.ui.dialogs.history.title') }}
             </button>
           </div>
+        </div>
 
-          <div
-            v-if="!historySelected"
-            class="rounded-sm border border-sidebar-border/60 px-2 py-2 text-xs text-muted-foreground"
-          >
-            {{ t('git.ui.dialogs.history.selectCommitToViewDiff') }}
-          </div>
-
-          <template v-else>
-            <div class="rounded-sm border border-sidebar-border/60 bg-sidebar-accent/10 p-2">
-              <div class="truncate text-xs font-medium text-foreground" :title="historySelected.subject || ''">
-                {{ historySelected.subject || t('git.ui.dialogs.history.noMessage') }}
-              </div>
-              <div class="mt-1 text-[10px] text-muted-foreground">{{ historySelectedMeta }}</div>
-              <div class="mt-0.5 flex items-center gap-1">
-                <div class="min-w-0 flex-1 truncate font-mono text-[10px] text-muted-foreground">
-                  {{ historySelected.hash }}
+        <ScrollArea class="flex-1 min-h-0">
+          <div v-if="sourceControlView === 'changes'" class="space-y-2 p-1.5">
+            <!-- Commit Section -->
+            <div v-if="gitReady" class="space-y-2">
+              <div
+                v-if="gitState?.mergeInProgress"
+                class="rounded-sm border border-sidebar-border/60 bg-sidebar-accent/20 p-2 text-[11px]"
+              >
+                <div class="font-medium">{{ t('git.ui.sequencer.mergeInProgressTitle') }}</div>
+                <div class="text-[11px] text-muted-foreground mt-0.5">
+                  {{ t('git.ui.sequencer.mergeInProgressDescription') }}
                 </div>
-                <IconButton
-                  size="sm"
-                  :tooltip="t('git.ui.dialogs.history.actions.copyHash')"
-                  :aria-label="t('git.ui.dialogs.history.actions.copyHash')"
-                  @click="copyCommitHash(historySelected.hash)"
-                >
-                  <RiClipboardLine class="h-3.5 w-3.5" />
-                </IconButton>
-              </div>
-              <div class="mt-1 text-[10px] text-muted-foreground">
-                {{ t('common.files') }}: {{ historySelectedSummary.files }} · +{{
-                  historySelectedSummary.insertions
-                }}
-                -{{ historySelectedSummary.deletions }}
+                <div class="mt-2 flex flex-wrap items-center justify-end gap-2">
+                  <MiniActionButton variant="destructive" @click="abortMerge">{{ t('common.abort') }}</MiniActionButton>
+
+                  <div class="relative">
+                    <IconButton
+                      size="sm"
+                      class="text-muted-foreground hover:text-foreground hover:bg-primary/6"
+                      :title="t('git.ui.sequencer.moreMergeActions')"
+                      :aria-label="t('git.ui.sequencer.moreMergeActions')"
+                      @click.stop="openMergeActionMenu"
+                    >
+                      <RiMore2Line class="h-4 w-4" />
+                    </IconButton>
+
+                    <OptionMenu
+                      :open="mergeActionMenuOpen"
+                      :query="mergeActionMenuQuery"
+                      :groups="mergeActionMenuGroups"
+                      :title="t('git.ui.sequencer.mergeActions')"
+                      :mobile-title="t('git.ui.sequencer.mergeActions')"
+                      :searchable="false"
+                      :is-mobile-pointer="ui.isMobilePointer"
+                      :desktop-fixed="true"
+                      desktop-placement="bottom-end"
+                      desktop-class="w-48"
+                      @update:open="setMergeActionMenuOpen"
+                      @update:query="(v) => (mergeActionMenuQuery = v)"
+                      @select="onMergeActionMenuSelect"
+                    />
+                  </div>
+                </div>
               </div>
 
-              <div class="mt-2 flex flex-wrap gap-1">
-                <MiniActionButton size="xs" @click="onHistoryCheckout(historySelected)">{{
-                  t('git.ui.dialogs.history.actions.checkout')
-                }}</MiniActionButton>
-                <MiniActionButton size="xs" @click="onHistoryCreateBranch(historySelected)">{{
-                  t('git.ui.dialogs.history.actions.createBranch')
-                }}</MiniActionButton>
-                <MiniActionButton size="xs" variant="destructive" @click="onHistoryRevert(historySelected)">{{
-                  t('git.ui.dialogs.history.actions.revert')
+              <div
+                v-else-if="gitState?.rebaseInProgress"
+                class="rounded-sm border border-sidebar-border/60 bg-sidebar-accent/20 p-2 text-[11px]"
+              >
+                <div class="font-medium">{{ t('git.ui.sequencer.rebaseInProgressTitle') }}</div>
+                <div class="text-[11px] text-muted-foreground mt-0.5">
+                  {{ t('git.ui.sequencer.rebaseInProgressDescription') }}
+                </div>
+                <div class="mt-2 flex flex-wrap items-center justify-end gap-2">
+                  <MiniActionButton @click="rebaseContinue">{{ t('common.continue') }}</MiniActionButton>
+                  <MiniActionButton variant="destructive" @click="abortRebase">{{
+                    t('common.abort')
+                  }}</MiniActionButton>
+
+                  <div class="relative">
+                    <IconButton
+                      size="sm"
+                      class="text-muted-foreground hover:text-foreground hover:bg-primary/6"
+                      :title="t('git.ui.sequencer.moreRebaseActions')"
+                      :aria-label="t('git.ui.sequencer.moreRebaseActions')"
+                      @click.stop="openRebaseActionMenu"
+                    >
+                      <RiMore2Line class="h-4 w-4" />
+                    </IconButton>
+
+                    <OptionMenu
+                      :open="rebaseActionMenuOpen"
+                      :query="rebaseActionMenuQuery"
+                      :groups="rebaseActionMenuGroups"
+                      :title="t('git.ui.sequencer.rebaseActions')"
+                      :mobile-title="t('git.ui.sequencer.rebaseActions')"
+                      :searchable="false"
+                      :is-mobile-pointer="ui.isMobilePointer"
+                      :desktop-fixed="true"
+                      desktop-placement="bottom-end"
+                      desktop-class="w-48"
+                      @update:open="setRebaseActionMenuOpen"
+                      @update:query="(v) => (rebaseActionMenuQuery = v)"
+                      @select="onRebaseActionMenuSelect"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div
+                v-else-if="gitState?.cherryPickInProgress"
+                class="rounded-sm border border-sidebar-border/60 bg-sidebar-accent/20 p-2 text-[11px]"
+              >
+                <div class="font-medium">{{ t('git.ui.sequencer.cherryPickInProgressTitle') }}</div>
+                <div class="text-[11px] text-muted-foreground mt-0.5">
+                  {{ t('git.ui.sequencer.cherryPickInProgressDescription') }}
+                </div>
+                <div class="mt-2 flex flex-wrap items-center justify-end gap-2">
+                  <MiniActionButton @click="cherryPickContinue">{{ t('common.continue') }}</MiniActionButton>
+                  <MiniActionButton variant="destructive" @click="cherryPickAbort">{{
+                    t('common.abort')
+                  }}</MiniActionButton>
+
+                  <div class="relative">
+                    <IconButton
+                      size="sm"
+                      class="text-muted-foreground hover:text-foreground hover:bg-primary/6"
+                      :title="t('git.ui.sequencer.moreCherryPickActions')"
+                      :aria-label="t('git.ui.sequencer.moreCherryPickActions')"
+                      @click.stop="openCherryPickActionMenu"
+                    >
+                      <RiMore2Line class="h-4 w-4" />
+                    </IconButton>
+
+                    <OptionMenu
+                      :open="cherryPickActionMenuOpen"
+                      :query="cherryPickActionMenuQuery"
+                      :groups="cherryPickActionMenuGroups"
+                      :title="t('git.ui.sequencer.cherryPickActions')"
+                      :mobile-title="t('git.ui.sequencer.cherryPickActions')"
+                      :searchable="false"
+                      :is-mobile-pointer="ui.isMobilePointer"
+                      :desktop-fixed="true"
+                      desktop-placement="bottom-end"
+                      desktop-class="w-48"
+                      @update:open="setCherryPickActionMenuOpen"
+                      @update:query="(v) => (cherryPickActionMenuQuery = v)"
+                      @select="onCherryPickActionMenuSelect"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div
+                v-else-if="gitState?.revertInProgress"
+                class="rounded-sm border border-sidebar-border/60 bg-sidebar-accent/20 p-2 text-[11px]"
+              >
+                <div class="font-medium">{{ t('git.ui.sequencer.revertInProgressTitle') }}</div>
+                <div class="text-[11px] text-muted-foreground mt-0.5">
+                  {{ t('git.ui.sequencer.revertInProgressDescription') }}
+                </div>
+                <div class="mt-2 flex flex-wrap items-center justify-end gap-2">
+                  <MiniActionButton @click="revertContinue">{{ t('common.continue') }}</MiniActionButton>
+                  <MiniActionButton variant="destructive" @click="revertAbortSeq">{{
+                    t('common.abort')
+                  }}</MiniActionButton>
+
+                  <div class="relative">
+                    <IconButton
+                      size="sm"
+                      class="text-muted-foreground hover:text-foreground hover:bg-primary/6"
+                      :title="t('git.ui.sequencer.moreRevertActions')"
+                      :aria-label="t('git.ui.sequencer.moreRevertActions')"
+                      @click.stop="openRevertActionMenu"
+                    >
+                      <RiMore2Line class="h-4 w-4" />
+                    </IconButton>
+
+                    <OptionMenu
+                      :open="revertActionMenuOpen"
+                      :query="revertActionMenuQuery"
+                      :groups="revertActionMenuGroups"
+                      :title="t('git.ui.sequencer.revertActions')"
+                      :mobile-title="t('git.ui.sequencer.revertActions')"
+                      :searchable="false"
+                      :is-mobile-pointer="ui.isMobilePointer"
+                      :desktop-fixed="true"
+                      desktop-placement="bottom-end"
+                      desktop-class="w-48"
+                      @update:open="setRevertActionMenuOpen"
+                      @update:query="(v) => (revertActionMenuQuery = v)"
+                      @select="onRevertActionMenuSelect"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <GitCommitBox
+                v-model:message="commitMessage"
+                :committing="committing"
+                :gitmoji-enabled="gitmojiEnabled"
+                :gitmojis="gitmojis"
+                v-model:selectedGitmoji="selectedGitmoji"
+                @insertGitmoji="insertGitmoji"
+                @messageKeydown="onCommitMessageKeydown"
+                @commit="commitStaged"
+              />
+            </div>
+
+            <div
+              v-if="!projectRoot"
+              class="mx-1 rounded-sm border border-sidebar-border/60 bg-sidebar-accent/10 p-3 text-center"
+            >
+              <div class="text-sm font-medium">{{ t('git.ui.noProjectSelectedTitle') }}</div>
+              <div class="text-xs text-muted-foreground mt-1">{{ t('git.ui.noProjectSelectedDescription') }}</div>
+            </div>
+
+            <div
+              v-else-if="!gitReady && !loading"
+              class="mx-1 rounded-sm border border-sidebar-border/60 bg-sidebar-accent/10 p-3 text-center"
+            >
+              <div class="text-sm font-medium">{{ t('git.ui.noGitRepositoryTitle') }}</div>
+              <div class="text-xs text-muted-foreground mt-1">
+                {{ t('git.ui.noGitRepositoryDescription') }}
+              </div>
+              <div
+                v-if="unsafeRepoDetected"
+                class="mt-3 rounded-sm border border-amber-500/40 bg-amber-500/10 p-3 text-left"
+              >
+                <div class="text-xs font-medium">{{ t('git.ui.unsafeRepo.trustRequiredTitle') }}</div>
+                <div class="mt-1 text-[11px] text-muted-foreground break-words">
+                  {{ unsafeRepoHint || t('git.ui.unsafeRepo.blockedDefaultHint') }}
+                </div>
+                <div class="mt-1 text-[11px] font-mono break-all" :title="unsafeRepoPath">{{ unsafeRepoPath }}</div>
+                <div class="mt-2 flex justify-end">
+                  <MiniActionButton variant="default" :disabled="unsafeRepoBusy" @click="trustUnsafeRepo">
+                    {{ t('git.ui.unsafeRepo.trustThisRepository') }}
+                  </MiniActionButton>
+                </div>
+              </div>
+              <div class="mt-3 flex items-center justify-center gap-2">
+                <MiniActionButton size="xs" @click="toggleRepoMenu">{{ t('git.ui.selectRepo') }}</MiniActionButton>
+                <MiniActionButton variant="default" size="xs" @click="initRepoOpen = true">{{
+                  t('git.ui.initialize')
                 }}</MiniActionButton>
               </div>
             </div>
 
-            <div class="rounded-sm border border-sidebar-border/60 overflow-hidden">
-              <div class="border-b border-sidebar-border/50 px-2 py-1">
-                <div class="text-[11px] font-medium text-muted-foreground">
-                  {{ t('git.ui.dialogs.history.sections.files') }}
+            <div v-if="gitReady" class="space-y-0">
+              <GitStashPanel
+                v-model:expanded="isStashExpanded"
+                :stashes="stashList"
+                :loading="stashLoading"
+                :can-operate="!!repoRoot"
+                :is-touch-pointer="ui.isTouchPointer"
+                :is-mobile-form-factor="ui.isMobilePointer"
+                @openCreate="stashDialogOpen = true"
+                @dropAll="stashDropAll"
+                @view="stashView"
+                @apply="(ref: string) => stashAction('apply', ref)"
+                @pop="(ref: string) => stashAction('pop', ref)"
+                @branch="stashBranchFrom"
+                @drop="(ref: string) => stashAction('drop', ref)"
+              />
+
+              <GitMergeChangesSection
+                v-if="mergeCount > 0"
+                v-model:expanded="isMergeExpanded"
+                :count="mergeCount"
+                :files="mergeList"
+                :selected-file="selectedFile"
+                :diff-source="diffSource"
+                :has-more="hasMoreMerge"
+                :loading="mergeListLoading"
+                :can-operate="!!root"
+                :is-touch-pointer="ui.isTouchPointer"
+                :is-mobile-form-factor="ui.isMobilePointer"
+                :multi-select-mode="mergeMultiSelect.enabled.value"
+                :selected-paths="mergeMultiSelect.selectedList.value"
+                @select="(p: string) => selectFileFromSidebar(p, 'working')"
+                @toggleSelect="onToggleMergePathSelection"
+                @toggleMultiSelect="toggleMergeMultiSelectMode"
+                @selectAllSelected="selectAllMergePaths"
+                @invertSelected="invertMergePathSelection"
+                @stageSelected="stageSelectedMergePaths"
+                @discardSelected="discardSelectedMergePaths"
+                @history="(p: string) => openFileHistoryWithRefs(p)"
+                @discard="(p: string) => revertFile(p)"
+                @showMore="showMoreMerge"
+              />
+
+              <GitStagedChangesSection
+                v-model:expanded="isStagedExpanded"
+                :count="stagedCount"
+                :files="stagedList"
+                :selected-file="selectedFile"
+                :diff-source="diffSource"
+                :has-more="hasMoreStaged"
+                :loading="stagedListLoading"
+                :can-operate="!!root"
+                :is-touch-pointer="ui.isTouchPointer"
+                :is-mobile-form-factor="ui.isMobilePointer"
+                :multi-select-mode="stagedMultiSelect.enabled.value"
+                :selected-paths="stagedMultiSelect.selectedList.value"
+                @select="(p: string) => selectFileFromSidebar(p, 'staged')"
+                @toggleSelect="onToggleStagedPathSelection"
+                @toggleMultiSelect="toggleStagedMultiSelectMode"
+                @selectAllSelected="selectAllStagedPaths"
+                @invertSelected="invertStagedPathSelection"
+                @unstageSelected="unstageSelectedStagedPaths"
+                @discardSelected="discardSelectedStagedPaths"
+                @deleteSelected="deleteSelectedStagedPaths"
+                @unstageAll="unstageAll"
+                @unstage="(p: string) => unstagePaths([p])"
+                @rename="openRenameDialog"
+                @history="(p: string) => openFileHistoryWithRefs(p)"
+                @discard="(p: string) => revertFile(p)"
+                @delete="(p: string) => deletePath(p, false)"
+                @deleteForce="(p: string) => deletePath(p, true)"
+                @showMore="showMoreStaged"
+              />
+
+              <GitChangesSection
+                v-model:expanded="isChangesExpanded"
+                :count="changesCount"
+                :files="changesList"
+                :selected-file="selectedFile"
+                :diff-source="diffSource"
+                :has-more="hasMoreUnstaged"
+                :loading="changesListLoading"
+                :can-operate="!!root"
+                :is-touch-pointer="ui.isTouchPointer"
+                :is-mobile-form-factor="ui.isMobilePointer"
+                :multi-select-mode="changesMultiSelect.enabled.value"
+                :selected-paths="changesMultiSelect.selectedList.value"
+                @select="(p: string) => selectFileFromSidebar(p, 'working')"
+                @toggleSelect="onToggleChangesPathSelection"
+                @toggleMultiSelect="toggleChangesMultiSelectMode"
+                @selectAllSelected="selectAllChangesPaths"
+                @invertSelected="invertChangesPathSelection"
+                @stageSelected="stageSelectedChangesPaths"
+                @discardSelected="discardSelectedChangesPaths"
+                @deleteSelected="deleteSelectedChangesPaths"
+                @stageAll="stageAllTracked"
+                @discardAll="discardAllTracked"
+                @stage="(p: string) => stagePaths([p])"
+                @rename="openRenameDialog"
+                @history="(p: string) => openFileHistoryWithRefs(p)"
+                @discard="(p: string) => revertFile(p)"
+                @delete="(p: string) => deletePath(p, false)"
+                @deleteForce="(p: string) => deletePath(p, true)"
+                @showMore="showMoreChanges"
+              />
+
+              <GitUntrackedSection
+                v-model:expanded="isUntrackedExpanded"
+                :count="untrackedCount"
+                :files="untrackedList"
+                :selected-file="selectedFile"
+                :diff-source="diffSource"
+                :has-more="hasMoreUntracked"
+                :loading="untrackedListLoading"
+                :can-operate="!!root"
+                :is-touch-pointer="ui.isTouchPointer"
+                :is-mobile-form-factor="ui.isMobilePointer"
+                :multi-select-mode="untrackedMultiSelect.enabled.value"
+                :selected-paths="untrackedMultiSelect.selectedList.value"
+                @select="(p: string) => selectFileFromSidebar(p, 'working')"
+                @toggleSelect="onToggleUntrackedPathSelection"
+                @toggleMultiSelect="toggleUntrackedMultiSelectMode"
+                @selectAllSelected="selectAllUntrackedPaths"
+                @invertSelected="invertUntrackedPathSelection"
+                @stageSelected="stageSelectedUntrackedPaths"
+                @ignoreSelected="ignoreSelectedUntrackedPaths"
+                @deleteSelected="deleteSelectedUntrackedPaths"
+                @stageAll="stageAllUntracked"
+                @discardAll="() => cleanUntracked(false)"
+                @stage="(p: string) => stagePaths([p])"
+                @rename="openRenameDialog"
+                @discard="(p: string) => revertFile(p)"
+                @ignore="(p: string) => ignorePath(p)"
+                @showMore="showMoreUntracked"
+              />
+            </div>
+          </div>
+
+          <div v-else-if="sourceControlView === 'history'" class="space-y-2 p-1.5">
+            <div
+              v-if="!projectRoot"
+              class="mx-1 rounded-sm border border-sidebar-border/60 bg-sidebar-accent/10 p-3 text-center"
+            >
+              <div class="text-sm font-medium">{{ t('git.ui.noProjectSelectedTitle') }}</div>
+              <div class="text-xs text-muted-foreground mt-1">{{ t('git.ui.noProjectSelectedDescription') }}</div>
+            </div>
+
+            <div
+              v-else-if="!gitReady && !loading"
+              class="mx-1 rounded-sm border border-sidebar-border/60 bg-sidebar-accent/10 p-3 text-center"
+            >
+              <div class="text-sm font-medium">{{ t('git.ui.noGitRepositoryTitle') }}</div>
+              <div class="text-xs text-muted-foreground mt-1">{{ t('git.ui.noGitRepositoryDescription') }}</div>
+            </div>
+
+            <template v-else>
+              <div class="rounded-sm border border-sidebar-border/60 bg-sidebar-accent/10 p-2">
+                <div class="mb-1 flex items-center justify-between gap-2">
+                  <div class="text-[11px] font-medium text-muted-foreground">{{ t('common.search') }}</div>
+                </div>
+
+                <div v-if="historyFilterPath" class="mb-2 flex items-center justify-between gap-2">
+                  <div class="truncate text-[10px] text-muted-foreground font-mono" :title="historyFilterPath">
+                    {{ historyFilterPath }}
+                  </div>
+                  <IconButton
+                    size="xs"
+                    :tooltip="t('common.clear')"
+                    :aria-label="t('common.clear')"
+                    @click="onClearHistoryPathFilter"
+                  >
+                    <RiCloseLine class="h-3.5 w-3.5" />
+                  </IconButton>
+                </div>
+
+                <div class="grid gap-2">
+                  <SearchInput
+                    v-model="historySearchDraft"
+                    class="flex-1 text-xs"
+                    input-class="h-8 font-mono text-xs"
+                    :placeholder="t('git.ui.dialogs.history.placeholders.commitMetaContains')"
+                    :input-aria-label="t('common.search')"
+                    :input-title="t('common.search')"
+                    :search-aria-label="t('common.search')"
+                    :search-title="t('common.search')"
+                    :clear-aria-label="t('common.clear')"
+                    :clear-title="t('common.clear')"
+                    :is-touch-pointer="ui.isTouchPointer"
+                    @search="onApplyHistoryFilters"
+                  />
                 </div>
               </div>
-              <div v-if="historyFilesError" class="px-2 py-2 text-xs text-destructive">{{ historyFilesError }}</div>
-              <div v-else-if="historyFilesLoading" class="px-2 py-2 text-xs text-muted-foreground">
-                {{ t('git.ui.dialogs.history.loadingFiles') }}
-              </div>
-              <div v-else-if="!historyFiles.length" class="px-2 py-2 text-xs text-muted-foreground">
-                {{ t('git.ui.dialogs.history.emptyFiles') }}
-              </div>
-              <div v-else class="divide-y divide-sidebar-border/50">
-                <button
-                  v-for="file in historyFiles"
-                  :key="`${file.status}:${file.path}`"
-                  type="button"
-                  class="w-full px-2 py-1.5 text-left text-xs hover:bg-sidebar-accent/35"
-                  :class="historyFileSelected?.path === file.path ? 'bg-sidebar-accent/45' : ''"
-                  @click="onSelectHistoryCommitFile(file)"
-                >
-                  <div class="flex min-w-0 items-center gap-2">
-                    <span class="w-4 text-[10px] font-mono text-muted-foreground">{{ file.status }}</span>
-                    <span class="flex-1 truncate font-mono">{{ file.path }}</span>
-                    <span v-if="file.insertions > 0" class="text-[10px] font-mono text-emerald-500"
-                      >+{{ file.insertions }}</span
-                    >
-                    <span v-if="file.deletions > 0" class="text-[10px] font-mono text-rose-500"
-                      >-{{ file.deletions }}</span
-                    >
+
+              <div class="rounded-sm border border-sidebar-border/60 overflow-hidden">
+                <div class="border-b border-sidebar-border/50 px-2 py-1">
+                  <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                    <div aria-hidden="true" />
+                    <PaginationControls
+                      class="justify-center"
+                      :page="historyCurrentPage"
+                      :total-pages="historyPaginationTotalPages"
+                      :disabled="historyLoading"
+                      :prev-label="t('common.previousPage')"
+                      :next-label="t('common.nextPage')"
+                      :page-input-label="t('common.currentPage')"
+                      @update:page="setHistoryPage"
+                    />
+                    <div class="flex justify-end">
+                      <IconButton
+                        size="xs"
+                        :tooltip="t('common.refresh')"
+                        :aria-label="t('common.refresh')"
+                        :disabled="historyLoading"
+                        @click="refreshHistory"
+                      >
+                        <RiRefreshLine class="h-3.5 w-3.5" :class="historyLoading ? 'animate-spin' : ''" />
+                      </IconButton>
+                    </div>
                   </div>
-                </button>
+                </div>
+
+                <div v-if="historyError" class="px-2 py-2 text-xs text-destructive">
+                  {{ historyError }}
+                </div>
+                <div
+                  v-else-if="historyLoading && !historyCommits.length"
+                  class="px-2 py-2 text-xs text-muted-foreground"
+                >
+                  {{ t('common.loading') }}
+                </div>
+                <div v-else-if="!historyCommits.length" class="px-2 py-2 text-xs text-muted-foreground">
+                  {{ t('git.ui.dialogs.history.emptyCommits') }}
+                </div>
+                <div v-else class="divide-y divide-sidebar-border/50">
+                  <button
+                    v-for="commit in historyCommits"
+                    :key="commit.hash"
+                    type="button"
+                    class="w-full px-2 py-1.5 text-left hover:bg-sidebar-accent/35"
+                    @click="onSelectHistoryCommit(commit)"
+                  >
+                    <div class="truncate text-[11px] font-medium text-foreground">
+                      {{ commit.subject || t('git.ui.dialogs.history.noMessage') }}
+                    </div>
+                    <div class="mt-0.5 flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                      <span class="font-mono">{{ commit.shortHash }}</span>
+                      <span class="truncate">{{ commit.authorName || t('common.unknown') }}</span>
+                      <span v-if="commit.authorDate">{{ formatDateTimeYMDHM(commit.authorDate) }}</span>
+                    </div>
+                  </button>
+                </div>
               </div>
-              <div
-                v-if="historySelected && historyFilesPaginationTotalPages > 1"
-                class="border-t border-sidebar-border/50 px-1 py-0.5"
-              >
+
+              <div class="px-1 py-0.5">
                 <PaginationControls
                   class="w-full justify-center"
-                  :page="historyFilesCurrentPage"
-                  :total-pages="historyFilesPaginationTotalPages"
-                  :disabled="historyFilesLoading"
+                  :page="historyCurrentPage"
+                  :total-pages="historyPaginationTotalPages"
+                  :disabled="historyLoading"
                   :prev-label="t('common.previousPage')"
                   :next-label="t('common.nextPage')"
                   :page-input-label="t('common.currentPage')"
-                  @update:page="setHistoryFilesPage"
+                  @update:page="setHistoryPage"
                 />
               </div>
+            </template>
+          </div>
+
+          <div v-else class="space-y-2 p-1.5">
+            <div class="flex items-center justify-between gap-2 rounded-sm border border-sidebar-border/60 px-2 py-1.5">
+              <button
+                type="button"
+                class="inline-flex items-center gap-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+                @click="backToHistoryList"
+              >
+                <RiArrowLeftSLine class="h-3.5 w-3.5" />
+                {{ t('git.ui.dialogs.history.title') }}
+              </button>
             </div>
-          </template>
-        </div>
-      </ScrollArea>
-    </div>
+
+            <div
+              v-if="!historySelected"
+              class="rounded-sm border border-sidebar-border/60 px-2 py-2 text-xs text-muted-foreground"
+            >
+              {{ t('git.ui.dialogs.history.selectCommitToViewDiff') }}
+            </div>
+
+            <template v-else>
+              <div class="rounded-sm border border-sidebar-border/60 bg-sidebar-accent/10 p-2">
+                <div class="truncate text-xs font-medium text-foreground" :title="historySelected.subject || ''">
+                  {{ historySelected.subject || t('git.ui.dialogs.history.noMessage') }}
+                </div>
+                <div class="mt-1 text-[10px] text-muted-foreground">{{ historySelectedMeta }}</div>
+                <div class="mt-0.5 flex items-center gap-1">
+                  <div class="min-w-0 flex-1 truncate font-mono text-[10px] text-muted-foreground">
+                    {{ historySelected.hash }}
+                  </div>
+                  <IconButton
+                    size="sm"
+                    :tooltip="t('git.ui.dialogs.history.actions.copyHash')"
+                    :aria-label="t('git.ui.dialogs.history.actions.copyHash')"
+                    @click="copyCommitHash(historySelected.hash)"
+                  >
+                    <RiClipboardLine class="h-3.5 w-3.5" />
+                  </IconButton>
+                </div>
+                <div class="mt-1 text-[10px] text-muted-foreground">
+                  {{ t('common.files') }}: {{ historySelectedSummary.files }} · +{{
+                    historySelectedSummary.insertions
+                  }}
+                  -{{ historySelectedSummary.deletions }}
+                </div>
+
+                <div class="mt-2 flex flex-wrap gap-1">
+                  <MiniActionButton size="xs" @click="onHistoryCheckout(historySelected)">{{
+                    t('git.ui.dialogs.history.actions.checkout')
+                  }}</MiniActionButton>
+                  <MiniActionButton size="xs" @click="onHistoryCreateBranch(historySelected)">{{
+                    t('git.ui.dialogs.history.actions.createBranch')
+                  }}</MiniActionButton>
+                  <MiniActionButton size="xs" variant="destructive" @click="onHistoryRevert(historySelected)">{{
+                    t('git.ui.dialogs.history.actions.revert')
+                  }}</MiniActionButton>
+                </div>
+              </div>
+
+              <div class="rounded-sm border border-sidebar-border/60 overflow-hidden">
+                <div class="border-b border-sidebar-border/50 px-2 py-1">
+                  <div class="text-[11px] font-medium text-muted-foreground">
+                    {{ t('git.ui.dialogs.history.sections.files') }}
+                  </div>
+                </div>
+                <div v-if="historyFilesError" class="px-2 py-2 text-xs text-destructive">{{ historyFilesError }}</div>
+                <div v-else-if="historyFilesLoading" class="px-2 py-2 text-xs text-muted-foreground">
+                  {{ t('git.ui.dialogs.history.loadingFiles') }}
+                </div>
+                <div v-else-if="!historyFiles.length" class="px-2 py-2 text-xs text-muted-foreground">
+                  {{ t('git.ui.dialogs.history.emptyFiles') }}
+                </div>
+                <div v-else class="divide-y divide-sidebar-border/50">
+                  <button
+                    v-for="file in historyFiles"
+                    :key="`${file.status}:${file.path}`"
+                    type="button"
+                    class="w-full px-2 py-1.5 text-left text-xs hover:bg-sidebar-accent/35"
+                    :class="historyFileSelected?.path === file.path ? 'bg-sidebar-accent/45' : ''"
+                    @click="onSelectHistoryCommitFile(file)"
+                  >
+                    <div class="flex min-w-0 items-center gap-2">
+                      <span class="w-4 text-[10px] font-mono text-muted-foreground">{{ file.status }}</span>
+                      <span class="flex-1 truncate font-mono">{{ file.path }}</span>
+                      <span v-if="file.insertions > 0" class="text-[10px] font-mono text-emerald-500"
+                        >+{{ file.insertions }}</span
+                      >
+                      <span v-if="file.deletions > 0" class="text-[10px] font-mono text-rose-500"
+                        >-{{ file.deletions }}</span
+                      >
+                    </div>
+                  </button>
+                </div>
+                <div
+                  v-if="historySelected && historyFilesPaginationTotalPages > 1"
+                  class="border-t border-sidebar-border/50 px-1 py-0.5"
+                >
+                  <PaginationControls
+                    class="w-full justify-center"
+                    :page="historyFilesCurrentPage"
+                    :total-pages="historyFilesPaginationTotalPages"
+                    :disabled="historyFilesLoading"
+                    :prev-label="t('common.previousPage')"
+                    :next-label="t('common.nextPage')"
+                    :page-input-label="t('common.currentPage')"
+                    @update:page="setHistoryFilesPage"
+                  />
+                </div>
+              </div>
+            </template>
+          </div>
+        </ScrollArea>
+      </div>
+    </Teleport>
 
     <div class="min-w-0 flex flex-1 flex-col overflow-hidden" v-show="showDiffPane">
       <div v-if="props.embedded" class="flex items-center gap-2 border-b border-sidebar-border/50 px-2 py-1.5">

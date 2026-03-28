@@ -19,11 +19,23 @@ const auth = useAuthStore()
 const health = useHealthStore()
 const settings = useSettingsStore()
 const desktopRuntime = isDesktopRuntime()
+const isEmbeddedWorkspacePane = (() => {
+  if (typeof window === 'undefined') return false
+  return String(new URLSearchParams(window.location.search).get('ocEmbed') || '').trim() === '1'
+})()
+const embeddedBootSettled = ref(!isEmbeddedWorkspacePane)
 
 const desktopBackendReachable = computed(() => health.data !== null)
 const backendReady = computed(() => health.data !== null && health.data.isOpenCodeReady)
 const showDesktopLoading = computed(() => desktopRuntime && !desktopBackendReachable.value)
-const showLogin = computed(() => !showDesktopLoading.value && (auth.needsLogin || !backendReady.value))
+const showEmbeddedBootPlaceholder = computed(() => isEmbeddedWorkspacePane && !embeddedBootSettled.value)
+const showLogin = computed(
+  () =>
+    !isEmbeddedWorkspacePane &&
+    !showDesktopLoading.value &&
+    !showEmbeddedBootPlaceholder.value &&
+    (auth.needsLogin || !backendReady.value),
+)
 
 let desktopProbeTimer: ReturnType<typeof setInterval> | null = null
 let desktopProbeBusy = false
@@ -81,8 +93,14 @@ function scheduleDesktopProbe() {
 }
 
 onMounted(() => {
-  void auth.refresh().catch(() => {})
-  void health.refresh().catch(() => {})
+  const authRefresh = auth.refresh().catch(() => {})
+  const healthRefresh = health.refresh().catch(() => {})
+
+  if (!isEmbeddedWorkspacePane) return
+
+  void Promise.allSettled([authRefresh, healthRefresh]).then(() => {
+    embeddedBootSettled.value = true
+  })
 })
 
 watch(
@@ -112,12 +130,13 @@ watchEffect(() => {
   <div class="app-root">
     <ToastHost />
     <DesktopLoadingPage
-      v-if="showDesktopLoading"
+      v-if="!isEmbeddedWorkspacePane && showDesktopLoading"
       :backend-error="loadingError"
       :backend-error-info="loadingErrorInfo"
       @retry="refreshDesktopBootState"
       @open-config="openRuntimeConfig"
     />
+    <div v-else-if="showEmbeddedBootPlaceholder" class="h-full w-full bg-background" />
     <LoginPage v-else-if="showLogin" />
     <MainLayout v-else />
   </div>

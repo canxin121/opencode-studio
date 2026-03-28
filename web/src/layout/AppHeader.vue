@@ -149,21 +149,29 @@ const tabs = computed<Tab[]>(() => {
   }))
 })
 
-// Sync Route -> UI Store (for mobile title / persistence)
-// We rely on Vue Router for the actual active state in the UI.
+function mainTabRoute(path: string): { path: string; query?: Record<string, string> } {
+  const normalizedPath = String(path || '').trim()
+  if (!normalizedPath) return { path: '/chat' }
+  const windowId = String(ui.activeWorkspaceWindowId || '').trim()
+  if (!windowId) return { path: normalizedPath }
+  return {
+    path: normalizedPath,
+    query: { windowId },
+  }
+}
+
+// Sync Route -> UI Store (for mobile title / persistence + workspace windows)
 watch(
-  () => route.path,
-  (path) => {
+  () => ({ path: route.path, query: route.query }),
+  ({ path, query }) => {
     const normalized = String(path || '').toLowerCase()
     const matchesMainTab = MAIN_TABS.some((tab) => normalized.startsWith(tab.path))
     if (!matchesMainTab) return
 
     const next = mainTabFromPath(normalized)
-    if (ui.activeMainTab !== next) {
-      ui.setActiveMainTab(next)
-    }
+    ui.syncActiveWorkspaceWindowFromRoute(next, query)
   },
-  { immediate: true },
+  { immediate: true, deep: true },
 )
 
 const mobileTitle = computed(() => {
@@ -227,7 +235,7 @@ onMounted(() => {
     e.preventDefault()
     const tab = tabs.value[num - 1]
     if (tab) {
-      router.push(tab.path)
+      router.push(mainTabRoute(tab.path))
     }
   }
   window.addEventListener('keydown', keyHandler)
@@ -326,7 +334,7 @@ function openHelpDialog() {
         <RouterLink
           v-for="tab in tabs"
           :key="tab.id"
-          :to="tab.path"
+          :to="mainTabRoute(tab.path)"
           class="relative flex items-center gap-2 px-3 h-9 rounded-md typography-ui-label font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring text-muted-foreground hover:bg-secondary/40 hover:text-foreground"
           active-class="bg-secondary/70 !text-foreground"
         >

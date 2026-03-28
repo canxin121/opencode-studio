@@ -334,11 +334,74 @@ fn ws_envelope_text(seq: u64, payload_json: &str) -> String {
     out
 }
 
+fn normalize_directory_filter(raw: Option<&str>) -> Option<String> {
+    raw.and_then(crate::path_utils::normalize_directory_for_match)
+}
+
+fn event_directory_from_json_value(value: &serde_json::Value, depth: usize) -> Option<String> {
+    if depth > 3 {
+        return None;
+    }
+
+    if let Some(dir) = value.get("directory").and_then(|v| v.as_str())
+        && let Some(normalized) = crate::path_utils::normalize_directory_for_match(dir)
+    {
+        return Some(normalized);
+    }
+    if let Some(cwd) = value.get("cwd").and_then(|v| v.as_str())
+        && let Some(normalized) = crate::path_utils::normalize_directory_for_match(cwd)
+    {
+        return Some(normalized);
+    }
+
+    if let Some(properties) = value.get("properties")
+        && let Some(normalized) = event_directory_from_json_value(properties, depth + 1)
+    {
+        return Some(normalized);
+    }
+    if let Some(payload) = value.get("payload")
+        && let Some(normalized) = event_directory_from_json_value(payload, depth + 1)
+    {
+        return Some(normalized);
+    }
+
+    None
+}
+
+fn event_matches_directory_filter(payload_json: &str, directory_filter: Option<&str>) -> bool {
+    let Some(filter_dir) = normalize_directory_filter(directory_filter) else {
+        return true;
+    };
+
+    let Ok(parsed) = serde_json::from_str::<serde_json::Value>(payload_json) else {
+        // Preserve safety for non-JSON / malformed payloads.
+        return true;
+    };
+
+    let Some(event_dir) = event_directory_from_json_value(&parsed, 0) else {
+        // Keep global/control events flowing to avoid desync.
+        return true;
+    };
+
+    if event_dir == filter_dir {
+        return true;
+    }
+    let prefix = format!("{filter_dir}/");
+    event_dir.starts_with(&prefix)
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct GlobalEventSseQuery {
+    pub directory: Option<String>,
+}
+
 #[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct GlobalEventWsQuery {
     pub cursor: Option<u64>,
     pub last_event_id: Option<u64>,
+    pub directory: Option<String>,
 }
 
 fn parse_ws_last_event_id(query: &GlobalEventWsQuery, headers: &HeaderMap) -> Option<u64> {
@@ -776,6 +839,7 @@ fn push_normalized_sse_chunk(buf: &mut BytesMut, chunk: &[u8], prev_cr: &mut boo
 pub(crate) async fn global_event_sse(
     State(state): State<Arc<crate::AppState>>,
     headers: HeaderMap,
+    Query(query): Query<GlobalEventSseQuery>,
 ) -> ApiResult<Response> {
     // Ensure the hub is running.
     start_global_sse_hub_if_needed(state.clone());
@@ -810,6 +874,7 @@ pub(crate) async fn global_event_sse(
         GLOBAL_HUB.replay_since_until(last_event_id, seq_at_subscribe)
     };
     let replay_len = replay.len();
+    let directory_filter = normalize_directory_filter(query.directory.as_deref());
 
     tracing::debug!(
         target: "opencode_studio.global_sse_hub.downstream",
@@ -821,6 +886,7 @@ pub(crate) async fn global_event_sse(
         replay_gap_forced = forced_replay_gap_frame.is_some(),
         replay_gap_seq = replay_gap_seq.unwrap_or(0),
         cursor_ahead,
+        directory_filter = directory_filter.as_deref().unwrap_or(""),
         latest_seq = GLOBAL_HUB.latest_seq(),
         upstream_connected = GLOBAL_HUB.is_upstream_connected(),
         downstream_clients = GLOBAL_HUB.downstream_client_count(),
@@ -849,6 +915,9 @@ pub(crate) async fn global_event_sse(
         }
 
         for evt in replay {
+            if !event_matches_directory_filter(&evt.payload_json, directory_filter.as_deref()) {
+                continue;
+            }
             if evt.seq <= last_emitted_seq {
                 continue;
             }
@@ -859,6 +928,9 @@ pub(crate) async fn global_event_sse(
         loop {
             match tokio::time::timeout(DOWNSTREAM_RECV_TIMEOUT, rx.recv()).await {
                 Ok(Ok(evt)) => {
+                    if !event_matches_directory_filter(&evt.payload_json, directory_filter.as_deref()) {
+                        continue;
+                    }
                     if evt.seq <= last_emitted_seq {
                         continue;
                     }
@@ -930,6 +1002,7 @@ async fn run_global_event_ws_client(
     replay: Vec<HubFrame>,
     forced_replay_gap_json: Option<(u64, String)>,
     mut rx: broadcast::Receiver<HubFrame>,
+    directory_filter: Option<String>,
 ) {
     let mut last_emitted_seq = last_event_id;
 
@@ -944,6 +1017,9 @@ async fn run_global_event_ws_client(
     }
 
     for evt in replay {
+        if !event_matches_directory_filter(&evt.payload_json, directory_filter.as_deref()) {
+            continue;
+        }
         if evt.seq <= last_emitted_seq {
             continue;
         }
@@ -996,6 +1072,9 @@ async fn run_global_event_ws_client(
             recv = rx.recv() => {
                 match recv {
                     Ok(evt) => {
+                        if !event_matches_directory_filter(&evt.payload_json, directory_filter.as_deref()) {
+                            continue;
+                        }
                         if evt.seq <= last_emitted_seq {
                             continue;
                         }
@@ -1054,6 +1133,8 @@ pub(crate) async fn global_event_ws(
 ) -> ApiResult<Response> {
     start_global_sse_hub_if_needed(state.clone());
 
+    let directory_filter = normalize_directory_filter(query.directory.as_deref());
+
     let client_id = GLOBAL_HUB.allocate_client_id();
     let requested_last_event_id = parse_ws_last_event_id(&query, &headers).unwrap_or(0);
     let rx = GLOBAL_HUB.tx.subscribe();
@@ -1089,6 +1170,7 @@ pub(crate) async fn global_event_ws(
         replay_gap_forced = forced_replay_gap_json.is_some(),
         replay_gap_seq = replay_gap_seq.unwrap_or(0),
         cursor_ahead,
+        directory_filter = directory_filter.as_deref().unwrap_or(""),
         latest_seq = GLOBAL_HUB.latest_seq(),
         upstream_connected = GLOBAL_HUB.is_upstream_connected(),
         downstream_clients = GLOBAL_HUB.downstream_client_count(),
@@ -1103,6 +1185,7 @@ pub(crate) async fn global_event_ws(
             replay,
             forced_replay_gap_json,
             rx,
+            directory_filter,
         )
         .await;
     });

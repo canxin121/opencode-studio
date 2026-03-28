@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
 import { apiErrorBodyRecord, ApiError } from '@/lib/api'
 import { gitJson, gitWatchUrl } from '@/lib/gitApi'
@@ -68,6 +68,7 @@ const { t } = useI18n()
 const directoryStore = useDirectoryStore()
 const gitRepos = useGitReposStore()
 const ui = useUiStore()
+const route = useRoute()
 const router = useRouter()
 
 const projectRoot = computed(() => directoryStore.currentDirectory)
@@ -1000,13 +1001,18 @@ function openFileInFiles(path: string) {
     ui.requestWorkspaceDockFile(abs, 'open')
     return
   }
-  void router.push({
-    path: '/files',
-    query: {
-      gitPath: abs,
-      gitAction: 'open',
-    },
+
+  const query = {
+    filePath: abs,
+  }
+  const fileName = abs.split('/').filter(Boolean).pop() || String(t('nav.files'))
+  ui.openWorkspaceWindow('files', {
+    activate: true,
+    query,
+    title: fileName,
+    matchKeys: ['filePath'],
   })
+  void router.push({ path: '/files', query })
 }
 
 function revealFileInFiles(path: string) {
@@ -1016,13 +1022,18 @@ function revealFileInFiles(path: string) {
     ui.requestWorkspaceDockFile(abs, 'reveal')
     return
   }
-  void router.push({
-    path: '/files',
-    query: {
-      gitPath: abs,
-      gitAction: 'reveal',
-    },
+
+  const query = {
+    filePath: abs,
+  }
+  const fileName = abs.split('/').filter(Boolean).pop() || String(t('nav.files'))
+  ui.openWorkspaceWindow('files', {
+    activate: true,
+    query,
+    title: fileName,
+    matchKeys: ['filePath'],
   })
+  void router.push({ path: '/files', query })
 }
 
 function openWorktree(path: string) {
@@ -1135,6 +1146,24 @@ const headline = computed(() => {
   if (status.value.behind) parts.push(`↓ ${status.value.behind}`)
   return parts.join('  ')
 })
+
+function syncGitWindowTitle() {
+  const base = String(t('nav.git'))
+  const branch = String(status.value?.current || '').trim()
+  const repo = String(selectedRepoRelative.value || '').trim()
+  const detail = branch || (repo && repo !== '.' ? repo : '')
+  const title = detail ? `${base} · ${detail}` : base
+
+  ui.setWorkspaceWindowTitleFromRoute(route.query, title)
+}
+
+watch(
+  () => [status.value?.current, selectedRepoRelative.value, route.query],
+  () => {
+    syncGitWindowTitle()
+  },
+  { immediate: true },
+)
 
 // Template is rendered by ./git/GitPageView.vue. Keep this file under 1000 LOC by
 // passing a context bag (refs + handlers) to the view.

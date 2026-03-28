@@ -40,9 +40,11 @@ import {
   extractRunConfigFromMessageInfo,
   loadSessionRunConfigMap,
 } from './chat/runConfig'
-import { STORAGE_LAST_SESSION, STORAGE_RUN_CONFIG } from './chat/storeKeys'
+import { STORAGE_LAST_SESSION, STORAGE_LAST_SESSION_BY_WINDOW, STORAGE_RUN_CONFIG } from './chat/storeKeys'
 import { applyStreamingEventToMessages } from './chat/streaming'
 import type { JsonObject as UnknownRecord, JsonValue } from '@/types/json'
+import { getLocalJson, setLocalJson } from '@/lib/persist'
+import { DEFAULT_WINDOW_SCOPE_ID, normalizeWindowScopeId, resolveWindowScopeId } from '@/app/windowScope'
 
 import { ApiError } from '../lib/api'
 
@@ -62,11 +64,13 @@ export type {
 import { useSettingsStore } from './settings'
 import { useDirectoryStore } from './directory'
 import { useToastsStore } from './toasts'
+import { useUiStore } from './ui'
 
 export const useChatStore = defineStore('chat', () => {
   const settings = useSettingsStore()
   const directoryStore = useDirectoryStore()
   const toasts = useToastsStore()
+  const ui = useUiStore()
 
   // Keep session list fetches bounded; sidebar has its own paging.
   const SESSION_PAGE_SIZE = 30
@@ -84,7 +88,80 @@ export const useChatStore = defineStore('chat', () => {
   const sessionsLoading = ref(false)
   const sessionsError = ref<string | null>(null)
 
-  const selectedSessionId = ref<string | null>(null)
+  const selectedSessionIdByWindow = ref<Record<string, string | null>>(
+    (() => {
+      const persisted = getLocalJson<unknown>(STORAGE_LAST_SESSION_BY_WINDOW, {})
+      const out: Record<string, string | null> = {}
+
+      if (persisted && typeof persisted === 'object' && !Array.isArray(persisted)) {
+        for (const [rawWindowId, rawSessionId] of Object.entries(persisted as Record<string, unknown>)) {
+          const windowId = normalizeWindowScopeId(rawWindowId, '')
+          const sid = String(rawSessionId || '').trim()
+          if (!windowId) continue
+          out[windowId] = sid || null
+        }
+      }
+
+      let legacy = ''
+      try {
+        legacy = String(localStorage.getItem(STORAGE_LAST_SESSION) || '').trim()
+      } catch {
+        legacy = ''
+      }
+      if (legacy && !Object.values(out).some((value) => value === legacy)) {
+        out[DEFAULT_WINDOW_SCOPE_ID] = legacy
+      }
+
+      return out
+    })(),
+  )
+
+  function resolveChatWindowScopeId(windowId?: string | null): string {
+    return resolveWindowScopeId({
+      fallback: windowId || ui.activeWorkspaceWindowId,
+      defaultScope: DEFAULT_WINDOW_SCOPE_ID,
+    })
+  }
+
+  function selectedSessionIdForWindow(windowId?: string | null): string | null {
+    const scopeId = resolveChatWindowScopeId(windowId)
+    const sid = String(selectedSessionIdByWindow.value[scopeId] || '').trim()
+    return sid || null
+  }
+
+  function setSelectedSessionIdForWindow(windowId: string | null | undefined, sessionId: string | null | undefined) {
+    const scopeId = resolveChatWindowScopeId(windowId)
+    const sid = String(sessionId || '').trim()
+    const prev = String(selectedSessionIdByWindow.value[scopeId] || '').trim()
+    if (prev === sid) return
+
+    const next = {
+      ...selectedSessionIdByWindow.value,
+      [scopeId]: sid || null,
+    }
+    selectedSessionIdByWindow.value = next
+    setLocalJson(STORAGE_LAST_SESSION_BY_WINDOW, next)
+
+    // Keep a legacy fallback slot for old builds/tools.
+    try {
+      if (sid) {
+        localStorage.setItem(STORAGE_LAST_SESSION, sid)
+      } else if (scopeId === DEFAULT_WINDOW_SCOPE_ID) {
+        localStorage.removeItem(STORAGE_LAST_SESSION)
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const selectedSessionId = computed<string | null>({
+    get() {
+      return selectedSessionIdForWindow()
+    },
+    set(value) {
+      setSelectedSessionIdForWindow(undefined, value)
+    },
+  })
   const messagesBySession = ref<Record<string, MessageEntry[]>>({})
   const messagesHydratedBySession = ref<Record<string, boolean>>({})
   const messages = computed<MessageEntry[]>(() => {
@@ -126,7 +203,7 @@ export const useChatStore = defineStore('chat', () => {
   const refreshMessagesRetryTimerBySession = new Map<string, number>()
   const refreshMessagesRequestSeqBySession = new Map<string, number>()
   const refreshSessionDiffInvalidateTimerBySession = new Map<string, number>()
-  let selectSeq = 0
+  const selectSeqByWindow = new Map<string, number>()
   let lastGlobalErrorToastAt = 0
   const lastSessionErrorToastByKey = new Map<string, { at: number; message: string }>()
   let createSessionInFlight: Promise<Session | null> | null = null
@@ -720,10 +797,23 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  async function selectSession(id: string | null) {
-    const previous = selectedSessionId.value
+  function nextSelectSeq(windowScopeId: string): number {
+    const scopeId = resolveChatWindowScopeId(windowScopeId)
+    const next = (selectSeqByWindow.get(scopeId) || 0) + 1
+    selectSeqByWindow.set(scopeId, next)
+    return next
+  }
+
+  function isLatestSelectSeq(windowScopeId: string, token: number): boolean {
+    const scopeId = resolveChatWindowScopeId(windowScopeId)
+    return (selectSeqByWindow.get(scopeId) || 0) === token
+  }
+
+  async function selectSession(id: string | null, opts?: { windowId?: string | null }) {
+    const scopeId = resolveChatWindowScopeId(opts?.windowId)
+    const previous = selectedSessionIdForWindow(scopeId)
     const sid = (id || '').trim()
-    selectedSessionId.value = sid || null
+    setSelectedSessionIdForWindow(scopeId, sid || null)
     messagesError.value = null
 
     // Keep memory bounded: when leaving a session, drop any expanded history window.
@@ -752,16 +842,9 @@ export const useChatStore = defineStore('chat', () => {
       ensureSessionMessages(sid)
     }
 
-    try {
-      if (sid) localStorage.setItem(STORAGE_LAST_SESSION, sid)
-      else localStorage.removeItem(STORAGE_LAST_SESSION)
-    } catch {
-      // ignore
-    }
-
     if (!sid) return
 
-    const token = ++selectSeq
+    const token = nextSelectSeq(scopeId)
 
     // Ensure we can resolve directory for this session even if it isn't in the current directory list.
     let dir: string | null = sessionDirectoryById.value[sid] || null
@@ -808,10 +891,13 @@ export const useChatStore = defineStore('chat', () => {
     }
 
     // If the user selected a different session while we were searching, bail.
-    if (token !== selectSeq || selectedSessionId.value !== sid) return
+    if (!isLatestSelectSeq(scopeId, token) || selectedSessionIdForWindow(scopeId) !== sid) return
 
-    if (dir && dir.trim() && directoryStore.currentDirectory !== dir.trim()) {
-      directoryStore.setDirectory(dir.trim())
+    if (dir && dir.trim()) {
+      const normalizedDir = dir.trim()
+      if (directoryStore.getDirectoryForWindow(scopeId) !== normalizedDir) {
+        directoryStore.setDirectoryForWindow(scopeId, normalizedDir)
+      }
     }
 
     // Refresh diff after directory resolution so cross-directory sessions use the correct scope.

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRouter } from 'vue-router'
 import { onClickOutside } from '@vueuse/core'
 import { RiListUnordered } from '@remixicon/vue'
 import { useI18n } from 'vue-i18n'
@@ -262,7 +262,6 @@ function scrollToHeading(id: string) {
 const toasts = useToastsStore()
 const directoryStore = useDirectoryStore()
 const ui = useUiStore()
-const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 
@@ -596,25 +595,21 @@ function openWorkspaceLink(href: string): boolean {
   })
   if (!resolved?.path) return false
 
-  if (route.path === '/files') {
-    const nextQuery: Record<string, string | string[] | null | undefined> = { ...route.query }
-    nextQuery.gitPath = resolved.path
-    nextQuery.gitAction = 'open'
-    if (resolved.line) nextQuery.gitLine = String(resolved.line)
-    else delete nextQuery.gitLine
-    if (resolved.column) nextQuery.gitColumn = String(resolved.column)
-    else delete nextQuery.gitColumn
-    if (resolved.anchor) nextQuery.gitAnchor = String(resolved.anchor)
-    else delete nextQuery.gitAnchor
-    void router.push({ path: '/files', query: nextQuery })
-    return true
+  const query: Record<string, string> = {
+    filePath: resolved.path,
   }
+  if (resolved.line) query.fileLine = String(resolved.line)
+  if (resolved.column) query.fileColumn = String(resolved.column)
+  if (resolved.anchor) query.fileAnchor = String(resolved.anchor)
 
-  ui.requestWorkspaceDockFile(resolved.path, 'open', {
-    line: resolved.line,
-    column: resolved.column,
-    anchor: resolved.anchor,
+  const fileName = resolved.path.split('/').filter(Boolean).pop() || String(t('nav.files'))
+  ui.openWorkspaceWindow('files', {
+    activate: true,
+    query,
+    title: fileName,
+    matchKeys: ['filePath'],
   })
+  void router.push({ path: '/files', query })
   return true
 }
 

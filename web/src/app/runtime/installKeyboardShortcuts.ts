@@ -103,21 +103,20 @@ export function installKeyboardShortcuts(): () => void {
     // Cmd/Ctrl+N: create session
     if (hasModifier(e) && keyLower(e) === 'n') {
       e.preventDefault()
-      ui.setActiveMainTab('chat')
       ui.setSessionSwitcherOpen(false)
       void (async () => {
         const created = await chat.createSession().catch(() => null)
         const sid = (created?.id || chat.selectedSessionId || '').trim()
-        const cur = router.currentRoute.value
 
         if (sid) {
           ui.enableSessionQuery()
-          const nextQuery = patchSessionIdInQuery(cur.query || {}, sid)
-          if ((cur.path || '').startsWith('/chat')) {
-            await router.replace({ query: nextQuery })
-          } else {
-            await router.push({ path: '/chat', query: nextQuery })
-          }
+          const nextQuery = patchSessionIdInQuery(router.currentRoute.value.query || {}, sid)
+          ui.createWorkspaceWindow('chat', {
+            activate: true,
+            query: nextQuery,
+            title: String(i18n.global.t('nav.chat')),
+          })
+          await router.push({ path: '/chat', query: nextQuery })
         } else {
           await router.push('/chat')
         }

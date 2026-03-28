@@ -14,7 +14,6 @@ import {
 } from '@remixicon/vue'
 
 import RenameSessionDialog from '@/components/chat/RenameSessionDialog.vue'
-import { patchSessionIdInQuery } from '@/app/navigation/sessionQuery'
 import { useChatStore } from '@/stores/chat'
 import { useSettingsStore } from '@/stores/settings'
 import { useToastsStore } from '@/stores/toasts'
@@ -1605,28 +1604,54 @@ async function focusDirectoryContext(directoryId: string, directoryPath: string)
   }
 }
 
+function resolveSessionTabTitle(sessionId: string): string {
+  const sid = String(sessionId || '').trim()
+  if (!sid) return ''
+
+  const list = Array.isArray(chat.sessions) ? chat.sessions : []
+  const matched = list.find((item) => String((item as { id?: string } | null)?.id || '').trim() === sid) as
+    | { title?: string; slug?: string }
+    | undefined
+
+  const title = String(matched?.title || '').trim()
+  if (title) return title
+  const slug = String(matched?.slug || '').trim()
+  if (slug) return slug
+  return ''
+}
+
+async function openSessionInWorkspaceWindow(sessionId: string): Promise<string> {
+  const sid = String(sessionId || '').trim()
+  if (!sid) return ''
+
+  ui.enableSessionQuery()
+  const nextQuery = { sessionId: sid }
+  const resolvedTitle = resolveSessionTabTitle(sid)
+
+  const targetId = ui.openWorkspaceWindow('chat', {
+    activate: true,
+    query: nextQuery,
+    title: resolvedTitle || undefined,
+    matchKeys: ['sessionId'],
+  })
+
+  await router.push({ path: '/chat', query: { ...nextQuery, windowId: targetId } })
+
+  return targetId
+}
+
 async function createSessionInDirectory(directoryId: string, directoryPath: string) {
   if (creatingSession.value) return
   creatingSession.value = true
   try {
     await focusDirectoryContext(directoryId, directoryPath)
-    if (props.navigateToChat) {
-      ui.setActiveMainTab('chat')
-    }
     const created = await chat.createSession()
     if (created?.id) {
       // Ensure the sidebar list reflects the new session without a manual refresh.
       void revalidateSidebarState(undefined, { silent: true })
 
       if (props.navigateToChat) {
-        ui.enableSessionQuery()
-        const nextQuery = patchSessionIdInQuery(route.query, created.id)
-        // If the user creates a session from Settings/other pages, take them to Chat.
-        if ((route.path || '').startsWith('/chat')) {
-          await router.replace({ query: nextQuery })
-        } else {
-          await router.push({ path: '/chat', query: nextQuery })
-        }
+        await openSessionInWorkspaceWindow(created.id)
       }
 
       // Mobile UX: switch focus to the main chat pane after creating.
@@ -1640,18 +1665,19 @@ async function createSessionInDirectory(directoryId: string, directoryPath: stri
 }
 
 async function selectSession(sessionId: string) {
+  let targetWindowId = ''
   if (props.navigateToChat) {
-    ui.enableSessionQuery()
-    // Default behavior: selecting a session navigates to Chat.
-    ui.setActiveMainTab('chat')
-    const nextQuery = patchSessionIdInQuery(route.query, sessionId)
-    if ((route.path || '').startsWith('/chat')) {
-      await router.replace({ query: nextQuery })
-    } else {
-      await router.push({ path: '/chat', query: nextQuery })
-    }
+    // Opening a session from the sidebar should activate/create a session window tab.
+    targetWindowId = await openSessionInWorkspaceWindow(sessionId)
   }
   await chat.selectSession(sessionId)
+
+  if (targetWindowId) {
+    const title = String(chat.selectedSession?.title || '').trim() || String(chat.selectedSession?.slug || '').trim()
+    if (title) {
+      ui.setWorkspaceWindowTitle(targetWindowId, title)
+    }
+  }
 
   // Mobile UX: selecting a session should immediately close the switcher.
   if (props.mobileVariant) ui.setSessionSwitcherOpen(false)

@@ -36,9 +36,7 @@ try {
   sessionStorage.setItem(PAGE_LOAD_TOKEN_KEY, token)
   const params = new URLSearchParams(window.location.search || '')
   const sid = readSessionIdFromQuery({
-    sessionid: params.get('sessionid'),
     sessionId: params.get('sessionId'),
-    session: params.get('session'),
   })
   sessionStorage.setItem(INITIAL_SESSION_QUERY_KEY, sid)
 } catch {

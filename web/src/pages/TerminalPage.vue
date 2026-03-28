@@ -61,7 +61,7 @@ import {
   type TerminalSessionMeta as NameKeyedTerminalSessionMeta,
 } from '@/features/terminal/lib/sessionNameKey'
 import { handleTerminalKeyboardShortcut } from '@/features/terminal/lib/terminalKeyboardShortcuts'
-import { useDesktopSidebarResize } from '@/composables/useDesktopSidebarResize'
+import { WORKSPACE_SIDEBAR_HOST_SELECTOR } from '@/layout/workspaceSidebarHost'
 import { useDirectoryStore } from '@/stores/directory'
 import { useUiStore } from '@/stores/ui'
 
@@ -178,7 +178,6 @@ function persistGitHandoffSessionName(next: string | null) {
 
 const ui = useUiStore()
 const directoryStore = useDirectoryStore()
-const { startDesktopSidebarResize } = useDesktopSidebarResize()
 
 const route = useRoute()
 const router = useRouter()
@@ -220,7 +219,13 @@ function hydratePendingSendFromQuery() {
   }
 }
 
-const useShellSidebar = computed(() => (ui.isCompactLayout ? ui.isSessionSwitcherOpen : ui.isSidebarOpen))
+const isEmbeddedWorkspacePane = computed(() => String(route.query?.ocEmbed || '').trim() === '1')
+const useDesktopSidebarHost = computed(() => !ui.isCompactLayout && !isEmbeddedWorkspacePane.value)
+const useShellSidebar = computed(() => {
+  if (isEmbeddedWorkspacePane.value) return false
+  if (useDesktopSidebarHost.value) return true
+  return ui.isCompactLayout ? ui.isSessionSwitcherOpen : ui.isSidebarOpen
+})
 const sessionId = ref<string | null>(null)
 const sessionList = ref<string[]>([])
 const sessionMetaById = ref<Record<string, TerminalSessionMeta>>({})
@@ -971,6 +976,15 @@ const activeSessionName = computed(() => {
   if (customName) return customName
   return DEFAULT_TERMINAL_SESSION_NAME
 })
+
+function syncTerminalWindowTitle() {
+  const base = String(t('nav.terminal'))
+  const emptyLabel = String(t('terminal.active.noneSelected'))
+  const activeName = String(activeSessionName.value || '').trim()
+  const title = activeName && activeName !== emptyLabel ? `${base} · ${activeName}` : base
+
+  ui.setWorkspaceWindowTitleFromRoute(route.query, title)
+}
 
 function openTerminalSidebar() {
   if (ui.isCompactLayout) {
@@ -1919,6 +1933,14 @@ watch(
   },
 )
 
+watch(
+  () => [activeSessionName.value, route.query],
+  () => {
+    syncTerminalWindowTitle()
+  },
+  { immediate: true },
+)
+
 onBeforeUnmount(() => {
   window.removeEventListener('resize', scheduleResize)
   closeTerminalUiStateEvents()
@@ -1962,403 +1984,402 @@ watch(el, () => {
 
 <template>
   <div class="h-full flex overflow-hidden bg-background">
-    <aside
-      v-if="useShellSidebar"
-      class="relative flex h-full min-h-0 flex-col overflow-hidden bg-sidebar text-sidebar-foreground"
-      :class="ui.isCompactLayout ? 'w-full' : 'border-r border-sidebar-border/60'"
-      :style="ui.isCompactLayout ? undefined : { width: `${ui.sidebarWidth}px` }"
-    >
-      <div
-        v-if="!ui.isCompactLayout"
-        class="absolute right-0 top-0 z-10 h-full w-1 cursor-col-resize hover:bg-primary/40"
-        @pointerdown="startDesktopSidebarResize"
-      />
-      <div class="h-9 flex-shrink-0 select-none pl-3.5 pr-2 pt-1">
-        <div class="flex h-full items-center justify-between gap-2">
-          <div class="min-w-0 flex items-center gap-2">
-            <p class="typography-ui-label font-medium text-muted-foreground">{{ t('terminal.sidebar.title') }}</p>
-            <span
-              class="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-muted px-1 text-[10px] text-foreground/80"
-            >
-              {{ totalSessionCount }}
-            </span>
-          </div>
+    <Teleport :to="WORKSPACE_SIDEBAR_HOST_SELECTOR" :disabled="!useDesktopSidebarHost">
+      <aside
+        v-if="useShellSidebar"
+        class="relative flex h-full min-h-0 flex-col overflow-hidden bg-sidebar text-sidebar-foreground"
+        :class="ui.isCompactLayout || useDesktopSidebarHost ? 'w-full' : 'border-r border-sidebar-border/60'"
+        :style="ui.isCompactLayout || useDesktopSidebarHost ? undefined : { width: `${ui.sidebarWidth}px` }"
+      >
+        <div class="h-9 flex-shrink-0 select-none pl-3.5 pr-2 pt-1">
+          <div class="flex h-full items-center justify-between gap-2">
+            <div class="min-w-0 flex items-center gap-2">
+              <p class="typography-ui-label font-medium text-muted-foreground">{{ t('terminal.sidebar.title') }}</p>
+              <span
+                class="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-muted px-1 text-[10px] text-foreground/80"
+              >
+                {{ totalSessionCount }}
+              </span>
+            </div>
 
-          <div class="flex items-center gap-1">
-            <IconButton
-              variant="ghost"
-              size="md"
-              class="h-8 w-8"
-              :tooltip="String(t('terminal.session.create'))"
-              :is-touch-pointer="ui.isTouchPointer"
-              :title="String(t('terminal.session.create'))"
-              :aria-label="String(t('terminal.session.create'))"
-              @click="startSessionCreate"
-            >
-              <RiAddLine class="h-4 w-4" />
-            </IconButton>
+            <div class="flex items-center gap-1">
+              <IconButton
+                variant="ghost"
+                size="md"
+                class="h-8 w-8"
+                :tooltip="String(t('terminal.session.create'))"
+                :is-touch-pointer="ui.isTouchPointer"
+                :title="String(t('terminal.session.create'))"
+                :aria-label="String(t('terminal.session.create'))"
+                @click="startSessionCreate"
+              >
+                <RiAddLine class="h-4 w-4" />
+              </IconButton>
 
-            <IconButton
-              variant="ghost"
-              size="md"
-              class="h-8 w-8"
-              :tooltip="String(t('terminal.sidebar.refreshSessions'))"
-              :is-touch-pointer="ui.isTouchPointer"
-              :title="String(t('terminal.sidebar.refreshSessions'))"
-              :aria-label="String(t('terminal.sidebar.refreshSessions'))"
-              :disabled="sessionListRefreshing"
-              @click="refreshTrackedSessions"
-            >
-              <RiRefreshLine class="h-4 w-4" :class="sessionListRefreshing ? 'animate-spin' : ''" />
-            </IconButton>
+              <IconButton
+                variant="ghost"
+                size="md"
+                class="h-8 w-8"
+                :tooltip="String(t('terminal.sidebar.refreshSessions'))"
+                :is-touch-pointer="ui.isTouchPointer"
+                :title="String(t('terminal.sidebar.refreshSessions'))"
+                :aria-label="String(t('terminal.sidebar.refreshSessions'))"
+                :disabled="sessionListRefreshing"
+                @click="refreshTrackedSessions"
+              >
+                <RiRefreshLine class="h-4 w-4" :class="sessionListRefreshing ? 'animate-spin' : ''" />
+              </IconButton>
 
-            <IconButton
-              variant="ghost"
-              size="md"
-              class="h-8 w-8"
-              :class="terminalMultiSelect.enabled.value ? 'bg-primary/10 text-primary hover:bg-primary/15' : ''"
-              :tooltip="
-                String(
-                  terminalMultiSelect.enabled.value
-                    ? t('terminal.actions.exitMultiSelect')
-                    : t('terminal.actions.enterMultiSelect'),
-                )
-              "
-              :is-touch-pointer="ui.isTouchPointer"
-              :title="
-                String(
-                  terminalMultiSelect.enabled.value
-                    ? t('terminal.actions.exitMultiSelect')
-                    : t('terminal.actions.enterMultiSelect'),
-                )
-              "
-              :aria-label="
-                String(
-                  terminalMultiSelect.enabled.value
-                    ? t('terminal.actions.exitMultiSelect')
-                    : t('terminal.actions.enterMultiSelect'),
-                )
-              "
-              @click="toggleTerminalMultiSelectMode"
-            >
-              <RiCloseLine v-if="terminalMultiSelect.enabled.value" class="h-4 w-4" />
-              <RiListCheck3 v-else class="h-4 w-4" />
-            </IconButton>
+              <IconButton
+                variant="ghost"
+                size="md"
+                class="h-8 w-8"
+                :class="terminalMultiSelect.enabled.value ? 'bg-primary/10 text-primary hover:bg-primary/15' : ''"
+                :tooltip="
+                  String(
+                    terminalMultiSelect.enabled.value
+                      ? t('terminal.actions.exitMultiSelect')
+                      : t('terminal.actions.enterMultiSelect'),
+                  )
+                "
+                :is-touch-pointer="ui.isTouchPointer"
+                :title="
+                  String(
+                    terminalMultiSelect.enabled.value
+                      ? t('terminal.actions.exitMultiSelect')
+                      : t('terminal.actions.enterMultiSelect'),
+                  )
+                "
+                :aria-label="
+                  String(
+                    terminalMultiSelect.enabled.value
+                      ? t('terminal.actions.exitMultiSelect')
+                      : t('terminal.actions.enterMultiSelect'),
+                  )
+                "
+                @click="toggleTerminalMultiSelectMode"
+              >
+                <RiCloseLine v-if="terminalMultiSelect.enabled.value" class="h-4 w-4" />
+                <RiListCheck3 v-else class="h-4 w-4" />
+              </IconButton>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div class="flex-shrink-0 px-3 py-2">
-        <SearchInput
-          v-model="sidebarQuery"
-          :placeholder="String(t('terminal.sidebar.searchPlaceholder'))"
-          class="text-xs"
-          input-class="h-8 text-xs"
-          :input-aria-label="String(t('terminal.sidebar.searchAria'))"
-          :input-title="String(t('terminal.sidebar.searchAria'))"
-          :search-title="String(t('terminal.sidebar.searchAria'))"
-          :clear-aria-label="String(t('terminal.sidebar.clearSearch'))"
-          :clear-title="String(t('common.clear'))"
-          :is-touch-pointer="ui.isTouchPointer"
-        />
-      </div>
+        <div class="flex-shrink-0 px-3 py-2">
+          <SearchInput
+            v-model="sidebarQuery"
+            :placeholder="String(t('terminal.sidebar.searchPlaceholder'))"
+            class="text-xs"
+            input-class="h-8 text-xs"
+            :input-aria-label="String(t('terminal.sidebar.searchAria'))"
+            :input-title="String(t('terminal.sidebar.searchAria'))"
+            :search-title="String(t('terminal.sidebar.searchAria'))"
+            :clear-aria-label="String(t('terminal.sidebar.clearSearch'))"
+            :clear-title="String(t('common.clear'))"
+            :is-touch-pointer="ui.isTouchPointer"
+          />
+        </div>
 
-      <div
-        v-if="terminalMultiSelect.enabled.value"
-        class="flex-shrink-0 border-b border-sidebar-border/60 px-2.5 py-1.5"
-      >
-        <div class="flex flex-wrap items-center justify-between gap-1.5">
-          <div class="flex min-w-0 items-center">
-            <span
-              class="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-muted px-1 text-[10px] font-medium text-foreground/80"
-              :title="
-                String(
-                  t('terminal.sidebar.multiSelect.selectedCount', { count: terminalMultiSelect.selectedCount.value }),
-                )
-              "
-              :aria-label="
-                String(
-                  t('terminal.sidebar.multiSelect.selectedCount', { count: terminalMultiSelect.selectedCount.value }),
-                )
-              "
-            >
-              {{ terminalMultiSelect.selectedCount.value }}
-            </span>
-          </div>
+        <div
+          v-if="terminalMultiSelect.enabled.value"
+          class="flex-shrink-0 border-b border-sidebar-border/60 px-2.5 py-1.5"
+        >
+          <div class="flex flex-wrap items-center justify-between gap-1.5">
+            <div class="flex min-w-0 items-center">
+              <span
+                class="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-muted px-1 text-[10px] font-medium text-foreground/80"
+                :title="
+                  String(
+                    t('terminal.sidebar.multiSelect.selectedCount', { count: terminalMultiSelect.selectedCount.value }),
+                  )
+                "
+                :aria-label="
+                  String(
+                    t('terminal.sidebar.multiSelect.selectedCount', { count: terminalMultiSelect.selectedCount.value }),
+                  )
+                "
+              >
+                {{ terminalMultiSelect.selectedCount.value }}
+              </span>
+            </div>
 
-          <div class="flex items-center gap-1">
-            <IconButton
-              size="xs"
-              :tooltip="String(t('common.selectAll'))"
-              :title="String(t('common.selectAll'))"
-              :aria-label="String(t('common.selectAll'))"
-              :is-touch-pointer="ui.isTouchPointer"
-              :disabled="
-                visibleTerminalSelectableIds.length === 0 ||
-                terminalMultiSelect.selectedCount.value === visibleTerminalSelectableIds.length
-              "
-              @click="selectAllTerminalSessions"
-            >
-              <RiListCheck3 class="h-3.5 w-3.5" />
-            </IconButton>
-
-            <IconButton
-              size="xs"
-              :tooltip="String(t('common.invertSelection'))"
-              :title="String(t('common.invertSelection'))"
-              :aria-label="String(t('common.invertSelection'))"
-              :is-touch-pointer="ui.isTouchPointer"
-              :disabled="visibleTerminalSelectableIds.length === 0"
-              @click="invertTerminalSessionsSelection"
-            >
-              <RiRefreshLine class="h-3.5 w-3.5" />
-            </IconButton>
-
-            <ConfirmPopover
-              :title="String(t('terminal.actions.deleteSelectedConfirmTitle'))"
-              :description="
-                String(
-                  t('terminal.actions.deleteSelectedConfirmDescription', {
-                    count: terminalMultiSelect.selectedCount.value,
-                  }),
-                )
-              "
-              :confirm-text="String(t('terminal.actions.deleteSelected'))"
-              :cancel-text="String(t('common.cancel'))"
-              variant="destructive"
-              @confirm="deleteSelectedTerminalSessions"
-            >
+            <div class="flex items-center gap-1">
               <IconButton
                 size="xs"
-                variant="ghost-destructive"
-                :tooltip="String(t('terminal.actions.deleteSelected'))"
-                :title="String(t('terminal.actions.deleteSelected'))"
-                :aria-label="String(t('terminal.actions.deleteSelected'))"
+                :tooltip="String(t('common.selectAll'))"
+                :title="String(t('common.selectAll'))"
+                :aria-label="String(t('common.selectAll'))"
                 :is-touch-pointer="ui.isTouchPointer"
-                :disabled="terminalMultiSelect.selectedCount.value === 0"
-                @click.stop
+                :disabled="
+                  visibleTerminalSelectableIds.length === 0 ||
+                  terminalMultiSelect.selectedCount.value === visibleTerminalSelectableIds.length
+                "
+                @click="selectAllTerminalSessions"
               >
-                <RiDeleteBinLine class="h-3.5 w-3.5" />
+                <RiListCheck3 class="h-3.5 w-3.5" />
               </IconButton>
-            </ConfirmPopover>
 
-            <IconButton
-              size="xs"
-              :tooltip="String(t('terminal.actions.exitMultiSelect'))"
-              :title="String(t('terminal.actions.exitMultiSelect'))"
-              :aria-label="String(t('terminal.actions.exitMultiSelect'))"
-              :is-touch-pointer="ui.isTouchPointer"
-              @click="toggleTerminalMultiSelectMode"
-            >
-              <RiCloseLine class="h-3.5 w-3.5" />
-            </IconButton>
-          </div>
-        </div>
-      </div>
+              <IconButton
+                size="xs"
+                :tooltip="String(t('common.invertSelection'))"
+                :title="String(t('common.invertSelection'))"
+                :aria-label="String(t('common.invertSelection'))"
+                :is-touch-pointer="ui.isTouchPointer"
+                :disabled="visibleTerminalSelectableIds.length === 0"
+                @click="invertTerminalSessionsSelection"
+              >
+                <RiRefreshLine class="h-3.5 w-3.5" />
+              </IconButton>
 
-      <div v-if="!ui.isMobilePointer && sessionCreateOpen" class="flex-shrink-0 px-3 pb-2">
-        <div class="rounded-md border border-sidebar-border/70 bg-sidebar/95 p-2">
-          <div class="mt-1 flex items-center gap-1">
-            <Input
-              v-model="sessionCreateDraft"
-              class="h-7 min-w-0 flex-1 text-xs"
-              :placeholder="String(t('terminal.session.namePlaceholder'))"
-              @keydown.enter.prevent="saveSessionCreate"
-              @keydown.esc.prevent="cancelSessionCreate"
-            />
-            <IconButton
-              size="sm"
-              class="text-muted-foreground hover:bg-primary/6"
-              :title="String(t('common.cancel'))"
-              :aria-label="String(t('common.cancel'))"
-              :disabled="sessionCreateBusy"
-              @click="cancelSessionCreate"
-            >
-              <RiCloseLine class="h-4 w-4" />
-            </IconButton>
-            <IconButton
-              size="sm"
-              class="text-primary hover:bg-primary/10"
-              :title="String(t('terminal.session.create'))"
-              :aria-label="String(t('terminal.session.create'))"
-              :disabled="sessionCreateBusy || !sessionCreateDraft.trim()"
-              @click="saveSessionCreate"
-            >
-              <RiCheckLine class="h-4 w-4" />
-            </IconButton>
-          </div>
-        </div>
-      </div>
-
-      <div class="flex-1 min-h-0 overflow-x-hidden overflow-y-auto">
-        <div class="space-y-1 pb-1 pl-2.5 pr-1">
-          <div v-if="!visibleSidebarSessions.length" class="px-2 py-6 text-center text-muted-foreground">
-            <div class="typography-ui-label font-semibold">{{ t('terminal.sidebar.emptyTitle') }}</div>
-            <div class="typography-meta mt-1">{{ t('terminal.sidebar.emptyHint') }}</div>
-          </div>
-
-          <div v-for="item in visibleSidebarSessions" :key="item.id" class="relative">
-            <ListItemFrame
-              :active="!terminalMultiSelect.enabled.value && sessionId === item.id"
-              :as="isSessionRenaming(item.id) ? 'div' : 'button'"
-              :action-visibility="
-                terminalMultiSelect.enabled.value || ui.isMobilePointer || isSessionRenaming(item.id)
-                  ? 'always'
-                  : 'hover'
-              "
-              @click="handleSidebarSessionClick(item, $event)"
-            >
-              <template #leading>
-                <div class="flex items-center gap-1.5">
-                  <ListItemSelectionIndicator
-                    v-if="terminalMultiSelect.enabled.value"
-                    :selected="terminalMultiSelect.isSelected(item.id)"
-                  />
-                  <span
-                    class="inline-flex h-1.5 w-1.5 flex-shrink-0 rounded-full"
-                    :class="statusDotClassForSession(item.id)"
-                  />
-                </div>
-              </template>
-
-              <template v-if="!ui.isMobilePointer && isSessionRenaming(item.id)">
-                <Input
-                  v-model="sessionRenameDraft"
-                  class="h-7 min-w-0 flex-1 text-xs"
-                  :placeholder="String(t('terminal.session.namePlaceholder'))"
-                  @keydown.enter.prevent="saveSessionRename"
-                  @keydown.esc.prevent="cancelSessionRename"
+              <ConfirmPopover
+                :title="String(t('terminal.actions.deleteSelectedConfirmTitle'))"
+                :description="
+                  String(
+                    t('terminal.actions.deleteSelectedConfirmDescription', {
+                      count: terminalMultiSelect.selectedCount.value,
+                    }),
+                  )
+                "
+                :confirm-text="String(t('terminal.actions.deleteSelected'))"
+                :cancel-text="String(t('common.cancel'))"
+                variant="destructive"
+                @confirm="deleteSelectedTerminalSessions"
+              >
+                <IconButton
+                  size="xs"
+                  variant="ghost-destructive"
+                  :tooltip="String(t('terminal.actions.deleteSelected'))"
+                  :title="String(t('terminal.actions.deleteSelected'))"
+                  :aria-label="String(t('terminal.actions.deleteSelected'))"
+                  :is-touch-pointer="ui.isTouchPointer"
+                  :disabled="terminalMultiSelect.selectedCount.value === 0"
                   @click.stop
-                />
-              </template>
-
-              <template v-else>
-                <div class="flex w-full min-w-0 items-center gap-1">
-                  <span
-                    class="block min-w-0 flex-1 truncate typography-ui-label text-left"
-                    :class="item.name ? 'font-medium' : 'font-mono'"
-                  >
-                    {{ sidebarSessionLabel(item) }}
-                  </span>
-                </div>
-              </template>
-
-              <template #actions>
-                <template
-                  v-if="!terminalMultiSelect.enabled.value && ui.isMobilePointer && !isSessionRenaming(item.id)"
                 >
-                  <ListItemOverflowActionButton
-                    mobile
-                    :label="String(t('terminal.actions.title'))"
-                    @trigger="handleMobileSessionActionTrigger(item.id)"
-                  />
+                  <RiDeleteBinLine class="h-3.5 w-3.5" />
+                </IconButton>
+              </ConfirmPopover>
 
-                  <OptionMenu
-                    :open="isMobileSessionActionMenuOpen(item.id)"
-                    :query="mobileSessionActionQuery"
-                    :groups="mobileSessionActionGroups(item.id)"
-                    :title="mobileSessionActionTitle(item.id)"
-                    :mobile-title="mobileSessionActionTitle(item.id)"
-                    :searchable="true"
-                    :is-mobile-pointer="ui.isMobilePointer"
-                    @update:open="(v) => setMobileSessionActionMenuOpen(item.id, v)"
-                    @update:query="(v) => (mobileSessionActionQuery = v)"
-                    @select="(action) => runMobileSessionAction(item.id, action)"
-                  />
+              <IconButton
+                size="xs"
+                :tooltip="String(t('terminal.actions.exitMultiSelect'))"
+                :title="String(t('terminal.actions.exitMultiSelect'))"
+                :aria-label="String(t('terminal.actions.exitMultiSelect'))"
+                :is-touch-pointer="ui.isTouchPointer"
+                @click="toggleTerminalMultiSelectMode"
+              >
+                <RiCloseLine class="h-3.5 w-3.5" />
+              </IconButton>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="!ui.isMobilePointer && sessionCreateOpen" class="flex-shrink-0 px-3 pb-2">
+          <div class="rounded-md border border-sidebar-border/70 bg-sidebar/95 p-2">
+            <div class="mt-1 flex items-center gap-1">
+              <Input
+                v-model="sessionCreateDraft"
+                class="h-7 min-w-0 flex-1 text-xs"
+                :placeholder="String(t('terminal.session.namePlaceholder'))"
+                @keydown.enter.prevent="saveSessionCreate"
+                @keydown.esc.prevent="cancelSessionCreate"
+              />
+              <IconButton
+                size="sm"
+                class="text-muted-foreground hover:bg-primary/6"
+                :title="String(t('common.cancel'))"
+                :aria-label="String(t('common.cancel'))"
+                :disabled="sessionCreateBusy"
+                @click="cancelSessionCreate"
+              >
+                <RiCloseLine class="h-4 w-4" />
+              </IconButton>
+              <IconButton
+                size="sm"
+                class="text-primary hover:bg-primary/10"
+                :title="String(t('terminal.session.create'))"
+                :aria-label="String(t('terminal.session.create'))"
+                :disabled="sessionCreateBusy || !sessionCreateDraft.trim()"
+                @click="saveSessionCreate"
+              >
+                <RiCheckLine class="h-4 w-4" />
+              </IconButton>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex-1 min-h-0 overflow-x-hidden overflow-y-auto">
+          <div class="space-y-1 pb-1 pl-2.5 pr-1">
+            <div v-if="!visibleSidebarSessions.length" class="px-2 py-6 text-center text-muted-foreground">
+              <div class="typography-ui-label font-semibold">{{ t('terminal.sidebar.emptyTitle') }}</div>
+              <div class="typography-meta mt-1">{{ t('terminal.sidebar.emptyHint') }}</div>
+            </div>
+
+            <div v-for="item in visibleSidebarSessions" :key="item.id" class="relative">
+              <ListItemFrame
+                :active="!terminalMultiSelect.enabled.value && sessionId === item.id"
+                :as="isSessionRenaming(item.id) ? 'div' : 'button'"
+                :action-visibility="
+                  terminalMultiSelect.enabled.value || ui.isMobilePointer || isSessionRenaming(item.id)
+                    ? 'always'
+                    : 'hover'
+                "
+                @click="handleSidebarSessionClick(item, $event)"
+              >
+                <template #leading>
+                  <div class="flex items-center gap-1.5">
+                    <ListItemSelectionIndicator
+                      v-if="terminalMultiSelect.enabled.value"
+                      :selected="terminalMultiSelect.isSelected(item.id)"
+                    />
+                    <span
+                      class="inline-flex h-1.5 w-1.5 flex-shrink-0 rounded-full"
+                      :class="statusDotClassForSession(item.id)"
+                    />
+                  </div>
                 </template>
 
                 <template v-if="!ui.isMobilePointer && isSessionRenaming(item.id)">
-                  <IconButton
-                    size="xs"
-                    class="text-muted-foreground hover:bg-primary/6"
-                    :title="String(t('terminal.session.cancelRename'))"
-                    :aria-label="String(t('terminal.session.cancelRename'))"
-                    @click.stop="cancelSessionRename"
-                  >
-                    <RiCloseLine class="h-4 w-4" />
-                  </IconButton>
-                  <IconButton
-                    size="xs"
-                    class="text-primary hover:bg-primary/10"
-                    :title="String(t('terminal.session.saveRename'))"
-                    :aria-label="String(t('terminal.session.saveRename'))"
-                    @click.stop="saveSessionRename"
-                  >
-                    <RiCheckLine class="h-4 w-4" />
-                  </IconButton>
+                  <Input
+                    v-model="sessionRenameDraft"
+                    class="h-7 min-w-0 flex-1 text-xs"
+                    :placeholder="String(t('terminal.session.namePlaceholder'))"
+                    @keydown.enter.prevent="saveSessionRename"
+                    @keydown.esc.prevent="cancelSessionRename"
+                    @click.stop
+                  />
                 </template>
 
-                <template v-else-if="!terminalMultiSelect.enabled.value && !ui.isMobilePointer">
-                  <IconButton
-                    size="xs"
-                    class="text-muted-foreground hover:text-foreground hover:dark:bg-accent/40 hover:bg-primary/6"
-                    :title="String(t('terminal.actions.rename'))"
-                    :aria-label="String(t('terminal.actions.rename'))"
-                    @click.stop="startSessionRename(item.id)"
-                  >
-                    <RiEditLine class="h-4 w-4" />
-                  </IconButton>
-                  <ConfirmPopover
-                    :title="String(t('terminal.actions.disconnectConfirmTitle'))"
-                    :description="String(t('terminal.actions.disconnectConfirmDescription'))"
-                    :confirm-text="String(t('terminal.actions.disconnect'))"
-                    :cancel-text="String(t('common.cancel'))"
-                    variant="destructive"
-                    :anchor-to-cursor="false"
-                    :confirm-disabled="!canDisconnectSession(item.id)"
-                    @confirm="disconnectSessionFromSidebar(item.id)"
-                  >
-                    <IconButton
-                      size="xs"
-                      class="transition"
-                      :class="
-                        canDisconnectSession(item.id)
-                          ? 'text-destructive hover:bg-destructive/10 hover:dark:bg-accent/40'
-                          : 'text-muted-foreground/45'
-                      "
-                      :title="String(t('terminal.actions.disconnectStream'))"
-                      :aria-label="String(t('terminal.actions.disconnectStream'))"
-                      :disabled="!canDisconnectSession(item.id)"
-                      @click.stop
+                <template v-else>
+                  <div class="flex w-full min-w-0 items-center gap-1">
+                    <span
+                      class="block min-w-0 flex-1 truncate typography-ui-label text-left"
+                      :class="item.name ? 'font-medium' : 'font-mono'"
                     >
-                      <RiStopCircleLine class="h-4 w-4" />
-                    </IconButton>
-                  </ConfirmPopover>
-                  <IconButton
-                    size="xs"
-                    class="transition hover:dark:bg-accent/40 hover:bg-primary/6"
-                    :class="item.pinned ? 'text-amber-500' : 'text-muted-foreground hover:text-amber-500'"
-                    :title="item.pinned ? String(t('terminal.actions.unpin')) : String(t('terminal.actions.pin'))"
-                    :aria-label="item.pinned ? String(t('terminal.actions.unpin')) : String(t('terminal.actions.pin'))"
-                    @click.stop="toggleSessionPinned(item.id)"
-                  >
-                    <component :is="item.pinned ? RiStarFill : RiStarLine" class="h-4 w-4" />
-                  </IconButton>
-                  <ConfirmPopover
-                    :title="String(t('terminal.actions.deleteConfirmTitle'))"
-                    :description="String(t('terminal.actions.deleteConfirmDescription'))"
-                    :confirm-text="String(t('terminal.actions.deleteConfirmText'))"
-                    :cancel-text="String(t('common.cancel'))"
-                    variant="destructive"
-                    @confirm="closeTrackedSession(item.id)"
-                  >
-                    <IconButton
-                      size="xs"
-                      class="text-muted-foreground hover:text-destructive hover:dark:bg-accent/40 hover:bg-primary/6"
-                      :title="String(t('terminal.actions.delete'))"
-                      :aria-label="String(t('terminal.actions.delete'))"
-                      @click.stop
-                    >
-                      <RiDeleteBinLine class="h-4 w-4" />
-                    </IconButton>
-                  </ConfirmPopover>
+                      {{ sidebarSessionLabel(item) }}
+                    </span>
+                  </div>
                 </template>
-              </template>
-            </ListItemFrame>
+
+                <template #actions>
+                  <template
+                    v-if="!terminalMultiSelect.enabled.value && ui.isMobilePointer && !isSessionRenaming(item.id)"
+                  >
+                    <ListItemOverflowActionButton
+                      mobile
+                      :label="String(t('terminal.actions.title'))"
+                      @trigger="handleMobileSessionActionTrigger(item.id)"
+                    />
+
+                    <OptionMenu
+                      :open="isMobileSessionActionMenuOpen(item.id)"
+                      :query="mobileSessionActionQuery"
+                      :groups="mobileSessionActionGroups(item.id)"
+                      :title="mobileSessionActionTitle(item.id)"
+                      :mobile-title="mobileSessionActionTitle(item.id)"
+                      :searchable="true"
+                      :is-mobile-pointer="ui.isMobilePointer"
+                      @update:open="(v) => setMobileSessionActionMenuOpen(item.id, v)"
+                      @update:query="(v) => (mobileSessionActionQuery = v)"
+                      @select="(action) => runMobileSessionAction(item.id, action)"
+                    />
+                  </template>
+
+                  <template v-if="!ui.isMobilePointer && isSessionRenaming(item.id)">
+                    <IconButton
+                      size="xs"
+                      class="text-muted-foreground hover:bg-primary/6"
+                      :title="String(t('terminal.session.cancelRename'))"
+                      :aria-label="String(t('terminal.session.cancelRename'))"
+                      @click.stop="cancelSessionRename"
+                    >
+                      <RiCloseLine class="h-4 w-4" />
+                    </IconButton>
+                    <IconButton
+                      size="xs"
+                      class="text-primary hover:bg-primary/10"
+                      :title="String(t('terminal.session.saveRename'))"
+                      :aria-label="String(t('terminal.session.saveRename'))"
+                      @click.stop="saveSessionRename"
+                    >
+                      <RiCheckLine class="h-4 w-4" />
+                    </IconButton>
+                  </template>
+
+                  <template v-else-if="!terminalMultiSelect.enabled.value && !ui.isMobilePointer">
+                    <IconButton
+                      size="xs"
+                      class="text-muted-foreground hover:text-foreground hover:dark:bg-accent/40 hover:bg-primary/6"
+                      :title="String(t('terminal.actions.rename'))"
+                      :aria-label="String(t('terminal.actions.rename'))"
+                      @click.stop="startSessionRename(item.id)"
+                    >
+                      <RiEditLine class="h-4 w-4" />
+                    </IconButton>
+                    <ConfirmPopover
+                      :title="String(t('terminal.actions.disconnectConfirmTitle'))"
+                      :description="String(t('terminal.actions.disconnectConfirmDescription'))"
+                      :confirm-text="String(t('terminal.actions.disconnect'))"
+                      :cancel-text="String(t('common.cancel'))"
+                      variant="destructive"
+                      :anchor-to-cursor="false"
+                      :confirm-disabled="!canDisconnectSession(item.id)"
+                      @confirm="disconnectSessionFromSidebar(item.id)"
+                    >
+                      <IconButton
+                        size="xs"
+                        class="transition"
+                        :class="
+                          canDisconnectSession(item.id)
+                            ? 'text-destructive hover:bg-destructive/10 hover:dark:bg-accent/40'
+                            : 'text-muted-foreground/45'
+                        "
+                        :title="String(t('terminal.actions.disconnectStream'))"
+                        :aria-label="String(t('terminal.actions.disconnectStream'))"
+                        :disabled="!canDisconnectSession(item.id)"
+                        @click.stop
+                      >
+                        <RiStopCircleLine class="h-4 w-4" />
+                      </IconButton>
+                    </ConfirmPopover>
+                    <IconButton
+                      size="xs"
+                      class="transition hover:dark:bg-accent/40 hover:bg-primary/6"
+                      :class="item.pinned ? 'text-amber-500' : 'text-muted-foreground hover:text-amber-500'"
+                      :title="item.pinned ? String(t('terminal.actions.unpin')) : String(t('terminal.actions.pin'))"
+                      :aria-label="
+                        item.pinned ? String(t('terminal.actions.unpin')) : String(t('terminal.actions.pin'))
+                      "
+                      @click.stop="toggleSessionPinned(item.id)"
+                    >
+                      <component :is="item.pinned ? RiStarFill : RiStarLine" class="h-4 w-4" />
+                    </IconButton>
+                    <ConfirmPopover
+                      :title="String(t('terminal.actions.deleteConfirmTitle'))"
+                      :description="String(t('terminal.actions.deleteConfirmDescription'))"
+                      :confirm-text="String(t('terminal.actions.deleteConfirmText'))"
+                      :cancel-text="String(t('common.cancel'))"
+                      variant="destructive"
+                      @confirm="closeTrackedSession(item.id)"
+                    >
+                      <IconButton
+                        size="xs"
+                        class="text-muted-foreground hover:text-destructive hover:dark:bg-accent/40 hover:bg-primary/6"
+                        :title="String(t('terminal.actions.delete'))"
+                        :aria-label="String(t('terminal.actions.delete'))"
+                        @click.stop
+                      >
+                        <RiDeleteBinLine class="h-4 w-4" />
+                      </IconButton>
+                    </ConfirmPopover>
+                  </template>
+                </template>
+              </ListItemFrame>
+            </div>
           </div>
         </div>
-      </div>
-    </aside>
+      </aside>
+    </Teleport>
 
     <div class="min-w-0 flex-1 flex flex-col overflow-hidden" v-show="!ui.isCompactLayout || !ui.isSessionSwitcherOpen">
       <MobileSidebarEmptyState

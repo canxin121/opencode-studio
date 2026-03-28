@@ -91,8 +91,8 @@ import {
   writeFile,
 } from '@/features/files/api/filesApi'
 import type { FsContentSearchFileResult, FsContentSearchMatch } from '@/features/files/api/filesApi'
-import { useDesktopSidebarResize } from '@/composables/useDesktopSidebarResize'
 import { useUnifiedMultiSelect } from '@/composables/useUnifiedMultiSelect'
+import { WORKSPACE_SIDEBAR_HOST_SELECTOR } from '@/layout/workspaceSidebarHost'
 import { localStorageKeys } from '@/lib/persistence/storageKeys'
 import { useChatStore } from '@/stores/chat'
 import { useSettingsStore } from '@/stores/settings'
@@ -134,7 +134,6 @@ const directoryStore = useDirectoryStore()
 const ui = useUiStore()
 const route = useRoute()
 const router = useRouter()
-const { startDesktopSidebarResize } = useDesktopSidebarResize()
 const { t } = useI18n()
 const filesMultiSelect = useUnifiedMultiSelect()
 
@@ -398,8 +397,14 @@ const wrapLines = ref(true)
 const isSaving = ref(false)
 const uploading = ref(false)
 const showMobileViewer = ref(false)
+const isEmbeddedWorkspacePane = computed(() => String(route.query?.ocEmbed || '').trim() === '1')
+const useDesktopSidebarHost = computed(
+  () => !props.embedded && !isCompactLayout.value && !isEmbeddedWorkspacePane.value,
+)
 const showFilesSidebar = computed(() => {
+  if (isEmbeddedWorkspacePane.value) return false
   if (props.embedded) return embeddedView.value === 'list'
+  if (useDesktopSidebarHost.value) return true
   return isCompactLayout.value ? ui.isSessionSwitcherOpen : ui.isSidebarOpen
 })
 
@@ -654,6 +659,7 @@ watch(
 let rootRestoreSeq = 0
 let openFileSeq = 0
 let pageMounted = false
+const handledFileNavigationKey = ref('')
 const handledGitNavigationKey = ref('')
 const handledWorkspaceDockFileRequestSeq = ref(0)
 const fileRevealRequestSeq = ref(0)
@@ -678,6 +684,36 @@ watch(
 )
 
 const selectedPath = computed(() => selectedFile.value?.path || '')
+
+function fileNameFromPath(path: string): string {
+  const normalized = normalizePath(String(path || '').trim())
+  if (!normalized) return ''
+  const parts = normalized.split('/').filter(Boolean)
+  return parts[parts.length - 1] || normalized
+}
+
+const workspaceFilesTabTitle = computed(() => {
+  const selected = fileNameFromPath(selectedPath.value)
+  if (selected) return selected
+
+  const filePath = fileNameFromPath(routeQueryValue(route.query.filePath))
+  if (filePath) return filePath
+
+  const gitPath = fileNameFromPath(routeQueryValue(route.query.gitPath))
+  if (gitPath) return gitPath
+
+  return String(t('nav.files'))
+})
+
+watch(
+  () => [route.path, route.query, workspaceFilesTabTitle.value] as const,
+  ([path, _query, title]) => {
+    if (!String(path || '').startsWith('/files')) return
+    ui.setWorkspaceWindowTitleFromRoute(route.query, title)
+  },
+  { immediate: true, deep: true },
+)
+
 const rawApiPath = computed(() => {
   const path = selectedPath.value
   const rootPath = root.value
@@ -1347,6 +1383,22 @@ async function applyGitNavigationQuery() {
 
   await applyGitNavigationTarget(gitPathRaw, action, location)
   clearGitNavigationQuery()
+}
+
+async function applyFileNavigationQuery() {
+  if (!pageMounted) return
+
+  const workspaceRoot = root.value
+  const filePathRaw = routeQueryValue(route.query.filePath)
+  if (!workspaceRoot || !filePathRaw) return
+
+  const location = parseGitNavigationLocation(route.query.fileLine, route.query.fileColumn, route.query.fileAnchor)
+  const targetPath = resolveGitNavigationPath(filePathRaw, workspaceRoot)
+  const key = `${ui.activeWorkspaceWindowId}::${workspaceRoot}::${targetPath || filePathRaw}::${gitNavigationLocationKey(location)}`
+  if (handledFileNavigationKey.value === key) return
+  handledFileNavigationKey.value = key
+
+  await applyGitNavigationTarget(filePathRaw, 'open', location)
 }
 
 async function applyGitNavigationTarget(
@@ -2894,8 +2946,38 @@ async function loadMoreFileContent() {
   }
 }
 
+function shouldOpenFileInNewWorkspaceWindow(): boolean {
+  return !props.embedded && !isCompactLayout.value && !isEmbeddedWorkspacePane.value
+}
+
+function buildFileWindowRouteQuery(path: string): Record<string, string> {
+  const normalizedPath = normalizePath(String(path || '').trim())
+  return normalizedPath ? { filePath: normalizedPath } : {}
+}
+
+async function openFileInWorkspaceWindow(path: string) {
+  const query = buildFileWindowRouteQuery(path)
+  if (!query.filePath) return
+  if (isPathHiddenInFiles(query.filePath)) return
+
+  const title = fileNameFromPath(query.filePath) || String(t('nav.files'))
+  ui.openWorkspaceWindow('files', {
+    activate: true,
+    query,
+    title,
+    matchKeys: ['filePath'],
+  })
+
+  await router.push({ path: '/files', query }).catch(() => {})
+}
+
 async function requestFileSelect(node: FileNode) {
   if (node.type === 'file' && isPathHiddenInFiles(node.path)) return
+  if (node.type === 'file' && shouldOpenFileInNewWorkspaceWindow()) {
+    await openFileInWorkspaceWindow(node.path)
+    return
+  }
+
   highlightedPath.value = ''
   selectedDirectoryPath.value = ''
   clearBlame()
@@ -3670,6 +3752,7 @@ watch(
   () => root.value,
   (next) => {
     if (!pageMounted) return
+    handledFileNavigationKey.value = ''
     void restoreForRoot(next)
   },
 )
@@ -3686,6 +3769,14 @@ watch(
     ] as const,
   () => {
     void applyGitNavigationQuery()
+  },
+)
+
+watch(
+  () =>
+    [root.value, route.query.filePath, route.query.fileLine, route.query.fileColumn, route.query.fileAnchor] as const,
+  () => {
+    void applyFileNavigationQuery()
   },
 )
 
@@ -3778,6 +3869,7 @@ onMounted(async () => {
   await nextTick()
   await restoreForRoot(root.value).catch(() => {})
   await applyGitNavigationQuery()
+  await applyFileNavigationQuery()
   if (!chat.sessions.length) {
     await chat.refreshSessions().catch(() => {})
   }
@@ -3899,337 +3991,340 @@ onMounted(async () => {
       <div v-else class="h-full m-0 p-0">
         <div class="flex h-full min-h-0 flex-col m-0 p-0">
           <div class="flex min-h-0 flex-1 gap-0" :class="isCompactLayout ? 'flex-col' : ''">
-            <div
-              class="relative min-h-0 overflow-hidden m-0 p-0"
-              :class="isCompactLayout || props.embedded ? 'flex-1' : 'flex-shrink-0'"
-              :style="isCompactLayout || props.embedded ? undefined : { width: `${ui.sidebarWidth}px` }"
-              v-show="showFilesSidebar"
-            >
+            <Teleport :to="WORKSPACE_SIDEBAR_HOST_SELECTOR" :disabled="!useDesktopSidebarHost">
               <div
-                v-if="!isCompactLayout && !props.embedded"
-                class="absolute right-0 top-0 z-10 h-full w-1 cursor-col-resize hover:bg-primary/40"
-                @pointerdown="startDesktopSidebarResize"
-              />
-              <FilesExplorerPane
-                v-model:view-mode="explorerSidebarMode"
-                v-model:showHidden="showHidden"
-                v-model:showGitignored="showGitignored"
-                :root="root"
-                :is-compact-layout="isCompactLayout"
-                :is-mobile-form-factor="isMobileFormFactor"
-                :selected-file-path="highlightedPath || selectedDirectoryPath || selectedFile?.path || ''"
-                :has-root-children="hasRootChildren"
-                :flattened-tree="flattenedTree"
-                :deleting-paths="deletingPaths"
-                :selected-paths="selectedPaths"
-                :multi-select-enabled="filesMultiSelect.enabled.value"
-                :uploading="uploading"
-                :toggle-multi-select-mode="filesMultiSelect.toggleEnabled"
-                :select-all-visible-nodes="selectAllVisibleNodes"
-                :invert-visible-node-selection="invertVisibleNodeSelection"
-                :handle-node-click="handleNodeClick"
-                :handle-node-long-press="handleNodeLongPress"
-                :refresh-root="refreshRoot"
-                :collapse-all="collapseAllDirectories"
-                :active-create-dir="activeCreateDir"
-                :expand-directory="ensureDirectoryExpanded"
-                :create-node="createNodeFromExplorer"
-                :rename-node="renameNodeFromExplorer"
-                :move-node-by-drag="moveNodeByDrag"
-                :run-file-action="runExplorerFileAction"
-                :open-dialog="openDialog"
-                :delete-node="deleteNode"
-                :delete-selected-nodes="deleteSelectedNodes"
-                :open-move-selected-dialog="openMoveSelectedDialog"
-                :clear-selected-paths="clearSelectedPaths"
-                :upload-files="uploadFilesToDirectory"
+                class="relative h-full min-h-0 overflow-hidden m-0 p-0"
+                :class="isCompactLayout || props.embedded || useDesktopSidebarHost ? 'flex-1' : 'flex-shrink-0'"
+                :style="
+                  isCompactLayout || props.embedded || useDesktopSidebarHost
+                    ? undefined
+                    : { width: `${ui.sidebarWidth}px` }
+                "
+                v-show="showFilesSidebar"
               >
-                <template #search>
-                  <div class="flex min-h-0 flex-1 flex-col">
-                    <div class="border-b border-sidebar-border/40 px-2 py-1.5">
-                      <SegmentedControl class="grid-cols-2">
-                        <SegmentedButton
-                          :active="explorerSearchMode === 'files'"
-                          size="xs"
-                          class="rounded-sm"
-                          @click="explorerSearchMode = 'files'"
-                        >
-                          {{ t('files.search.mode.files') }}
-                        </SegmentedButton>
-                        <SegmentedButton
-                          :active="explorerSearchMode === 'content'"
-                          size="xs"
-                          class="rounded-sm"
-                          @click="explorerSearchMode = 'content'"
-                        >
-                          {{ t('files.search.mode.content') }}
-                        </SegmentedButton>
-                      </SegmentedControl>
+                <FilesExplorerPane
+                  v-model:view-mode="explorerSidebarMode"
+                  v-model:showHidden="showHidden"
+                  v-model:showGitignored="showGitignored"
+                  :root="root"
+                  :is-compact-layout="isCompactLayout"
+                  :is-mobile-form-factor="isMobileFormFactor"
+                  :selected-file-path="highlightedPath || selectedDirectoryPath || selectedFile?.path || ''"
+                  :has-root-children="hasRootChildren"
+                  :flattened-tree="flattenedTree"
+                  :deleting-paths="deletingPaths"
+                  :selected-paths="selectedPaths"
+                  :multi-select-enabled="filesMultiSelect.enabled.value"
+                  :uploading="uploading"
+                  :toggle-multi-select-mode="filesMultiSelect.toggleEnabled"
+                  :select-all-visible-nodes="selectAllVisibleNodes"
+                  :invert-visible-node-selection="invertVisibleNodeSelection"
+                  :handle-node-click="handleNodeClick"
+                  :handle-node-long-press="handleNodeLongPress"
+                  :refresh-root="refreshRoot"
+                  :collapse-all="collapseAllDirectories"
+                  :active-create-dir="activeCreateDir"
+                  :expand-directory="ensureDirectoryExpanded"
+                  :create-node="createNodeFromExplorer"
+                  :rename-node="renameNodeFromExplorer"
+                  :move-node-by-drag="moveNodeByDrag"
+                  :run-file-action="runExplorerFileAction"
+                  :open-dialog="openDialog"
+                  :delete-node="deleteNode"
+                  :delete-selected-nodes="deleteSelectedNodes"
+                  :open-move-selected-dialog="openMoveSelectedDialog"
+                  :clear-selected-paths="clearSelectedPaths"
+                  :upload-files="uploadFilesToDirectory"
+                >
+                  <template #search>
+                    <div class="flex min-h-0 flex-1 flex-col">
+                      <div class="border-b border-sidebar-border/40 px-2 py-1.5">
+                        <SegmentedControl class="grid-cols-2">
+                          <SegmentedButton
+                            :active="explorerSearchMode === 'files'"
+                            size="xs"
+                            class="rounded-sm"
+                            @click="explorerSearchMode = 'files'"
+                          >
+                            {{ t('files.search.mode.files') }}
+                          </SegmentedButton>
+                          <SegmentedButton
+                            :active="explorerSearchMode === 'content'"
+                            size="xs"
+                            class="rounded-sm"
+                            @click="explorerSearchMode = 'content'"
+                          >
+                            {{ t('files.search.mode.content') }}
+                          </SegmentedButton>
+                        </SegmentedControl>
 
-                      <div class="mt-2 space-y-1.5">
-                        <template v-if="explorerSearchMode === 'files'">
-                          <div class="flex items-center gap-1">
-                            <SearchInput
-                              v-model="searchQuery"
-                              :placeholder="String(t('files.search.files.placeholder'))"
-                              class="flex-1"
-                              input-class="oc-vscode-subtle-input h-[26px] font-mono text-[12px]"
-                              :search-disabled="searching || !hasFileSearch"
-                              :clear-disabled="!hasFileSearch"
-                              :input-aria-label="String(t('files.search.files.placeholder'))"
-                              :input-title="String(t('files.search.files.placeholder'))"
-                              :search-aria-label="String(t('common.search'))"
-                              :search-title="String(searching ? t('common.loading') : t('common.search'))"
-                              :clear-aria-label="String(t('common.clear'))"
-                              :clear-title="String(t('common.clear'))"
-                              :is-touch-pointer="ui.isTouchPointer"
-                              @search="runSearch"
-                              @clear="clearFileSearch"
-                            />
-                          </div>
-                          <div class="px-0.5 text-[11px] text-muted-foreground">
-                            <span v-if="!hasFileSearch">{{ t('files.search.files.hint') }}</span>
-                            <span v-else-if="searching">{{ t('common.searching') }}</span>
-                            <span v-else>{{ t('files.search.files.results', { count: searchResults.length }) }}</span>
-                          </div>
-                        </template>
-
-                        <template v-else>
-                          <div class="relative">
-                            <button
-                              type="button"
-                              class="absolute left-0 top-0 inline-flex h-[26px] w-4 items-center justify-center rounded-sm text-[10px] text-muted-foreground transition hover:bg-sidebar-accent/70 hover:text-foreground"
-                              :title="
-                                contentSearchReplaceOpen
-                                  ? String(t('files.search.content.hideReplace'))
-                                  : String(t('files.search.content.showReplace'))
-                              "
-                              :aria-label="
-                                contentSearchReplaceOpen
-                                  ? String(t('files.search.content.hideReplace'))
-                                  : String(t('files.search.content.showReplace'))
-                              "
-                              @click="contentSearchReplaceOpen = !contentSearchReplaceOpen"
-                            >
-                              {{ contentSearchReplaceOpen ? 'v' : '>' }}
-                            </button>
-
-                            <div class="ml-[18px] flex items-center gap-1">
+                        <div class="mt-2 space-y-1.5">
+                          <template v-if="explorerSearchMode === 'files'">
+                            <div class="flex items-center gap-1">
                               <SearchInput
-                                v-model="contentSearchQuery"
-                                :placeholder="String(t('files.search.content.placeholder'))"
+                                v-model="searchQuery"
+                                :placeholder="String(t('files.search.files.placeholder'))"
                                 class="flex-1"
                                 input-class="oc-vscode-subtle-input h-[26px] font-mono text-[12px]"
-                                :search-disabled="contentSearchLoading || contentSearchReplacing || !hasContentSearch"
-                                :clear-disabled="!hasContentSearch"
-                                :input-aria-label="String(t('files.search.content.placeholder'))"
-                                :input-title="String(t('files.search.content.placeholder'))"
+                                :search-disabled="searching || !hasFileSearch"
+                                :clear-disabled="!hasFileSearch"
+                                :input-aria-label="String(t('files.search.files.placeholder'))"
+                                :input-title="String(t('files.search.files.placeholder'))"
                                 :search-aria-label="String(t('common.search'))"
-                                :search-title="String(contentSearchLoading ? t('common.loading') : t('common.search'))"
+                                :search-title="String(searching ? t('common.loading') : t('common.search'))"
                                 :clear-aria-label="String(t('common.clear'))"
                                 :clear-title="String(t('common.clear'))"
                                 :is-touch-pointer="ui.isTouchPointer"
-                                @search="runContentSearch"
-                                @clear="clearContentSearch"
+                                @search="runSearch"
+                                @clear="clearFileSearch"
                               />
-                              <button
-                                type="button"
-                                class="h-6 w-6 rounded-sm border text-[10px] font-mono transition"
-                                :class="
-                                  contentSearchCaseSensitive
-                                    ? 'border-sidebar-border bg-sidebar-accent/80 text-foreground'
-                                    : 'border-sidebar-border/60 bg-sidebar-accent/25 text-muted-foreground hover:text-foreground'
-                                "
-                                :title="String(t('files.search.content.matchCase'))"
-                                @click="contentSearchCaseSensitive = !contentSearchCaseSensitive"
-                              >
-                                Aa
-                              </button>
-                              <button
-                                type="button"
-                                class="h-6 w-6 rounded-sm border text-[10px] font-mono transition"
-                                :class="
-                                  contentSearchWholeWord
-                                    ? 'border-sidebar-border bg-sidebar-accent/80 text-foreground'
-                                    : 'border-sidebar-border/60 bg-sidebar-accent/25 text-muted-foreground hover:text-foreground'
-                                "
-                                :title="String(t('files.search.content.matchWholeWord'))"
-                                @click="contentSearchWholeWord = !contentSearchWholeWord"
-                              >
-                                W
-                              </button>
-                              <button
-                                type="button"
-                                class="h-6 w-6 rounded-sm border text-[10px] font-mono transition"
-                                :class="
-                                  contentSearchRegex
-                                    ? 'border-sidebar-border bg-sidebar-accent/80 text-foreground'
-                                    : 'border-sidebar-border/60 bg-sidebar-accent/25 text-muted-foreground hover:text-foreground'
-                                "
-                                :title="String(t('files.search.content.useRegex'))"
-                                @click="contentSearchRegex = !contentSearchRegex"
-                              >
-                                .*
-                              </button>
                             </div>
-                          </div>
+                            <div class="px-0.5 text-[11px] text-muted-foreground">
+                              <span v-if="!hasFileSearch">{{ t('files.search.files.hint') }}</span>
+                              <span v-else-if="searching">{{ t('common.searching') }}</span>
+                              <span v-else>{{ t('files.search.files.results', { count: searchResults.length }) }}</span>
+                            </div>
+                          </template>
 
-                          <div v-if="contentSearchReplaceOpen" class="ml-[18px] flex items-center gap-1">
-                            <Input
-                              v-model="contentSearchReplace"
-                              :placeholder="String(t('files.search.content.replacePlaceholder'))"
-                              class="oc-vscode-subtle-input h-[26px] flex-1 font-mono text-[12px]"
-                            />
-                            <Button
-                              size="sm"
-                              class="h-[26px] px-2 text-[11px]"
-                              :disabled="
-                                contentSearchReplacing ||
-                                contentSearchLoading ||
-                                !hasContentSearch ||
-                                contentSearchMatchCount === 0
-                              "
-                              @click="replaceAllContentSearchMatches"
-                            >
-                              {{ contentSearchReplacing ? t('common.loading') : t('common.all') }}
-                            </Button>
-                          </div>
+                          <template v-else>
+                            <div class="relative">
+                              <button
+                                type="button"
+                                class="absolute left-0 top-0 inline-flex h-[26px] w-4 items-center justify-center rounded-sm text-[10px] text-muted-foreground transition hover:bg-sidebar-accent/70 hover:text-foreground"
+                                :title="
+                                  contentSearchReplaceOpen
+                                    ? String(t('files.search.content.hideReplace'))
+                                    : String(t('files.search.content.showReplace'))
+                                "
+                                :aria-label="
+                                  contentSearchReplaceOpen
+                                    ? String(t('files.search.content.hideReplace'))
+                                    : String(t('files.search.content.showReplace'))
+                                "
+                                @click="contentSearchReplaceOpen = !contentSearchReplaceOpen"
+                              >
+                                {{ contentSearchReplaceOpen ? 'v' : '>' }}
+                              </button>
 
-                          <div class="ml-[18px] px-0.5 text-[11px] text-muted-foreground">
-                            <span>{{ contentSearchSummary }}</span>
-                            <span v-if="activeContentSearchScope" class="ml-1"
-                              >in {{ activeContentSearchScope.description }}</span
-                            >
-                          </div>
-
-                          <div class="ml-[18px] flex flex-wrap items-center gap-1">
-                            <button
-                              v-for="scope in contentSearchScopeOptions"
-                              :key="scope.id"
-                              type="button"
-                              class="h-5 rounded-sm border px-1.5 text-[10px] font-medium transition"
-                              :class="
-                                contentSearchScopeMode === scope.id
-                                  ? 'border-sidebar-border bg-sidebar-accent/80 text-foreground'
-                                  : 'border-sidebar-border/60 bg-sidebar-accent/25 text-muted-foreground hover:text-foreground'
-                              "
-                              :title="scope.description"
-                              :disabled="scope.disabled"
-                              @click="contentSearchScopeMode = scope.id"
-                            >
-                              {{ scope.label }}
-                            </button>
-                          </div>
-                        </template>
-                      </div>
-                    </div>
-
-                    <ScrollArea class="min-h-0 flex-1">
-                      <div class="px-1 py-1">
-                        <template v-if="explorerSearchMode === 'files'">
-                          <div v-if="!hasFileSearch" class="px-2 py-2 text-xs text-muted-foreground">
-                            {{ t('files.search.files.noQuery') }}
-                          </div>
-                          <div v-else-if="searching" class="px-2 py-2 text-xs text-muted-foreground">
-                            {{ t('common.searching') }}
-                          </div>
-                          <div v-else-if="searchResults.length === 0" class="px-2 py-2 text-xs text-muted-foreground">
-                            {{ t('files.search.files.noFilesFound') }}
-                          </div>
-                          <div v-else class="space-y-0.5">
-                            <button
-                              v-for="node in searchResults"
-                              :key="node.path"
-                              type="button"
-                              class="oc-vscode-row h-[22px] w-full border-transparent px-2 text-left"
-                              @click="requestFileSelect(node)"
-                            >
-                              <span class="truncate font-mono text-[11px]" :title="node.path">{{
-                                node.relativePath || node.path
-                              }}</span>
-                            </button>
-                          </div>
-                        </template>
-
-                        <template v-else>
-                          <div
-                            v-if="contentSearchError"
-                            class="mx-1 mb-2 rounded-md border border-destructive/40 bg-destructive/10 px-2 py-1.5 text-xs"
-                          >
-                            {{ contentSearchError }}
-                          </div>
-                          <div v-if="!hasContentSearch" class="px-2 py-2 text-xs text-muted-foreground">
-                            {{ t('files.search.content.hint') }}
-                          </div>
-                          <div
-                            v-else-if="contentSearchLoading && !contentSearchFiles.length"
-                            class="px-2 py-2 text-xs text-muted-foreground"
-                          >
-                            {{ t('common.searching') }}
-                          </div>
-                          <div v-else-if="!contentSearchFiles.length" class="px-2 py-2 text-xs text-muted-foreground">
-                            {{ t('files.search.content.noMatchesFound') }}
-                          </div>
-                          <div v-else class="space-y-0">
-                            <div
-                              v-for="file in contentSearchFiles"
-                              :key="file.path"
-                              class="border-t border-sidebar-border/30 first:border-t-0"
-                            >
-                              <div class="flex items-center justify-between gap-2 px-2 py-0.5">
+                              <div class="ml-[18px] flex items-center gap-1">
+                                <SearchInput
+                                  v-model="contentSearchQuery"
+                                  :placeholder="String(t('files.search.content.placeholder'))"
+                                  class="flex-1"
+                                  input-class="oc-vscode-subtle-input h-[26px] font-mono text-[12px]"
+                                  :search-disabled="contentSearchLoading || contentSearchReplacing || !hasContentSearch"
+                                  :clear-disabled="!hasContentSearch"
+                                  :input-aria-label="String(t('files.search.content.placeholder'))"
+                                  :input-title="String(t('files.search.content.placeholder'))"
+                                  :search-aria-label="String(t('common.search'))"
+                                  :search-title="
+                                    String(contentSearchLoading ? t('common.loading') : t('common.search'))
+                                  "
+                                  :clear-aria-label="String(t('common.clear'))"
+                                  :clear-title="String(t('common.clear'))"
+                                  :is-touch-pointer="ui.isTouchPointer"
+                                  @search="runContentSearch"
+                                  @clear="clearContentSearch"
+                                />
                                 <button
                                   type="button"
-                                  class="oc-vscode-row h-[22px] min-w-0 flex-1 border-transparent px-1"
-                                  :title="file.path"
-                                  @click="openContentSearchResult(file.path)"
+                                  class="h-6 w-6 rounded-sm border text-[10px] font-mono transition"
+                                  :class="
+                                    contentSearchCaseSensitive
+                                      ? 'border-sidebar-border bg-sidebar-accent/80 text-foreground'
+                                      : 'border-sidebar-border/60 bg-sidebar-accent/25 text-muted-foreground hover:text-foreground'
+                                  "
+                                  :title="String(t('files.search.content.matchCase'))"
+                                  @click="contentSearchCaseSensitive = !contentSearchCaseSensitive"
                                 >
-                                  <span class="truncate font-mono text-[11px]">{{ file.relativePath }}</span>
+                                  Aa
                                 </button>
-                                <span class="oc-vscode-count-badge">{{ file.matchCount }}</span>
-                              </div>
-                              <div class="pb-0.5">
-                                <div
-                                  v-for="match in file.matches"
-                                  :key="`${file.path}:${match.startOffset}:${match.endOffset}`"
-                                  class="flex items-center gap-1 pl-2 pr-1"
+                                <button
+                                  type="button"
+                                  class="h-6 w-6 rounded-sm border text-[10px] font-mono transition"
+                                  :class="
+                                    contentSearchWholeWord
+                                      ? 'border-sidebar-border bg-sidebar-accent/80 text-foreground'
+                                      : 'border-sidebar-border/60 bg-sidebar-accent/25 text-muted-foreground hover:text-foreground'
+                                  "
+                                  :title="String(t('files.search.content.matchWholeWord'))"
+                                  @click="contentSearchWholeWord = !contentSearchWholeWord"
                                 >
+                                  W
+                                </button>
+                                <button
+                                  type="button"
+                                  class="h-6 w-6 rounded-sm border text-[10px] font-mono transition"
+                                  :class="
+                                    contentSearchRegex
+                                      ? 'border-sidebar-border bg-sidebar-accent/80 text-foreground'
+                                      : 'border-sidebar-border/60 bg-sidebar-accent/25 text-muted-foreground hover:text-foreground'
+                                  "
+                                  :title="String(t('files.search.content.useRegex'))"
+                                  @click="contentSearchRegex = !contentSearchRegex"
+                                >
+                                  .*
+                                </button>
+                              </div>
+                            </div>
+
+                            <div v-if="contentSearchReplaceOpen" class="ml-[18px] flex items-center gap-1">
+                              <Input
+                                v-model="contentSearchReplace"
+                                :placeholder="String(t('files.search.content.replacePlaceholder'))"
+                                class="oc-vscode-subtle-input h-[26px] flex-1 font-mono text-[12px]"
+                              />
+                              <Button
+                                size="sm"
+                                class="h-[26px] px-2 text-[11px]"
+                                :disabled="
+                                  contentSearchReplacing ||
+                                  contentSearchLoading ||
+                                  !hasContentSearch ||
+                                  contentSearchMatchCount === 0
+                                "
+                                @click="replaceAllContentSearchMatches"
+                              >
+                                {{ contentSearchReplacing ? t('common.loading') : t('common.all') }}
+                              </Button>
+                            </div>
+
+                            <div class="ml-[18px] px-0.5 text-[11px] text-muted-foreground">
+                              <span>{{ contentSearchSummary }}</span>
+                              <span v-if="activeContentSearchScope" class="ml-1"
+                                >in {{ activeContentSearchScope.description }}</span
+                              >
+                            </div>
+
+                            <div class="ml-[18px] flex flex-wrap items-center gap-1">
+                              <button
+                                v-for="scope in contentSearchScopeOptions"
+                                :key="scope.id"
+                                type="button"
+                                class="h-5 rounded-sm border px-1.5 text-[10px] font-medium transition"
+                                :class="
+                                  contentSearchScopeMode === scope.id
+                                    ? 'border-sidebar-border bg-sidebar-accent/80 text-foreground'
+                                    : 'border-sidebar-border/60 bg-sidebar-accent/25 text-muted-foreground hover:text-foreground'
+                                "
+                                :title="scope.description"
+                                :disabled="scope.disabled"
+                                @click="contentSearchScopeMode = scope.id"
+                              >
+                                {{ scope.label }}
+                              </button>
+                            </div>
+                          </template>
+                        </div>
+                      </div>
+
+                      <ScrollArea class="min-h-0 flex-1">
+                        <div class="px-1 py-1">
+                          <template v-if="explorerSearchMode === 'files'">
+                            <div v-if="!hasFileSearch" class="px-2 py-2 text-xs text-muted-foreground">
+                              {{ t('files.search.files.noQuery') }}
+                            </div>
+                            <div v-else-if="searching" class="px-2 py-2 text-xs text-muted-foreground">
+                              {{ t('common.searching') }}
+                            </div>
+                            <div v-else-if="searchResults.length === 0" class="px-2 py-2 text-xs text-muted-foreground">
+                              {{ t('files.search.files.noFilesFound') }}
+                            </div>
+                            <div v-else class="space-y-0.5">
+                              <button
+                                v-for="node in searchResults"
+                                :key="node.path"
+                                type="button"
+                                class="oc-vscode-row h-[22px] w-full border-transparent px-2 text-left"
+                                @click="requestFileSelect(node)"
+                              >
+                                <span class="truncate font-mono text-[11px]" :title="node.path">{{
+                                  node.relativePath || node.path
+                                }}</span>
+                              </button>
+                            </div>
+                          </template>
+
+                          <template v-else>
+                            <div
+                              v-if="contentSearchError"
+                              class="mx-1 mb-2 rounded-md border border-destructive/40 bg-destructive/10 px-2 py-1.5 text-xs"
+                            >
+                              {{ contentSearchError }}
+                            </div>
+                            <div v-if="!hasContentSearch" class="px-2 py-2 text-xs text-muted-foreground">
+                              {{ t('files.search.content.hint') }}
+                            </div>
+                            <div
+                              v-else-if="contentSearchLoading && !contentSearchFiles.length"
+                              class="px-2 py-2 text-xs text-muted-foreground"
+                            >
+                              {{ t('common.searching') }}
+                            </div>
+                            <div v-else-if="!contentSearchFiles.length" class="px-2 py-2 text-xs text-muted-foreground">
+                              {{ t('files.search.content.noMatchesFound') }}
+                            </div>
+                            <div v-else class="space-y-0">
+                              <div
+                                v-for="file in contentSearchFiles"
+                                :key="file.path"
+                                class="border-t border-sidebar-border/30 first:border-t-0"
+                              >
+                                <div class="flex items-center justify-between gap-2 px-2 py-0.5">
                                   <button
                                     type="button"
                                     class="oc-vscode-row h-[22px] min-w-0 flex-1 border-transparent px-1"
+                                    :title="file.path"
                                     @click="openContentSearchResult(file.path)"
                                   >
-                                    <span class="w-10 shrink-0 pr-1 text-right text-[10px] text-muted-foreground">{{
-                                      match.line
-                                    }}</span>
-                                    <span class="min-w-0 truncate font-mono text-[11px]">
-                                      <span class="text-muted-foreground">{{ match.before }}</span>
-                                      <span
-                                        class="rounded-sm border border-primary/35 bg-primary/20 px-0.5 text-foreground"
-                                        >{{ match.matched }}</span
-                                      >
-                                      <span class="text-muted-foreground">{{ match.after }}</span>
-                                    </span>
+                                    <span class="truncate font-mono text-[11px]">{{ file.relativePath }}</span>
                                   </button>
-                                  <button
-                                    v-if="contentSearchReplaceOpen"
-                                    type="button"
-                                    class="oc-vscode-icon-button h-5 w-12 text-[10px]"
-                                    :disabled="contentSearchReplacing"
-                                    @click="replaceContentSearchMatch(file, match)"
+                                  <span class="oc-vscode-count-badge">{{ file.matchCount }}</span>
+                                </div>
+                                <div class="pb-0.5">
+                                  <div
+                                    v-for="match in file.matches"
+                                    :key="`${file.path}:${match.startOffset}:${match.endOffset}`"
+                                    class="flex items-center gap-1 pl-2 pr-1"
                                   >
-                                    {{ t('common.replace') }}
-                                  </button>
+                                    <button
+                                      type="button"
+                                      class="oc-vscode-row h-[22px] min-w-0 flex-1 border-transparent px-1"
+                                      @click="openContentSearchResult(file.path)"
+                                    >
+                                      <span class="w-10 shrink-0 pr-1 text-right text-[10px] text-muted-foreground">{{
+                                        match.line
+                                      }}</span>
+                                      <span class="min-w-0 truncate font-mono text-[11px]">
+                                        <span class="text-muted-foreground">{{ match.before }}</span>
+                                        <span
+                                          class="rounded-sm border border-primary/35 bg-primary/20 px-0.5 text-foreground"
+                                          >{{ match.matched }}</span
+                                        >
+                                        <span class="text-muted-foreground">{{ match.after }}</span>
+                                      </span>
+                                    </button>
+                                    <button
+                                      v-if="contentSearchReplaceOpen"
+                                      type="button"
+                                      class="oc-vscode-icon-button h-5 w-12 text-[10px]"
+                                      :disabled="contentSearchReplacing"
+                                      @click="replaceContentSearchMatch(file, match)"
+                                    >
+                                      {{ t('common.replace') }}
+                                    </button>
+                                  </div>
                                 </div>
                               </div>
                             </div>
-                          </div>
-                        </template>
-                      </div>
-                    </ScrollArea>
-                  </div>
-                </template>
-              </FilesExplorerPane>
-            </div>
+                          </template>
+                        </div>
+                      </ScrollArea>
+                    </div>
+                  </template>
+                </FilesExplorerPane>
+              </div>
+            </Teleport>
 
             <div
               class="flex-1 min-h-0 overflow-hidden m-0 p-0"

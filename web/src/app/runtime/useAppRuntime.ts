@@ -19,6 +19,9 @@ import { installKeyboardInsets } from '@/lib/keyboardInsets'
 import { installKeyboardTapFix } from '@/lib/keyboardTapFix'
 import { installKeyboardShortcuts } from '@/app/runtime/installKeyboardShortcuts'
 import { readSessionIdFromFullPath, readSessionIdFromQuery } from '@/app/navigation/sessionQuery'
+import { MAIN_TABS, mainTabFromPath } from '@/app/navigation/mainTabs'
+import { readWindowIdFromQuery } from '@/app/windowScope'
+import { normalizeFsPath, trimTrailingFsSlashes } from '@/lib/path'
 
 export function useAppRuntime() {
   const route = useRoute()
@@ -189,6 +192,38 @@ export function useAppRuntime() {
     lastVisibilityState = state
   }
 
+  function normalizeDirectoryForMatch(input: unknown): string {
+    const value = typeof input === 'string' ? input.trim() : ''
+    if (!value) return ''
+    return trimTrailingFsSlashes(normalizeFsPath(value))
+  }
+
+  function eventDirectory(evt: { directory?: unknown; properties?: unknown }): string {
+    const topLevel = normalizeDirectoryForMatch(evt.directory)
+    if (topLevel) return topLevel
+
+    const properties =
+      evt.properties && typeof evt.properties === 'object' ? (evt.properties as Record<string, unknown>) : null
+    if (!properties) return ''
+
+    return normalizeDirectoryForMatch(properties.directory) || normalizeDirectoryForMatch(properties.cwd)
+  }
+
+  function eventMatchesCurrentDirectory(evt: { directory?: unknown; properties?: unknown }): boolean {
+    const current = normalizeDirectoryForMatch(directoryStore.currentDirectory)
+    if (!current) return true
+    const evtDir = eventDirectory(evt)
+    if (!evtDir) return true
+    return evtDir === current
+  }
+
+  function syncUiWindowContextFromRoute() {
+    const normalizedPath = String(route.path || '').toLowerCase()
+    const matchesMainTab = MAIN_TABS.some((tab) => normalizedPath.startsWith(tab.path))
+    if (!matchesMainTab) return
+    ui.syncActiveWorkspaceWindowFromRoute(mainTabFromPath(normalizedPath), route.query)
+  }
+
   function connectActivity() {
     sse?.close()
     sse = null
@@ -196,6 +231,7 @@ export function useAppRuntime() {
     try {
       sse = connectGlobalWs({
         endpoint: '/api/global/ws',
+        directory: String(directoryStore.currentDirectory || '').trim() || null,
         initialLastEventId: globalSseCursor,
         debugLabel: 'ws:global',
         onCursor: (lastEventId) => {
@@ -215,6 +251,8 @@ export function useAppRuntime() {
           directorySessions.scheduleSidebarRecoverySync('sequence-gap', 160)
         },
         onEvent: (evt) => {
+          if (!eventMatchesCurrentDirectory(evt)) return
+
           if (evt.type === 'config.settings.replace') {
             void settings.refresh().catch(() => {})
             return
@@ -274,6 +312,17 @@ export function useAppRuntime() {
 
   function applyDevice() {
     const info = getDeviceInfo()
+
+    // Embedded workspace panes (split iframes) should keep desktop-style layout
+    // even when the frame width is narrow.
+    const isEmbeddedWorkspacePane = String(route.query?.ocEmbed || '').trim() === '1'
+    if (isEmbeddedWorkspacePane) {
+      info.isCompactLayout = false
+      info.isNarrow = false
+      info.isMobile = false
+      info.isMobilePointer = false
+    }
+
     applyDeviceClasses(info)
     ui.setIsCompactLayout(info.isCompactLayout)
     ui.setIsMobileDevice(info.isMobileDevice)
@@ -286,6 +335,8 @@ export function useAppRuntime() {
   applyDevice()
 
   async function ensureSelectedSessionFromQuery() {
+    syncUiWindowContextFromRoute()
+    const routeWindowId = readWindowIdFromQuery(route.query) || null
     const sid = readSessionIdFromQuery(route.query) || readSessionIdFromFullPath(route.fullPath)
 
     // If the URL includes a session id, treat it as an explicit deep link.
@@ -296,7 +347,7 @@ export function useAppRuntime() {
 
     if (sid) {
       if (sid !== chat.selectedSessionId) {
-        await chat.selectSession(sid)
+        await chat.selectSession(sid, { windowId: routeWindowId })
       }
       return
     }
@@ -306,12 +357,13 @@ export function useAppRuntime() {
     const selected = chat.selectedSessionId
     const selectedExists = selected ? !!chat.selectedSession : false
     if (!selectedExists) {
-      await chat.selectSession(null)
+      await chat.selectSession(null, { windowId: routeWindowId })
     }
   }
 
   onMounted(async () => {
     window.addEventListener('resize', applyDevice)
+    syncUiWindowContextFromRoute()
 
     cleanupKeyboard = installKeyboardInsets({ enabled: true })
     cleanupShortcuts = installKeyboardShortcuts()
@@ -443,15 +495,32 @@ export function useAppRuntime() {
   watch(
     () => directoryStore.currentDirectory,
     async () => {
+      connectActivity()
       await chat.refreshSessions().catch(() => {})
       await ensureSelectedSessionFromQuery().catch(() => {})
     },
   )
 
   watch(
-    () => `${readSessionIdFromQuery(route.query)}|${readSessionIdFromFullPath(route.fullPath)}`,
+    () => ({ path: route.path, query: route.query }),
+    () => {
+      syncUiWindowContextFromRoute()
+    },
+    { immediate: true, deep: true },
+  )
+
+  watch(
+    () =>
+      `${readWindowIdFromQuery(route.query)}|${readSessionIdFromQuery(route.query)}|${readSessionIdFromFullPath(route.fullPath)}`,
     () => {
       void ensureSelectedSessionFromQuery()
+    },
+  )
+
+  watch(
+    () => String(route.query?.ocEmbed || '').trim(),
+    () => {
+      applyDevice()
     },
   )
 

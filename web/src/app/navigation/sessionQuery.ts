@@ -1,6 +1,6 @@
 import type { LocationQuery, LocationQueryRaw } from 'vue-router'
 
-const SESSION_QUERY_KEYS = ['sessionid', 'sessionId', 'session'] as const
+const SESSION_QUERY_KEY = 'sessionId' as const
 
 type ReadQueryLike = LocationQuery | LocationQueryRaw | Record<string, unknown> | null | undefined
 type WriteQueryLike = LocationQuery | LocationQueryRaw | null | undefined
@@ -28,11 +28,7 @@ function firstTrimmedString(value: unknown): string {
 }
 
 export function readSessionIdFromQuery(query: ReadQueryLike): string {
-  for (const key of SESSION_QUERY_KEYS) {
-    const sid = firstTrimmedString(readQueryValue(query, key))
-    if (sid) return sid
-  }
-  return ''
+  return firstTrimmedString(readQueryValue(query, SESSION_QUERY_KEY))
 }
 
 export function readSessionIdFromFullPath(fullPath: string): string {
@@ -46,9 +42,7 @@ export function readSessionIdFromFullPath(fullPath: string): string {
 
   const params = new URLSearchParams(queryPart)
   return readSessionIdFromQuery({
-    sessionid: params.get('sessionid'),
     sessionId: params.get('sessionId'),
-    session: params.get('session'),
   })
 }
 
@@ -60,22 +54,21 @@ export function patchSessionIdInQuery(query: WriteQueryLike, sessionId: string):
     }
   }
   const sid = String(sessionId || '').trim()
-  const existingKeys = SESSION_QUERY_KEYS.filter((key) => hasQueryKey(query, key))
+  const legacyKeys = ['session', 'sessionid'] as const
 
   if (!sid) {
-    for (const key of existingKeys) {
+    delete next[SESSION_QUERY_KEY]
+    for (const key of legacyKeys) {
       delete next[key]
     }
     return next
   }
 
-  if (existingKeys.length === 0) {
-    next.session = sid
-    return next
-  }
-
-  for (const key of existingKeys) {
-    next[key] = sid
+  next[SESSION_QUERY_KEY] = sid
+  for (const key of legacyKeys) {
+    if (hasQueryKey(next, key)) {
+      delete next[key]
+    }
   }
   return next
 }

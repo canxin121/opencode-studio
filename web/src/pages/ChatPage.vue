@@ -169,6 +169,23 @@ const sessionTitle = computed(() => {
   const id = typeof s?.id === 'string' ? s.id.trim() : ''
   return title || slug || id
 })
+
+const workspaceChatTabTitle = computed(() => {
+  const sid = readSessionIdFromQuery(route.query)
+  const title = String(sessionTitle.value || '').trim()
+  if (title) return title
+  if (sid) return `${String(t('nav.chat'))} · ${sid.slice(0, 8)}`
+  return String(t('nav.chat'))
+})
+
+watch(
+  () => [route.path, route.query, workspaceChatTabTitle.value] as const,
+  ([path, _query, title]) => {
+    if (!String(path || '').startsWith('/chat')) return
+    ui.setWorkspaceWindowTitleFromRoute(route.query, title)
+  },
+  { immediate: true, deep: true },
+)
 const sessionShareUrl = computed(() => {
   const s = asRecord(chat.selectedSession)
   const share = getRecord(s, 'share')

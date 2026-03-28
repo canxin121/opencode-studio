@@ -32,6 +32,7 @@ import {
   type DesktopConfig,
 } from '@/lib/desktopConfig'
 import { syncDesktopBackendTarget } from '@/lib/backend'
+import { WORKSPACE_SIDEBAR_HOST_SELECTOR } from '@/layout/workspaceSidebarHost'
 import { localStorageKeys } from '@/lib/persistence/storageKeys'
 import { buildLocalePickerOptions } from '@/pages/loginLocaleOptions'
 import {
@@ -63,7 +64,13 @@ const router = useRouter()
 const { startDesktopSidebarResize } = useDesktopSidebarResize()
 const { t } = useI18n()
 
-const useShellSidebar = computed(() => (ui.isCompactLayout ? ui.isSessionSwitcherOpen : ui.isSidebarOpen))
+const isEmbeddedWorkspacePane = computed(() => String(route.query?.ocEmbed || '').trim() === '1')
+const useDesktopSidebarHost = computed(() => !ui.isCompactLayout && !isEmbeddedWorkspacePane.value)
+const useShellSidebar = computed(() => {
+  if (isEmbeddedWorkspacePane.value) return false
+  if (useDesktopSidebarHost.value) return true
+  return ui.isCompactLayout ? ui.isSessionSwitcherOpen : ui.isSidebarOpen
+})
 const SETTINGS_LAST_ROUTE_KEY = localStorageKeys.settings.lastRoute
 
 function persistSettingsRoute(path: string) {
@@ -77,7 +84,9 @@ function persistSettingsRoute(path: string) {
 const settingsSidebarClass = computed(() =>
   ui.isCompactLayout
     ? 'relative h-full w-full border-r border-border bg-muted/10 shrink-0'
-    : 'relative h-full border-r border-border bg-muted/10 shrink-0',
+    : useDesktopSidebarHost.value
+      ? 'relative h-full w-full bg-muted/10 shrink-0'
+      : 'relative h-full border-r border-border bg-muted/10 shrink-0',
 )
 
 const desktopRuntimeEnabled = isDesktopRuntime()
@@ -724,100 +733,102 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
 <template>
   <div class="settings-page flex h-full flex-col overflow-hidden bg-background text-foreground">
     <div class="flex flex-1 overflow-hidden">
-      <aside
-        v-if="useShellSidebar"
-        :class="settingsSidebarClass"
-        :style="ui.isCompactLayout ? undefined : { width: `${ui.sidebarWidth}px` }"
-      >
-        <div
-          v-if="!ui.isCompactLayout"
-          class="absolute right-0 top-0 z-10 h-full w-1 cursor-col-resize hover:bg-primary/40"
-          @pointerdown="startDesktopSidebarResize"
-        />
-        <ScrollArea class="h-full">
-          <div class="flex flex-col gap-1 p-3">
-            <div class="mb-2 flex items-center justify-between px-1">
-              <div class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                {{ t('settings.title') }}
+      <Teleport :to="WORKSPACE_SIDEBAR_HOST_SELECTOR" :disabled="!useDesktopSidebarHost">
+        <aside
+          v-if="useShellSidebar"
+          :class="settingsSidebarClass"
+          :style="ui.isCompactLayout || useDesktopSidebarHost ? undefined : { width: `${ui.sidebarWidth}px` }"
+        >
+          <div
+            v-if="!ui.isCompactLayout && !useDesktopSidebarHost"
+            class="absolute right-0 top-0 z-10 h-full w-1 cursor-col-resize hover:bg-primary/40"
+            @pointerdown="startDesktopSidebarResize"
+          />
+          <ScrollArea class="h-full">
+            <div class="flex flex-col gap-1 p-3">
+              <div class="mb-2 flex items-center justify-between px-1">
+                <div class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  {{ t('settings.title') }}
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  class="h-7 w-7"
+                  :title="String(t('settings.refresh'))"
+                  :aria-label="String(t('settings.refreshAria'))"
+                  @click="settings.refresh"
+                  :disabled="settings.loading"
+                >
+                  <RiRefreshLine class="h-4 w-4" :class="settings.loading ? 'animate-spin' : ''" />
+                </Button>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                class="h-7 w-7"
-                :title="String(t('settings.refresh'))"
-                :aria-label="String(t('settings.refreshAria'))"
-                @click="settings.refresh"
-                :disabled="settings.loading"
-              >
-                <RiRefreshLine class="h-4 w-4" :class="settings.loading ? 'animate-spin' : ''" />
-              </Button>
-            </div>
-            <div v-for="tab in tabs" :key="tab.id" class="space-y-1">
-              <SidebarTextButton
-                @click="goToTab(tab.id)"
-                class="flex w-full items-center rounded-md border border-transparent px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/60 hover:text-foreground active:scale-95"
-                :class="
-                  activeTab === tab.id
-                    ? 'bg-primary/12 dark:bg-accent/80 text-foreground border-border/60'
-                    : 'text-muted-foreground'
-                "
-              >
-                <span class="inline-flex items-center gap-2">
-                  <RiArrowDownSLine
-                    v-if="tab.id === 'opencode' || tab.id === 'plugins'"
-                    class="h-3.5 w-3.5 transition-transform"
+              <div v-for="tab in tabs" :key="tab.id" class="space-y-1">
+                <SidebarTextButton
+                  @click="goToTab(tab.id)"
+                  class="flex w-full items-center rounded-md border border-transparent px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/60 hover:text-foreground active:scale-95"
+                  :class="
+                    activeTab === tab.id
+                      ? 'bg-primary/12 dark:bg-accent/80 text-foreground border-border/60'
+                      : 'text-muted-foreground'
+                  "
+                >
+                  <span class="inline-flex items-center gap-2">
+                    <RiArrowDownSLine
+                      v-if="tab.id === 'opencode' || tab.id === 'plugins'"
+                      class="h-3.5 w-3.5 transition-transform"
+                      :class="
+                        (tab.id === 'opencode' && opencodeExpanded && activeTab === 'opencode') ||
+                        (tab.id === 'plugins' && pluginsExpanded && activeTab === 'plugins')
+                          ? 'rotate-180'
+                          : ''
+                      "
+                    />
+                    {{ tab.label }}
+                  </span>
+                </SidebarTextButton>
+
+                <div
+                  v-if="tab.id === 'opencode' && activeTab === 'opencode' && opencodeExpanded"
+                  class="border-l border-border/60 pl-3 pt-2 space-y-1"
+                >
+                  <SidebarTextButton
+                    v-for="section in opencodeSections"
+                    :key="section.id"
+                    @click="goToOpencodeSection(section.id)"
+                    class="w-full rounded-md border border-transparent px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/60 hover:text-foreground active:scale-95"
                     :class="
-                      (tab.id === 'opencode' && opencodeExpanded && activeTab === 'opencode') ||
-                      (tab.id === 'plugins' && pluginsExpanded && activeTab === 'plugins')
-                        ? 'rotate-180'
-                        : ''
+                      activeOpencodeSection === section.id
+                        ? 'bg-primary/12 dark:bg-accent/80 text-foreground border-border/60'
+                        : 'text-muted-foreground'
                     "
-                  />
-                  {{ tab.label }}
-                </span>
-              </SidebarTextButton>
+                  >
+                    {{ t(section.labelKey) }}
+                  </SidebarTextButton>
+                </div>
 
-              <div
-                v-if="tab.id === 'opencode' && activeTab === 'opencode' && opencodeExpanded"
-                class="border-l border-border/60 pl-3 pt-2 space-y-1"
-              >
-                <SidebarTextButton
-                  v-for="section in opencodeSections"
-                  :key="section.id"
-                  @click="goToOpencodeSection(section.id)"
-                  class="w-full rounded-md border border-transparent px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/60 hover:text-foreground active:scale-95"
-                  :class="
-                    activeOpencodeSection === section.id
-                      ? 'bg-primary/12 dark:bg-accent/80 text-foreground border-border/60'
-                      : 'text-muted-foreground'
-                  "
+                <div
+                  v-if="tab.id === 'plugins' && activeTab === 'plugins' && pluginsExpanded"
+                  class="border-l border-border/60 pl-3 pt-2 space-y-1"
                 >
-                  {{ t(section.labelKey) }}
-                </SidebarTextButton>
-              </div>
-
-              <div
-                v-if="tab.id === 'plugins' && activeTab === 'plugins' && pluginsExpanded"
-                class="border-l border-border/60 pl-3 pt-2 space-y-1"
-              >
-                <SidebarTextButton
-                  v-for="plugin in pluginsTabPlugins"
-                  :key="`desktop-plugins-${plugin.id}`"
-                  @click="goToPluginsSection(plugin.id)"
-                  class="w-full rounded-md border border-transparent px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/60 hover:text-foreground active:scale-95"
-                  :class="
-                    activePluginsSection === plugin.id
-                      ? 'bg-primary/12 dark:bg-accent/80 text-foreground border-border/60'
-                      : 'text-muted-foreground'
-                  "
-                >
-                  {{ plugin.label }}
-                </SidebarTextButton>
+                  <SidebarTextButton
+                    v-for="plugin in pluginsTabPlugins"
+                    :key="`desktop-plugins-${plugin.id}`"
+                    @click="goToPluginsSection(plugin.id)"
+                    class="w-full rounded-md border border-transparent px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/60 hover:text-foreground active:scale-95"
+                    :class="
+                      activePluginsSection === plugin.id
+                        ? 'bg-primary/12 dark:bg-accent/80 text-foreground border-border/60'
+                        : 'text-muted-foreground'
+                    "
+                  >
+                    {{ plugin.label }}
+                  </SidebarTextButton>
+                </div>
               </div>
             </div>
-          </div>
-        </ScrollArea>
-      </aside>
+          </ScrollArea>
+        </aside>
+      </Teleport>
 
       <!-- Content -->
       <main

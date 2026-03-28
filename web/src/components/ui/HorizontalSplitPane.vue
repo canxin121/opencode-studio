@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref } from 'vue'
+import { onBeforeUnmount, ref, watch } from 'vue'
 
 const props = defineProps<{
   modelValue: number
@@ -18,17 +18,68 @@ const emit = defineEmits<{
 const isDragging = ref(false)
 const startX = ref(0)
 const startWidth = ref(0)
+const previewWidth = ref(0)
+const pointerTarget = ref<HTMLElement | null>(null)
+const pointerId = ref<number | null>(null)
+
+watch(
+  () => props.modelValue,
+  (value) => {
+    if (isDragging.value) return
+    previewWidth.value = value
+  },
+  { immediate: true },
+)
+
+function clampWidth(raw: number): number {
+  let out = raw
+  if (props.minWidth !== undefined) {
+    out = Math.max(props.minWidth, out)
+  }
+  if (props.maxWidth !== undefined) {
+    out = Math.min(props.maxWidth, out)
+  }
+  return out
+}
+
+function cleanupPointerState() {
+  window.removeEventListener('pointermove', handlePointerMove)
+  window.removeEventListener('pointerup', handlePointerUp)
+  window.removeEventListener('pointercancel', handlePointerUp)
+
+  document.body.style.cursor = ''
+  document.body.style.userSelect = ''
+
+  const target = pointerTarget.value
+  const id = pointerId.value
+  if (target && id !== null) {
+    try {
+      if (target.hasPointerCapture(id)) {
+        target.releasePointerCapture(id)
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  pointerTarget.value = null
+  pointerId.value = null
+}
 
 function handlePointerDown(e: PointerEvent) {
   if (props.disabled) return
   if (e.button !== 0) return
 
-  const target = e.currentTarget as HTMLElement
+  const target = e.currentTarget as HTMLElement | null
+  if (!target) return
   target.setPointerCapture(e.pointerId)
+  pointerTarget.value = target
+  pointerId.value = e.pointerId
 
   isDragging.value = true
   startX.value = e.clientX
   startWidth.value = props.modelValue
+  previewWidth.value = props.modelValue
 
   emit('dragStart')
 
@@ -45,48 +96,23 @@ function handlePointerMove(e: PointerEvent) {
   e.preventDefault()
 
   const deltaX = startX.value - e.clientX
-  let newWidth = startWidth.value + deltaX
-
-  if (props.minWidth !== undefined) {
-    newWidth = Math.max(props.minWidth, newWidth)
-  }
-  if (props.maxWidth !== undefined) {
-    newWidth = Math.min(props.maxWidth, newWidth)
-  }
-
-  emit('update:modelValue', newWidth)
+  previewWidth.value = clampWidth(startWidth.value + deltaX)
 }
 
-function handlePointerUp(e: PointerEvent) {
+function handlePointerUp() {
   if (!isDragging.value) return
 
+  const next = clampWidth(previewWidth.value)
   isDragging.value = false
+  emit('update:modelValue', next)
   emit('dragEnd')
 
-  window.removeEventListener('pointermove', handlePointerMove)
-  window.removeEventListener('pointerup', handlePointerUp)
-  window.removeEventListener('pointercancel', handlePointerUp)
-
-  document.body.style.cursor = ''
-  document.body.style.userSelect = ''
-
-  try {
-    const target = e.target as HTMLElement
-    if (target && target.hasPointerCapture(e.pointerId)) {
-      target.releasePointerCapture(e.pointerId)
-    }
-  } catch {
-    // ignore
-  }
+  cleanupPointerState()
 }
 
 onBeforeUnmount(() => {
   if (!isDragging.value) return
-  window.removeEventListener('pointermove', handlePointerMove)
-  window.removeEventListener('pointerup', handlePointerUp)
-  window.removeEventListener('pointercancel', handlePointerUp)
-  document.body.style.cursor = ''
-  document.body.style.userSelect = ''
+  cleanupPointerState()
 })
 </script>
 
@@ -108,7 +134,7 @@ onBeforeUnmount(() => {
     <div
       class="relative shrink-0 overflow-hidden"
       :class="{ 'transition-[width] duration-200 ease-out': !isDragging }"
-      :style="{ width: `${modelValue}px` }"
+      :style="{ width: `${previewWidth}px` }"
     >
       <slot name="right" />
     </div>
