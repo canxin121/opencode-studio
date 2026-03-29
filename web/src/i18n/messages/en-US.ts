@@ -296,6 +296,10 @@ export default {
       splitDropFailed: 'Failed to split into the target group.',
       splitDropSameTab: 'Drag a different tab to split.',
       splitDropNeedsTab: 'Open an ungrouped tab first, then drag another tab to split.',
+      dropIntoTabs: 'Drop into tab group',
+      dropInsertBefore: 'Insert on left',
+      dropInsertAfter: 'Insert on right',
+      dropReplace: 'Replace pane',
       closeGroup: 'Close group',
       closeCurrent: 'Close current window',
       closeOthers: 'Close other windows',
@@ -3759,6 +3763,9 @@ export default {
     },
     explorer: {
       title: 'Explorer',
+      navigation: {
+        goUp: 'Go to parent folder',
+      },
       toolbar: {
         newFile: 'New file',
         newFolder: 'New folder',

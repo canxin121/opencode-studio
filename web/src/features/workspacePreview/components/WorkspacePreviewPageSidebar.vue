@@ -34,6 +34,7 @@ import { buildPreviewFrameSrc } from '@/features/workspacePreview/model/previewU
 import { normalizeDirForCompare } from '@/features/sessions/model/labels'
 import SidebarPager from '@/layout/chatSidebar/components/SidebarPager.vue'
 import SidebarSectionSkeleton from '@/layout/chatSidebar/components/SidebarSectionSkeleton.vue'
+import { writeWorkspaceWindowTemplateToDataTransfer } from '@/layout/workspaceWindowDrag'
 import { apiUrl } from '@/lib/api'
 import { useChatStore } from '@/stores/chat'
 import { useDirectoryStore } from '@/stores/directory'
@@ -771,6 +772,50 @@ function handlePreviewSessionRowClick(
   selectSession(session.id)
 }
 
+function canDragPreviewSession(session: WorkspacePreviewSession, scope: PreviewSidebarScope): boolean {
+  if (previewMultiSelect.enabled.value) return false
+  if (isInlineRenameSession(session, scope)) return false
+  return Boolean(String(session.id || '').trim())
+}
+
+function previewSessionSubtitle(session: WorkspacePreviewSession): string {
+  const directory = String(session.directory || '').trim()
+  if (directory) return directory
+  const runDirectory = String(session.runDirectory || '').trim()
+  if (runDirectory) return runDirectory
+  const targetUrl = String(session.targetUrl || '').trim()
+  if (targetUrl) return targetUrl
+  const command = String(session.command || '').trim()
+  if (command) return command
+  return String(t('nav.preview'))
+}
+
+function handlePreviewSessionRowDragStart(
+  event: DragEvent,
+  session: WorkspacePreviewSession,
+  scope: PreviewSidebarScope,
+) {
+  if (!canDragPreviewSession(session, scope)) {
+    event.preventDefault()
+    return
+  }
+
+  const transfer = event.dataTransfer
+  if (!transfer) {
+    event.preventDefault()
+    return
+  }
+
+  transfer.effectAllowed = 'copyMove'
+  const ok = writeWorkspaceWindowTemplateToDataTransfer(transfer, {
+    tab: 'preview',
+    title: String(preview.sessionLabel(session) || '').trim() || undefined,
+  })
+  if (!ok) {
+    event.preventDefault()
+  }
+}
+
 function selectAllPreviewSessions() {
   if (!previewMultiSelect.enabled.value) return
   previewMultiSelect.selectAll(filteredPreviewSessionIds.value)
@@ -1146,10 +1191,12 @@ function selectSession(sessionId: string) {
               :active="!previewMultiSelect.enabled.value && preview.activeSessionId === session.id"
               :as="isInlineRenameSession(session, 'chat') ? 'div' : 'button'"
               density="compact"
+              :draggable="canDragPreviewSession(session, 'chat')"
               :actions-always-visible="
                 !previewMultiSelect.enabled.value && (ui.isMobilePointer || isInlineRenameSession(session, 'chat'))
               "
               @click="handlePreviewSessionRowClick(session, 'chat', $event)"
+              @dragstart="handlePreviewSessionRowDragStart($event, session, 'chat')"
             >
               <template #icon>
                 <div class="flex items-center gap-1.5">
@@ -1174,9 +1221,9 @@ function selectSession(sessionId: string) {
                     </span>
                     <span
                       class="truncate typography-micro font-mono text-left text-muted-foreground/60 w-full"
-                      :title="session.directory || session.id"
+                      :title="previewSessionSubtitle(session)"
                     >
-                      {{ session.directory || session.id }}
+                      {{ previewSessionSubtitle(session) }}
                     </span>
                   </div>
                 </template>
@@ -1298,10 +1345,12 @@ function selectSession(sessionId: string) {
               :active="!previewMultiSelect.enabled.value && preview.activeSessionId === session.id"
               :as="isInlineRenameSession(session, 'directory') ? 'div' : 'button'"
               density="compact"
+              :draggable="canDragPreviewSession(session, 'directory')"
               :actions-always-visible="
                 !previewMultiSelect.enabled.value && (ui.isMobilePointer || isInlineRenameSession(session, 'directory'))
               "
               @click="handlePreviewSessionRowClick(session, 'directory', $event)"
+              @dragstart="handlePreviewSessionRowDragStart($event, session, 'directory')"
             >
               <template #icon>
                 <div class="flex items-center gap-1.5">
@@ -1326,9 +1375,9 @@ function selectSession(sessionId: string) {
                     </span>
                     <span
                       class="truncate typography-micro font-mono text-left text-muted-foreground/60 w-full"
-                      :title="session.directory || session.id"
+                      :title="previewSessionSubtitle(session)"
                     >
-                      {{ session.directory || session.id }}
+                      {{ previewSessionSubtitle(session) }}
                     </span>
                   </div>
                 </template>
@@ -1444,10 +1493,12 @@ function selectSession(sessionId: string) {
               :active="!previewMultiSelect.enabled.value && preview.activeSessionId === session.id"
               :as="isInlineRenameSession(session, 'all') ? 'div' : 'button'"
               density="compact"
+              :draggable="canDragPreviewSession(session, 'all')"
               :actions-always-visible="
                 !previewMultiSelect.enabled.value && (ui.isMobilePointer || isInlineRenameSession(session, 'all'))
               "
               @click="handlePreviewSessionRowClick(session, 'all', $event)"
+              @dragstart="handlePreviewSessionRowDragStart($event, session, 'all')"
             >
               <template #icon>
                 <div class="flex items-center gap-1.5">
@@ -1472,9 +1523,9 @@ function selectSession(sessionId: string) {
                     </span>
                     <span
                       class="truncate typography-micro font-mono text-left text-muted-foreground/60 w-full"
-                      :title="session.directory || session.id"
+                      :title="previewSessionSubtitle(session)"
                     >
-                      {{ session.directory || session.id }}
+                      {{ previewSessionSubtitle(session) }}
                     </span>
                   </div>
                 </template>

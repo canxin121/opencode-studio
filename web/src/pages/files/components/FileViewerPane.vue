@@ -65,6 +65,7 @@ const commentText = defineModel<string>('commentText', { default: '' })
 const props = defineProps<{
   isCompactLayout: boolean
   showHeaderBackButton?: boolean
+  hideHeaderTitle?: boolean
   isTouchPointer?: boolean
   isMobileFormFactor?: boolean
   isMobilePointer?: boolean
@@ -164,6 +165,7 @@ const isTouchPointer = computed(() => props.isTouchPointer ?? isMobileFormFactor
 const shouldShowHeaderBackButton = computed(
   () => Boolean(props.showHeaderBackButton) || (props.isCompactLayout && showMobileViewer.value),
 )
+const showHeaderTitle = computed(() => props.hideHeaderTitle !== true)
 
 const viewMenuGroups = computed<OptionMenuGroup[]>(() => [
   {
@@ -1167,11 +1169,13 @@ function handleHeaderBackClick() {
         <RiArrowLeftSLine class="h-5 w-5" />
       </IconButton>
 
-      <div class="min-w-0 flex-1">
+      <div v-if="showHeaderTitle" class="min-w-0 flex-1">
         <div class="typography-ui-label font-semibold truncate">
           {{ selectedFile?.name || t('files.viewer.title.selectFile') }}
         </div>
       </div>
+
+      <div v-else class="flex-1" aria-hidden="true" />
 
       <div v-if="viewerMode === 'markdown'" class="shrink-0">
         <SegmentedControl class="grid-cols-3 max-w-xs">

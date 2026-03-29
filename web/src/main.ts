@@ -15,7 +15,6 @@ import App from './App.vue'
 import { router } from './router'
 import { i18n, ensureDefaultLocale, setAppLocale } from './i18n'
 import { DEFAULT_LOCALE, normalizeAppLocale } from './i18n/locale'
-import { readSessionIdFromQuery } from './app/navigation/sessionQuery'
 import { useToastsStore } from './stores/toasts'
 import { useAuthStore } from './stores/auth'
 import { syncDesktopBackendTarget } from './lib/backend'
@@ -34,11 +33,7 @@ const INITIAL_SESSION_QUERY_KEY = sessionStorageKeys.app.initialSessionQuery
 try {
   const token = String(performance.timeOrigin || Date.now())
   sessionStorage.setItem(PAGE_LOAD_TOKEN_KEY, token)
-  const params = new URLSearchParams(window.location.search || '')
-  const sid = readSessionIdFromQuery({
-    sessionId: params.get('sessionId'),
-  })
-  sessionStorage.setItem(INITIAL_SESSION_QUERY_KEY, sid)
+  sessionStorage.setItem(INITIAL_SESSION_QUERY_KEY, '')
 } catch {
   // ignore
 }

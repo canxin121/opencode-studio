@@ -4,7 +4,6 @@ import { useRoute, useRouter, RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
   RiArrowLeftSLine,
-  RiArrowDownSLine,
   RiLayoutLeftLine,
   RiLayoutRightLine,
   RiPlayListAddLine,
@@ -18,25 +17,29 @@ import {
   RiSettings3Line,
 } from '@remixicon/vue'
 import { cn } from '@/lib/utils'
-import { MAIN_TABS, mainTabFromPath, type MainTabId } from '@/app/navigation/mainTabs'
+import { MAIN_TABS, isWorkspaceMainTabPath, mainTabFromPath, type NavigationMainTabId } from '@/app/navigation/mainTabs'
 import { useUiStore } from '@/stores/ui'
 import { useHealthStore } from '@/stores/health'
 import { useDirectoryStore } from '@/stores/directory'
-import { useSettingsStore } from '@/stores/settings'
 import { useChatStore } from '@/stores/chat'
 import { apiJson } from '@/lib/api'
 import type { GitStatusResponse } from '@/types/git'
 import { localStorageKeys } from '@/lib/persistence/storageKeys'
 
 import IconButton from '@/components/ui/IconButton.vue'
-import DirectoryPathDialog from '@/components/ui/DirectoryPathDialog.vue'
 
-type Tab = { id: MainTabId; path: string; label: string; icon: Component; badge?: number; showDot?: boolean }
+type Tab = {
+  id: NavigationMainTabId
+  path: string
+  label: string
+  icon: Component
+  badge?: number
+  showDot?: boolean
+}
 
 const ui = useUiStore()
 const health = useHealthStore()
 const directoryStore = useDirectoryStore()
-const settings = useSettingsStore()
 const chat = useChatStore()
 const route = useRoute()
 const router = useRouter()
@@ -69,29 +72,6 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', updateHeaderHeight)
   window.removeEventListener('orientationchange', updateHeaderHeight)
 })
-
-// -- Directory Picker --
-const directoryPath = computed(() => (directoryStore.currentDirectory || '').trim())
-const directoryDisplay = computed(() => directoryStore.displayDirectory || '')
-const directoryPickerOpen = ref(false)
-const directoryPickerDraft = ref('')
-
-watch(directoryPickerOpen, (open) => {
-  if (open) directoryPickerDraft.value = directoryPath.value
-})
-
-const directoryPickerDisabled = computed(() => !(directoryPickerDraft.value || '').trim())
-
-async function applyDirectoryPicker() {
-  const next = (directoryPickerDraft.value || '').trim()
-  if (!next) return
-  const existing = settings.data?.projects || []
-  if (!existing.some((directory) => directory.path.trim() === next)) {
-    await settings.addProject(next)
-  }
-  directoryStore.setDirectory(next)
-  directoryPickerOpen.value = false
-}
 
 // -- Git Status / Badge --
 const diffFileCount = ref(0)
@@ -131,7 +111,7 @@ onBeforeUnmount(() => {
 })
 
 // -- Navigation Tabs --
-const TAB_ICONS: Record<MainTabId, Component> = {
+const TAB_ICONS: Record<NavigationMainTabId, Component> = {
   chat: RiChat4Line,
   files: RiFolder6Line,
   preview: RiGlobalLine,
@@ -149,15 +129,10 @@ const tabs = computed<Tab[]>(() => {
   }))
 })
 
-function mainTabRoute(path: string): { path: string; query?: Record<string, string> } {
+function mainTabRoute(path: string): string {
   const normalizedPath = String(path || '').trim()
-  if (!normalizedPath) return { path: '/chat' }
-  const windowId = String(ui.activeWorkspaceWindowId || '').trim()
-  if (!windowId) return { path: normalizedPath }
-  return {
-    path: normalizedPath,
-    query: { windowId },
-  }
+  if (!normalizedPath) return '/chat'
+  return normalizedPath
 }
 
 // Sync Route -> UI Store (for mobile title / persistence + workspace windows)
@@ -165,8 +140,7 @@ watch(
   () => ({ path: route.path, query: route.query }),
   ({ path, query }) => {
     const normalized = String(path || '').toLowerCase()
-    const matchesMainTab = MAIN_TABS.some((tab) => normalized.startsWith(tab.path))
-    if (!matchesMainTab) return
+    if (!isWorkspaceMainTabPath(normalized)) return
 
     const next = mainTabFromPath(normalized)
     ui.syncActiveWorkspaceWindowFromRoute(next, query)
@@ -279,6 +253,9 @@ function getRememberedSettingsRoute(): string {
 
 function openSettings() {
   ui.setSessionSwitcherOpen(false)
+  if (!ui.isCompactLayout) {
+    ui.setSidebarOpen(true, { preserveWidth: true })
+  }
   router.push(getRememberedSettingsRoute())
 }
 
@@ -361,20 +338,6 @@ function openHelpDialog() {
         <div class="typography-ui-label font-semibold truncate">{{ mobileTitle }}</div>
       </div>
 
-      <!-- Desktop Directory Picker -->
-      <button
-        v-else
-        type="button"
-        class="flex items-center gap-2 px-2.5 h-9 rounded-md text-[11px] font-medium hover:bg-secondary/40 transition-colors select-none max-w-[36vw]"
-        :title="directoryPath || String(t('header.noDirectorySelected'))"
-        :aria-label="String(t('header.changeDirectory'))"
-        @click="directoryPickerOpen = true"
-      >
-        <RiFolder6Line class="h-4 w-4 text-muted-foreground" />
-        <span class="font-mono truncate">{{ directoryDisplay || String(t('header.noDirectorySelected')) }}</span>
-        <RiArrowDownSLine class="h-4 w-4 text-muted-foreground flex-shrink-0" />
-      </button>
-
       <div class="flex-1" v-if="!ui.isCompactLayout" />
 
       <!-- Right Actions -->
@@ -427,18 +390,6 @@ function openHelpDialog() {
           </IconButton>
 
           <IconButton
-            v-if="ui.isCompactLayout"
-            size="lg"
-            :tooltip="directoryPath || String(t('header.noDirectorySelected'))"
-            :is-touch-pointer="ui.isTouchPointer"
-            :aria-label="String(t('header.changeDirectory'))"
-            :title="directoryPath || String(t('header.noDirectorySelected'))"
-            @click="directoryPickerOpen = true"
-          >
-            <RiFolder6Line class="h-5 w-5" />
-          </IconButton>
-
-          <IconButton
             size="lg"
             :tooltip="String(t('nav.settings'))"
             :is-touch-pointer="ui.isTouchPointer"
@@ -451,18 +402,4 @@ function openHelpDialog() {
       </div>
     </div>
   </header>
-
-  <DirectoryPathDialog
-    :open="directoryPickerOpen"
-    :path="directoryPickerDraft"
-    :title="String(t('header.selectDirectory.title'))"
-    :description="String(t('header.selectDirectory.description'))"
-    :placeholder="String(t('header.selectDirectory.placeholder'))"
-    :confirm-label="String(t('common.useDirectory'))"
-    :confirm-disabled="directoryPickerDisabled"
-    :base-path="directoryStore.currentDirectory || ''"
-    @update:open="(v) => (directoryPickerOpen = v)"
-    @update:path="(v) => (directoryPickerDraft = v)"
-    @confirm="applyDirectoryPicker"
-  />
 </template>

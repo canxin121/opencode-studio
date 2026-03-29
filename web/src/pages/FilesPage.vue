@@ -92,6 +92,7 @@ import {
 } from '@/features/files/api/filesApi'
 import type { FsContentSearchFileResult, FsContentSearchMatch } from '@/features/files/api/filesApi'
 import { useUnifiedMultiSelect } from '@/composables/useUnifiedMultiSelect'
+import { isEmbeddedWorkspacePaneContext } from '@/app/windowScope'
 import { WORKSPACE_SIDEBAR_HOST_SELECTOR } from '@/layout/workspaceSidebarHost'
 import { localStorageKeys } from '@/lib/persistence/storageKeys'
 import { useChatStore } from '@/stores/chat'
@@ -137,11 +138,18 @@ const router = useRouter()
 const { t } = useI18n()
 const filesMultiSelect = useUnifiedMultiSelect()
 
-const projectRoot = computed(() => directoryStore.currentDirectory || '')
-const root = computed(() => trimTrailingSlashes(normalizePath((projectRoot.value || '').trim())))
+const preferredProjectRoot = computed(() => directoryStore.currentDirectory || '')
+const configuredProjectRoots = computed(() => {
+  const projects = Array.isArray(settings.data?.projects) ? settings.data?.projects : []
+  return projects.map((entry) => trimTrailingSlashes(normalizePath(String(entry?.path || '').trim()))).filter(Boolean)
+})
+const explorerRootPath = ref('')
+const root = computed(() => trimTrailingSlashes(normalizePath((explorerRootPath.value || '').trim())))
 const isCompactLayout = computed(() => ui.isCompactLayout)
 const isMobileFormFactor = computed(() => ui.isMobilePointer)
-const embeddedView = ref<'list' | 'viewer'>(props.embedded ? 'list' : 'viewer')
+const embeddedView = ref<'list' | 'viewer'>(
+  isEmbeddedWorkspacePaneContext(route.query) || props.embedded ? 'list' : 'viewer',
+)
 
 const showHidden = ref(localStorage.getItem(STORAGE_FILES_SHOW_HIDDEN) === 'true')
 const respectGitignore = ref(localStorage.getItem(STORAGE_FILES_RESPECT_GITIGNORE) !== 'false')
@@ -397,13 +405,14 @@ const wrapLines = ref(true)
 const isSaving = ref(false)
 const uploading = ref(false)
 const showMobileViewer = ref(false)
-const isEmbeddedWorkspacePane = computed(() => String(route.query?.ocEmbed || '').trim() === '1')
+const isEmbeddedWorkspacePane = computed(() => isEmbeddedWorkspacePaneContext(route.query))
+const embeddedMode = computed(() => props.embedded || isEmbeddedWorkspacePane.value)
 const useDesktopSidebarHost = computed(
-  () => !props.embedded && !isCompactLayout.value && !isEmbeddedWorkspacePane.value,
+  () => !embeddedMode.value && !isCompactLayout.value && !isEmbeddedWorkspacePane.value,
 )
 const showFilesSidebar = computed(() => {
   if (isEmbeddedWorkspacePane.value) return false
-  if (props.embedded) return embeddedView.value === 'list'
+  if (embeddedMode.value) return embeddedView.value === 'list'
   if (useDesktopSidebarHost.value) return true
   return isCompactLayout.value ? ui.isSessionSwitcherOpen : ui.isSidebarOpen
 })
@@ -641,7 +650,7 @@ watch(
 )
 
 watch(
-  () => [props.embedded, selectedFile.value?.path] as const,
+  () => [embeddedMode.value, selectedFile.value?.path] as const,
   ([embedded, path]) => {
     if (!embedded) return
     embeddedView.value = path ? 'viewer' : 'list'
@@ -1186,8 +1195,105 @@ function normalizePath(value: string): string {
 }
 
 function trimTrailingSlashes(value: string): string {
-  return value.replace(/\/+$/g, '')
+  const normalized = normalizePath(String(value || '').trim())
+  if (!normalized) return ''
+  if (normalized === '/') return '/'
+  if (/^[A-Za-z]:\/$/.test(normalized)) return normalized
+  return normalized.replace(/\/+$/g, '')
 }
+
+function rootDrive(path: string): string {
+  const normalized = trimTrailingSlashes(path)
+  const m = normalized.match(/^([A-Za-z]:)(?:\/|$)/)
+  return m ? `${m[1]}/` : ''
+}
+
+function parentRootPath(path: string): string {
+  const normalized = trimTrailingSlashes(path)
+  if (!normalized) return ''
+  if (normalized === '/') return ''
+  const drive = rootDrive(normalized)
+  if (drive && normalized === drive) return ''
+
+  const slash = normalized.lastIndexOf('/')
+  if (slash < 0) return ''
+  if (slash === 0) return '/'
+  if (drive && slash <= drive.length - 1) return drive
+  return normalized.slice(0, slash)
+}
+
+function systemRootForPath(path: string): string {
+  const drive = rootDrive(path)
+  if (drive) return drive
+  return '/'
+}
+
+function rootOptionLabel(path: string): string {
+  const normalized = trimTrailingSlashes(path)
+  if (!normalized) return ''
+  if (normalized === '/') return '/'
+  return normalized
+}
+
+const rootCanNavigateUp = computed(() => Boolean(parentRootPath(root.value)))
+
+const explorerRootOptions = computed(() => {
+  const out = new Set<string>()
+  const current = root.value
+  const preferred = trimTrailingSlashes(normalizePath(preferredProjectRoot.value || ''))
+  const configured = configuredProjectRoots.value
+
+  if (current) {
+    out.add(current)
+    const parent = parentRootPath(current)
+    if (parent) out.add(parent)
+    const sysRoot = systemRootForPath(current)
+    if (sysRoot) out.add(sysRoot)
+  }
+  if (preferred) out.add(preferred)
+  for (const candidate of configured) {
+    out.add(candidate)
+    const sysRoot = systemRootForPath(candidate)
+    if (sysRoot) out.add(sysRoot)
+  }
+
+  return Array.from(out)
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+    .map((path) => ({ id: path, label: rootOptionLabel(path) }))
+})
+
+function setExplorerRoot(path: string, opts?: { source?: string }) {
+  const next = trimTrailingSlashes(normalizePath(String(path || '').trim()))
+  if (!next || next === root.value) return
+  explorerRootPath.value = next
+  ui.setGlobalSelection('files-root', next, {
+    meta: { source: String(opts?.source || 'files-root-switch') },
+  })
+}
+
+function navigateRootUp() {
+  const parent = parentRootPath(root.value)
+  if (!parent) return
+  setExplorerRoot(parent, { source: 'files-root-up' })
+}
+
+watch(
+  () => [preferredProjectRoot.value, configuredProjectRoots.value] as const,
+  ([preferred, configured]) => {
+    if (root.value) return
+    const nextPreferred = trimTrailingSlashes(normalizePath(String(preferred || '').trim()))
+    if (nextPreferred) {
+      explorerRootPath.value = nextPreferred
+      return
+    }
+    const fallback = configured.find((path) => Boolean(path)) || ''
+    if (fallback) {
+      explorerRootPath.value = fallback
+    }
+  },
+  { immediate: true, deep: true },
+)
 
 function joinPath(base: string, name: string): string {
   const b = base.replace(/\/+$/, '')
@@ -1199,7 +1305,14 @@ function withinWorkspace(path: string, basePath = root.value): boolean {
   const normalizedBase = trimTrailingSlashes(normalizePath(basePath || ''))
   if (!normalizedBase) return true
   const normalizedPath = trimTrailingSlashes(normalizePath(path))
-  return normalizedPath === normalizedBase || normalizedPath.startsWith(`${normalizedBase}/`)
+  if (normalizedPath === normalizedBase) return true
+  if (normalizedBase === '/') {
+    return normalizedPath.startsWith('/')
+  }
+  if (/^[A-Za-z]:\/$/.test(normalizedBase)) {
+    return normalizedPath.toLowerCase().startsWith(normalizedBase.toLowerCase())
+  }
+  return normalizedPath.startsWith(`${normalizedBase}/`)
 }
 
 function relativeToWorkspace(absPath: string): string {
@@ -1207,6 +1320,16 @@ function relativeToWorkspace(absPath: string): string {
   const normalized = trimTrailingSlashes(normalizePath(absPath))
   if (!base) return normalized
   if (normalized === base) return '.'
+  if (base === '/') {
+    if (normalized.startsWith('/')) return normalized.slice(1)
+    return normalized
+  }
+  if (/^[A-Za-z]:\/$/.test(base)) {
+    if (normalized.toLowerCase().startsWith(base.toLowerCase())) {
+      return normalized.slice(base.length).replace(/^\/+/, '')
+    }
+    return normalized
+  }
   if (normalized.startsWith(`${base}/`)) return normalized.slice(base.length + 1)
   return normalized
 }
@@ -1297,12 +1420,12 @@ function gitNavigationLocationKey(location?: GitNavigationLocation): string {
 }
 
 function showEmbeddedFileList() {
-  if (!props.embedded) return
+  if (!embeddedMode.value) return
   embeddedView.value = 'list'
 }
 
 function showEmbeddedFileViewer() {
-  if (!props.embedded) return
+  if (!embeddedMode.value) return
   if (!selectedFile.value) return
   embeddedView.value = 'viewer'
 }
@@ -1444,7 +1567,7 @@ async function applyGitNavigationTarget(
   selectOnlyPath(targetPath)
   highlightedPath.value = targetPath
   selectedDirectoryPath.value = normalizePath(targetPath.split('/').slice(0, -1).join('/')) || workspaceRoot
-  if (props.embedded) {
+  if (embeddedMode.value) {
     embeddedView.value = 'list'
   }
   if (isCompactLayout.value) {
@@ -2823,9 +2946,13 @@ async function openFile(node: FileNode) {
   if (isCompactLayout.value) {
     showMobileViewer.value = true
   }
-  if (props.embedded) {
+  if (embeddedMode.value) {
     showEmbeddedFileViewer()
   }
+
+  ui.setGlobalSelection('files-file', node.path, {
+    meta: { source: 'files-open-file' },
+  })
 
   const previewMode = detectPreviewMode(node.path)
   if (previewMode === 'image' || previewMode === 'pdf' || previewMode === 'audio' || previewMode === 'video') {
@@ -2947,7 +3074,7 @@ async function loadMoreFileContent() {
 }
 
 function shouldOpenFileInNewWorkspaceWindow(): boolean {
-  return !props.embedded && !isCompactLayout.value && !isEmbeddedWorkspacePane.value
+  return !embeddedMode.value && !isCompactLayout.value && !isEmbeddedWorkspacePane.value
 }
 
 function buildFileWindowRouteQuery(path: string): Record<string, string> {
@@ -3021,6 +3148,9 @@ async function handleNodeClick(node: FileNode, options: ExplorerNodeClickOptions
         selectedPaths.value = new Set(targets)
       }
       selectionAnchorPath.value = path
+      ui.setGlobalSelection(node.type === 'directory' ? 'files-directory' : 'files-file', path, {
+        meta: { source: 'files-node-range-select', multi: true },
+      })
       return
     }
 
@@ -3032,6 +3162,9 @@ async function handleNodeClick(node: FileNode, options: ExplorerNodeClickOptions
     }
     selectedPaths.value = next
     selectionAnchorPath.value = path
+    ui.setGlobalSelection(node.type === 'directory' ? 'files-directory' : 'files-file', path, {
+      meta: { source: 'files-node-multi-select', multi: true },
+    })
     return
   }
 
@@ -3042,9 +3175,16 @@ async function handleNodeClick(node: FileNode, options: ExplorerNodeClickOptions
   closeFileTimeline()
   if (node.type === 'directory') {
     selectedDirectoryPath.value = path
+    ui.setGlobalSelection('files-directory', path, {
+      meta: { source: 'files-node-click' },
+    })
     await toggleDirectory(path)
     return
   }
+
+  ui.setGlobalSelection('files-file', path, {
+    meta: { source: 'files-node-click' },
+  })
   await requestFileSelect(node)
 }
 
@@ -3751,10 +3891,43 @@ async function restoreForRoot(next: string) {
 watch(
   () => root.value,
   (next) => {
+    if (next) {
+      ui.setGlobalSelection('files-root', next, {
+        meta: { source: 'files-root-active' },
+      })
+    }
     if (!pageMounted) return
     handledFileNavigationKey.value = ''
     void restoreForRoot(next)
   },
+)
+
+watch(
+  () => [selectedFile.value?.path, viewerMode.value] as const,
+  ([path, mode]) => {
+    const filePath = normalizePath(String(path || '').trim())
+    if (!filePath) return
+    ui.setGlobalSelection('files-editor', filePath, {
+      meta: { mode, source: 'files-viewer-focus' },
+    })
+  },
+)
+
+watch(
+  () => selection.value,
+  (range) => {
+    if (!range) return
+    const filePath = normalizePath(String(selectedFile.value?.path || '').trim())
+    if (!filePath) return
+    ui.setGlobalSelection('files-selection', filePath, {
+      meta: {
+        source: 'files-selection-change',
+        startLine: range.startLine,
+        endLine: range.endLine,
+      },
+    })
+  },
+  { deep: true },
 )
 
 watch(
@@ -3783,7 +3956,7 @@ watch(
 watch(
   () => [root.value, ui.workspaceDockFileRequestSeq] as const,
   () => {
-    if (!props.embedded) return
+    if (!embeddedMode.value) return
     if (!pageMounted) return
 
     const requestSeq = Number(ui.workspaceDockFileRequestSeq || 0)
@@ -3994,9 +4167,9 @@ onMounted(async () => {
             <Teleport :to="WORKSPACE_SIDEBAR_HOST_SELECTOR" :disabled="!useDesktopSidebarHost">
               <div
                 class="relative h-full min-h-0 overflow-hidden m-0 p-0"
-                :class="isCompactLayout || props.embedded || useDesktopSidebarHost ? 'flex-1' : 'flex-shrink-0'"
+                :class="isCompactLayout || embeddedMode || useDesktopSidebarHost ? 'flex-1' : 'flex-shrink-0'"
                 :style="
-                  isCompactLayout || props.embedded || useDesktopSidebarHost
+                  isCompactLayout || embeddedMode || useDesktopSidebarHost
                     ? undefined
                     : { width: `${ui.sidebarWidth}px` }
                 "
@@ -4007,6 +4180,10 @@ onMounted(async () => {
                   v-model:showHidden="showHidden"
                   v-model:showGitignored="showGitignored"
                   :root="root"
+                  :root-options="explorerRootOptions"
+                  :can-navigate-up="rootCanNavigateUp"
+                  :navigate-up="navigateRootUp"
+                  :switch-root="setExplorerRoot"
                   :is-compact-layout="isCompactLayout"
                   :is-mobile-form-factor="isMobileFormFactor"
                   :selected-file-path="highlightedPath || selectedDirectoryPath || selectedFile?.path || ''"
@@ -4328,7 +4505,7 @@ onMounted(async () => {
 
             <div
               class="flex-1 min-h-0 overflow-hidden m-0 p-0"
-              v-show="props.embedded ? embeddedView === 'viewer' : !isCompactLayout || !ui.isSessionSwitcherOpen"
+              v-show="embeddedMode ? embeddedView === 'viewer' : !isCompactLayout || !ui.isSessionSwitcherOpen"
             >
               <FileViewerPane
                 v-model:showMobileViewer="showMobileViewer"
@@ -4339,7 +4516,8 @@ onMounted(async () => {
                 v-model:selection="selection"
                 v-model:commentText="commentText"
                 :is-compact-layout="isCompactLayout"
-                :show-header-back-button="props.embedded"
+                :show-header-back-button="embeddedMode"
+                :hide-header-title="isEmbeddedWorkspacePane"
                 :is-touch-pointer="ui.isTouchPointer"
                 :is-mobile-form-factor="isMobileFormFactor"
                 :selected-file="selectedFile"
@@ -4398,7 +4576,7 @@ onMounted(async () => {
                 :refresh-timeline="refreshFileTimeline"
                 :select-timeline-commit="selectFileTimelineCommit"
                 :open-timeline="openFileTimeline"
-                :open-sidebar="props.embedded ? showEmbeddedFileList : () => ui.setSessionSwitcherOpen(true)"
+                :open-sidebar="embeddedMode ? showEmbeddedFileList : () => ui.setSessionSwitcherOpen(true)"
                 :on-header-back="showEmbeddedFileList"
                 :refresh-file="() => refreshCurrentFile({ source: 'manual' })"
                 :save="() => save()"

@@ -7,12 +7,18 @@ test('main layout wires flexible dock panel regions', () => {
   const mainLayoutSource = readFileSync(resolve(import.meta.dir, '../src/layout/MainLayout.vue'), 'utf8')
   const appHeaderSource = readFileSync(resolve(import.meta.dir, '../src/layout/AppHeader.vue'), 'utf8')
   const uiStoreSource = readFileSync(resolve(import.meta.dir, '../src/stores/ui.ts'), 'utf8')
+  const horizontalSplitSource = readFileSync(
+    resolve(import.meta.dir, '../src/components/ui/HorizontalSplitPane.vue'),
+    'utf8',
+  )
 
   assert.ok(mainLayoutSource.includes('HorizontalSplitPane'))
   assert.ok(!mainLayoutSource.includes('VerticalSplitPane'))
   assert.ok(mainLayoutSource.includes('WorkspaceDockPanel'))
   assert.ok(mainLayoutSource.includes('showWorkspaceRightDock'))
+  assert.ok(mainLayoutSource.includes(':show-right-pane="showWorkspaceRightDock"'))
   assert.ok(!mainLayoutSource.includes('showWorkspaceBottomDock'))
+  assert.ok(horizontalSplitSource.includes('showRightPane'))
 
   assert.ok(appHeaderSource.includes('toggleWorkspaceDock'))
   assert.ok(appHeaderSource.includes('RiLayoutRightLine'))

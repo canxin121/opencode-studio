@@ -19,6 +19,7 @@ import ListItemOverflowActionButton from '@/components/ui/ListItemOverflowAction
 import { directoryEntryLabel, formatTime, sessionLabel } from '@/features/sessions/model/labels'
 import type { DirectoryEntry } from '@/features/sessions/model/types'
 import type { SessionActionItem } from '@/layout/chatSidebar/useSessionActionMenu'
+import { writeWorkspaceWindowTemplateToDataTransfer } from '@/layout/workspaceWindowDrag'
 import SidebarListItem from '@/components/ui/SidebarListItem.vue'
 import SidebarSessionActionMenu from '@/layout/chatSidebar/components/SidebarSessionActionMenu.vue'
 
@@ -126,6 +127,7 @@ const statusLabelText = computed(() => {
 })
 
 const canShowActions = computed(() => props.actionsEnabled && hasSessionContext.value)
+const canDragToWorkspace = computed(() => hasSessionContext.value && !props.multiSelectEnabled && !isInlineRename.value)
 const renameInputEl = ref<HTMLInputElement | null>(null)
 
 const isInlineRename = computed(() => props.renaming && !props.uiIsCompactLayout && hasSessionContext.value)
@@ -145,6 +147,14 @@ const shouldRenderSessionActionMenu = computed(() => {
 const titleText = computed(() => {
   if (!props.session) return props.sessionId
   return sessionLabel(props.session)
+})
+
+const workspaceTabTitleText = computed(() => {
+  const titled = String(props.session?.title || '').trim()
+  if (titled) return titled
+  const slug = String(props.session?.slug || '').trim()
+  if (slug) return slug
+  return ''
 })
 
 const directoryText = computed(() => {
@@ -204,6 +214,36 @@ function handleRowClick(event: MouseEvent) {
   }
   emit('open')
 }
+
+function handleRowDragStart(event: DragEvent) {
+  if (!canDragToWorkspace.value) {
+    event.preventDefault()
+    return
+  }
+
+  const sid = String(props.sessionId || '').trim()
+  if (!sid) {
+    event.preventDefault()
+    return
+  }
+
+  const transfer = event.dataTransfer
+  if (!transfer) {
+    event.preventDefault()
+    return
+  }
+
+  transfer.effectAllowed = 'copyMove'
+  const ok = writeWorkspaceWindowTemplateToDataTransfer(transfer, {
+    tab: 'chat',
+    query: { sessionId: sid },
+    title: String(workspaceTabTitleText.value || '').trim() || undefined,
+    matchKeys: ['sessionId'],
+  })
+  if (!ok) {
+    event.preventDefault()
+  }
+}
 </script>
 
 <template>
@@ -213,9 +253,11 @@ function handleRowClick(event: MouseEvent) {
       :indent="indentPx"
       :as="isInlineRename ? 'div' : 'button'"
       :actions-always-visible="actionsAlwaysVisible"
+      :draggable="canDragToWorkspace"
       class="gap-2 relative"
       :class="highlighted ? 'ring-2 ring-primary/40 ring-inset' : ''"
       @click="handleRowClick($event)"
+      @dragstart="handleRowDragStart"
     >
       <template #icon>
         <div class="flex items-center gap-1.5 min-w-0">

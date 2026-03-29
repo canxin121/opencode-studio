@@ -3,6 +3,7 @@ import type { Router } from 'vue-router'
 
 import { ApiError } from '@/lib/api'
 import { stageTrustedTerminalHandoff } from '@/lib/terminalHandoff'
+import { withEmbeddedWorkspaceScopeQuery } from '@/app/windowScope'
 import { useGitCredentialsDialogs } from '@/composables/git/useGitCredentialsDialogs'
 import type { JsonValue } from '@/types/json'
 import { i18n } from '@/i18n'
@@ -392,7 +393,11 @@ export function useGitPageAuth(opts: {
       return
     }
 
-    void router.push({ path: '/terminal', query: { sendToken } })
+    const currentQuery = router.currentRoute.value.query || {}
+    void router.push({
+      path: '/terminal',
+      query: withEmbeddedWorkspaceScopeQuery({ sendToken }, currentQuery),
+    })
   }
 
   function terminalCommandForRemoteAction(action: PendingRemoteAction): string {

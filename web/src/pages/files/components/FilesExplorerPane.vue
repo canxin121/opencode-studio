@@ -4,6 +4,7 @@ import type { ComponentPublicInstance } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import {
+  RiArrowLeftSLine,
   RiArrowUpLine,
   RiCheckLine,
   RiCloseLine,
@@ -35,6 +36,7 @@ import SidebarIconButton from '@/components/ui/SidebarIconButton.vue'
 import SidebarListItem from '@/components/ui/SidebarListItem.vue'
 import Skeleton from '@/components/ui/Skeleton.vue'
 import ScrollArea from '@/components/ui/ScrollArea.vue'
+import { writeWorkspaceWindowTemplateToDataTransfer } from '@/layout/workspaceWindowDrag'
 
 import { fileIconClass, fileIconComponent } from '../fileKinds'
 import type { DialogKind, FileNode, FlatRow } from '../types'
@@ -53,6 +55,10 @@ const showGitignored = defineModel<boolean>('showGitignored', { default: false }
 
 const props = defineProps<{
   root: string
+  rootOptions?: Array<{ id: string; label: string }>
+  canNavigateUp?: boolean
+  navigateUp?: () => void | Promise<void>
+  switchRoot?: (rootPath: string) => void | Promise<void>
   isCompactLayout: boolean
   isMobileFormFactor?: boolean
   isMobilePointer?: boolean
@@ -205,6 +211,15 @@ const hasDeletingSelected = computed(() =>
 
 function isNodeSelected(path: string): boolean {
   return props.selectedPaths.has(path)
+}
+
+const selectedRootPath = computed(() => String(props.root || '').trim())
+
+function onRootSelect(ev: Event) {
+  const target = ev.target as HTMLSelectElement | null
+  const next = String(target?.value || '').trim()
+  if (!next || next === selectedRootPath.value) return
+  void props.switchRoot?.(next)
 }
 
 const inlineCreateDepth = computed(() => {
@@ -930,6 +945,36 @@ async function onRowDrop(ev: DragEvent, row: FlatRow) {
   await props.uploadFiles(list, row.node.path)
 }
 
+function handleWorkspaceItemDragStart(ev: DragEvent, row: FlatRow) {
+  if (row.node.type !== 'file') {
+    ev.preventDefault()
+    return
+  }
+
+  const path = String(row.node.path || '').trim()
+  if (!path) {
+    ev.preventDefault()
+    return
+  }
+
+  const transfer = ev.dataTransfer
+  if (!transfer) {
+    ev.preventDefault()
+    return
+  }
+
+  transfer.effectAllowed = 'copyMove'
+  const ok = writeWorkspaceWindowTemplateToDataTransfer(transfer, {
+    tab: 'files',
+    query: { filePath: path },
+    title: String(row.node.name || '').trim() || undefined,
+    matchKeys: ['filePath'],
+  })
+  if (!ok) {
+    ev.preventDefault()
+  }
+}
+
 function handleGlobalPointerDown(ev: PointerEvent) {
   const target = ev.target as Node | null
   if (!target) return
@@ -1068,6 +1113,28 @@ onBeforeUnmount(() => {
             @select="runExplorerAction"
           />
         </div>
+      </div>
+    </div>
+
+    <div class="border-b border-sidebar-border/60 px-1.5 py-1">
+      <div class="flex items-center gap-1">
+        <SidebarIconButton
+          size="sm"
+          :title="t('files.explorer.navigation.goUp')"
+          :aria-label="t('files.explorer.navigation.goUp')"
+          :disabled="!canNavigateUp"
+          @click="navigateUp && navigateUp()"
+        >
+          <RiArrowLeftSLine class="h-3.5 w-3.5" />
+        </SidebarIconButton>
+
+        <select
+          class="h-7 min-w-0 flex-1 rounded-sm border border-sidebar-border/60 bg-sidebar-accent/15 px-2 text-[11px] font-mono text-foreground"
+          :value="selectedRootPath"
+          @change="onRootSelect"
+        >
+          <option v-for="option in rootOptions || []" :key="option.id" :value="option.id">{{ option.label }}</option>
+        </select>
       </div>
     </div>
 
@@ -1290,7 +1357,8 @@ onBeforeUnmount(() => {
                   ]"
                   @click="handleTreeNodeClick($event, entry.row.node)"
                   @pointerdown="onRowPointerDown($event, entry.row.node)"
-                  @dragstart.prevent
+                  :draggable="entry.row.node.type === 'file'"
+                  @dragstart="handleWorkspaceItemDragStart($event, entry.row)"
                   @dragover="onRowDragOver($event, entry.row)"
                   @dragleave="onRowDragLeave($event, entry.row)"
                   @drop="onRowDrop($event, entry.row)"

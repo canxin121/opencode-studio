@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 
 const props = defineProps<{
   modelValue: number
   minWidth?: number
   maxWidth?: number
   disabled?: boolean
+  showRightPane?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -21,6 +22,8 @@ const startWidth = ref(0)
 const previewWidth = ref(0)
 const pointerTarget = ref<HTMLElement | null>(null)
 const pointerId = ref<number | null>(null)
+const showRightPane = computed(() => props.showRightPane !== false)
+const effectiveRightWidth = computed(() => (showRightPane.value ? previewWidth.value : 0))
 
 watch(
   () => props.modelValue,
@@ -29,6 +32,16 @@ watch(
     previewWidth.value = value
   },
   { immediate: true },
+)
+
+watch(
+  () => props.showRightPane,
+  (value) => {
+    if (value !== false || !isDragging.value) return
+    isDragging.value = false
+    emit('dragEnd')
+    cleanupPointerState()
+  },
 )
 
 function clampWidth(raw: number): number {
@@ -123,6 +136,7 @@ onBeforeUnmount(() => {
     </div>
 
     <div
+      v-show="showRightPane"
       class="group relative z-20 -mx-1.5 flex h-full w-3 cursor-col-resize items-center justify-center select-none touch-none"
       :class="{ 'pointer-events-none opacity-50': disabled }"
       @pointerdown="handlePointerDown"
@@ -133,8 +147,9 @@ onBeforeUnmount(() => {
 
     <div
       class="relative shrink-0 overflow-hidden"
-      :class="{ 'transition-[width] duration-200 ease-out': !isDragging }"
-      :style="{ width: `${previewWidth}px` }"
+      :aria-hidden="!showRightPane"
+      :class="[showRightPane ? '' : 'pointer-events-none', { 'transition-[width] duration-200 ease-out': !isDragging }]"
+      :style="{ width: `${effectiveRightWidth}px` }"
     >
       <slot name="right" />
     </div>

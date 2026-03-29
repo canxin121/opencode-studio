@@ -51,6 +51,7 @@ import { useSettingsStore } from '@/stores/settings'
 import { useUiStore } from '@/stores/ui'
 import { useToastsStore } from '@/stores/toasts'
 import { gitRepoScopedStorageKey, localStorageKeys } from '@/lib/persistence/storageKeys'
+import { isEmbeddedWorkspacePaneContext, withEmbeddedWorkspaceScopeQuery } from '@/app/windowScope'
 
 const props = withDefaults(
   defineProps<{
@@ -70,6 +71,7 @@ const gitRepos = useGitReposStore()
 const ui = useUiStore()
 const route = useRoute()
 const router = useRouter()
+const isEmbeddedWorkspacePane = computed(() => props.embedded || isEmbeddedWorkspacePaneContext(route.query))
 
 const projectRoot = computed(() => directoryStore.currentDirectory)
 
@@ -997,7 +999,7 @@ function resolveRepoFilePath(path: string): string | null {
 function openFileInFiles(path: string) {
   const abs = resolveRepoFilePath(path)
   if (!abs) return
-  if (props.embedded) {
+  if (isEmbeddedWorkspacePane.value) {
     ui.requestWorkspaceDockFile(abs, 'open')
     return
   }
@@ -1012,13 +1014,13 @@ function openFileInFiles(path: string) {
     title: fileName,
     matchKeys: ['filePath'],
   })
-  void router.push({ path: '/files', query })
+  void router.push({ path: '/files', query: withEmbeddedWorkspaceScopeQuery(query, route.query) })
 }
 
 function revealFileInFiles(path: string) {
   const abs = resolveRepoFilePath(path)
   if (!abs) return
-  if (props.embedded) {
+  if (isEmbeddedWorkspacePane.value) {
     ui.requestWorkspaceDockFile(abs, 'reveal')
     return
   }
@@ -1033,7 +1035,7 @@ function revealFileInFiles(path: string) {
     title: fileName,
     matchKeys: ['filePath'],
   })
-  void router.push({ path: '/files', query })
+  void router.push({ path: '/files', query: withEmbeddedWorkspaceScopeQuery(query, route.query) })
 }
 
 function openWorktree(path: string) {
@@ -1147,8 +1149,31 @@ const headline = computed(() => {
   return parts.join('  ')
 })
 
+function gitDiffFileName(path: string): string {
+  const normalized = String(path || '')
+    .trim()
+    .replace(/\\/g, '/')
+  if (!normalized) return ''
+  const parts = normalized.split('/').filter(Boolean)
+  return parts[parts.length - 1] || normalized
+}
+
+const gitDiffSourceTitle = computed(() =>
+  diffSource.value === 'staged'
+    ? String(t('git.ui.diffViewer.labels.index'))
+    : String(t('git.ui.diffViewer.labels.workingTree')),
+)
+
 function syncGitWindowTitle() {
   const base = String(t('nav.git'))
+  const selectedDiffFile = gitDiffFileName(selectedFile.value || '')
+  if (selectedDiffFile) {
+    const sourceTitle = String(gitDiffSourceTitle.value || '').trim()
+    const detail = sourceTitle ? `${selectedDiffFile} · ${sourceTitle}` : selectedDiffFile
+    ui.setWorkspaceWindowTitleFromRoute(route.query, `${base} · ${detail}`)
+    return
+  }
+
   const branch = String(status.value?.current || '').trim()
   const repo = String(selectedRepoRelative.value || '').trim()
   const detail = branch || (repo && repo !== '.' ? repo : '')
@@ -1158,7 +1183,7 @@ function syncGitWindowTitle() {
 }
 
 watch(
-  () => [status.value?.current, selectedRepoRelative.value, route.query],
+  () => [status.value?.current, selectedRepoRelative.value, selectedFile.value, diffSource.value, route.query],
   () => {
     syncGitWindowTitle()
   },
@@ -1297,5 +1322,5 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <GitPageView :ctx="viewCtx" :embedded="props.embedded" />
+  <GitPageView :ctx="viewCtx" :embedded="isEmbeddedWorkspacePane" />
 </template>

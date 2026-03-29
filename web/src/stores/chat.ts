@@ -893,13 +893,6 @@ export const useChatStore = defineStore('chat', () => {
     // If the user selected a different session while we were searching, bail.
     if (!isLatestSelectSeq(scopeId, token) || selectedSessionIdForWindow(scopeId) !== sid) return
 
-    if (dir && dir.trim()) {
-      const normalizedDir = dir.trim()
-      if (directoryStore.getDirectoryForWindow(scopeId) !== normalizedDir) {
-        directoryStore.setDirectoryForWindow(scopeId, normalizedDir)
-      }
-    }
-
     // Refresh diff after directory resolution so cross-directory sessions use the correct scope.
     void refreshSessionDiff(sid, { silent: true })
 

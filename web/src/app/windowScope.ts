@@ -1,3 +1,5 @@
+import type { LocationQueryRaw } from 'vue-router'
+
 function firstQueryValue(raw: unknown): string {
   if (typeof raw === 'string') return raw.trim()
   if (Array.isArray(raw)) {
@@ -9,7 +11,47 @@ function firstQueryValue(raw: unknown): string {
   return ''
 }
 
+function hasEmbeddedWorkspacePaneLocation(): boolean {
+  if (typeof window === 'undefined') return false
+  return hasEmbeddedWorkspacePaneSearch(window.location.search || '')
+}
+
+const embeddedWorkspacePaneBootContext = hasEmbeddedWorkspacePaneLocation()
+
 export const DEFAULT_WINDOW_SCOPE_ID = 'window-default'
+
+export function hasEmbeddedWorkspacePaneQuery(query: unknown): boolean {
+  if (!query || typeof query !== 'object') return false
+  const record = query as Record<string, unknown>
+  return firstQueryValue(record.ocEmbed) === '1'
+}
+
+export function hasEmbeddedWorkspacePaneSearch(search: string): boolean {
+  const source = String(search || '').trim()
+  if (!source) return false
+  const params = new URLSearchParams(source.startsWith('?') ? source : `?${source}`)
+  return firstQueryValue(params.get('ocEmbed')) === '1'
+}
+
+export function isEmbeddedWorkspacePaneContext(query?: unknown): boolean {
+  if (hasEmbeddedWorkspacePaneQuery(query)) return true
+  if (hasEmbeddedWorkspacePaneLocation()) return true
+  return embeddedWorkspacePaneBootContext
+}
+
+export function withEmbeddedWorkspaceScopeQuery(nextQuery: LocationQueryRaw, currentQuery?: unknown): LocationQueryRaw {
+  if (!isEmbeddedWorkspacePaneContext(currentQuery)) return { ...nextQuery }
+
+  const out: LocationQueryRaw = {
+    ...nextQuery,
+    ocEmbed: '1',
+  }
+  const windowId = readWindowIdFromQuery(currentQuery) || readWindowIdFromLocation()
+  if (windowId && !firstQueryValue(out.windowId)) {
+    out.windowId = windowId
+  }
+  return out
+}
 
 export function readWindowIdFromQuery(query: unknown): string {
   if (!query || typeof query !== 'object') return ''

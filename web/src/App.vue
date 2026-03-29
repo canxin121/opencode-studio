@@ -9,6 +9,7 @@ import type { DesktopBackendErrorInfo } from './lib/desktopConfig'
 import { syncDesktopBackendTarget } from './lib/backend'
 
 import { applyAppearanceSettingsToDom } from './lib/appearance'
+import { isEmbeddedWorkspacePaneContext } from './app/windowScope'
 
 import LoginPage from './pages/LoginPage.vue'
 import DesktopLoadingPage from './pages/DesktopLoadingPage.vue'
@@ -19,10 +20,7 @@ const auth = useAuthStore()
 const health = useHealthStore()
 const settings = useSettingsStore()
 const desktopRuntime = isDesktopRuntime()
-const isEmbeddedWorkspacePane = (() => {
-  if (typeof window === 'undefined') return false
-  return String(new URLSearchParams(window.location.search).get('ocEmbed') || '').trim() === '1'
-})()
+const isEmbeddedWorkspacePane = isEmbeddedWorkspacePaneContext()
 const embeddedBootSettled = ref(!isEmbeddedWorkspacePane)
 
 const desktopBackendReachable = computed(() => health.data !== null)

@@ -5,6 +5,7 @@ import { useSettingsStore } from '@/stores/settings'
 import { useToastsStore } from '@/stores/toasts'
 import { useUiStore } from '@/stores/ui'
 import { patchSessionIdInQuery } from '@/app/navigation/sessionQuery'
+import { isEmbeddedWorkspacePaneContext, withEmbeddedWorkspaceScopeQuery } from '@/app/windowScope'
 import { i18n } from '@/i18n'
 
 type ModifierLabel = 'cmd' | 'ctrl'
@@ -109,14 +110,19 @@ export function installKeyboardShortcuts(): () => void {
         const sid = (created?.id || chat.selectedSessionId || '').trim()
 
         if (sid) {
-          ui.enableSessionQuery()
-          const nextQuery = patchSessionIdInQuery(router.currentRoute.value.query || {}, sid)
+          const currentQuery = router.currentRoute.value.query || {}
+          const isEmbeddedWorkspacePane = isEmbeddedWorkspacePaneContext(currentQuery)
+          const nextQuery = patchSessionIdInQuery(currentQuery, sid)
           ui.createWorkspaceWindow('chat', {
             activate: true,
             query: nextQuery,
             title: String(i18n.global.t('nav.chat')),
           })
-          await router.push({ path: '/chat', query: nextQuery })
+          if (isEmbeddedWorkspacePane) {
+            await router.push({ path: '/chat', query: withEmbeddedWorkspaceScopeQuery(nextQuery, currentQuery) })
+          } else {
+            await router.push('/chat')
+          }
         } else {
           await router.push('/chat')
         }

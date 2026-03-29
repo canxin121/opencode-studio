@@ -7,6 +7,7 @@ import ListItemOverflowActionButton from '@/components/ui/ListItemOverflowAction
 import ListItemSelectionIndicator from '@/components/ui/ListItemSelectionIndicator.vue'
 import OptionMenu from '@/components/ui/OptionMenu.vue'
 import type { OptionMenuGroup, OptionMenuItem } from '@/components/ui/optionMenu.types'
+import { writeWorkspaceWindowTemplateToDataTransfer } from '@/layout/workspaceWindowDrag'
 
 const props = withDefaults(
   defineProps<{
@@ -88,14 +89,42 @@ function onMobileActionSelect(item: OptionMenuItem) {
 function handleMobileActionTrigger() {
   openMobileActionMenu()
 }
+
+function handleRowDragStart(event: DragEvent) {
+  const path = String(props.path || '').trim()
+  if (!path) {
+    event.preventDefault()
+    return
+  }
+
+  const transfer = event.dataTransfer
+  if (!transfer) {
+    event.preventDefault()
+    return
+  }
+
+  transfer.effectAllowed = 'copyMove'
+  const fileName = path.split(/[\\/]/).filter(Boolean).pop() || path
+  const ok = writeWorkspaceWindowTemplateToDataTransfer(transfer, {
+    tab: 'files',
+    query: { filePath: path },
+    title: fileName,
+    matchKeys: ['filePath'],
+  })
+  if (!ok) {
+    event.preventDefault()
+  }
+}
 </script>
 
 <template>
   <ListItemFrame
+    draggable="true"
     :active="active"
     :action-visibility="hasMobileActions ? 'always' : 'hover'"
     class="select-none"
     @click="emit('select', $event)"
+    @dragstart="handleRowDragStart"
   >
     <template #leading>
       <div class="flex items-center gap-1.5">

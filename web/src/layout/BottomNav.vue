@@ -4,12 +4,12 @@ import { RouterLink, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { RiChat4Line, RiFolder6Line, RiTerminalBoxLine, RiGitMergeLine, RiGlobalLine } from '@remixicon/vue'
 import { cn } from '@/lib/utils'
-import { MAIN_TABS, type MainTabId } from '@/app/navigation/mainTabs'
+import { MAIN_TABS, type NavigationMainTabId } from '@/app/navigation/mainTabs'
 
 const route = useRoute()
 const { t } = useI18n()
 
-const TAB_ICONS: Record<MainTabId, Component> = {
+const TAB_ICONS: Record<NavigationMainTabId, Component> = {
   chat: RiChat4Line,
   files: RiFolder6Line,
   preview: RiGlobalLine,

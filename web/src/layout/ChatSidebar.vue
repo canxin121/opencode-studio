@@ -803,7 +803,6 @@ async function runDirectoryDialogAction(item: DirectoryDialogActionItem) {
 async function sessionActionOpen() {
   const t = sessionActionsTarget.value
   if (!t) return
-  await selectDirectory(t.directory.id, t.directory.path)
   await selectSession(t.session.id)
   sessionActionsOpen.value = false
 }
@@ -894,7 +893,6 @@ async function runSessionDialogAction(item: SessionDialogActionItem) {
   const t = sessionActionsTarget.value
   if (!t) return
   sessionActionsOpen.value = false
-  await selectDirectory(t.directory.id, t.directory.path)
   if (t.session?.id && t.session.id !== chat.selectedSessionId) {
     await selectSession(t.session.id)
   }
@@ -1450,58 +1448,21 @@ async function requestRunningSessionsPage(nextPage: number) {
   }
 }
 
-async function resolveDirectoryForOpenSession(
-  sessionId: string,
-  row: ThreadSessionRow | null,
-): Promise<DirectoryEntry | null> {
-  const rowDirectory = row?.directory
-  if (rowDirectory?.id && rowDirectory.path) {
-    return rowDirectory
-  }
-
-  const resolved = await directorySessions
-    .resolveDirectoryForSession(sessionId, {
-      directoryId: rowDirectory?.id,
-      directoryPath: rowDirectory?.path,
-    })
-    .catch(() => null)
-  if (!resolved?.directoryId || !resolved.directoryPath) return null
-  return {
-    id: resolved.directoryId,
-    path: resolved.directoryPath,
-  }
-}
-
 async function openRunningSession(sessionId: string) {
   const sid = (sessionId || '').trim()
   if (!sid) return
-  const row = pagedRunningSessionRows.value.find((item) => item.id === sid) || null
-  const directory = await resolveDirectoryForOpenSession(sid, row)
-  if (directory?.id && directory?.path) {
-    await selectDirectory(directory.id, directory.path)
-  }
   await selectSession(sid)
 }
 
 async function openPinnedSession(sessionId: string) {
   const sid = (sessionId || '').trim()
   if (!sid) return
-  const row = pagedPinnedSessionRows.value.find((item) => item.id === sid) || null
-  const directory = await resolveDirectoryForOpenSession(sid, row)
-  if (directory?.id && directory?.path) {
-    await selectDirectory(directory.id, directory.path)
-  }
   await selectSession(sid)
 }
 
 async function openRecentSession(sessionId: string) {
   const sid = (sessionId || '').trim()
   if (!sid) return
-  const row = pagedRecentSessionRows.value.find((item) => item.id === sid) || null
-  const directory = await resolveDirectoryForOpenSession(sid, row)
-  if (directory?.id && directory?.path) {
-    await selectDirectory(directory.id, directory.path)
-  }
   await selectSession(sid)
 }
 
@@ -1624,7 +1585,6 @@ async function openSessionInWorkspaceWindow(sessionId: string): Promise<string> 
   const sid = String(sessionId || '').trim()
   if (!sid) return ''
 
-  ui.enableSessionQuery()
   const nextQuery = { sessionId: sid }
   const resolvedTitle = resolveSessionTabTitle(sid)
 
@@ -1635,7 +1595,7 @@ async function openSessionInWorkspaceWindow(sessionId: string): Promise<string> 
     matchKeys: ['sessionId'],
   })
 
-  await router.push({ path: '/chat', query: { ...nextQuery, windowId: targetId } })
+  await router.push('/chat')
 
   return targetId
 }
@@ -1671,6 +1631,12 @@ async function selectSession(sessionId: string) {
     targetWindowId = await openSessionInWorkspaceWindow(sessionId)
   }
   await chat.selectSession(sessionId)
+  ui.setGlobalSelection('chat-session', sessionId, {
+    windowId: targetWindowId || undefined,
+    meta: {
+      source: 'chat-sidebar',
+    },
+  })
 
   if (targetWindowId) {
     const title = String(chat.selectedSession?.title || '').trim() || String(chat.selectedSession?.slug || '').trim()

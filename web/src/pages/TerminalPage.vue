@@ -62,6 +62,7 @@ import {
 } from '@/features/terminal/lib/sessionNameKey'
 import { handleTerminalKeyboardShortcut } from '@/features/terminal/lib/terminalKeyboardShortcuts'
 import { WORKSPACE_SIDEBAR_HOST_SELECTOR } from '@/layout/workspaceSidebarHost'
+import { isEmbeddedWorkspacePaneContext, withEmbeddedWorkspaceScopeQuery } from '@/app/windowScope'
 import { useDirectoryStore } from '@/stores/directory'
 import { useUiStore } from '@/stores/ui'
 
@@ -215,11 +216,17 @@ function hydratePendingSendFromQuery() {
   }
 
   if (token || legacySend) {
-    void router.replace({ path: '/terminal', query: {} }).catch(() => {})
+    const nextQuery = withEmbeddedWorkspaceScopeQuery({}, route.query)
+    void router
+      .replace({
+        path: '/terminal',
+        ...(Object.keys(nextQuery).length ? { query: nextQuery } : {}),
+      })
+      .catch(() => {})
   }
 }
 
-const isEmbeddedWorkspacePane = computed(() => String(route.query?.ocEmbed || '').trim() === '1')
+const isEmbeddedWorkspacePane = computed(() => isEmbeddedWorkspacePaneContext(route.query))
 const useDesktopSidebarHost = computed(() => !ui.isCompactLayout && !isEmbeddedWorkspacePane.value)
 const useShellSidebar = computed(() => {
   if (isEmbeddedWorkspacePane.value) return false
@@ -2396,11 +2403,13 @@ watch(el, () => {
         <div
           class="flex shrink-0 items-center gap-3 border-b border-border/60 bg-background/75 px-4 py-2.5 backdrop-blur"
         >
-          <div class="min-w-0 flex-1">
+          <div v-if="!isEmbeddedWorkspacePane" class="min-w-0 flex-1">
             <div class="truncate text-sm font-medium text-foreground" :title="activeSessionName">
               {{ activeSessionName }}
             </div>
           </div>
+
+          <div v-else class="flex-1" aria-hidden="true" />
 
           <IconButton
             variant="ghost"

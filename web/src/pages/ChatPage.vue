@@ -32,6 +32,7 @@ import { formatTimeHM } from '@/i18n/intl'
 import { useChatRenderBlocks } from './chat/useChatRenderBlocks'
 import { useChatMessageActions } from './chat/useChatMessageActions'
 import { deriveSendRunConfig } from './chat/modelSendDefaults'
+import { isEmbeddedWorkspacePaneContext } from '@/app/windowScope'
 import type { OptionMenuGroup, OptionMenuItem } from '@/components/ui/optionMenu.types'
 import type { MessageEntry } from '@/types/chat'
 import type { JsonObject, JsonValue } from '@/types/json'
@@ -166,15 +167,12 @@ const sessionTitle = computed(() => {
   const s = asRecord(chat.selectedSession)
   const title = typeof s?.title === 'string' ? s.title.trim() : ''
   const slug = typeof s?.slug === 'string' ? s.slug.trim() : ''
-  const id = typeof s?.id === 'string' ? s.id.trim() : ''
-  return title || slug || id
+  return title || slug
 })
 
 const workspaceChatTabTitle = computed(() => {
-  const sid = readSessionIdFromQuery(route.query)
   const title = String(sessionTitle.value || '').trim()
   if (title) return title
-  if (sid) return `${String(t('nav.chat'))} · ${sid.slice(0, 8)}`
   return String(t('nav.chat'))
 })
 
@@ -257,9 +255,16 @@ const {
   commandIndex,
   loadCommands,
   insertCommand,
-  handleDraftInput,
+  handleDraftInput: handleDraftInputBase,
   handleDraftKeydown: handleDraftKeydownInner,
 } = chatCommands
+
+function handleDraftInput() {
+  handleDraftInputBase()
+  ui.setGlobalSelection('chat-input', chat.selectedSessionId || 'composer', {
+    meta: { source: 'chat-composer-input' },
+  })
+}
 
 modelSelection = useChatModelSelection({
   chat,
@@ -986,6 +991,23 @@ function isStreamingAssistantMessage(
 }
 
 let commandPointerHandler: ((event: MouseEvent | TouchEvent) => void) | null = null
+let chatFocusInHandler: ((event: FocusEvent) => void) | null = null
+let chatPointerUpHandler: ((event: PointerEvent) => void) | null = null
+
+function resolveMessageIdFromTarget(target: EventTarget | null): string {
+  if (!(target instanceof Element)) return ''
+  const anchor = target.closest<HTMLElement>('[id^="msg-"]')
+  if (!anchor) return ''
+  return String(anchor.id || '')
+    .replace(/^msg-/, '')
+    .trim()
+}
+
+function hasTextSelection(): boolean {
+  const selection = window.getSelection()
+  const text = selection ? String(selection.toString() || '').trim() : ''
+  return text.length > 0
+}
 
 function formatTime(ms?: number): string {
   return formatTimeHM(ms)
@@ -1077,6 +1099,12 @@ function handleSessionActionRequest(actionId: string) {
 watch(
   () => chat.selectedSessionId,
   (sid) => {
+    const selectedSid = String(sid || '').trim()
+    if (selectedSid) {
+      ui.setGlobalSelection('chat-session', selectedSid, {
+        meta: { source: 'chat-page-session-watch' },
+      })
+    }
     requestInitialScroll(chat.selectedSessionId)
 
     // Keep existing session behavior: agent/model are driven by the session's run config.
@@ -1244,7 +1272,10 @@ onMounted(async () => {
   // MainLayout already refreshes these, but keep Chat resilient on direct navigation.
   if (!chat.sessions.length) await chat.refreshSessions().catch(() => {})
 
-  const sidFromQuery = readSessionIdFromQuery(route.query) || readSessionIdFromFullPath(route.fullPath)
+  const isEmbeddedWorkspacePane = isEmbeddedWorkspacePaneContext(route.query)
+  const sidFromQuery = isEmbeddedWorkspacePane
+    ? readSessionIdFromQuery(route.query) || readSessionIdFromFullPath(route.fullPath)
+    : ''
   if (sidFromQuery && sidFromQuery !== chat.selectedSessionId) {
     await chat.selectSession(sidFromQuery).catch(() => {})
   }
@@ -1285,6 +1316,53 @@ onMounted(async () => {
     commandOpen.value = false
   }
   document.addEventListener('pointerdown', commandPointerHandler, true)
+
+  chatFocusInHandler = (event: FocusEvent) => {
+    const target = event.target as Node | null
+    if (!target || !pageRef.value?.contains(target)) return
+    const element = target instanceof Element ? target : target.parentElement
+    if (!element) return
+
+    if (element.closest('[data-chat-input="true"]')) {
+      ui.setGlobalSelection('chat-input', String(chat.selectedSessionId || 'composer').trim() || 'composer', {
+        meta: { source: 'chat-composer-focus' },
+      })
+      return
+    }
+
+    const messageId = resolveMessageIdFromTarget(element)
+    if (messageId) {
+      ui.setGlobalSelection('chat-message', messageId, {
+        meta: { source: 'chat-message-focus' },
+      })
+    }
+  }
+
+  chatPointerUpHandler = (event: PointerEvent) => {
+    const target = event.target as Node | null
+    if (!target || !pageRef.value?.contains(target)) return
+
+    const messageId = resolveMessageIdFromTarget(target)
+    if (messageId) {
+      ui.setGlobalSelection('chat-message', messageId, {
+        meta: { source: 'chat-message-pointerup' },
+      })
+    }
+
+    if (hasTextSelection()) {
+      const sid = String(chat.selectedSessionId || '').trim()
+      const token = sid ? `${sid}:${Date.now()}` : `selection:${Date.now()}`
+      ui.setGlobalSelection('chat-text', token, {
+        meta: {
+          source: 'chat-text-selection',
+          ...(messageId ? { messageId } : {}),
+        },
+      })
+    }
+  }
+
+  document.addEventListener('focusin', chatFocusInHandler, true)
+  document.addEventListener('pointerup', chatPointerUpHandler, true)
 })
 
 watch(
@@ -1446,6 +1524,14 @@ onBeforeUnmount(() => {
   if (commandPointerHandler) {
     document.removeEventListener('pointerdown', commandPointerHandler, true)
     commandPointerHandler = null
+  }
+  if (chatFocusInHandler) {
+    document.removeEventListener('focusin', chatFocusInHandler, true)
+    chatFocusInHandler = null
+  }
+  if (chatPointerUpHandler) {
+    document.removeEventListener('pointerup', chatPointerUpHandler, true)
+    chatPointerUpHandler = null
   }
 })
 </script>

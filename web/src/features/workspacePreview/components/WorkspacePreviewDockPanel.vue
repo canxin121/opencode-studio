@@ -30,6 +30,7 @@ import { useChatStore } from '@/stores/chat'
 import { useDirectoryStore } from '@/stores/directory'
 import { useUiStore } from '@/stores/ui'
 import { useWorkspacePreviewStore } from '@/stores/workspacePreview'
+import { isEmbeddedWorkspacePaneContext } from '@/app/windowScope'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -791,6 +792,8 @@ const showEmptyState = computed(() => {
   return !activeSession.value
 })
 
+const isEmbeddedWorkspacePane = computed(() => isEmbeddedWorkspacePaneContext(route.query))
+
 const emptyStateTitle = computed(() => {
   if (preview.sessions.length > 0 && !activeSession.value) return String(t('workspaceDock.preview.urlEmpty'))
   return String(t('workspaceDock.preview.states.emptyTitle'))
@@ -800,30 +803,34 @@ const emptyStateDescription = computed(() => String(t('workspaceDock.preview.sta
 
 const sessionPickerLabel = computed(() => String(t('workspaceDock.preview.sessionsTitle')))
 
+function resolveSessionLabel(session: WorkspacePreviewSession): string {
+  return String(preview.sessionLabel(session) || '').trim() || String(t('nav.preview'))
+}
+
 const activeSessionLabel = computed(() => {
   const active = preview.sessions.find((session) => session.id === preview.activeSessionId)
-  if (active) return sessionLabel(active)
+  if (active) return resolveSessionLabel(active)
   return String(t('workspaceDock.preview.urlEmpty'))
 })
+
+const topBarSessionLabel = computed(() =>
+  isEmbeddedWorkspacePane.value ? sessionPickerLabel.value : activeSessionLabel.value,
+)
 
 const sessionMenuGroups = computed<OptionMenuGroup[]>(() => [
   {
     id: 'workspace-preview-sessions',
     items: preview.sessions.map((session) => ({
       id: session.id,
-      label: sessionLabel(session),
+      label: resolveSessionLabel(session),
       description: String(session.state || ''),
       checked: preview.activeSessionId === session.id,
-      keywords: `${sessionLabel(session)} ${session.id} ${session.state || ''} ${session.directory || ''} ${
+      keywords: `${resolveSessionLabel(session)} ${session.id} ${session.state || ''} ${session.directory || ''} ${
         session.targetUrl || ''
       }`,
     })),
   },
 ])
-
-function sessionLabel(session: WorkspacePreviewSession): string {
-  return String(session.id || '').trim()
-}
 
 function suggestPreviewIdFromDirectory(directory: string): string {
   const trimmed = String(directory || '')
@@ -1181,7 +1188,7 @@ onBeforeUnmount(() => {
           :aria-label="sessionPickerLabel"
           @click.stop="setSessionMenuOpen(!sessionMenuOpen)"
         >
-          <span class="min-w-0 truncate text-left text-xs font-medium">{{ activeSessionLabel }}</span>
+          <span class="min-w-0 truncate text-left text-xs font-medium">{{ topBarSessionLabel }}</span>
           <RiArrowDownSLine class="h-4 w-4 shrink-0 text-muted-foreground" />
         </button>
 

@@ -81,11 +81,14 @@ const activeSessionId = computed(() => {
 })
 
 const sessionItems = computed(() => {
-  return sessionIds.value.map((sid) => {
+  const baseLabel = String(t('nav.terminal'))
+  const total = sessionIds.value.length
+  return sessionIds.value.map((sid, index) => {
     const custom = String(uiState.value?.sessionMetaById?.[sid]?.name || '').trim()
+    const fallback = total > 1 ? `${baseLabel} ${index + 1}` : baseLabel
     return {
       id: sid,
-      label: custom || sid.slice(0, 8),
+      label: custom || fallback,
     }
   })
 })

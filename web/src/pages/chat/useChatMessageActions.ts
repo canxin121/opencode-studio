@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 
 import { apiJson } from '@/lib/api'
 import { patchSessionIdInQuery } from '@/app/navigation/sessionQuery'
+import { isEmbeddedWorkspacePaneContext } from '@/app/windowScope'
 import type { JsonValue } from '@/types/json'
 import { buildAssistantErrorCopyText } from './assistantError'
 
@@ -156,7 +157,12 @@ export function useChatMessageActions(opts: {
     })
     const newId = typeof resp?.id === 'string' ? resp.id : ''
     if (!newId) return
-    await router.replace({ path: '/chat', query: patchSessionIdInQuery(route.query, newId) })
+    const isEmbeddedWorkspacePane = isEmbeddedWorkspacePaneContext(route.query)
+    if (isEmbeddedWorkspacePane) {
+      await router.replace({ path: '/chat', query: patchSessionIdInQuery(route.query, newId) })
+    } else {
+      await router.replace({ path: '/chat' })
+    }
     await chat.selectSession(newId).catch(() => {})
     await nextTick()
     scrollToBottom('auto')

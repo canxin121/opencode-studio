@@ -35,6 +35,7 @@ import { syncDesktopBackendTarget } from '@/lib/backend'
 import { WORKSPACE_SIDEBAR_HOST_SELECTOR } from '@/layout/workspaceSidebarHost'
 import { localStorageKeys } from '@/lib/persistence/storageKeys'
 import { buildLocalePickerOptions } from '@/pages/loginLocaleOptions'
+import { isEmbeddedWorkspacePaneContext } from '@/app/windowScope'
 import {
   CHAT_ACTIVITY_EXPAND_KEYS,
   DEFAULT_CHAT_ACTIVITY_EXPAND_KEYS,
@@ -64,7 +65,7 @@ const router = useRouter()
 const { startDesktopSidebarResize } = useDesktopSidebarResize()
 const { t } = useI18n()
 
-const isEmbeddedWorkspacePane = computed(() => String(route.query?.ocEmbed || '').trim() === '1')
+const isEmbeddedWorkspacePane = computed(() => isEmbeddedWorkspacePaneContext(route.query))
 const useDesktopSidebarHost = computed(() => !ui.isCompactLayout && !isEmbeddedWorkspacePane.value)
 const useShellSidebar = computed(() => {
   if (isEmbeddedWorkspacePane.value) return false
@@ -498,6 +499,20 @@ watch(
     const fullPath = String(path || '')
     if (!fullPath.startsWith('/settings')) return
     persistSettingsRoute(fullPath)
+  },
+  { immediate: true },
+)
+
+watch(
+  () => ({
+    path: route.path,
+    compact: ui.isCompactLayout,
+    embedded: isEmbeddedWorkspacePane.value,
+  }),
+  ({ path, compact, embedded }) => {
+    if (compact || embedded) return
+    if (!String(path || '').startsWith('/settings')) return
+    ui.setSidebarOpen(true, { preserveWidth: true })
   },
   { immediate: true },
 )

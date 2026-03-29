@@ -296,6 +296,10 @@ export default {
       splitDropFailed: '分屏加入目标分组失败。',
       splitDropSameTab: '请拖拽另一个标签进行分屏。',
       splitDropNeedsTab: '请先打开一个未分组标签，再拖拽另一个标签进行分屏。',
+      dropIntoTabs: '拖放到标签组',
+      dropInsertBefore: '插入到左侧',
+      dropInsertAfter: '插入到右侧',
+      dropReplace: '替换当前窗格',
       closeGroup: '关闭分组',
       closeCurrent: '关闭当前窗口',
       closeOthers: '关闭其他窗口',
@@ -3753,6 +3757,9 @@ export default {
     },
     explorer: {
       title: '资源管理器',
+      navigation: {
+        goUp: '返回上一级目录',
+      },
       toolbar: {
         newFile: '新建文件',
         newFolder: '新建文件夹',

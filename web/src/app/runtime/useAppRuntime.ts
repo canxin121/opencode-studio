@@ -19,8 +19,8 @@ import { installKeyboardInsets } from '@/lib/keyboardInsets'
 import { installKeyboardTapFix } from '@/lib/keyboardTapFix'
 import { installKeyboardShortcuts } from '@/app/runtime/installKeyboardShortcuts'
 import { readSessionIdFromFullPath, readSessionIdFromQuery } from '@/app/navigation/sessionQuery'
-import { MAIN_TABS, mainTabFromPath } from '@/app/navigation/mainTabs'
-import { readWindowIdFromQuery } from '@/app/windowScope'
+import { isWorkspaceMainTabPath, mainTabFromPath } from '@/app/navigation/mainTabs'
+import { isEmbeddedWorkspacePaneContext, readWindowIdFromQuery } from '@/app/windowScope'
 import { normalizeFsPath, trimTrailingFsSlashes } from '@/lib/path'
 
 export function useAppRuntime() {
@@ -219,8 +219,7 @@ export function useAppRuntime() {
 
   function syncUiWindowContextFromRoute() {
     const normalizedPath = String(route.path || '').toLowerCase()
-    const matchesMainTab = MAIN_TABS.some((tab) => normalizedPath.startsWith(tab.path))
-    if (!matchesMainTab) return
+    if (!isWorkspaceMainTabPath(normalizedPath)) return
     ui.syncActiveWorkspaceWindowFromRoute(mainTabFromPath(normalizedPath), route.query)
   }
 
@@ -315,7 +314,7 @@ export function useAppRuntime() {
 
     // Embedded workspace panes (split iframes) should keep desktop-style layout
     // even when the frame width is narrow.
-    const isEmbeddedWorkspacePane = String(route.query?.ocEmbed || '').trim() === '1'
+    const isEmbeddedWorkspacePane = isEmbeddedWorkspacePaneContext(route.query)
     if (isEmbeddedWorkspacePane) {
       info.isCompactLayout = false
       info.isNarrow = false
@@ -337,7 +336,10 @@ export function useAppRuntime() {
   async function ensureSelectedSessionFromQuery() {
     syncUiWindowContextFromRoute()
     const routeWindowId = readWindowIdFromQuery(route.query) || null
-    const sid = readSessionIdFromQuery(route.query) || readSessionIdFromFullPath(route.fullPath)
+    const isEmbeddedWorkspacePane = isEmbeddedWorkspacePaneContext(route.query)
+    const sid = isEmbeddedWorkspacePane
+      ? readSessionIdFromQuery(route.query) || readSessionIdFromFullPath(route.fullPath)
+      : ''
 
     // If the URL includes a session id, treat it as an explicit deep link.
     // Don't strip it just because the in-memory flag wasn't restored yet.
@@ -387,7 +389,10 @@ export function useAppRuntime() {
 
     // Keep sessions available for all views.
     await chat.refreshSessions().catch(() => {})
-    if (readSessionIdFromQuery(route.query) || readSessionIdFromFullPath(route.fullPath)) {
+    if (
+      isEmbeddedWorkspacePaneContext(route.query) &&
+      (readSessionIdFromQuery(route.query) || readSessionIdFromFullPath(route.fullPath))
+    ) {
       ui.enableSessionQuery()
     }
     await ensureSelectedSessionFromQuery().catch(() => {})
@@ -518,7 +523,7 @@ export function useAppRuntime() {
   )
 
   watch(
-    () => String(route.query?.ocEmbed || '').trim(),
+    () => isEmbeddedWorkspacePaneContext(route.query),
     () => {
       applyDevice()
     },

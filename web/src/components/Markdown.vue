@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { onClickOutside } from '@vueuse/core'
 import { RiListUnordered } from '@remixicon/vue'
 import { useI18n } from 'vue-i18n'
 import { renderMarkdown, type MarkdownUiLabels } from '@/lib/markdown'
 import { copyTextToClipboard } from '@/lib/clipboard'
+import { withEmbeddedWorkspaceScopeQuery } from '@/app/windowScope'
 import { resolveWorkspaceFileLink, resolveWorkspaceMediaUrl } from '@/lib/workspaceLinks'
 import { useDirectoryStore } from '@/stores/directory'
 import { useToastsStore } from '@/stores/toasts'
@@ -34,6 +35,7 @@ const props = withDefaults(
 
 const html = ref('')
 const rootEl = ref<HTMLElement | null>(null)
+const route = useRoute()
 let timer: number | null = null
 let copiedTimer: number | null = null
 let mermaidTimer: number | null = null
@@ -609,7 +611,7 @@ function openWorkspaceLink(href: string): boolean {
     title: fileName,
     matchKeys: ['filePath'],
   })
-  void router.push({ path: '/files', query })
+  void router.push({ path: '/files', query: withEmbeddedWorkspaceScopeQuery(query, route.query) })
   return true
 }
 

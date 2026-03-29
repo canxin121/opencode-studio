@@ -55,6 +55,7 @@ import GitRemoteTargetDialogs from './components/GitRemoteTargetDialogs.vue'
 import GitPageMiscDialogs from './components/GitPageMiscDialogs.vue'
 import { formatDateTimeYMDHM } from '@/i18n/intl'
 import { WORKSPACE_SIDEBAR_HOST_SELECTOR } from '@/layout/workspaceSidebarHost'
+import { isEmbeddedWorkspacePaneContext } from '@/app/windowScope'
 
 const props = defineProps({
   ctx: {
@@ -69,6 +70,7 @@ const props = defineProps({
 const { startDesktopSidebarResize } = useDesktopSidebarResize()
 const { t } = useI18n()
 const route = useRoute()
+const isEmbeddedWorkspacePane = computed(() => isEmbeddedWorkspacePaneContext(route.query))
 
 // NOTE: We deliberately destructure refs/functions from ctx so the template can remain
 // close to the original GitPage.vue markup. Values are mostly refs (from parent)
@@ -1363,8 +1365,7 @@ function openFirstConflictAndShowDiff() {
 }
 
 const useShellSidebar = computed(() => {
-  const isEmbeddedWorkspacePane = String(route.query?.ocEmbed || '').trim() === '1'
-  if (isEmbeddedWorkspacePane) return false
+  if (isEmbeddedWorkspacePane.value) return false
   if (!props.embedded && !ui.isCompactLayout) return true
   if (props.embedded) return embeddedView.value === 'list'
   return ui.isCompactLayout ? ui.isSessionSwitcherOpen : ui.isSidebarOpen
@@ -1373,7 +1374,7 @@ const useShellSidebar = computed(() => {
 const useDesktopSidebarHost = computed(() => {
   if (props.embedded) return false
   if (ui.isCompactLayout) return false
-  return String(route.query?.ocEmbed || '').trim() !== '1'
+  return !isEmbeddedWorkspacePane.value
 })
 
 const canResizeSidebar = computed(() => !ui.isCompactLayout && !props.embedded && !useDesktopSidebarHost.value)

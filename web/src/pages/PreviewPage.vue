@@ -8,13 +8,14 @@ import WorkspacePreviewPageSidebar from '@/features/workspacePreview/components/
 import { WORKSPACE_SIDEBAR_HOST_SELECTOR } from '@/layout/workspaceSidebarHost'
 import { useUiStore } from '@/stores/ui'
 import { useWorkspacePreviewStore } from '@/stores/workspacePreview'
+import { isEmbeddedWorkspacePaneContext } from '@/app/windowScope'
 
 const ui = useUiStore()
 const preview = useWorkspacePreviewStore()
 const route = useRoute()
 const { t } = useI18n()
 
-const isEmbeddedWorkspacePane = computed(() => String(route.query?.ocEmbed || '').trim() === '1')
+const isEmbeddedWorkspacePane = computed(() => isEmbeddedWorkspacePaneContext(route.query))
 const useDesktopSidebarHost = computed(() => !ui.isCompactLayout && !isEmbeddedWorkspacePane.value)
 const showPreviewSidebar = computed(() => {
   if (isEmbeddedWorkspacePane.value) return false
@@ -22,10 +23,35 @@ const showPreviewSidebar = computed(() => {
   return ui.isCompactLayout ? ui.isSessionSwitcherOpen : ui.isSidebarOpen
 })
 
+function basenameFromPath(rawPath: string): string {
+  const normalized = String(rawPath || '')
+    .trim()
+    .replace(/\\/g, '/')
+    .replace(/\/+/g, '/')
+    .replace(/\/+$/g, '')
+  if (!normalized) return ''
+  const parts = normalized.split('/').filter(Boolean)
+  return parts[parts.length - 1] || ''
+}
+
+function hostFromUrl(rawUrl: string): string {
+  const candidate = String(rawUrl || '').trim()
+  if (!candidate) return ''
+  try {
+    const parsed = new URL(candidate)
+    return String(parsed.hostname || parsed.host || '').trim()
+  } catch {
+    return ''
+  }
+}
+
 function syncPreviewWindowTitle() {
   const base = String(t('nav.preview'))
-  const sessionId = String(preview.activeSession?.id || '').trim()
-  const title = sessionId ? `${base} · ${sessionId}` : base
+  const active = preview.activeSession
+  const detail = active
+    ? basenameFromPath(active.runDirectory) || basenameFromPath(active.directory) || hostFromUrl(active.targetUrl)
+    : ''
+  const title = detail ? `${base} · ${detail}` : base
 
   ui.setWorkspaceWindowTitleFromRoute(route.query, title)
 }
