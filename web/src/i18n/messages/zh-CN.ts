@@ -247,6 +247,10 @@ export default {
     mainNavigation: '主导航',
     primaryNavigation: '主要导航',
   },
+  desktopSidebar: {
+    collapse: '收起侧边栏',
+    expand: '展开侧边栏',
+  },
   header: {
     toggleSidebar: '切换侧边栏',
     openSessions: '打开会话列表',

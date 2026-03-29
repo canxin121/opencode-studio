@@ -281,7 +281,7 @@ export const useUiStore = defineStore('ui', () => {
     (() => {
       const raw = getLocalString(STORAGE_SIDEBAR_WIDTH)
       const n = raw ? Number(raw) : NaN
-      return Number.isFinite(n) ? Math.min(520, Math.max(220, n)) : 280
+      return Number.isFinite(n) ? Math.min(520, Math.max(280, n)) : 320
     })(),
   )
   const hasManuallyResizedLeftSidebar = ref(false)
@@ -1297,7 +1297,7 @@ export const useUiStore = defineStore('ui', () => {
     if (isSidebarOpen.value && typeof window !== 'undefined') {
       // When opening and not manually resized, use proportional width.
       if (!hasManuallyResizedLeftSidebar.value) {
-        sidebarWidth.value = Math.min(520, Math.max(220, Math.floor(window.innerWidth * 0.2)))
+        sidebarWidth.value = Math.min(520, Math.max(280, Math.floor(window.innerWidth * 0.24)))
       }
     }
   }
@@ -1307,7 +1307,7 @@ export const useUiStore = defineStore('ui', () => {
     isSidebarOpen.value = open
     if (!open || opts?.preserveWidth || wasOpen) return
     if (typeof window !== 'undefined' && !hasManuallyResizedLeftSidebar.value) {
-      sidebarWidth.value = Math.min(520, Math.max(220, Math.floor(window.innerWidth * 0.2)))
+      sidebarWidth.value = Math.min(520, Math.max(280, Math.floor(window.innerWidth * 0.24)))
     }
   }
 
@@ -1316,20 +1316,18 @@ export const useUiStore = defineStore('ui', () => {
   }
 
   function setWorkspaceDockOpen(open: boolean) {
-    if (open) {
-      workspaceDockPlacement.value = 'right'
-    }
-    isWorkspaceDockOpen.value = open
-  }
-
-  function toggleWorkspaceDock(defaultPanel: WorkspaceDockPanel = 'git') {
-    if (isWorkspaceDockOpen.value) {
+    if (!open) {
       isWorkspaceDockOpen.value = false
       return
     }
+    workspaceDockPlacement.value = 'right'
+    isWorkspaceDockOpen.value = false
+  }
+
+  function toggleWorkspaceDock(defaultPanel: WorkspaceDockPanel = 'git') {
     workspaceDockPanel.value = defaultPanel
     workspaceDockPlacement.value = 'right'
-    isWorkspaceDockOpen.value = true
+    isWorkspaceDockOpen.value = false
   }
 
   function setWorkspaceDockPanel(panel: WorkspaceDockPanel) {
@@ -1559,7 +1557,14 @@ export const useUiStore = defineStore('ui', () => {
     if (fromRoute && workspaceWindows.value.some((item) => item.id === fromRoute)) {
       return fromRoute
     }
-    return getResolvedWorkspaceWindowId()
+
+    // Desktop shell routes drive sidebar state only, so route-scoped title updates
+    // must target explicit windowId. Keep compact/mobile fallback behavior.
+    if (isCompactLayout.value) {
+      return getResolvedWorkspaceWindowId()
+    }
+
+    return ''
   }
 
   function setWorkspaceWindowTitleFromRoute(rawQuery: unknown, title?: string | null) {
@@ -1595,6 +1600,22 @@ export const useUiStore = defineStore('ui', () => {
 
   function syncActiveWorkspaceWindowFromRoute(tab: MainTab, rawQuery: unknown) {
     const routeWindowId = readWindowIdFromRouteQuery(rawQuery)
+
+    // Desktop shell routes drive sidebar state only.
+    // Keep split-pane window content stable unless explicit window activation happens.
+    if (!isCompactLayout.value) {
+      if (routeWindowId && workspaceWindows.value.some((item) => item.id === routeWindowId)) {
+        clearSuppressedRouteWindowRestore(routeWindowId)
+        activateWorkspaceWindow(routeWindowId)
+        return
+      }
+
+      if (!activeWorkspaceWindow.value) {
+        activeMainTabFallback.value = tab
+      }
+      return
+    }
+
     if (routeWindowId) {
       if (!workspaceWindows.value.some((item) => item.id === routeWindowId)) {
         if (isRouteWindowRestoreSuppressed(routeWindowId)) {
@@ -1936,7 +1957,7 @@ export const useUiStore = defineStore('ui', () => {
 
     workspaceDockPanel.value = 'files'
     workspaceDockPlacement.value = 'right'
-    isWorkspaceDockOpen.value = true
+    isWorkspaceDockOpen.value = false
     workspaceDockFileRequest.value = {
       path: targetPath,
       action: action === 'reveal' ? 'reveal' : 'open',

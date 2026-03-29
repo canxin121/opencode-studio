@@ -33,6 +33,14 @@ test('ui workspace defaults to empty and route sync avoids implicit window creat
     uiStoreSource,
     'function setActiveWorkspaceWindowRouteQuery(rawQuery: unknown)',
   )
+  const syncFromRouteFn = extractFunctionSource(
+    uiStoreSource,
+    'function syncActiveWorkspaceWindowFromRoute(tab: MainTab, rawQuery: unknown)',
+  )
+  const resolveRouteWindowFn = extractFunctionSource(
+    uiStoreSource,
+    'function resolveWorkspaceWindowIdFromRouteQuery(rawQuery: unknown)',
+  )
   const setActiveMainTabFn = extractFunctionSource(uiStoreSource, 'function setActiveMainTab(tab: MainTab)')
 
   // Route-query sync should be a no-op when there is no active workspace window.
@@ -44,4 +52,27 @@ test('ui workspace defaults to empty and route sync avoids implicit window creat
   assert.ok(setActiveMainTabFn.includes('activeMainTabFallback.value = tab'))
   assert.ok(setActiveMainTabFn.includes('if (!targetId) return'))
   assert.ok(!setActiveMainTabFn.includes('createWorkspaceWindow('))
+
+  // Desktop route-only switches should not rewrite active split-pane window content.
+  const desktopRouteGuardIdx = syncFromRouteFn.indexOf('if (!isCompactLayout.value)')
+  const routeWindowBranchIdx = syncFromRouteFn.indexOf('if (routeWindowId)')
+  const setActiveMainTabCallIdx = syncFromRouteFn.indexOf('setActiveMainTab(tab)')
+  const desktopBranch =
+    desktopRouteGuardIdx >= 0 && routeWindowBranchIdx > desktopRouteGuardIdx
+      ? syncFromRouteFn.slice(desktopRouteGuardIdx, routeWindowBranchIdx)
+      : ''
+
+  assert.ok(desktopRouteGuardIdx >= 0)
+  assert.ok(routeWindowBranchIdx >= 0)
+  assert.ok(setActiveMainTabCallIdx >= 0)
+  assert.ok(desktopRouteGuardIdx < routeWindowBranchIdx)
+  assert.ok(desktopRouteGuardIdx < setActiveMainTabCallIdx)
+  assert.ok(desktopBranch.includes('activateWorkspaceWindow(routeWindowId)'))
+  assert.ok(!desktopBranch.includes('setWorkspaceWindowMainTab(routeWindowId, tab)'))
+  assert.ok(!desktopBranch.includes('setWorkspaceWindowRouteQuery(routeWindowId, rawQuery)'))
+
+  // Route-derived window-title updates should require explicit window scope on desktop.
+  assert.ok(resolveRouteWindowFn.includes('if (isCompactLayout.value)'))
+  assert.ok(resolveRouteWindowFn.includes('return getResolvedWorkspaceWindowId()'))
+  assert.ok(resolveRouteWindowFn.includes("return ''"))
 })

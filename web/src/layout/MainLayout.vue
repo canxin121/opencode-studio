@@ -2,17 +2,20 @@
 import HelpDialog from '@/components/HelpDialog.vue'
 import ImageViewerDialog from '@/components/ImageViewerDialog.vue'
 import McpDialog from '@/components/McpDialog.vue'
-import HorizontalSplitPane from '@/components/ui/HorizontalSplitPane.vue'
 import MultiPaneHorizontalSplit from '@/components/ui/MultiPaneHorizontalSplit.vue'
 import Skeleton from '@/components/ui/Skeleton.vue'
+import AppDesktopSidebar from '@/layout/AppDesktopSidebar.vue'
 import AppHeader from '@/layout/AppHeader.vue'
 import ChatSidebar from '@/layout/ChatSidebar.vue'
 import BottomNav from '@/layout/BottomNav.vue'
-import WorkspaceDockPanel from '@/layout/WorkspaceDockPanel.vue'
 import WorkspaceEditorGroupPane from '@/layout/WorkspaceEditorGroupPane.vue'
 import WorkspacePrimaryPaneView from '@/layout/WorkspacePrimaryPaneView.vue'
 import { WORKSPACE_MAIN_TABS, type MainTabId } from '@/app/navigation/mainTabs'
-import { hasEmbeddedWorkspacePaneQuery, isEmbeddedWorkspacePaneContext } from '@/app/windowScope'
+import {
+  hasEmbeddedWorkspacePaneQuery,
+  isEmbeddedWorkspacePaneContext,
+  withEmbeddedWorkspaceScopeQuery,
+} from '@/app/windowScope'
 import { WORKSPACE_SIDEBAR_HOST_ID } from '@/layout/workspaceSidebarHost'
 import {
   hasWorkspaceWindowDragDataTransfer,
@@ -142,14 +145,13 @@ const isGroupPaneMode = computed(() => useWorkspaceWindowLayout.value && workspa
 const activePrimaryWindowId = computed(() =>
   String(ui.activeWorkspaceWindowId || ui.workspaceVisibleWindowIds[0] || ui.workspaceWindows[0]?.id || '').trim(),
 )
-const showWorkspaceRightDock = computed(() => isGroupPaneMode.value && ui.isWorkspaceDockOpen)
 const isGroupPaneResizing = ref(false)
 const isLeftSidebarResizing = ref(false)
 const desktopSidebarAsideEl = ref<HTMLElement | null>(null)
-const isWorkspaceDockResizing = ref(false)
-const isAnySidebarResizing = computed(() => isLeftSidebarResizing.value || isWorkspaceDockResizing.value)
+const isAnySidebarResizing = computed(() => isLeftSidebarResizing.value)
 const isWorkspaceDropDragActive = ref(false)
 const workspacePaneDropTarget = ref<{ paneId: string; position: WorkspaceDropPosition } | null>(null)
+const DESKTOP_SIDEBAR_COLLAPSED_WIDTH = 76
 const showWorkspacePaneDropTargets = computed(
   () =>
     useWorkspaceWindowLayout.value &&
@@ -158,8 +160,9 @@ const showWorkspacePaneDropTargets = computed(
     (Boolean(String(ui.workspaceWindowDragId || '').trim()) || isWorkspaceDropDragActive.value),
 )
 const desktopSidebarRenderWidth = computed(() => {
-  if (!showDesktopSidebarHost.value || !ui.isSidebarOpen) return 0
-  return ui.sidebarWidth
+  if (!showDesktopSidebarHost.value) return 0
+  if (ui.isSidebarOpen) return ui.sidebarWidth
+  return DESKTOP_SIDEBAR_COLLAPSED_WIDTH
 })
 
 type WorkspaceDropPosition = 'before' | 'replace' | 'after'
@@ -250,14 +253,40 @@ function handleDesktopSidebarResize(event: PointerEvent) {
   })
 }
 
-function handleWorkspaceDockResizeStart() {
-  isWorkspaceDockResizing.value = true
-}
+function workspaceDockRequestQuery() {
+  const request = ui.workspaceDockFileRequest
+  const targetPath = String(request?.path || '').trim()
+  if (!targetPath) return null
 
-function handleWorkspaceDockResizeEnd() {
-  window.requestAnimationFrame(() => {
-    isWorkspaceDockResizing.value = false
-  })
+  const action = String(request?.action || '')
+    .trim()
+    .toLowerCase()
+  const line = Number(request?.line)
+  const column = Number(request?.column)
+  const anchor = String(request?.anchor || '').trim()
+
+  if (action === 'reveal') {
+    return withEmbeddedWorkspaceScopeQuery(
+      {
+        gitPath: targetPath,
+        gitAction: 'reveal',
+        ...(Number.isFinite(line) && line > 0 ? { gitLine: String(Math.floor(line)) } : {}),
+        ...(Number.isFinite(column) && column > 0 ? { gitColumn: String(Math.floor(column)) } : {}),
+        ...(anchor ? { gitAnchor: anchor } : {}),
+      },
+      route.query,
+    )
+  }
+
+  return withEmbeddedWorkspaceScopeQuery(
+    {
+      filePath: targetPath,
+      ...(Number.isFinite(line) && line > 0 ? { fileLine: String(Math.floor(line)) } : {}),
+      ...(Number.isFinite(column) && column > 0 ? { fileColumn: String(Math.floor(column)) } : {}),
+      ...(anchor ? { fileAnchor: anchor } : {}),
+    },
+    route.query,
+  )
 }
 
 function normalizeTemplateSource(source: WorkspaceWindowTemplateDragData): WorkspaceDropSource | null {
@@ -655,9 +684,12 @@ watch(
 )
 
 watch(
-  () => showWorkspaceRightDock.value,
-  (visible) => {
-    if (!visible) isWorkspaceDockResizing.value = false
+  () => Number(ui.workspaceDockFileRequestSeq || 0),
+  (seq, prev) => {
+    if (!Number.isFinite(seq) || seq <= 0 || seq === prev) return
+    const nextQuery = workspaceDockRequestQuery()
+    if (!nextQuery) return
+    void router.push({ path: '/files', query: nextQuery }).catch(() => {})
   },
 )
 </script>
@@ -681,10 +713,8 @@ watch(
           ref="desktopSidebarAsideEl"
           class="relative h-full overflow-hidden bg-sidebar"
           :style="{ width: `${desktopSidebarRenderWidth}px` }"
-          :aria-hidden="!ui.isSidebarOpen"
           :class="[
-            ui.isSidebarOpen || isLeftSidebarResizing ? 'border-r border-border' : 'border-r border-transparent',
-            ui.isSidebarOpen ? '' : 'pointer-events-none',
+            'border-r border-border',
             isLeftSidebarResizing ? '' : 'transition-[width,border-color] duration-200 ease-out',
           ]"
         >
@@ -699,7 +729,7 @@ watch(
             class="relative h-full min-h-0"
             :class="{ 'oc-sidebar-host-resizing': isLeftSidebarResizing }"
           >
-            <ChatSidebar v-if="usesChatShellSidebar" v-show="!isLeftSidebarResizing" />
+            <AppDesktopSidebar :expanded="ui.isSidebarOpen" :resizing="isLeftSidebarResizing" />
 
             <div
               v-if="ui.isSidebarOpen && isLeftSidebarResizing"
@@ -727,11 +757,7 @@ watch(
             <ChatSidebar mobile-variant />
           </div>
 
-          <div
-            v-if="isGroupPaneMode && showDesktopSidebarHost && !usesChatShellSidebar"
-            class="hidden"
-            aria-hidden="true"
-          >
+          <div v-if="showDesktopSidebarHost && !usesChatShellSidebar" class="hidden" aria-hidden="true">
             <router-view />
           </div>
 
@@ -749,178 +775,147 @@ watch(
                 : undefined
             "
           >
-            <HorizontalSplitPane
-              v-if="isGroupPaneMode"
-              v-model="ui.workspaceDockWidth"
-              :min-width="280"
-              :max-width="1200"
-              :show-right-pane="showWorkspaceRightDock"
-              @drag-start="handleWorkspaceDockResizeStart"
-              @drag-end="handleWorkspaceDockResizeEnd"
-            >
-              <template #left>
-                <div class="relative h-full min-h-0">
-                  <div v-show="!isAnySidebarResizing" class="h-full min-h-0">
-                    <MultiPaneHorizontalSplit
-                      v-if="isGroupPaneMode"
-                      :pane-ids="workspaceGroupPaneIds"
-                      :ratios="groupPaneRatios"
-                      :min-pane-width="280"
-                      @update:ratios="handleGroupPaneRatiosUpdate"
-                      @drag-start="handleGroupPaneResizeStart"
-                      @drag-end="handleGroupPaneResizeEnd"
-                    >
-                      <template #pane="{ paneId }">
-                        <div class="relative h-full min-w-0">
-                          <WorkspaceEditorGroupPane
-                            v-show="!isGroupPaneResizing"
-                            :group-id="paneId"
-                            class="h-full min-w-0"
-                          />
-
-                          <div
-                            v-show="isGroupPaneResizing"
-                            class="flex h-full min-h-0 border-l border-border/60 bg-background"
-                            aria-hidden="true"
-                          >
-                            <div class="flex min-h-0 flex-1 items-center justify-center px-4">
-                              <div class="flex w-full max-w-xs flex-col items-center gap-3 px-4 py-6 text-center">
-                                <Skeleton class="h-8 w-8 rounded-full" />
-                                <Skeleton class="h-2.5 w-32" />
-                                <span class="text-xs font-medium text-muted-foreground">
-                                  {{ t('header.windowTabs.resizingSplit') }}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div
-                            v-if="showWorkspacePaneDropTargets"
-                            class="workspace-pane-drop-overlay workspace-pane-drop-overlay--below-tabs pointer-events-none absolute inset-x-0 bottom-0 top-9 z-30 p-2 pt-0"
-                            aria-hidden="true"
-                          >
-                            <div
-                              class="pointer-events-auto flex h-full items-stretch gap-2"
-                              @dragover="handleWorkspacePaneOverlayDragOver"
-                              @drop="handleWorkspacePaneOverlayDrop"
-                            >
-                              <div
-                                class="pointer-events-auto flex min-h-0 w-1/4 items-center justify-center rounded-md border text-center text-[10px] font-medium leading-4 transition-colors"
-                                :class="workspacePaneDropZoneClass(paneId, 'before')"
-                                @dragover="handleWorkspacePaneDropDragOver($event, paneId, 'before')"
-                                @dragleave="handleWorkspacePaneDropDragLeave($event, paneId, 'before')"
-                                @drop="void handleWorkspacePaneDrop($event, paneId, 'before')"
-                              >
-                                {{ workspacePaneDropZoneLabel('before') }}
-                              </div>
-
-                              <div
-                                class="pointer-events-auto flex min-h-0 flex-1 items-center justify-center rounded-md border text-center text-[10px] font-medium leading-4 transition-colors"
-                                :class="workspacePaneDropZoneClass(paneId, 'replace')"
-                                @dragover="handleWorkspacePaneDropDragOver($event, paneId, 'replace')"
-                                @dragleave="handleWorkspacePaneDropDragLeave($event, paneId, 'replace')"
-                                @drop="void handleWorkspacePaneDrop($event, paneId, 'replace')"
-                              >
-                                {{ workspacePaneDropZoneLabel('replace') }}
-                              </div>
-
-                              <div
-                                class="pointer-events-auto flex min-h-0 w-1/4 items-center justify-center rounded-md border text-center text-[10px] font-medium leading-4 transition-colors"
-                                :class="workspacePaneDropZoneClass(paneId, 'after')"
-                                @dragover="handleWorkspacePaneDropDragOver($event, paneId, 'after')"
-                                @dragleave="handleWorkspacePaneDropDragLeave($event, paneId, 'after')"
-                                @drop="void handleWorkspacePaneDrop($event, paneId, 'after')"
-                              >
-                                {{ workspacePaneDropZoneLabel('after') }}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </template>
-                    </MultiPaneHorizontalSplit>
-
-                    <div v-else-if="isEmbeddedWorkspacePane" class="relative h-full min-h-0">
-                      <WorkspacePrimaryPaneView :window-id="activePrimaryWindowId" />
+            <div v-if="isGroupPaneMode" class="relative h-full min-h-0">
+              <div v-show="!isAnySidebarResizing" class="h-full min-h-0">
+                <MultiPaneHorizontalSplit
+                  v-if="isGroupPaneMode"
+                  :pane-ids="workspaceGroupPaneIds"
+                  :ratios="groupPaneRatios"
+                  :min-pane-width="280"
+                  @update:ratios="handleGroupPaneRatiosUpdate"
+                  @drag-start="handleGroupPaneResizeStart"
+                  @drag-end="handleGroupPaneResizeEnd"
+                >
+                  <template #pane="{ paneId }">
+                    <div class="relative h-full min-w-0">
+                      <WorkspaceEditorGroupPane
+                        v-show="!isGroupPaneResizing"
+                        :group-id="paneId"
+                        class="h-full min-w-0"
+                      />
 
                       <div
-                        v-if="showWorkspacePaneDropTargets && selectedWorkspaceGroupId"
-                        class="pointer-events-auto absolute inset-0 z-30 flex items-stretch gap-2"
+                        v-show="isGroupPaneResizing"
+                        class="flex h-full min-h-0 border-l border-border/60 bg-background"
                         aria-hidden="true"
-                        @dragover="handleWorkspacePaneOverlayDragOver"
-                        @drop="handleWorkspacePaneOverlayDrop"
+                      >
+                        <div class="flex min-h-0 flex-1 items-center justify-center px-4">
+                          <div class="flex w-full max-w-xs flex-col items-center gap-3 px-4 py-6 text-center">
+                            <Skeleton class="h-8 w-8 rounded-full" />
+                            <Skeleton class="h-2.5 w-32" />
+                            <span class="text-xs font-medium text-muted-foreground">
+                              {{ t('header.windowTabs.resizingSplit') }}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div
+                        v-if="showWorkspacePaneDropTargets"
+                        class="workspace-pane-drop-overlay workspace-pane-drop-overlay--below-tabs pointer-events-none absolute inset-x-0 bottom-0 top-9 z-30 p-2 pt-0"
+                        aria-hidden="true"
                       >
                         <div
-                          class="pointer-events-auto flex min-h-0 w-1/4 items-center justify-center rounded-md border text-center text-[10px] font-medium leading-4 transition-colors"
-                          :class="workspacePaneDropZoneClass(selectedWorkspaceGroupId, 'before')"
-                          @dragover="handleWorkspacePaneDropDragOver($event, selectedWorkspaceGroupId, 'before')"
-                          @dragleave="handleWorkspacePaneDropDragLeave($event, selectedWorkspaceGroupId, 'before')"
-                          @drop="void handleWorkspacePaneDrop($event, selectedWorkspaceGroupId, 'before')"
+                          class="pointer-events-auto flex h-full items-stretch gap-2"
+                          @dragover="handleWorkspacePaneOverlayDragOver"
+                          @drop="handleWorkspacePaneOverlayDrop"
                         >
-                          {{ workspacePaneDropZoneLabel('before') }}
-                        </div>
+                          <div
+                            class="pointer-events-auto flex min-h-0 w-1/4 items-center justify-center rounded-md border text-center text-[10px] font-medium leading-4 transition-colors"
+                            :class="workspacePaneDropZoneClass(paneId, 'before')"
+                            @dragover="handleWorkspacePaneDropDragOver($event, paneId, 'before')"
+                            @dragleave="handleWorkspacePaneDropDragLeave($event, paneId, 'before')"
+                            @drop="void handleWorkspacePaneDrop($event, paneId, 'before')"
+                          >
+                            {{ workspacePaneDropZoneLabel('before') }}
+                          </div>
 
-                        <div
-                          class="pointer-events-auto flex min-h-0 flex-1 items-center justify-center rounded-md border text-center text-[10px] font-medium leading-4 transition-colors"
-                          :class="workspacePaneDropZoneClass(selectedWorkspaceGroupId, 'replace')"
-                          @dragover="handleWorkspacePaneDropDragOver($event, selectedWorkspaceGroupId, 'replace')"
-                          @dragleave="handleWorkspacePaneDropDragLeave($event, selectedWorkspaceGroupId, 'replace')"
-                          @drop="void handleWorkspacePaneDrop($event, selectedWorkspaceGroupId, 'replace')"
-                        >
-                          {{ workspacePaneDropZoneLabel('replace') }}
-                        </div>
+                          <div
+                            class="pointer-events-auto flex min-h-0 flex-1 items-center justify-center rounded-md border text-center text-[10px] font-medium leading-4 transition-colors"
+                            :class="workspacePaneDropZoneClass(paneId, 'replace')"
+                            @dragover="handleWorkspacePaneDropDragOver($event, paneId, 'replace')"
+                            @dragleave="handleWorkspacePaneDropDragLeave($event, paneId, 'replace')"
+                            @drop="void handleWorkspacePaneDrop($event, paneId, 'replace')"
+                          >
+                            {{ workspacePaneDropZoneLabel('replace') }}
+                          </div>
 
-                        <div
-                          class="pointer-events-auto flex min-h-0 w-1/4 items-center justify-center rounded-md border text-center text-[10px] font-medium leading-4 transition-colors"
-                          :class="workspacePaneDropZoneClass(selectedWorkspaceGroupId, 'after')"
-                          @dragover="handleWorkspacePaneDropDragOver($event, selectedWorkspaceGroupId, 'after')"
-                          @dragleave="handleWorkspacePaneDropDragLeave($event, selectedWorkspaceGroupId, 'after')"
-                          @drop="void handleWorkspacePaneDrop($event, selectedWorkspaceGroupId, 'after')"
-                        >
-                          {{ workspacePaneDropZoneLabel('after') }}
+                          <div
+                            class="pointer-events-auto flex min-h-0 w-1/4 items-center justify-center rounded-md border text-center text-[10px] font-medium leading-4 transition-colors"
+                            :class="workspacePaneDropZoneClass(paneId, 'after')"
+                            @dragover="handleWorkspacePaneDropDragOver($event, paneId, 'after')"
+                            @dragleave="handleWorkspacePaneDropDragLeave($event, paneId, 'after')"
+                            @drop="void handleWorkspacePaneDrop($event, paneId, 'after')"
+                          >
+                            {{ workspacePaneDropZoneLabel('after') }}
+                          </div>
                         </div>
                       </div>
                     </div>
+                  </template>
+                </MultiPaneHorizontalSplit>
 
-                    <div v-else class="flex h-full items-center justify-center px-4 text-xs text-muted-foreground">
-                      {{ t('header.windowTabs.splitNoContent') }}
-                    </div>
-                  </div>
+                <div v-else-if="isEmbeddedWorkspacePane" class="relative h-full min-h-0">
+                  <WorkspacePrimaryPaneView :window-id="activePrimaryWindowId" />
 
                   <div
-                    v-show="isAnySidebarResizing"
-                    class="workspace-main-resize-placeholder absolute inset-0 z-20 flex items-center justify-center px-4"
+                    v-if="showWorkspacePaneDropTargets && selectedWorkspaceGroupId"
+                    class="pointer-events-auto absolute inset-0 z-30 flex items-stretch gap-2"
                     aria-hidden="true"
+                    @dragover="handleWorkspacePaneOverlayDragOver"
+                    @drop="handleWorkspacePaneOverlayDrop"
                   >
-                    <div class="flex w-full max-w-xs flex-col items-center gap-3 px-4 py-6 text-center">
-                      <Skeleton class="h-8 w-8 rounded-full" />
-                      <Skeleton class="h-2.5 w-32" />
-                      <span class="text-xs font-medium text-muted-foreground">
-                        {{ t('header.windowTabs.resizingSidebar') }}
-                      </span>
+                    <div
+                      class="pointer-events-auto flex min-h-0 w-1/4 items-center justify-center rounded-md border text-center text-[10px] font-medium leading-4 transition-colors"
+                      :class="workspacePaneDropZoneClass(selectedWorkspaceGroupId, 'before')"
+                      @dragover="handleWorkspacePaneDropDragOver($event, selectedWorkspaceGroupId, 'before')"
+                      @dragleave="handleWorkspacePaneDropDragLeave($event, selectedWorkspaceGroupId, 'before')"
+                      @drop="void handleWorkspacePaneDrop($event, selectedWorkspaceGroupId, 'before')"
+                    >
+                      {{ workspacePaneDropZoneLabel('before') }}
+                    </div>
+
+                    <div
+                      class="pointer-events-auto flex min-h-0 flex-1 items-center justify-center rounded-md border text-center text-[10px] font-medium leading-4 transition-colors"
+                      :class="workspacePaneDropZoneClass(selectedWorkspaceGroupId, 'replace')"
+                      @dragover="handleWorkspacePaneDropDragOver($event, selectedWorkspaceGroupId, 'replace')"
+                      @dragleave="handleWorkspacePaneDropDragLeave($event, selectedWorkspaceGroupId, 'replace')"
+                      @drop="void handleWorkspacePaneDrop($event, selectedWorkspaceGroupId, 'replace')"
+                    >
+                      {{ workspacePaneDropZoneLabel('replace') }}
+                    </div>
+
+                    <div
+                      class="pointer-events-auto flex min-h-0 w-1/4 items-center justify-center rounded-md border text-center text-[10px] font-medium leading-4 transition-colors"
+                      :class="workspacePaneDropZoneClass(selectedWorkspaceGroupId, 'after')"
+                      @dragover="handleWorkspacePaneDropDragOver($event, selectedWorkspaceGroupId, 'after')"
+                      @dragleave="handleWorkspacePaneDropDragLeave($event, selectedWorkspaceGroupId, 'after')"
+                      @drop="void handleWorkspacePaneDrop($event, selectedWorkspaceGroupId, 'after')"
+                    >
+                      {{ workspacePaneDropZoneLabel('after') }}
                     </div>
                   </div>
                 </div>
-              </template>
-              <template #right>
-                <div class="relative h-full min-h-0">
-                  <WorkspaceDockPanel v-show="showWorkspaceRightDock && !isAnySidebarResizing" />
 
-                  <div
-                    v-show="showWorkspaceRightDock && isAnySidebarResizing"
-                    class="workspace-dock-resize-placeholder absolute inset-0 z-20 flex items-center justify-center px-4"
-                    aria-hidden="true"
-                  >
-                    <div class="flex w-full max-w-xs flex-col items-center gap-3 px-4 py-6 text-center">
-                      <Skeleton class="h-8 w-8 rounded-full" />
-                      <Skeleton class="h-2.5 w-32" />
-                      <span class="text-xs font-medium text-muted-foreground">
-                        {{ t('header.windowTabs.resizingSidebar') }}
-                      </span>
-                    </div>
-                  </div>
+                <div v-else class="flex h-full items-center justify-center px-4 text-xs text-muted-foreground">
+                  {{ t('header.windowTabs.splitNoContent') }}
                 </div>
-              </template>
-            </HorizontalSplitPane>
+              </div>
+
+              <div
+                v-show="isAnySidebarResizing"
+                class="workspace-main-resize-placeholder absolute inset-0 z-20 flex items-center justify-center px-4"
+                aria-hidden="true"
+              >
+                <div class="flex w-full max-w-xs flex-col items-center gap-3 px-4 py-6 text-center">
+                  <Skeleton class="h-8 w-8 rounded-full" />
+                  <Skeleton class="h-2.5 w-32" />
+                  <span class="text-xs font-medium text-muted-foreground">
+                    {{ t('header.windowTabs.resizingSidebar') }}
+                  </span>
+                </div>
+              </div>
+            </div>
 
             <div v-else-if="ui.isCompactLayout" class="relative h-full min-h-0">
               <WorkspacePrimaryPaneView :window-id="activePrimaryWindowId" />

@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n'
 
 import WorkspacePreviewDockPanel from '@/features/workspacePreview/components/WorkspacePreviewDockPanel.vue'
 import WorkspacePreviewPageSidebar from '@/features/workspacePreview/components/WorkspacePreviewPageSidebar.vue'
-import { WORKSPACE_SIDEBAR_HOST_SELECTOR } from '@/layout/workspaceSidebarHost'
+import { WORKSPACE_SIDEBAR_PANEL_HOST_SELECTOR } from '@/layout/workspaceSidebarHost'
 import { useUiStore } from '@/stores/ui'
 import { useWorkspacePreviewStore } from '@/stores/workspacePreview'
 import { isEmbeddedWorkspacePaneContext } from '@/app/windowScope'
@@ -67,7 +67,7 @@ watch(
 
 <template>
   <div class="flex h-full min-h-0 overflow-hidden bg-background text-foreground">
-    <Teleport :to="WORKSPACE_SIDEBAR_HOST_SELECTOR" :disabled="!useDesktopSidebarHost">
+    <Teleport :to="WORKSPACE_SIDEBAR_PANEL_HOST_SELECTOR" :disabled="!useDesktopSidebarHost">
       <aside
         v-if="showPreviewSidebar"
         class="relative h-full min-h-0 overflow-hidden bg-sidebar text-sidebar-foreground"

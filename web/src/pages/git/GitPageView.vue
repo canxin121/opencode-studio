@@ -54,7 +54,7 @@ import GitAuthDialogs from './components/GitAuthDialogs.vue'
 import GitRemoteTargetDialogs from './components/GitRemoteTargetDialogs.vue'
 import GitPageMiscDialogs from './components/GitPageMiscDialogs.vue'
 import { formatDateTimeYMDHM } from '@/i18n/intl'
-import { WORKSPACE_SIDEBAR_HOST_SELECTOR } from '@/layout/workspaceSidebarHost'
+import { WORKSPACE_SIDEBAR_PANEL_HOST_SELECTOR } from '@/layout/workspaceSidebarHost'
 import { isEmbeddedWorkspacePaneContext } from '@/app/windowScope'
 
 const props = defineProps({
@@ -1403,7 +1403,7 @@ void diffPaneRef
 <template>
   <div class="flex h-full bg-background text-foreground overflow-hidden">
     <!-- Left Sidebar (Source Control) -->
-    <Teleport :to="WORKSPACE_SIDEBAR_HOST_SELECTOR" :disabled="!useDesktopSidebarHost">
+    <Teleport :to="WORKSPACE_SIDEBAR_PANEL_HOST_SELECTOR" :disabled="!useDesktopSidebarHost">
       <div
         v-if="useShellSidebar"
         class="oc-vscode-pane relative h-full shrink-0"

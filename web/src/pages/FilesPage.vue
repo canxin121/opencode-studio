@@ -93,7 +93,7 @@ import {
 import type { FsContentSearchFileResult, FsContentSearchMatch } from '@/features/files/api/filesApi'
 import { useUnifiedMultiSelect } from '@/composables/useUnifiedMultiSelect'
 import { isEmbeddedWorkspacePaneContext } from '@/app/windowScope'
-import { WORKSPACE_SIDEBAR_HOST_SELECTOR } from '@/layout/workspaceSidebarHost'
+import { WORKSPACE_SIDEBAR_PANEL_HOST_SELECTOR } from '@/layout/workspaceSidebarHost'
 import { localStorageKeys } from '@/lib/persistence/storageKeys'
 import { useChatStore } from '@/stores/chat'
 import { useSettingsStore } from '@/stores/settings'
@@ -4164,7 +4164,7 @@ onMounted(async () => {
       <div v-else class="h-full m-0 p-0">
         <div class="flex h-full min-h-0 flex-col m-0 p-0">
           <div class="flex min-h-0 flex-1 gap-0" :class="isCompactLayout ? 'flex-col' : ''">
-            <Teleport :to="WORKSPACE_SIDEBAR_HOST_SELECTOR" :disabled="!useDesktopSidebarHost">
+            <Teleport :to="WORKSPACE_SIDEBAR_PANEL_HOST_SELECTOR" :disabled="!useDesktopSidebarHost">
               <div
                 class="relative h-full min-h-0 overflow-hidden m-0 p-0"
                 :class="isCompactLayout || embeddedMode || useDesktopSidebarHost ? 'flex-1' : 'flex-shrink-0'"

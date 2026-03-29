@@ -1,6 +1,6 @@
 import { useUiStore } from '@/stores/ui'
 
-const SIDEBAR_MIN_WIDTH = 220
+const SIDEBAR_MIN_WIDTH = 280
 const SIDEBAR_MAX_WIDTH = 520
 
 type DesktopSidebarResizeOptions = {

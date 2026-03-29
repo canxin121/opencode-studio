@@ -61,7 +61,7 @@ import {
   type TerminalSessionMeta as NameKeyedTerminalSessionMeta,
 } from '@/features/terminal/lib/sessionNameKey'
 import { handleTerminalKeyboardShortcut } from '@/features/terminal/lib/terminalKeyboardShortcuts'
-import { WORKSPACE_SIDEBAR_HOST_SELECTOR } from '@/layout/workspaceSidebarHost'
+import { WORKSPACE_SIDEBAR_PANEL_HOST_SELECTOR } from '@/layout/workspaceSidebarHost'
 import { isEmbeddedWorkspacePaneContext, withEmbeddedWorkspaceScopeQuery } from '@/app/windowScope'
 import { useDirectoryStore } from '@/stores/directory'
 import { useUiStore } from '@/stores/ui'
@@ -1991,7 +1991,7 @@ watch(el, () => {
 
 <template>
   <div class="h-full flex overflow-hidden bg-background">
-    <Teleport :to="WORKSPACE_SIDEBAR_HOST_SELECTOR" :disabled="!useDesktopSidebarHost">
+    <Teleport :to="WORKSPACE_SIDEBAR_PANEL_HOST_SELECTOR" :disabled="!useDesktopSidebarHost">
       <aside
         v-if="useShellSidebar"
         class="relative flex h-full min-h-0 flex-col overflow-hidden bg-sidebar text-sidebar-foreground"

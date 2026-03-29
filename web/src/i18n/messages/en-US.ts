@@ -247,6 +247,10 @@ export default {
     mainNavigation: 'Main navigation',
     primaryNavigation: 'Primary navigation',
   },
+  desktopSidebar: {
+    collapse: 'Collapse sidebar',
+    expand: 'Expand sidebar',
+  },
   header: {
     toggleSidebar: 'Toggle sidebar',
     openSessions: 'Open sessions',

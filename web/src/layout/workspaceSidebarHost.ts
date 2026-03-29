@@ -1,2 +1,4 @@
 export const WORKSPACE_SIDEBAR_HOST_ID = 'workspace-sidebar-host'
 export const WORKSPACE_SIDEBAR_HOST_SELECTOR = `#${WORKSPACE_SIDEBAR_HOST_ID}`
+export const WORKSPACE_SIDEBAR_PANEL_HOST_ID = 'workspace-sidebar-panel-host'
+export const WORKSPACE_SIDEBAR_PANEL_HOST_SELECTOR = `#${WORKSPACE_SIDEBAR_PANEL_HOST_ID}`

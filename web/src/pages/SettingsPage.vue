@@ -32,7 +32,7 @@ import {
   type DesktopConfig,
 } from '@/lib/desktopConfig'
 import { syncDesktopBackendTarget } from '@/lib/backend'
-import { WORKSPACE_SIDEBAR_HOST_SELECTOR } from '@/layout/workspaceSidebarHost'
+import { WORKSPACE_SIDEBAR_PANEL_HOST_SELECTOR } from '@/layout/workspaceSidebarHost'
 import { localStorageKeys } from '@/lib/persistence/storageKeys'
 import { buildLocalePickerOptions } from '@/pages/loginLocaleOptions'
 import { isEmbeddedWorkspacePaneContext } from '@/app/windowScope'
@@ -748,7 +748,7 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
 <template>
   <div class="settings-page flex h-full flex-col overflow-hidden bg-background text-foreground">
     <div class="flex flex-1 overflow-hidden">
-      <Teleport :to="WORKSPACE_SIDEBAR_HOST_SELECTOR" :disabled="!useDesktopSidebarHost">
+      <Teleport :to="WORKSPACE_SIDEBAR_PANEL_HOST_SELECTOR" :disabled="!useDesktopSidebarHost">
         <aside
           v-if="useShellSidebar"
           :class="settingsSidebarClass"
