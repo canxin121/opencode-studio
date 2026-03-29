@@ -2460,28 +2460,58 @@ fn build_chat_sidebar_view(input: ChatSidebarViewBuildInput<'_>) -> ChatSidebarV
     }
 }
 
-fn all_known_sidebar_directories(
-    state: &Arc<crate::AppState>,
+fn merge_sidebar_directories_with_recent(
     configured: &[DirectoryWire],
+    recent_entries: &[crate::directory_session_index::RecentSessionRecord],
 ) -> Vec<DirectoryWire> {
-    let mut all_directories = configured.to_vec();
-    let mut known_ids = all_directories
-        .iter()
-        .map(|entry| entry.id.clone())
-        .collect::<HashSet<_>>();
-    for recent in state.directory_session_index.recent_sessions_snapshot() {
-        if known_ids.contains(&recent.directory_id) {
-            continue;
+    let mut all_directories = Vec::<DirectoryWire>::new();
+    let mut known_ids = HashSet::<String>::new();
+    let mut known_path_keys = HashSet::<String>::new();
+
+    let mut push_unique = |entry: DirectoryWire| {
+        let id = entry.id.trim();
+        let path = entry.path.trim();
+        if id.is_empty() || path.is_empty() {
+            return;
         }
-        known_ids.insert(recent.directory_id.clone());
+
+        let path_key = normalize_path_for_match(path).unwrap_or_else(|| path.to_string());
+        if known_ids.contains(id) || known_path_keys.contains(&path_key) {
+            return;
+        }
+
+        known_ids.insert(id.to_string());
+        known_path_keys.insert(path_key);
         all_directories.push(DirectoryWire {
-            id: recent.directory_id,
-            path: recent.directory_path,
+            id: id.to_string(),
+            path: path.to_string(),
+            added_at: entry.added_at,
+            last_opened_at: entry.last_opened_at,
+        });
+    };
+
+    for entry in configured {
+        push_unique(entry.clone());
+    }
+
+    for recent in recent_entries {
+        push_unique(DirectoryWire {
+            id: recent.directory_id.clone(),
+            path: recent.directory_path.clone(),
             added_at: 0,
             last_opened_at: 0,
         });
     }
+
     all_directories
+}
+
+fn all_known_sidebar_directories(
+    state: &Arc<crate::AppState>,
+    configured: &[DirectoryWire],
+) -> Vec<DirectoryWire> {
+    let recent_entries = state.directory_session_index.recent_sessions_snapshot();
+    merge_sidebar_directories_with_recent(configured, &recent_entries)
 }
 
 pub(crate) async fn directories_get(
@@ -3957,6 +3987,56 @@ mod tests {
     fn normalize_path_for_match_linux_remains_case_sensitive() {
         let normalized = normalize_path_for_match("/home/Alice/Repo/").expect("normalized");
         assert_eq!(normalized, "/home/Alice/Repo");
+    }
+
+    #[test]
+    fn merge_sidebar_directories_with_recent_prefers_configured_and_dedupes_by_path() {
+        let configured = vec![DirectoryWire {
+            id: "dir_cfg".to_string(),
+            path: "/tmp/repo/".to_string(),
+            added_at: 0,
+            last_opened_at: 0,
+        }];
+        let recent = vec![
+            crate::directory_session_index::RecentSessionRecord {
+                session_id: "ses_1".to_string(),
+                directory_id: "dir_stale".to_string(),
+                directory_path: "/tmp/repo".to_string(),
+                updated_at: 10.0,
+            },
+            crate::directory_session_index::RecentSessionRecord {
+                session_id: "ses_2".to_string(),
+                directory_id: "dir_other".to_string(),
+                directory_path: "/tmp/other".to_string(),
+                updated_at: 9.0,
+            },
+        ];
+
+        let out = merge_sidebar_directories_with_recent(&configured, &recent);
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0].id, "dir_cfg");
+        assert_eq!(out[1].id, "dir_other");
+        assert_eq!(out[1].path, "/tmp/other");
+    }
+
+    #[test]
+    fn merge_sidebar_directories_with_recent_dedupes_windows_path_case() {
+        let configured = vec![DirectoryWire {
+            id: "dir_cfg".to_string(),
+            path: "C:\\Users\\Alice\\Repo\\".to_string(),
+            added_at: 0,
+            last_opened_at: 0,
+        }];
+        let recent = vec![crate::directory_session_index::RecentSessionRecord {
+            session_id: "ses_1".to_string(),
+            directory_id: "dir_stale".to_string(),
+            directory_path: "c:/users/alice/repo".to_string(),
+            updated_at: 10.0,
+        }];
+
+        let out = merge_sidebar_directories_with_recent(&configured, &recent);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].id, "dir_cfg");
     }
 
     #[test]

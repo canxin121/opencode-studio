@@ -374,11 +374,17 @@ export async function listSessions(directory?: string | null, opts?: SessionList
   }
 }
 
-export async function listSessionStatus(directory?: string | null, opts?: { sessionId?: string }): Promise<JsonObject> {
+export async function listSessionStatus(
+  directory?: string | null,
+  opts?: { sessionId?: string; local?: boolean; preferLocal?: boolean },
+): Promise<JsonObject> {
   const q = directoryQuery(directory)
   const params: string[] = []
   const sid = typeof opts?.sessionId === 'string' ? opts.sessionId.trim() : ''
   if (sid) params.push(`sessionId=${encodeURIComponent(sid)}`)
+  if (opts?.local === true || opts?.preferLocal === true) {
+    params.push('local=true')
+  }
   const sep = q && params.length ? '&' : '?'
   const suffix = params.length ? `${sep}${params.join('&')}` : ''
   return await apiJson<JsonObject>(`/api/session/status${q}${suffix}`)

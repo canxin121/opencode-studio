@@ -16,3 +16,14 @@ test('workspace editor group pane keeps tab strip droppable without hover drag c
   assert.ok(mainLayoutSource.includes('workspace-pane-drop-overlay--below-tabs'))
   assert.ok(mainLayoutSource.includes('top-9'))
 })
+
+test('workspace editor group pane propagates pane and iframe interactions into focused window state', () => {
+  const paneSource = readFileSync(resolve(import.meta.dir, '../src/layout/WorkspaceEditorGroupPane.vue'), 'utf8')
+
+  assert.ok(paneSource.includes('@pointerdown.capture="handlePanePointerDown"'))
+  assert.ok(paneSource.includes('ui.setFocusedWorkspaceWindow(targetWindowId)'))
+  assert.ok(paneSource.includes("frameWindow.addEventListener('pointerdown', handleFramePointerDown, true)"))
+  assert.ok(paneSource.includes("frameDocument.addEventListener('focusin', handleFrameFocusIn, true)"))
+  assert.ok(paneSource.includes('@load="handleFrameLoad"'))
+  assert.ok(paneSource.includes('border-border/70 bg-secondary/40 text-foreground/85'))
+})

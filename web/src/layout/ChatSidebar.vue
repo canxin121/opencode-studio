@@ -1569,6 +1569,12 @@ function resolveSessionTabTitle(sessionId: string): string {
   const sid = String(sessionId || '').trim()
   if (!sid) return ''
 
+  const cached = chat.getSessionById(sid) as { title?: string; slug?: string } | null
+  const cachedTitle = String(cached?.title || '').trim()
+  if (cachedTitle) return cachedTitle
+  const cachedSlug = String(cached?.slug || '').trim()
+  if (cachedSlug) return cachedSlug
+
   const list = Array.isArray(chat.sessions) ? chat.sessions : []
   const matched = list.find((item) => String((item as { id?: string } | null)?.id || '').trim() === sid) as
     | { title?: string; slug?: string }
@@ -1630,7 +1636,7 @@ async function selectSession(sessionId: string) {
     // Opening a session from the sidebar should activate/create a session window tab.
     targetWindowId = await openSessionInWorkspaceWindow(sessionId)
   }
-  await chat.selectSession(sessionId)
+  await chat.selectSession(sessionId, targetWindowId ? { windowId: targetWindowId } : undefined)
   ui.setGlobalSelection('chat-session', sessionId, {
     windowId: targetWindowId || undefined,
     meta: {
@@ -1639,7 +1645,7 @@ async function selectSession(sessionId: string) {
   })
 
   if (targetWindowId) {
-    const title = String(chat.selectedSession?.title || '').trim() || String(chat.selectedSession?.slug || '').trim()
+    const title = resolveSessionTabTitle(sessionId)
     if (title) {
       ui.setWorkspaceWindowTitle(targetWindowId, title)
     }

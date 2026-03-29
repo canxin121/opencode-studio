@@ -436,6 +436,56 @@ export const useChatStore = defineStore('chat', () => {
     return sessionsById.value[sid] ?? sessions.value.find((s) => s.id === sid) ?? null
   }
 
+  function readSessionIdFromRouteQuery(routeQuery: unknown): string {
+    if (!routeQuery || typeof routeQuery !== 'object') return ''
+    const query = routeQuery as Record<string, unknown>
+    const sid =
+      (typeof query.sessionId === 'string' ? query.sessionId : '') ||
+      (typeof query.sessionid === 'string' ? query.sessionid : '') ||
+      (typeof query.session === 'string' ? query.session : '')
+    return sid.trim()
+  }
+
+  function sessionTabTitle(session: Partial<Session> | null | undefined): string {
+    const title = typeof session?.title === 'string' ? session.title.trim() : ''
+    if (title) return title
+    const slug = typeof session?.slug === 'string' ? session.slug.trim() : ''
+    return slug
+  }
+
+  function syncWorkspaceChatTabTitlesForSession(session: Partial<Session> & { id: string }) {
+    const sid = (session?.id || '').trim()
+    if (!sid) return
+
+    const nextTitle = sessionTabTitle(session)
+    if (!nextTitle) return
+
+    for (const windowTab of ui.workspaceWindows || []) {
+      if (windowTab?.mainTab !== 'chat') continue
+      const routeSessionId = readSessionIdFromRouteQuery(windowTab?.routeQuery)
+      if (!routeSessionId || routeSessionId !== sid) continue
+
+      const windowId = String(windowTab.id || '').trim()
+      if (!windowId) continue
+      ui.setWorkspaceWindowTitle(windowId, nextTitle)
+    }
+  }
+
+  function clearWorkspaceChatTabTitlesForSession(sessionId: string) {
+    const sid = (sessionId || '').trim()
+    if (!sid) return
+
+    for (const windowTab of ui.workspaceWindows || []) {
+      if (windowTab?.mainTab !== 'chat') continue
+      const routeSessionId = readSessionIdFromRouteQuery(windowTab?.routeQuery)
+      if (!routeSessionId || routeSessionId !== sid) continue
+
+      const windowId = String(windowTab.id || '').trim()
+      if (!windowId) continue
+      ui.setWorkspaceWindowTitle(windowId, null)
+    }
+  }
+
   const selectedSession = computed(() => getSessionById(selectedSessionId.value))
 
   const selectedSessionDirectory = computed(() => {
@@ -493,7 +543,6 @@ export const useChatStore = defineStore('chat', () => {
   async function refreshAttention(sessionId: string) {
     return refreshAttentionForSession({
       sessionId,
-      getDirectoryForSession,
       attentionBySession,
       sessionStatusBySession,
     })
@@ -561,8 +610,14 @@ export const useChatStore = defineStore('chat', () => {
   function getDirectoryForSession(sessionId: string): string | null {
     const sid = (sessionId || '').trim()
     if (!sid) return directoryStore.currentDirectory
+
     const mapped = sessionDirectoryById.value[sid]
     if (mapped && mapped.trim()) return mapped.trim()
+
+    const direct = sessionsById.value[sid]
+    const directDirectory = typeof direct?.directory === 'string' ? direct.directory.trim() : ''
+    if (directDirectory) return directDirectory
+
     return directoryStore.currentDirectory
   }
 
@@ -1380,7 +1435,10 @@ export const useChatStore = defineStore('chat', () => {
     createSessionInFlight = (async () => {
       const created = await chatApi.createSession(directoryStore.currentDirectory)
       if (created && typeof created === 'object') {
-        upsertSessionCache(created, { insertIfMissing: true })
+        upsertSessionCache(created, {
+          insertIfMissing: true,
+          directoryHint: directoryStore.currentDirectory,
+        })
       }
       scheduleSessionsRefresh(1200)
       if (created?.id) {
@@ -1414,6 +1472,8 @@ export const useChatStore = defineStore('chat', () => {
     if (selectedSessionId.value === sid) {
       selectedSessionId.value = null
     }
+
+    clearWorkspaceChatTabTitlesForSession(sid)
 
     clearAttention(sid)
 
@@ -1488,7 +1548,7 @@ export const useChatStore = defineStore('chat', () => {
 
   function upsertSessionCache(
     updated: (Partial<Session> & { id: string }) | null | undefined,
-    opts?: { insertIfMissing?: boolean },
+    opts?: { insertIfMissing?: boolean; directoryHint?: string | null },
   ) {
     if (!updated || typeof updated !== 'object') return
     const sid = typeof updated.id === 'string' ? updated.id.trim() : ''
@@ -1501,10 +1561,15 @@ export const useChatStore = defineStore('chat', () => {
     } as Session
 
     const updatedDir = typeof merged.directory === 'string' ? merged.directory.trim() : ''
-    const resolvedDir =
-      updatedDir ||
-      (typeof sessionDirectoryById.value[sid] === 'string' ? sessionDirectoryById.value[sid].trim() : '') ||
-      (directoryStore.currentDirectory || '').trim()
+    const mappedDir = typeof sessionDirectoryById.value[sid] === 'string' ? sessionDirectoryById.value[sid].trim() : ''
+    const directDir =
+      typeof sessionsById.value[sid]?.directory === 'string' ? sessionsById.value[sid].directory.trim() : ''
+    const hintedDir = typeof opts?.directoryHint === 'string' ? opts.directoryHint.trim() : ''
+
+    // Never persist window-local currentDirectory as authoritative mapping.
+    // Cross-window events can omit directory, and falling back here corrupts
+    // session->directory mapping globally.
+    const resolvedDir = updatedDir || mappedDir || directDir || hintedDir
 
     if (resolvedDir) {
       sessionDirectoryById.value = {
@@ -1514,12 +1579,13 @@ export const useChatStore = defineStore('chat', () => {
     }
 
     sessionsById.value = { ...sessionsById.value, [sid]: merged }
+    syncWorkspaceChatTabTitlesForSession(merged)
     const hasInCurrent = sessions.value.some((s) => s.id === sid)
     if (hasInCurrent) {
       sessions.value = sessions.value.map((s) => (s.id === sid ? { ...s, ...merged } : s))
     } else if (opts?.insertIfMissing) {
       const currentDir = (directoryStore.currentDirectory || '').trim()
-      if (!resolvedDir || resolvedDir === currentDir) {
+      if (resolvedDir && resolvedDir === currentDir) {
         sessions.value = [{ ...merged }, ...sessions.value].slice(0, SESSION_PAGE_SIZE)
       }
     }
@@ -1667,6 +1733,8 @@ export const useChatStore = defineStore('chat', () => {
     const sid = extractSessionId(evt)
 
     if (sid && t === 'session.deleted') {
+      clearWorkspaceChatTabTitlesForSession(sid)
+
       const nextById = { ...sessionsById.value }
       delete nextById[sid]
       sessionsById.value = nextById

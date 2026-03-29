@@ -11,6 +11,7 @@ import { copyTextToClipboard } from '@/lib/clipboard'
 import { readSessionIdFromFullPath, readSessionIdFromQuery } from '@/app/navigation/sessionQuery'
 import { useChatStore } from '@/stores/chat'
 import { useDirectoryStore } from '@/stores/directory'
+import { useDirectorySessionStore } from '@/stores/directorySessionStore'
 import { useOpencodeConfigStore } from '@/stores/opencodeConfig'
 import { usePluginHostStore } from '@/stores/pluginHost'
 import { useSessionActivityStore } from '@/stores/sessionActivity'
@@ -67,6 +68,7 @@ const route = useRoute()
 const router = useRouter()
 const chat = useChatStore()
 const directoryStore = useDirectoryStore()
+const directorySessions = useDirectorySessionStore()
 const opencodeConfig = useOpencodeConfigStore()
 const pluginHost = usePluginHostStore()
 const activity = useSessionActivityStore()
@@ -1016,6 +1018,7 @@ function formatTime(ms?: number): string {
 const runUi = useChatRunUi({
   chat,
   activity,
+  directorySessions,
   toasts,
   modelSelection,
   draft,

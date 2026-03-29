@@ -1,5 +1,6 @@
 import { router } from '@/router'
 import { useChatStore } from '@/stores/chat'
+import { useDirectorySessionStore } from '@/stores/directorySessionStore'
 import { useSessionActivityStore } from '@/stores/sessionActivity'
 import { useSettingsStore } from '@/stores/settings'
 import { useToastsStore } from '@/stores/toasts'
@@ -29,6 +30,7 @@ function keyLower(e: KeyboardEvent): string {
 export function installKeyboardShortcuts(): () => void {
   const ui = useUiStore()
   const chat = useChatStore()
+  const directorySessions = useDirectorySessionStore()
   const settings = useSettingsStore()
   const activity = useSessionActivityStore()
   const toasts = useToastsStore()
@@ -56,6 +58,11 @@ export function installKeyboardShortcuts(): () => void {
   const canAbortNow = (): boolean => {
     const sid = chat.selectedSessionId
     if (!sid) return false
+
+    // Align keyboard abort gate with sidebar/runtime authority.
+    if (directorySessions.isSessionRuntimeActive(sid, { includeCooldown: false })) {
+      return true
+    }
 
     const st = (chat as ChatStatusSource).selectedSessionStatus?.status ?? null
     const statusType = typeof st?.type === 'string' ? st.type : ''

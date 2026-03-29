@@ -2,7 +2,12 @@ import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 
 import { isMainTabId, type MainTabId } from '@/app/navigation/mainTabs'
-import { DEFAULT_WINDOW_SCOPE_ID, normalizeWindowScopeId, resolveWindowScopeId } from '@/app/windowScope'
+import {
+  DEFAULT_WINDOW_SCOPE_ID,
+  isEmbeddedWorkspacePaneContext,
+  normalizeWindowScopeId,
+  resolveWindowScopeId,
+} from '@/app/windowScope'
 import { getLocalJson, getLocalString, setLocalJson, setLocalString } from '@/lib/persist'
 import { localStorageKeys } from '@/lib/persistence/storageKeys'
 
@@ -264,6 +269,18 @@ const STORAGE_WORKSPACE_DOCK_WIDTH = localStorageKeys.ui.workspaceDockWidth
 const STORAGE_WORKSPACE_DOCK_HEIGHT = localStorageKeys.ui.workspaceDockHeight
 
 export const useUiStore = defineStore('ui', () => {
+  const shouldPersistWorkspaceShellState = !isEmbeddedWorkspacePaneContext()
+
+  function persistWorkspaceShellString(key: string, value: string) {
+    if (!shouldPersistWorkspaceShellState) return
+    setLocalString(key, value)
+  }
+
+  function persistWorkspaceShellJson(key: string, value: unknown) {
+    if (!shouldPersistWorkspaceShellState) return
+    setLocalJson(key, value)
+  }
+
   // Explicit semantic signals.
   const isCompactLayout = ref(false)
   const isMobileDevice = ref(false)
@@ -634,13 +651,13 @@ export const useUiStore = defineStore('ui', () => {
         workspaceWindowDragId.value = ''
       }
       retainGlobalSelectionsForWindows(list.map((item) => item.id))
-      setLocalJson(STORAGE_WORKSPACE_WINDOWS, list)
+      persistWorkspaceShellJson(STORAGE_WORKSPACE_WINDOWS, list)
     },
     { deep: true },
   )
 
   watch(activeWorkspaceWindowId, (v) => {
-    setLocalString(STORAGE_ACTIVE_WORKSPACE_WINDOW_ID, String(v || ''))
+    persistWorkspaceShellString(STORAGE_ACTIVE_WORKSPACE_WINDOW_ID, String(v || ''))
   })
 
   watch(
@@ -667,7 +684,7 @@ export const useUiStore = defineStore('ui', () => {
     },
     { immediate: true },
   )
-  watch(activeMainTab, (v) => setLocalString(STORAGE_ACTIVE_TAB, v), { immediate: true })
+  watch(activeMainTab, (v) => persistWorkspaceShellString(STORAGE_ACTIVE_TAB, v), { immediate: true })
 
   const workspaceSplitWidth = ref<number>(520)
 
@@ -1222,7 +1239,7 @@ export const useUiStore = defineStore('ui', () => {
   watch(
     workspaceGroups,
     (list) => {
-      setLocalJson(STORAGE_WORKSPACE_GROUPS, list)
+      persistWorkspaceShellJson(STORAGE_WORKSPACE_GROUPS, list)
     },
     { deep: true },
   )
@@ -1230,13 +1247,13 @@ export const useUiStore = defineStore('ui', () => {
   watch(
     workspaceGroupPaneRatiosById,
     (value) => {
-      setLocalJson(STORAGE_WORKSPACE_GROUP_PANE_RATIOS, value)
+      persistWorkspaceShellJson(STORAGE_WORKSPACE_GROUP_PANE_RATIOS, value)
     },
     { deep: true },
   )
 
   watch(activeWorkspaceGroupId, (v) => {
-    setLocalString(STORAGE_ACTIVE_WORKSPACE_GROUP_ID, String(v || ''))
+    persistWorkspaceShellString(STORAGE_ACTIVE_WORKSPACE_GROUP_ID, String(v || ''))
   })
 
   // Global overlays
@@ -1378,8 +1395,10 @@ export const useUiStore = defineStore('ui', () => {
 
   function openWorkspaceWindow(
     tab: MainTab = activeMainTab.value,
-    opts?: { activate?: boolean; query?: unknown; title?: string; matchKeys?: string[] },
+    opts?: { activate?: boolean; query?: unknown; title?: string; matchKeys?: string[]; reuseExisting?: boolean },
   ): string {
+    const shouldActivate = opts?.activate !== false
+    const shouldReuseExisting = opts?.reuseExisting !== false
     const selectedGroup =
       getWorkspaceGroupById(activeWorkspaceGroupId.value) ||
       workspaceGroups.value[0] ||
@@ -1389,10 +1408,12 @@ export const useUiStore = defineStore('ui', () => {
     const effectiveKeys = matchKeys.length > 0 ? matchKeys : defaultMatchKeysForMainTab(tab)
     const scopeWindowIds = selectedGroup ? selectedGroup.tabIds : workspaceWindows.value.map((item) => item.id)
 
-    const existing = findWorkspaceWindowByTabAndQuery(tab, query, {
-      keys: effectiveKeys,
-      windowIds: scopeWindowIds,
-    })
+    const existing = shouldReuseExisting
+      ? findWorkspaceWindowByTabAndQuery(tab, query, {
+          keys: effectiveKeys,
+          windowIds: scopeWindowIds,
+        })
+      : null
     if (existing) {
       const targetId = existing.id
       clearSuppressedRouteWindowRestore(targetId)
@@ -1402,18 +1423,20 @@ export const useUiStore = defineStore('ui', () => {
         setWorkspaceWindowTitle(targetId, opts.title)
       }
 
-      if (selectedGroup) {
+      if (selectedGroup && shouldActivate) {
         setWorkspaceGroupTabs(selectedGroup.id, selectedGroup.tabIds, { activeWindowId: targetId })
         activeWorkspaceGroupId.value = selectedGroup.id
         activeWorkspaceWindowId.value = targetId
-      } else {
+      } else if (!selectedGroup && shouldActivate) {
         const nextGroup = createWorkspaceWindowGroup({ tabIds: [targetId], activeWindowId: targetId })
         workspaceGroups.value = [...workspaceGroups.value, nextGroup]
         activeWorkspaceGroupId.value = nextGroup.id
         activeWorkspaceWindowId.value = targetId
       }
 
-      syncWorkspaceSelectionState()
+      if (shouldActivate) {
+        syncWorkspaceSelectionState()
+      }
       return targetId
     }
 
@@ -1423,18 +1446,24 @@ export const useUiStore = defineStore('ui', () => {
 
     if (selectedGroup) {
       const nextTabIds = normalizeIdList([...selectedGroup.tabIds, next.id])
-      setWorkspaceGroupTabs(selectedGroup.id, nextTabIds, { activeWindowId: next.id })
-      activeWorkspaceGroupId.value = selectedGroup.id
-      activeWorkspaceWindowId.value = next.id
-      syncWorkspaceSelectionState()
+      if (shouldActivate) {
+        setWorkspaceGroupTabs(selectedGroup.id, nextTabIds, { activeWindowId: next.id })
+        activeWorkspaceGroupId.value = selectedGroup.id
+        activeWorkspaceWindowId.value = next.id
+        syncWorkspaceSelectionState()
+      } else {
+        setWorkspaceGroupTabs(selectedGroup.id, nextTabIds)
+      }
       return next.id
     }
 
     const nextGroup = createWorkspaceWindowGroup({ tabIds: [next.id], activeWindowId: next.id })
     workspaceGroups.value = [...workspaceGroups.value, nextGroup]
-    activeWorkspaceGroupId.value = nextGroup.id
-    activeWorkspaceWindowId.value = next.id
-    syncWorkspaceSelectionState()
+    if (shouldActivate) {
+      activeWorkspaceGroupId.value = nextGroup.id
+      activeWorkspaceWindowId.value = next.id
+      syncWorkspaceSelectionState()
+    }
     return next.id
   }
 
@@ -1751,6 +1780,7 @@ export const useUiStore = defineStore('ui', () => {
       query: source.routeQuery,
       title: source.title,
       matchKeys: defaultMatchKeysForMainTab(source.mainTab),
+      reuseExisting: false,
     })
 
     const sourceGroupId = getWorkspaceWindowGroupId(sourceId)
@@ -1793,7 +1823,9 @@ export const useUiStore = defineStore('ui', () => {
 
     setWorkspaceWindowMainTab(targetId, source.mainTab)
     setWorkspaceWindowRouteQuery(targetId, source.routeQuery)
-    setWorkspaceWindowTitle(targetId, source.title)
+    if (typeof source.title !== 'undefined') {
+      setWorkspaceWindowTitle(targetId, source.title)
+    }
 
     if (opts?.closeSource !== false) {
       closeWorkspaceWindow(sourceId)

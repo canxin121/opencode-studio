@@ -20,7 +20,6 @@ function promptId(value: JsonObject): string {
 
 export async function refreshAttentionForSession(opts: {
   sessionId: string
-  getDirectoryForSession: (sessionId: string) => string | null
   attentionBySession: Ref<Record<string, AttentionEvent>>
   sessionStatusBySession: Ref<Record<string, SessionStatusEvent>>
 }): Promise<void> {
@@ -30,7 +29,8 @@ export async function refreshAttentionForSession(opts: {
   // Only surface prompts when the session is actively running.
   // OpenCode's /session/status returns only non-idle sessions.
   const statusMap = await chatApi
-    .listSessionStatus(opts.getDirectoryForSession(sid), { sessionId: sid })
+    // Prefer local runtime cache to align with sidebar runtime snapshot semantics.
+    .listSessionStatus(null, { sessionId: sid, local: true })
     .catch(() => null)
   if (statusMap && typeof statusMap === 'object' && !Array.isArray(statusMap)) {
     const statusRecord = asRecord(statusMap)
@@ -83,18 +83,22 @@ export async function refreshAttentionForSession(opts: {
     }
   }
 
-  const dir = opts.getDirectoryForSession(sid)
-  const [permissions, questions] = await Promise.all([
-    chatApi.listPermissions(dir, { sessionId: sid }).catch(() => []),
-    chatApi.listQuestions(dir, { sessionId: sid }).catch(() => []),
+  const [permissionsRaw, questionsRaw] = await Promise.all([
+    // Session-scoped attention should not be constrained by potentially stale
+    // directory mappings from chat cache.
+    chatApi.listPermissions(null, { sessionId: sid }).catch(() => null),
+    chatApi.listQuestions(null, { sessionId: sid }).catch(() => null),
   ])
 
-  const perList = (Array.isArray(permissions) ? permissions : [])
+  const permissions = Array.isArray(permissionsRaw) ? permissionsRaw : null
+  const questions = Array.isArray(questionsRaw) ? questionsRaw : null
+
+  const perList = (permissions || [])
     .filter((p) => promptSessionId(p) === sid)
     .sort((a, b) => promptId(a).localeCompare(promptId(b)))
   const per = perList.length ? perList[perList.length - 1] : null
 
-  const queList = (Array.isArray(questions) ? questions : [])
+  const queList = (questions || [])
     .filter((p) => promptSessionId(p) === sid)
     .sort((a, b) => promptId(a).localeCompare(promptId(b)))
   const que = queList.length ? queList[queList.length - 1] : null
@@ -116,7 +120,9 @@ export async function refreshAttentionForSession(opts: {
 
   if (next) {
     opts.attentionBySession.value = { ...opts.attentionBySession.value, [sid]: next }
-  } else {
+  } else if (permissions && questions) {
+    // Clear only when both authoritative queries succeeded and returned no prompt.
+    // On transient failures keep existing attention to avoid false "resolved" UI.
     // Clear stale UI after reload.
     if (opts.attentionBySession.value[sid]) {
       const nextMap = { ...opts.attentionBySession.value }

@@ -860,13 +860,23 @@ export const useDirectorySessionStore = defineStore('directorySession', () => {
     if (!sid) return row
     const cachedSession = chat.getSessionById(sid)
     const knownRow = knownRows[sid]
+
+    // Prefer sidebar/server snapshots over chat cache when both exist.
+    // Cache can be temporarily stale/missing directory during cross-window SSE races.
+    const preferredSession = mergeSidebarSessionSummary(
+      cachedSession || null,
+      row.session || knownRow?.session || null,
+      sid,
+    )
+
     const directory =
       row.directory ||
       knownRow?.directory ||
       knownDirectoryForSession(row) ||
       (knownRow ? knownDirectoryForSession(knownRow) : null)
+
     return mergeSidebarRowSnapshot(row, {
-      session: mergeSidebarSessionSummary(knownRow?.session || null, cachedSession || null, sid),
+      session: preferredSession,
       directory,
     })
   }

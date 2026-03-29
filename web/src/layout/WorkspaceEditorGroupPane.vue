@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, type Component } from 'vue'
+import { computed, onBeforeUnmount, ref, type Component } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
@@ -96,6 +96,72 @@ const activeWindow = computed<WorkspaceWindowTab | null>(() => {
 const activeWindowId = computed(() => String(activeWindow.value?.id || '').trim())
 const canDragTabs = computed(() => !ui.isCompactLayout)
 const isTabStripDropActive = ref(false)
+const frameEl = ref<HTMLIFrameElement | null>(null)
+let clearFrameFocusBridge: (() => void) | null = null
+
+function clearFrameFocusListeners() {
+  clearFrameFocusBridge?.()
+  clearFrameFocusBridge = null
+}
+
+function resolvePaneFocusWindowId(): string {
+  const target = group.value
+  if (!target) return ''
+  const preferredId = String(target.activeWindowId || '').trim()
+  if (preferredId && target.tabIds.includes(preferredId)) return preferredId
+  return String(target.tabIds[0] || '').trim()
+}
+
+function focusPaneWindow() {
+  const targetWindowId = resolvePaneFocusWindowId()
+  if (!targetWindowId) return
+  if (String(ui.focusedWorkspaceWindowId || '').trim() === targetWindowId) return
+  ui.setFocusedWorkspaceWindow(targetWindowId)
+}
+
+function handlePanePointerDown() {
+  focusPaneWindow()
+}
+
+function bindFrameFocusListeners() {
+  clearFrameFocusListeners()
+
+  const frame = frameEl.value
+  if (!frame) return
+
+  try {
+    const frameWindow = frame.contentWindow
+    const frameDocument = frame.contentDocument
+    if (!frameWindow || !frameDocument) return
+
+    const handleFramePointerDown = () => {
+      focusPaneWindow()
+    }
+    const handleFrameFocusIn = () => {
+      focusPaneWindow()
+    }
+
+    frameWindow.addEventListener('pointerdown', handleFramePointerDown, true)
+    frameWindow.addEventListener('mousedown', handleFramePointerDown, true)
+    frameDocument.addEventListener('focusin', handleFrameFocusIn, true)
+
+    clearFrameFocusBridge = () => {
+      frameWindow.removeEventListener('pointerdown', handleFramePointerDown, true)
+      frameWindow.removeEventListener('mousedown', handleFramePointerDown, true)
+      frameDocument.removeEventListener('focusin', handleFrameFocusIn, true)
+    }
+  } catch {
+    clearFrameFocusBridge = null
+  }
+}
+
+function handleFrameLoad() {
+  bindFrameFocusListeners()
+}
+
+onBeforeUnmount(() => {
+  clearFrameFocusListeners()
+})
 
 function tabLabel(tab: MainTabId): string {
   return String(t(TAB_LABEL_KEYS[tab]))
@@ -269,11 +335,19 @@ function isWindowActive(windowId: string): boolean {
   return String(windowId || '').trim() === activeWindowId.value
 }
 
+function isWindowFocused(windowId: string): boolean {
+  return String(windowId || '').trim() === String(ui.focusedWorkspaceWindowId || '').trim()
+}
+
 function tabClass(windowId: string): string {
+  const active = isWindowActive(windowId)
+  const focused = isWindowFocused(windowId)
   return cn(
     'group flex min-w-[140px] max-w-[240px] select-none items-center rounded-md border transition-colors cursor-default active:cursor-grabbing',
-    isWindowActive(windowId)
-      ? 'border-primary/50 bg-background text-foreground shadow-[0_1px_0_rgba(0,0,0,0.1)]'
+    active
+      ? focused
+        ? 'border-primary/50 bg-background text-foreground shadow-[0_1px_0_rgba(0,0,0,0.1)]'
+        : 'border-border/70 bg-secondary/40 text-foreground/85'
       : 'border-transparent bg-transparent text-muted-foreground hover:border-border/60 hover:bg-secondary/60 hover:text-foreground',
   )
 }
@@ -409,6 +483,7 @@ async function handleTabStripDrop(event: DragEvent) {
       query: source.data.query,
       title: source.data.title,
       matchKeys: source.data.matchKeys,
+      reuseExisting: false,
     })
   }
 
@@ -428,7 +503,10 @@ async function handleTabStripDrop(event: DragEvent) {
 </script>
 
 <template>
-  <section class="app-region-no-drag flex h-full min-h-0 flex-col border-l border-border/60 bg-background">
+  <section
+    class="app-region-no-drag flex h-full min-h-0 flex-col border-l border-border/60 bg-background"
+    @pointerdown.capture="handlePanePointerDown"
+  >
     <div
       class="relative min-h-0 border-b border-border/60 bg-secondary/20 px-1.5 py-1"
       :class="isTabStripDropActive ? 'bg-primary/10 ring-1 ring-inset ring-primary/50' : ''"
@@ -485,7 +563,7 @@ async function handleTabStripDrop(event: DragEvent) {
     </div>
 
     <div class="min-h-0 flex-1 overflow-hidden bg-background">
-      <iframe v-if="frameSrc" :src="frameSrc" class="h-full w-full border-0" />
+      <iframe v-if="frameSrc" ref="frameEl" :src="frameSrc" class="h-full w-full border-0" @load="handleFrameLoad" />
       <div v-else class="flex h-full items-center justify-center px-4 text-xs text-muted-foreground">
         {{ t('header.windowTabs.splitNoContent') }}
       </div>

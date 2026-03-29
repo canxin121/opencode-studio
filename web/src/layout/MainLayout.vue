@@ -376,6 +376,7 @@ function ensureDropSourceWindowId(source: WorkspaceDropSource): string {
     query: source.query,
     title: source.title,
     matchKeys: source.matchKeys,
+    reuseExisting: false,
   })
 }
 

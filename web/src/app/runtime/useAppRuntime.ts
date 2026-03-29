@@ -217,6 +217,53 @@ export function useAppRuntime() {
     return evtDir === current
   }
 
+  const crossDirectoryEventTypes = new Set([
+    'session.created',
+    'session.updated',
+    'session.deleted',
+    'session.status',
+    'session.idle',
+    'session.error',
+    'permission.asked',
+    'permission.replied',
+    'question.asked',
+    'question.replied',
+    'question.rejected',
+    'opencode-studio:session-activity',
+    'chat-sidebar.delta',
+    'chat-sidebar.patch',
+    'chat-sidebar.state',
+    'opencode-studio:replay-gap',
+    'config.settings.replace',
+  ])
+
+  function shouldBypassDirectoryFilter(evt: { type?: unknown }): boolean {
+    const ty = typeof evt.type === 'string' ? evt.type.trim().toLowerCase() : ''
+    if (!ty) return false
+    return crossDirectoryEventTypes.has(ty)
+  }
+
+  function eventSessionId(evt: { properties?: unknown }): string {
+    const props =
+      evt.properties && typeof evt.properties === 'object' ? (evt.properties as Record<string, unknown>) : null
+    if (!props) return ''
+
+    const direct =
+      (typeof props.sessionID === 'string' ? props.sessionID : '') ||
+      (typeof props.sessionId === 'string' ? props.sessionId : '') ||
+      (typeof props.session_id === 'string' ? props.session_id : '')
+    if (direct.trim()) return direct.trim()
+
+    const part = props.part && typeof props.part === 'object' ? (props.part as Record<string, unknown>) : null
+    if (!part) return ''
+
+    const nested =
+      (typeof part.sessionID === 'string' ? part.sessionID : '') ||
+      (typeof part.sessionId === 'string' ? part.sessionId : '') ||
+      (typeof part.session_id === 'string' ? part.session_id : '')
+    return nested.trim()
+  }
+
   function syncUiWindowContextFromRoute() {
     const normalizedPath = String(route.path || '').toLowerCase()
     if (!isWorkspaceMainTabPath(normalizedPath)) return
@@ -230,7 +277,9 @@ export function useAppRuntime() {
     try {
       sse = connectGlobalWs({
         endpoint: '/api/global/ws',
-        directory: String(directoryStore.currentDirectory || '').trim() || null,
+        // Multi-window desktop mode must receive cross-directory runtime/status events
+        // so all windows stay consistent for the same session.
+        directory: null,
         initialLastEventId: globalSseCursor,
         debugLabel: 'ws:global',
         onCursor: (lastEventId) => {
@@ -250,7 +299,10 @@ export function useAppRuntime() {
           directorySessions.scheduleSidebarRecoverySync('sequence-gap', 160)
         },
         onEvent: (evt) => {
-          if (!eventMatchesCurrentDirectory(evt)) return
+          const selectedSessionId = String(chat.selectedSessionId || '').trim()
+          const isSelectedSessionEvent = selectedSessionId && eventSessionId(evt) === selectedSessionId
+
+          if (!isSelectedSessionEvent && !shouldBypassDirectoryFilter(evt) && !eventMatchesCurrentDirectory(evt)) return
 
           if (evt.type === 'config.settings.replace') {
             void settings.refresh().catch(() => {})
@@ -500,7 +552,6 @@ export function useAppRuntime() {
   watch(
     () => directoryStore.currentDirectory,
     async () => {
-      connectActivity()
       await chat.refreshSessions().catch(() => {})
       await ensureSelectedSessionFromQuery().catch(() => {})
     },
