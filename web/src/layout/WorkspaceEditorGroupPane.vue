@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, type Component } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, type Component } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
@@ -22,6 +22,7 @@ import {
   type WorkspaceWindowTemplateDragData,
 } from '@/layout/workspaceWindowDrag'
 import { cn } from '@/lib/utils'
+import { readWorkspacePaneFocusWindowId } from '@/app/windowScope'
 import { useUiStore, type WorkspaceWindowTab } from '@/stores/ui'
 
 const props = defineProps<{
@@ -112,8 +113,13 @@ function resolvePaneFocusWindowId(): string {
   return String(target.tabIds[0] || '').trim()
 }
 
-function focusPaneWindow() {
-  const targetWindowId = resolvePaneFocusWindowId()
+function focusPaneWindow(windowId?: string) {
+  const requestedWindowId = String(windowId || '').trim()
+  const hasRequestedWindow = requestedWindowId
+    ? groupTabs.value.some((item) => String(item.id || '').trim() === requestedWindowId)
+    : false
+
+  const targetWindowId = hasRequestedWindow ? requestedWindowId : resolvePaneFocusWindowId()
   if (!targetWindowId) return
   if (String(ui.focusedWorkspaceWindowId || '').trim() === targetWindowId) return
   ui.setFocusedWorkspaceWindow(targetWindowId)
@@ -159,7 +165,22 @@ function handleFrameLoad() {
   bindFrameFocusListeners()
 }
 
+function handleWorkspacePaneFocusMessage(event: MessageEvent) {
+  if (event.origin !== window.location.origin) return
+
+  const targetWindowId = readWorkspacePaneFocusWindowId(event.data)
+  if (!targetWindowId) return
+  if (!groupTabs.value.some((tab) => tab.id === targetWindowId)) return
+
+  focusPaneWindow(targetWindowId)
+}
+
+onMounted(() => {
+  window.addEventListener('message', handleWorkspacePaneFocusMessage)
+})
+
 onBeforeUnmount(() => {
+  window.removeEventListener('message', handleWorkspacePaneFocusMessage)
   clearFrameFocusListeners()
 })
 

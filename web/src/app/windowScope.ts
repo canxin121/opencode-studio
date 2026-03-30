@@ -19,6 +19,7 @@ function hasEmbeddedWorkspacePaneLocation(): boolean {
 const embeddedWorkspacePaneBootContext = hasEmbeddedWorkspacePaneLocation()
 
 export const DEFAULT_WINDOW_SCOPE_ID = 'window-default'
+export const WORKSPACE_PANE_FOCUS_MESSAGE_TYPE = 'oc:workspace-pane-focus'
 
 export function hasEmbeddedWorkspacePaneQuery(query: unknown): boolean {
   if (!query || typeof query !== 'object') return false
@@ -69,6 +70,23 @@ export function readWindowIdFromSearch(search: string): string {
 export function readWindowIdFromLocation(): string {
   if (typeof window === 'undefined') return ''
   return readWindowIdFromSearch(window.location.search || '')
+}
+
+export function createWorkspacePaneFocusMessage(windowId?: unknown): { type: string; windowId: string } | null {
+  const normalizedWindowId = String(windowId || '').trim()
+  if (!normalizedWindowId) return null
+  return {
+    type: WORKSPACE_PANE_FOCUS_MESSAGE_TYPE,
+    windowId: normalizedWindowId,
+  }
+}
+
+export function readWorkspacePaneFocusWindowId(payload: unknown): string {
+  if (!payload || typeof payload !== 'object') return ''
+  const message = payload as Record<string, unknown>
+  const messageType = String(message.type || '').trim()
+  if (messageType !== WORKSPACE_PANE_FOCUS_MESSAGE_TYPE) return ''
+  return firstQueryValue(message.windowId || message.windowid)
 }
 
 export function normalizeWindowScopeId(raw: unknown, fallback = DEFAULT_WINDOW_SCOPE_ID): string {

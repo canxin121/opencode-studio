@@ -8,6 +8,7 @@ test('desktop sidebar keeps non-chat panel host mounted for teleport sidebars', 
 
   assert.ok(sidebarSource.includes(':id="WORKSPACE_SIDEBAR_PANEL_HOST_ID"'))
   assert.ok(sidebarSource.includes("activeTab === 'chat' ? 'hidden' : ''"))
+  assert.ok(sidebarSource.includes('const focusedMainTab = ui.activeWorkspaceWindow?.mainTab'))
   assert.ok(!sidebarSource.includes('v-else :id="WORKSPACE_SIDEBAR_PANEL_HOST_ID"'))
 })
 

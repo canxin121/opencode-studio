@@ -20,7 +20,12 @@ import { installKeyboardTapFix } from '@/lib/keyboardTapFix'
 import { installKeyboardShortcuts } from '@/app/runtime/installKeyboardShortcuts'
 import { readSessionIdFromFullPath, readSessionIdFromQuery } from '@/app/navigation/sessionQuery'
 import { isWorkspaceMainTabPath, mainTabFromPath } from '@/app/navigation/mainTabs'
-import { isEmbeddedWorkspacePaneContext, readWindowIdFromQuery } from '@/app/windowScope'
+import {
+  createWorkspacePaneFocusMessage,
+  isEmbeddedWorkspacePaneContext,
+  readWindowIdFromLocation,
+  readWindowIdFromQuery,
+} from '@/app/windowScope'
 import { normalizeFsPath, trimTrailingFsSlashes } from '@/lib/path'
 
 export function useAppRuntime() {
@@ -49,6 +54,7 @@ export function useAppRuntime() {
   let cleanupShortcuts: (() => void) | null = null
   let cleanupKeyboardTapFix: (() => void) | null = null
   let cleanupBroadcast: (() => void) | null = null
+  let cleanupEmbeddedPaneFocusBridge: (() => void) | null = null
   let updateTimer: number | null = null
   let sseDebugTimer: number | null = null
   let lastSseDebugAt = 0
@@ -270,6 +276,36 @@ export function useAppRuntime() {
     ui.syncActiveWorkspaceWindowFromRoute(mainTabFromPath(normalizedPath), route.query)
   }
 
+  function installEmbeddedPaneFocusBridge() {
+    cleanupEmbeddedPaneFocusBridge?.()
+    cleanupEmbeddedPaneFocusBridge = null
+
+    if (typeof window === 'undefined') return
+    if (!isEmbeddedWorkspacePaneContext(route.query)) return
+    if (window.parent === window) return
+
+    const windowId = readWindowIdFromQuery(route.query) || readWindowIdFromLocation()
+    if (!windowId) return
+    const targetOrigin = String(window.location.origin || '').trim()
+    const postTargetOrigin = targetOrigin && targetOrigin !== 'null' ? targetOrigin : '*'
+
+    const notifyParentFocus = () => {
+      const message = createWorkspacePaneFocusMessage(windowId)
+      if (!message) return
+      window.parent.postMessage(message, postTargetOrigin)
+    }
+
+    document.addEventListener('pointerdown', notifyParentFocus, true)
+    document.addEventListener('mousedown', notifyParentFocus, true)
+    document.addEventListener('focusin', notifyParentFocus, true)
+
+    cleanupEmbeddedPaneFocusBridge = () => {
+      document.removeEventListener('pointerdown', notifyParentFocus, true)
+      document.removeEventListener('mousedown', notifyParentFocus, true)
+      document.removeEventListener('focusin', notifyParentFocus, true)
+    }
+  }
+
   function connectActivity() {
     sse?.close()
     sse = null
@@ -418,6 +454,7 @@ export function useAppRuntime() {
   onMounted(async () => {
     window.addEventListener('resize', applyDevice)
     syncUiWindowContextFromRoute()
+    installEmbeddedPaneFocusBridge()
 
     cleanupKeyboard = installKeyboardInsets({ enabled: true })
     cleanupShortcuts = installKeyboardShortcuts()
@@ -577,6 +614,14 @@ export function useAppRuntime() {
     () => isEmbeddedWorkspacePaneContext(route.query),
     () => {
       applyDevice()
+      installEmbeddedPaneFocusBridge()
+    },
+  )
+
+  watch(
+    () => readWindowIdFromQuery(route.query),
+    () => {
+      installEmbeddedPaneFocusBridge()
     },
   )
 
@@ -589,6 +634,8 @@ export function useAppRuntime() {
     cleanupShortcuts = null
     cleanupKeyboardTapFix?.()
     cleanupKeyboardTapFix = null
+    cleanupEmbeddedPaneFocusBridge?.()
+    cleanupEmbeddedPaneFocusBridge = null
     if (updateTimer !== null) {
       window.clearTimeout(updateTimer)
       updateTimer = null

@@ -2,8 +2,11 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  WORKSPACE_PANE_FOCUS_MESSAGE_TYPE,
+  createWorkspacePaneFocusMessage,
   hasEmbeddedWorkspacePaneSearch,
   isEmbeddedWorkspacePaneContext,
+  readWorkspacePaneFocusWindowId,
   withEmbeddedWorkspaceScopeQuery,
 } from '../src/app/windowScope.ts'
 
@@ -63,4 +66,18 @@ test('withEmbeddedWorkspaceScopeQuery is a no-op outside embed context', () => {
     const next = withEmbeddedWorkspaceScopeQuery({ foo: 'bar' }, {})
     assert.deepEqual(next, { foo: 'bar' })
   })
+})
+
+test('workspace pane focus message helpers normalize message payload', () => {
+  assert.deepEqual(createWorkspacePaneFocusMessage('win-101'), {
+    type: WORKSPACE_PANE_FOCUS_MESSAGE_TYPE,
+    windowId: 'win-101',
+  })
+  assert.equal(createWorkspacePaneFocusMessage(''), null)
+  assert.equal(
+    readWorkspacePaneFocusWindowId({ type: WORKSPACE_PANE_FOCUS_MESSAGE_TYPE, windowId: 'win-101' }),
+    'win-101',
+  )
+  assert.equal(readWorkspacePaneFocusWindowId({ type: 'other', windowId: 'win-101' }), '')
+  assert.equal(readWorkspacePaneFocusWindowId({}), '')
 })

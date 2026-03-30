@@ -116,7 +116,13 @@ onBeforeUnmount(() => {
   }
 })
 
-const activeTab = computed<MainTabId>(() => mainTabFromPath(String(route.path || '')))
+const activeTab = computed<MainTabId>(() => {
+  const focusedMainTab = ui.activeWorkspaceWindow?.mainTab
+  if (focusedMainTab) return focusedMainTab
+  const fallbackMainTab = ui.activeMainTab
+  if (fallbackMainTab) return fallbackMainTab
+  return mainTabFromPath(String(route.path || ''))
+})
 
 const navItems = computed<NavItem[]>(() =>
   WORKSPACE_MAIN_TABS.map((tab) => ({

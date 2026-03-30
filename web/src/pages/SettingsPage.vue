@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { RiArrowDownSLine, RiRefreshLine } from '@remixicon/vue'
+import { RiRefreshLine } from '@remixicon/vue'
 import { useI18n } from 'vue-i18n'
 
 import { useSettingsStore, type Settings } from '../stores/settings'
@@ -15,14 +15,19 @@ import type { AppLocale } from '@/i18n/locale'
 import Button from '@/components/ui/Button.vue'
 import IconButton from '@/components/ui/IconButton.vue'
 import OptionPicker from '@/components/ui/OptionPicker.vue'
-import SidebarTextButton from '@/components/ui/SidebarTextButton.vue'
-import ScrollArea from '@/components/ui/ScrollArea.vue'
 import OpenCodeConfigPanel from '@/components/settings/OpenCodeConfigPanel.vue'
 import PluginSettingsPanel from '@/components/settings/PluginSettingsPanel.vue'
 import BackendsPanel from '@/components/settings/BackendsPanel.vue'
 import DebugPanel from '@/components/settings/DebugPanel.vue'
 import Input from '@/components/ui/Input.vue'
 import { opencodeSections } from '@/components/settings/opencodeSections'
+import SettingsSidebar from '@/components/settings/sidebar/SettingsSidebar.vue'
+import {
+  buildSettingsSidebarTabs,
+  isSettingsTab,
+  type SettingsSidebarLeafItem,
+  type SettingsTab,
+} from '@/components/settings/sidebar/settingsSidebarNavigation'
 import { useDesktopSidebarResize } from '@/composables/useDesktopSidebarResize'
 import {
   desktopBackendRestart,
@@ -53,8 +58,6 @@ import {
   type ChatToolActivityType,
 } from '@/lib/chatActivity'
 
-type SettingsTab = 'opencode' | 'plugins' | 'backends' | 'appearance' | 'debug'
-
 const settings = useSettingsStore()
 const pluginHost = usePluginHostStore()
 const toasts = useToastsStore()
@@ -84,10 +87,10 @@ function persistSettingsRoute(path: string) {
 
 const settingsSidebarClass = computed(() =>
   ui.isCompactLayout
-    ? 'relative h-full w-full border-r border-border bg-muted/10 shrink-0'
+    ? 'relative h-full w-full shrink-0 border-r border-border bg-sidebar'
     : useDesktopSidebarHost.value
-      ? 'relative h-full w-full bg-muted/10 shrink-0'
-      : 'relative h-full border-r border-border bg-muted/10 shrink-0',
+      ? 'relative h-full w-full shrink-0 bg-sidebar'
+      : 'relative h-full shrink-0 border-r border-border bg-sidebar',
 )
 
 const desktopRuntimeEnabled = isDesktopRuntime()
@@ -343,13 +346,7 @@ const updateReminderSnoozeUntilLabel = computed(() => {
   }
 })
 
-const tabs = computed<Array<{ id: SettingsTab; label: string }>>(() => [
-  { id: 'opencode', label: String(t('settings.tabs.opencode')) },
-  { id: 'plugins', label: String(t('settings.tabs.plugins')) },
-  { id: 'backends', label: String(t('settings.tabs.backends')) },
-  { id: 'appearance', label: String(t('settings.tabs.appearance')) },
-  { id: 'debug', label: String(t('settings.tabs.debug')) },
-])
+const tabs = computed(() => buildSettingsSidebarTabs((_id, labelKey) => String(t(labelKey))))
 
 function normalizeOpencodeSection(raw?: string): string {
   const val = (raw || '').trim().toLowerCase()
@@ -387,8 +384,7 @@ function normalizePluginsSection(raw?: string): string {
 
 const activeTab = computed<SettingsTab>(() => {
   const raw = String(route.params.tab || '').toLowerCase()
-  const match = tabs.value.find((t) => t.id === raw)
-  return match?.id || 'opencode'
+  return isSettingsTab(raw) ? raw : 'opencode'
 })
 
 const activeOpencodeSection = computed(() => {
@@ -401,8 +397,21 @@ const activePluginsSection = computed(() => {
   return normalizePluginsSection(route.params.section as string | undefined)
 })
 
-const opencodeExpanded = ref(activeTab.value === 'opencode')
-const pluginsExpanded = ref(activeTab.value === 'plugins')
+const opencodeSidebarSections = computed<SettingsSidebarLeafItem[]>(() =>
+  opencodeSections.map((section) => ({
+    id: section.id,
+    label: String(t(section.labelKey)),
+    keywords: [section.id],
+  })),
+)
+
+const pluginsSidebarItems = computed<SettingsSidebarLeafItem[]>(() =>
+  pluginsTabPlugins.value.map((plugin) => ({
+    id: plugin.id,
+    label: plugin.label,
+    keywords: [plugin.id],
+  })),
+)
 
 function ensureSettingsRoute() {
   if (activeTab.value === 'plugins') {
@@ -435,38 +444,21 @@ function ensureSettingsRoute() {
 
 function goToTab(id: SettingsTab) {
   if (id === 'opencode') {
-    if (activeTab.value !== 'opencode') {
-      opencodeExpanded.value = true
-      const section = activeOpencodeSection.value || normalizeOpencodeSection()
-      void router.push(`/settings/opencode/${section}`)
-    } else {
-      opencodeExpanded.value = !opencodeExpanded.value
-    }
+    const section = activeOpencodeSection.value || normalizeOpencodeSection()
+    void router.push(`/settings/opencode/${section}`)
     return
   }
 
   if (id === 'plugins') {
-    if (activeTab.value !== 'plugins') {
-      pluginsExpanded.value = true
-      const section = activePluginsSection.value || normalizePluginsSection()
-      if (section) {
-        void router.push(`/settings/plugins/${section}`)
-      } else {
-        void router.push('/settings/plugins')
-      }
-    } else {
-      pluginsExpanded.value = !pluginsExpanded.value
-    }
+    const section = activePluginsSection.value || normalizePluginsSection()
+    void router.push(section ? `/settings/plugins/${section}` : '/settings/plugins')
     return
   }
 
-  opencodeExpanded.value = false
-  pluginsExpanded.value = false
   void router.push(`/settings/${id}`)
 }
 
 function goToOpencodeSection(id: string) {
-  opencodeExpanded.value = true
   const section = normalizeOpencodeSection(id)
   void router.push(`/settings/opencode/${section}`)
 }
@@ -474,8 +466,18 @@ function goToOpencodeSection(id: string) {
 function goToPluginsSection(id: string) {
   const section = normalizePluginsSection(id)
   if (!section) return
-  pluginsExpanded.value = true
   void router.push(`/settings/plugins/${section}`)
+}
+
+async function refreshSettingsSidebar() {
+  await Promise.all([
+    settings.refresh(),
+    pluginHost.bootstrapped
+      ? pluginHost.refreshList().then(async () => {
+          await pluginHost.preloadReadyManifests()
+        })
+      : pluginHost.bootstrap(),
+  ])
 }
 
 onMounted(() => {
@@ -517,6 +519,13 @@ watch(
   { immediate: true },
 )
 
+function joinWindowTitle(parts: Array<string | null | undefined>) {
+  return parts
+    .map((part) => String(part || '').trim())
+    .filter(Boolean)
+    .join(' · ')
+}
+
 watch(
   () => [route.params.tab, route.params.section],
   () => ensureSettingsRoute(),
@@ -532,21 +541,32 @@ watch(
   },
 )
 
-watch(
-  () => activeTab.value,
-  (tab, prev) => {
-    if (tab !== 'opencode') {
-      opencodeExpanded.value = false
-    } else if (prev !== 'opencode' && !opencodeExpanded.value) {
-      opencodeExpanded.value = true
-    }
+const settingsWindowTitle = computed(() => {
+  const base = String(t('settings.title'))
+  const activeTabLabel = tabs.value.find((tab) => tab.id === activeTab.value)?.label || base
 
-    if (tab !== 'plugins') {
-      pluginsExpanded.value = false
-    } else if (prev !== 'plugins' && !pluginsExpanded.value) {
-      pluginsExpanded.value = true
-    }
+  if (activeTab.value === 'opencode') {
+    const sectionLabel =
+      opencodeSidebarSections.value.find((section) => section.id === activeOpencodeSection.value)?.label || ''
+    return joinWindowTitle([base, activeTabLabel, sectionLabel])
+  }
+
+  if (activeTab.value === 'plugins') {
+    const pluginLabel =
+      pluginsSidebarItems.value.find((plugin) => plugin.id === activePluginsSection.value)?.label || ''
+    return joinWindowTitle([base, activeTabLabel, pluginLabel])
+  }
+
+  return joinWindowTitle([base, activeTabLabel])
+})
+
+watch(
+  () => [route.path, route.query, settingsWindowTitle.value] as const,
+  ([path]) => {
+    if (!String(path || '').startsWith('/settings')) return
+    ui.setWorkspaceWindowTitleFromRoute(route.query, settingsWindowTitle.value)
   },
+  { immediate: true, deep: true },
 )
 
 function makeSetting<K extends keyof Settings>(key: K, fallback: NonNullable<Settings[K]>) {
@@ -759,89 +779,20 @@ const dirtyHint = computed(() => (settings.error ? settings.error : null))
             class="absolute right-0 top-0 z-10 h-full w-1 cursor-col-resize hover:bg-primary/40"
             @pointerdown="startDesktopSidebarResize"
           />
-          <ScrollArea class="h-full">
-            <div class="flex flex-col gap-1 p-3">
-              <div class="mb-2 flex items-center justify-between px-1">
-                <div class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  {{ t('settings.title') }}
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  class="h-7 w-7"
-                  :title="String(t('settings.refresh'))"
-                  :aria-label="String(t('settings.refreshAria'))"
-                  @click="settings.refresh"
-                  :disabled="settings.loading"
-                >
-                  <RiRefreshLine class="h-4 w-4" :class="settings.loading ? 'animate-spin' : ''" />
-                </Button>
-              </div>
-              <div v-for="tab in tabs" :key="tab.id" class="space-y-1">
-                <SidebarTextButton
-                  @click="goToTab(tab.id)"
-                  class="flex w-full items-center rounded-md border border-transparent px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/60 hover:text-foreground active:scale-95"
-                  :class="
-                    activeTab === tab.id
-                      ? 'bg-primary/12 dark:bg-accent/80 text-foreground border-border/60'
-                      : 'text-muted-foreground'
-                  "
-                >
-                  <span class="inline-flex items-center gap-2">
-                    <RiArrowDownSLine
-                      v-if="tab.id === 'opencode' || tab.id === 'plugins'"
-                      class="h-3.5 w-3.5 transition-transform"
-                      :class="
-                        (tab.id === 'opencode' && opencodeExpanded && activeTab === 'opencode') ||
-                        (tab.id === 'plugins' && pluginsExpanded && activeTab === 'plugins')
-                          ? 'rotate-180'
-                          : ''
-                      "
-                    />
-                    {{ tab.label }}
-                  </span>
-                </SidebarTextButton>
-
-                <div
-                  v-if="tab.id === 'opencode' && activeTab === 'opencode' && opencodeExpanded"
-                  class="border-l border-border/60 pl-3 pt-2 space-y-1"
-                >
-                  <SidebarTextButton
-                    v-for="section in opencodeSections"
-                    :key="section.id"
-                    @click="goToOpencodeSection(section.id)"
-                    class="w-full rounded-md border border-transparent px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/60 hover:text-foreground active:scale-95"
-                    :class="
-                      activeOpencodeSection === section.id
-                        ? 'bg-primary/12 dark:bg-accent/80 text-foreground border-border/60'
-                        : 'text-muted-foreground'
-                    "
-                  >
-                    {{ t(section.labelKey) }}
-                  </SidebarTextButton>
-                </div>
-
-                <div
-                  v-if="tab.id === 'plugins' && activeTab === 'plugins' && pluginsExpanded"
-                  class="border-l border-border/60 pl-3 pt-2 space-y-1"
-                >
-                  <SidebarTextButton
-                    v-for="plugin in pluginsTabPlugins"
-                    :key="`desktop-plugins-${plugin.id}`"
-                    @click="goToPluginsSection(plugin.id)"
-                    class="w-full rounded-md border border-transparent px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/60 hover:text-foreground active:scale-95"
-                    :class="
-                      activePluginsSection === plugin.id
-                        ? 'bg-primary/12 dark:bg-accent/80 text-foreground border-border/60'
-                        : 'text-muted-foreground'
-                    "
-                  >
-                    {{ plugin.label }}
-                  </SidebarTextButton>
-                </div>
-              </div>
-            </div>
-          </ScrollArea>
+          <SettingsSidebar
+            :tabs="tabs"
+            :active-tab="activeTab"
+            :active-opencode-section="activeOpencodeSection"
+            :active-plugins-section="activePluginsSection"
+            :opencode-sections="opencodeSidebarSections"
+            :plugins="pluginsSidebarItems"
+            :loading="settings.loading || pluginHost.loading"
+            :is-touch-pointer="ui.isTouchPointer"
+            @refresh="refreshSettingsSidebar"
+            @navigate-tab="goToTab"
+            @navigate-opencode-section="goToOpencodeSection"
+            @navigate-plugins-section="goToPluginsSection"
+          />
         </aside>
       </Teleport>
 

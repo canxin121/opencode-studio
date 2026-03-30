@@ -22,6 +22,9 @@ test('workspace editor group pane propagates pane and iframe interactions into f
 
   assert.ok(paneSource.includes('@pointerdown.capture="handlePanePointerDown"'))
   assert.ok(paneSource.includes('ui.setFocusedWorkspaceWindow(targetWindowId)'))
+  assert.ok(paneSource.includes('readWorkspacePaneFocusWindowId(event.data)'))
+  assert.ok(paneSource.includes("window.addEventListener('message', handleWorkspacePaneFocusMessage)"))
+  assert.ok(paneSource.includes("window.removeEventListener('message', handleWorkspacePaneFocusMessage)"))
   assert.ok(paneSource.includes("frameWindow.addEventListener('pointerdown', handleFramePointerDown, true)"))
   assert.ok(paneSource.includes("frameDocument.addEventListener('focusin', handleFrameFocusIn, true)"))
   assert.ok(paneSource.includes('@load="handleFrameLoad"'))
