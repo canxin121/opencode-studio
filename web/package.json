@@ -31,7 +31,7 @@
     "markdown-it": "^14.1.0",
     "markdown-it-texmath": "^1.0.0",
     "mermaid": "^11.12.2",
-    "monaco-editor": "^0.55.1",
+    "monaco-editor": "^0.56.0",
     "pinia": "^3.0.0",
     "radix-vue": "^1.9.17",
     "tailwind-merge": "^3.3.1",
